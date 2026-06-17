@@ -29,7 +29,7 @@ const files = {
   capabilities: path.join(webuiRoot, 'src/data/capabilities.ts'),
   styles: path.join(webuiRoot, 'src/styles/base.css'),
   tuiPanel: path.join(backendRoot, 'crates/cowd-cli/src/tui/components/tool_ops_panel.rs'),
-  tuiProjection: path.join(backendRoot, 'crates/cowd-cli/src/tui/projection_client.rs'),
+  tuiGatewayClient: path.join(backendRoot, 'crates/cowd-cli/src/tui/gateway_client.rs'),
   tuiState: path.join(backendRoot, 'crates/cowd-cli/src/tui/state.rs'),
 };
 
@@ -86,7 +86,7 @@ const pageText = read(files.page);
 const capabilitiesText = read(files.capabilities);
 const stylesText = read(files.styles);
 const tuiPanelText = read(files.tuiPanel);
-const tuiProjectionText = read(files.tuiProjection);
+const tuiGatewayClientText = read(files.tuiGatewayClient);
 const tuiStateText = read(files.tuiState);
 const failures = [];
 
@@ -153,7 +153,7 @@ const requiredTuiProjectionTerms = [
   'tool_intent_plan',
   'tool_context_fanout_plan',
 ];
-for (const term of hasAll(tuiProjectionText, requiredTuiProjectionTerms)) failures.push(`TUI projection client missing ${term}`);
+for (const term of hasAll(tuiGatewayClientText, requiredTuiProjectionTerms)) failures.push(`TUI gateway client missing ${term}`);
 
 const requiredTuiStateTerms = [
   'ToolOpsPanel',
@@ -169,7 +169,7 @@ const report = {
   generated_at: new Date().toISOString(),
   status: failures.length ? 'fail' : 'pass',
   scope: 'tool operation management closure: backend routes, WebUI client, page sections, navigation filters, and structured rendering',
-  tui_scope: 'TUI parity closure: ToolOpsPanel, projection client, sidebar action handling, and dangerous-action confirmation',
+  tui_scope: 'TUI parity closure: ToolOpsPanel, gateway client, sidebar action handling, and dangerous-action confirmation',
   required_sections: requiredSections,
   required_backend_routes: requiredBackendRoutes,
   required_client_methods: requiredClientMethods,

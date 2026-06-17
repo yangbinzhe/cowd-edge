@@ -20,7 +20,7 @@ const modules = [
   { id: 'memory', page: 'MemoryPage.vue', routes: ['/api/memory', '/api/cowd/structured'], tui: ['memory_panel.rs', 'l4_knowledge_view.rs'], cli: ['import-session'] },
   { id: 'skills', page: 'SkillsPage.vue', routes: ['/api/skills'], tui: ['skills_panel.rs'], cli: ['skills'] },
   { id: 'agents', page: 'AgentsPage.vue', routes: ['/api/agents', '/api/tasks'], tui: ['agent_team_panel.rs', 'agents_overlay.rs'], cli: ['prompt'] },
-  { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/commands'], tui: ['tool_ops_panel.rs', 'projection_client.rs', 'runtime_activity_panel.rs'], cli: ['prompt'] },
+  { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/commands'], tui: ['tool_ops_panel.rs', 'gateway_client.rs', 'runtime_activity_panel.rs'], cli: ['prompt'] },
   { id: 'gateway', page: 'GatewayPage.vue', routes: ['/api/connectors', '/api/cross-plane', '/api/platforms'], tui: ['gateway_panel.rs', 'approval_cockpit_panel.rs'], cli: ['gateway'] },
   { id: 'mfg', page: 'MfgPage.vue', routes: ['/api/apps/mfg', '/api/matrix'], tui: ['goal_workbench_panel.rs', 'task_decomposition_view.rs'], cli: ['gateway'] },
   { id: 'audit', page: 'AuditPage.vue', routes: ['/api/audit', '/api/usage', '/api/cowd/release-gate'], tui: ['export_dialog.rs', 'approval_cockpit_panel.rs'], cli: ['doctor'] },

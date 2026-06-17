@@ -54,14 +54,14 @@ const toolRows = computed(() => tools.value.map((tool: any) => ({
 })));
 const commandRows = computed(() => commands.value.map((command: any) => ({
   name: command.name,
-  action: command.action,
-  target: command.target,
+  action: formatActionKind(command.action),
+  target: formatActionTarget(command.action),
   description: command.description || '-',
 })));
 const historyRows = computed(() => history.value.slice(0, 12).map((item: any) => ({
   command: item.command || item.name || '-',
-  action: item.action || '-',
-  target: item.target || '-',
+  action: formatActionKind(item.action),
+  target: formatActionTarget(item.action),
   at: item.executed_at_ms || item.timestamp || '-',
 })));
 const checkpointRows = computed(() => checkpoints.value.map((checkpoint: any) => ({
@@ -70,6 +70,16 @@ const checkpointRows = computed(() => checkpoints.value.map((checkpoint: any) =>
   files: checkpoint.file_count || checkpoint.files || 0,
   created: checkpoint.created_at || checkpoint.created_at_ms || '-',
 })));
+
+function formatActionKind(action: any) {
+  if (!action) return '-';
+  return typeof action === 'string' ? action : action.kind || '-';
+}
+
+function formatActionTarget(action: any) {
+  if (!action || typeof action === 'string') return '-';
+  return action.path || action.operation || action.action || '-';
+}
 const cacheRows = computed(() => Object.entries(cacheStats.value)
   .filter(([key]) => !key.startsWith('__'))
   .map(([key, value]) => ({
@@ -174,7 +184,9 @@ async function runSafeTool() {
 }
 
 async function executeCommand() {
-  result.value = await api.executeCommand(selectedCommand.value, {});
+  const resolution: any = await api.resolveCommand(selectedCommand.value, 'webui', { source: 'tools-page' });
+  const resolvedCommand = resolution?.resolution?.command?.name || selectedCommand.value;
+  result.value = await api.executeCommand(resolvedCommand, {});
   await refresh();
 }
 

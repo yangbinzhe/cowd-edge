@@ -720,8 +720,12 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(config),
   }),
-  commands: () => read('/api/commands', { commands: [] }),
+  commands: (surface = 'webui') => read(`/api/commands?surface=${encodeURIComponent(surface)}`, { commands: [] }),
   commandHistory: () => read('/api/commands/history', { history: [] }),
+  resolveCommand: (command: string, surface = 'webui', context: Record<string, unknown> = {}) => write('/api/commands/resolve', {
+    method: 'POST',
+    body: JSON.stringify({ input: command, surface, context }),
+  }),
   executeCommand: (command: string, args: Record<string, unknown> = {}) => write('/api/commands/execute', {
     method: 'POST',
     body: JSON.stringify({ command, args }),

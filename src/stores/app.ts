@@ -584,7 +584,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function executeCommand(command: string, args: Record<string, unknown> = {}) {
-    const result: any = await api.executeCommand(command, args);
+    const resolution: any = await api.resolveCommand(command, 'webui', { session_id: activeSessionId.value });
+    const resolvedCommand = resolution?.resolution?.command?.name || command;
+    const result: any = await api.executeCommand(resolvedCommand, args);
     commandHistory.value = [result, ...commandHistory.value];
     activity.value.unshift({
       id: `command-${Date.now()}`,
