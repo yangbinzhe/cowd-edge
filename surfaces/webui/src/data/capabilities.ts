@@ -31,12 +31,13 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
   runtime: spec(
     'runtime',
     'Runtime Control',
-    '会话租约、工具流水、价值闭环和控制面健康集中在一个运行视图。',
+    '会话租约、工具流水、成长闭环、价值闭环和控制面健康集中在一个运行视图。',
     [
       { id: 'overview', label: 'Overview', description: 'Health, readiness, blocked checks, and current control-plane state.' },
       { id: 'runs', label: 'Runs', description: 'Session runs, value-loop stages, leases, and active execution history.' },
       { id: 'policy', label: 'Policy', description: 'Runtime policy, observability switches, provider reload, and production gates.' },
       { id: 'timeline', label: 'Timeline', description: 'Chronological runtime events with tool/context/approval boundaries.' },
+      { id: 'growth', label: 'Growth', description: 'Risk-gated growth events, durable promotions, and fact/memory/matrix learning receipts.' },
     ],
     [
       { label: 'Refresh runtime', kind: 'primary', endpoint: '/api/runtime/timeline' },
@@ -45,6 +46,7 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
     ],
     [
       { label: 'API', value: '/api/runtime/control-plane' },
+      { label: 'Growth', value: '/api/growth/status, /api/growth/events' },
       { label: 'Parity', value: 'WebUI and TUI full control surface' },
       { label: 'CLI', value: 'core-only status and import commands' },
     ],
@@ -68,6 +70,27 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
       { label: 'API', value: '/api/context/current' },
       { label: 'Kernel role', value: 'Context orchestration and evidence routing' },
       { label: 'Memory link', value: 'Recall packets and facts feed context packets' },
+    ],
+  ),
+  reality: spec(
+    'reality',
+    'Reality Core',
+    '事实语义、Fact Flow、Memory、Matrix、Growth、Context 和 Audit 在一个只读工作台中对齐。',
+    [
+      { id: 'core-map', label: 'Core map', description: 'fact-kernel, Memory Engine, Matrix Engine, Growth Channel, Context Bridge, and Audit Trace.' },
+      { id: 'fact-flow', label: 'Fact Flow', description: 'Events, evidence, candidates, decisions, and Memory/Matrix targets for current work.' },
+      { id: 'promotions', label: 'Promotions', description: 'Durable growth receipts and where candidates landed or why they were held.' },
+      { id: 'boundaries', label: 'Boundaries', description: 'Observed, inferred, simulated, hypothetical, and conflict state visibility.' },
+    ],
+    [
+      { label: 'Refresh Reality Core', kind: 'primary', endpoint: '/api/reality/status' },
+      { label: 'Load Fact Flow', kind: 'secondary', endpoint: '/api/reality/flow' },
+      { label: 'Inspect promotions', kind: 'secondary', endpoint: '/api/reality/promotions' },
+    ],
+    [
+      { label: 'API', value: '/api/reality/*' },
+      { label: 'Rule layer', value: 'fact-kernel is internal only' },
+      { label: 'Engines', value: 'Memory and Matrix are same-level Reality Core engines' },
     ],
   ),
   memory: spec(
@@ -154,7 +177,30 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
     [
       { label: 'API', value: '/api/tools' },
       { label: 'Execution', value: '/api/tools/execute, /api/tools/batch-readonly' },
+      { label: 'Slash', value: '/api/slash' },
       { label: 'Safety', value: 'Workspace-scoped writes and approval-aware actions' },
+    ],
+  ),
+  surfaces: spec(
+    'surfaces',
+    'Surface Host',
+    'WebUI、TUI、外部消息面和静态资源面由 Gateway SurfaceHost 统一发现、诊断和分发。',
+    [
+      { id: 'registry', label: 'Registry', description: 'Registered surfaces, lifecycle, capabilities, routes, and resources.' },
+      { id: 'health', label: 'Health', description: 'Host health, per-surface checks, and dispatch readiness.' },
+      { id: 'routes', label: 'Routes', description: 'HTTP entry points, callback routes, and static resource mount points.' },
+      { id: 'events', label: 'Events', description: 'Recent surface events and delivery receipts.' },
+      { id: 'dispatch', label: 'Dispatch', description: 'Send messages and execute surface actions through Gateway.' },
+    ],
+    [
+      { label: 'Refresh surfaces', kind: 'primary', endpoint: '/api/surfaces' },
+      { label: 'Check health', kind: 'secondary', endpoint: '/api/surfaces/:id/health' },
+      { label: 'Send message', kind: 'secondary', endpoint: '/api/surfaces/:id/send' },
+    ],
+    [
+      { label: 'API', value: '/api/surfaces' },
+      { label: 'Boundary', value: 'Gateway owns external ingress and delivery' },
+      { label: 'Runtime', value: 'Harness returns results, Gateway routes them to surfaces' },
     ],
   ),
   gateway: spec(
@@ -162,6 +208,7 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
     'Gateway and Cross-plane',
     '外部平台、连接器资源、MCP 服务、身份授权和跨平面执行统一管理。',
     [
+      { id: 'surfaces', label: 'Surfaces', description: 'SurfaceHost registry, static forwarding, callbacks, and delivery readiness.' },
       { id: 'connectors', label: 'Connectors', description: 'Platform accounts, connector capabilities, and MCP server bindings.' },
       { id: 'resources', label: 'Resources', description: 'Resource directory validation and promotion into memory.' },
       { id: 'identities', label: 'Identities', description: 'Identity bindings, grants, policy simulation, and revocation.' },
@@ -174,6 +221,7 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
     ],
     [
       { label: 'API', value: '/api/cross-plane/summary' },
+      { label: 'Surfaces', value: '/api/surfaces' },
       { label: 'Connectors', value: '/api/connectors/resources' },
       { label: 'Governance', value: 'Identities, grants, audit, executions' },
     ],

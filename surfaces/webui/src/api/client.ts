@@ -1,7 +1,5 @@
 import type { ActivityEvent, NavId, SessionSummary, WorkspaceFile } from '../types';
 
-const authToken = () => localStorage.getItem('cowd-auth-token') || '';
-
 export interface ApiOffline {
   __offline?: boolean;
   __error?: string;
@@ -61,8 +59,6 @@ export class ApiWriteError extends Error {
 function headers(init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   if (!headers.has('Content-Type') && init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const token = authToken();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
   return headers;
 }
 
@@ -199,9 +195,15 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
   const routes: Record<Exclude<NavId, 'chat' | 'settings'>, Array<[string, string]>> = {
     runtime: [
       ['Control plane', '/api/runtime/control-plane'],
+      ['Runtime status', '/api/runtime/status'],
+      ['Runtime snapshot', '/api/runtime/snapshot'],
+      ['Source audit', '/api/runtime/source-audit'],
+      ['Runtime turns', '/api/runtime/turns'],
       ['Effective config', '/api/runtime/config/effective'],
       ['Session leases', '/api/runtime/session-leases'],
       ['Timeline', `/api/runtime/timeline?session_id=${sid}&limit=80`],
+      ['Growth status', '/api/growth/status'],
+      ['Growth events', '/api/growth/events'],
       ['Approvals pending', '/api/approval/pending'],
       ['Tasks', '/api/tasks'],
     ],
@@ -218,6 +220,7 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['Runtime', '/api/memory/runtime'],
       ['Maintenance', '/api/memory/maintenance'],
       ['Clusters', '/api/memory/clusters'],
+      ['Lifecycle', `/api/memory/lifecycle/${encodeURIComponent(sessionId || 'api-context')}`],
     ],
     skills: [
       ['Catalog', '/api/skills/catalog'],
@@ -231,9 +234,14 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
     ],
     tools: [
       ['Registry', '/api/tools'],
-      ['Commands history', '/api/commands/history'],
+      ['Slash history', '/api/slash/history'],
       ['Cowd capabilities', '/api/cowd/capabilities'],
       ['Cross-plane summary', '/api/cross-plane/summary'],
+    ],
+    surfaces: [
+      ['Surface registry', '/api/surfaces'],
+      ['Surface host health', '/api/surfaces/health'],
+      ['Cowd surfaces projection', '/api/cowd/surfaces'],
     ],
     gateway: [
       ['Connectors summary', '/api/connectors/summary'],
@@ -241,6 +249,7 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['Connector capabilities', '/api/connectors/capabilities'],
       ['MCP servers', '/api/connectors/mcp/servers'],
       ['Platforms', '/api/platforms'],
+      ['WeChat QR', '/api/channels/wechat-ilink/qr'],
       ['WeChat accounts', '/api/channels/wechat-ilink/accounts'],
     ],
     mfg: [
@@ -273,6 +282,7 @@ export const api = {
   authVerify: () => read('/api/auth/verify', { authenticated: false, status: 'offline' }),
   sessions: () => read<{ sessions: SessionSummary[] }>('/api/sessions?limit=24', { sessions: [] }),
   searchSessions: (query: string) => read<{ sessions: SessionSummary[] }>(`/api/sessions?limit=24${query ? `&q=${encodeURIComponent(query)}` : ''}`, { sessions: [] }),
+  searchMessages: (query: string) => read(`/api/sessions/search?q=${encodeURIComponent(query)}`, { matches: [] }),
   createSession: (model?: string) => write<SessionSummary>('/api/sessions', {
     method: 'POST',
     body: JSON.stringify({ model }),
@@ -294,6 +304,7 @@ export const api = {
     workspace_canonical: '',
     profile_id: '',
   }),
+  workspaces: () => read('/api/workspaces', { workspaces: [] }),
   files: (dir = '') => read<{ dir: string; files: WorkspaceFile[] }>(`/api/workspace/files${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`, {
     dir,
     files: [],
@@ -328,6 +339,37 @@ export const api = {
   deleteSessionAttachment: (sessionId: string, refId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(refId)}`, { method: 'DELETE' }),
   runtimeTimeline: (sessionId: string) => read(`/api/runtime/timeline?session_id=${encodeURIComponent(sessionId)}&limit=50`, { events: [] }),
   runtimeControlPlane: () => read('/api/runtime/control-plane', {}),
+  runtimeStatus: () => read('/api/runtime/status', {}),
+  runtimeSnapshot: () => read('/api/runtime/snapshot', {}),
+  runtimeSourceAudit: () => read('/api/runtime/source-audit', {}),
+  runtimeSourceRepairPlan: () => read('/api/runtime/source-repair-plan', {}),
+  runtimeTurns: () => read('/api/runtime/turns', { turns: [] }),
+  submitRuntimeTurn: (prompt: string, sessionId?: string, taskId?: string) => writeWithReceipt('/api/runtime/turns', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, session_id: sessionId, task_id: taskId }),
+  }),
+  runtimeTurn: (id: string) => read(`/api/runtime/turns/${encodeURIComponent(id)}`, {}),
+  cancelRuntimeTurn: (id: string) => writeWithReceipt(`/api/runtime/turns/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  realityStatus: () => read('/api/reality/status', {}),
+  realityStatic: () => read('/api/reality/static', { core_map: [] }),
+  realityFlow: (sessionId?: string, limit = 50) => {
+    const params = new URLSearchParams();
+    if (sessionId) params.set('session_id', sessionId);
+    params.set('limit', String(limit));
+    const suffix = params.toString();
+    return read(`/api/reality/flow${suffix ? `?${suffix}` : ''}`, { stages: [], events: [], promotions: [] });
+  },
+  realityPromotions: (filters: { sessionId?: string; target?: string; status?: string; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (filters.sessionId) params.set('session_id', filters.sessionId);
+    if (filters.target) params.set('target', filters.target);
+    if (filters.status) params.set('status', filters.status);
+    params.set('limit', String(filters.limit || 100));
+    return read(`/api/reality/promotions?${params.toString()}`, { promotions: [] });
+  },
+  realityBoundaries: () => read('/api/reality/boundaries', { boundaries: [] }),
+  growthStatus: () => read('/api/growth/status', {}),
+  growthEvents: () => read('/api/growth/events', { events: [], promotions: [] }),
   providers: () => read('/api/config/providers', { providers: [], models: [] }),
   effectiveConfig: () => read('/api/runtime/config/effective', {}),
   reloadProviders: () => write('/api/runtime/providers/reload', { method: 'POST' }),
@@ -338,6 +380,10 @@ export const api = {
   }),
   toggleSolo: () => write('/api/approval/solo', { method: 'POST' }),
   approvalPending: () => read('/api/approval/pending', []),
+  approvalRiskReceipt: (toolName: string, input: unknown, sessionId?: string) => writeWithReceipt('/api/approval/risk-receipt', {
+    method: 'POST',
+    body: JSON.stringify({ tool_name: toolName, input, session_id: sessionId }),
+  }),
   approvalRespond: (id: string, approved: boolean, reason = '') => write('/api/approval/respond', {
     method: 'POST',
     body: JSON.stringify({ id, approved, reason }),
@@ -365,6 +411,7 @@ export const api = {
   memoryLayers: () => read('/api/memory/layers', { layers: [] }),
   memoryLayer: (layer: string) => read(`/api/memory/${encodeURIComponent(layer)}`, { entries: [] }),
   memoryRuntime: () => read('/api/memory/runtime', {}),
+  memoryLifecycle: (id: string) => read(`/api/memory/lifecycle/${encodeURIComponent(id)}`, {}),
   memoryClusters: (limit = 24) => read(`/api/memory/clusters?limit=${limit}`, { clusters: [] }),
   memoryLinks: () => read('/api/memory/links', { links: [] }),
   memoryEntities: () => read('/api/memory/entities', { entities: [] }),
@@ -502,12 +549,41 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ prompt }),
   }),
+  surfaceRegistry: () => read('/api/surfaces', { kind: 'surface.registry', registry: { surfaces: [] } }),
+  surfaceHostHealth: () => read('/api/surfaces/health', { kind: 'surface.health', status: 'offline', registry: { surfaces: [] } }),
+  surfaceDetail: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}`, {}),
+  surfaceRoutes: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/routes`, { routes: [] }),
+  surfaceResources: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/resources`, { resources: [] }),
+  surfaceHealth: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/health`, {}),
+  surfaceEvents: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/events`, { events: [] }),
+  surfaceSend: (id: string, recipient: string, text: string, thread?: string, metadata: Record<string, unknown> = {}) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/send`, {
+    method: 'POST',
+    body: JSON.stringify({ recipient, text, thread: thread || undefined, metadata }),
+  }),
+  surfaceAction: (id: string, action: string, payload: Record<string, unknown> = {}) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/action`, {
+    method: 'POST',
+    body: JSON.stringify({ action, payload }),
+  }),
   platforms: () => read('/api/platforms', {}),
+  platform: (name: string) => read(`/api/platforms/${encodeURIComponent(name)}`, {}),
+  wechatIlinkQrStart: (botType = '3') => writeWithReceipt('/api/channels/wechat-ilink/qr', {
+    method: 'POST',
+    body: JSON.stringify({ bot_type: botType }),
+  }),
+  wechatIlinkQrPoll: (qrcode: string, baseUrl?: string) => writeWithReceipt('/api/channels/wechat-ilink/qr/poll', {
+    method: 'POST',
+    body: JSON.stringify({ qrcode, base_url: baseUrl }),
+  }),
   connectorsSummary: () => read('/api/connectors/summary', {}),
   connectorAccounts: () => read('/api/connectors/accounts', {}),
   connectorCapabilities: () => read('/api/connectors/capabilities', {}),
   connectorResources: () => read('/api/connectors/resources', {}),
   connectorMcpServers: () => read('/api/connectors/mcp/servers', {}),
+  mockDocsTools: () => read('/api/connectors/services/mock.docs/tools', { tools: [] }),
+  mockDocsExecute: (tool: string, input: Record<string, unknown> = {}) => writeWithReceipt('/api/connectors/services/mock.docs/execute', {
+    method: 'POST',
+    body: JSON.stringify({ tool, input }),
+  }),
   connectorRevalidateResource: (reference: string) => write('/api/connectors/resources/revalidate', {
     method: 'POST',
     body: JSON.stringify({ reference }),
@@ -655,6 +731,7 @@ export const api = {
   mfgIncident: (id: string) => read(`/api/apps/mfg/incidents/${encodeURIComponent(id)}`, {}),
   mfgSkills: () => read('/api/apps/mfg/skills', {}),
   mfgSkill: (id: string) => read(`/api/apps/mfg/skills/${encodeURIComponent(id)}`, {}),
+  mfgSkillRun: (id: string) => read(`/api/apps/mfg/skill-runs/${encodeURIComponent(id)}`, {}),
   mfgCreateIncident: (body: Record<string, unknown>) => write('/api/apps/mfg/incidents', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -662,6 +739,13 @@ export const api = {
   mfgIncidentRoom: (id: string) => read(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/room`, {}),
   mfgAnalyzeIncident: (id: string) => write(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/analyze`, { method: 'POST' }),
   mfgPromoteIncidentCase: (id: string) => write(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/cases/promote`, { method: 'POST' }),
+  mfgCase: (id: string) => read(`/api/apps/mfg/cases/${encodeURIComponent(id)}`, {}),
+  mfgCaseSearch: (query: string) => read(`/api/apps/mfg/cases/search?q=${encodeURIComponent(query)}`, { cases: [] }),
+  mfgPlaybook: (id: string) => read(`/api/apps/mfg/playbooks/${encodeURIComponent(id)}`, {}),
+  mfgPlaybookUpsert: (body: Record<string, unknown>) => write('/api/apps/mfg/playbooks/upsert', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
   mfgRecommendPlaybooks: (id: string, limit = 5) => write(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/playbooks/recommend`, {
     method: 'POST',
     body: JSON.stringify({ limit }),
@@ -720,13 +804,13 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(config),
   }),
-  commands: (surface = 'webui') => read(`/api/commands?surface=${encodeURIComponent(surface)}`, { commands: [] }),
-  commandHistory: () => read('/api/commands/history', { history: [] }),
-  resolveCommand: (command: string, surface = 'webui', context: Record<string, unknown> = {}) => write('/api/commands/resolve', {
+  commands: (surface = 'webui') => read(`/api/slash?surface=${encodeURIComponent(surface)}`, { commands: [] }),
+  commandHistory: () => read('/api/slash/history', { history: [] }),
+  resolveCommand: (command: string, surface = 'webui', context: Record<string, unknown> = {}) => write('/api/slash/resolve', {
     method: 'POST',
     body: JSON.stringify({ input: command, surface, context }),
   }),
-  executeCommand: (command: string, args: Record<string, unknown> = {}) => write('/api/commands/execute', {
+  executeCommand: (command: string, args: Record<string, unknown> = {}) => write('/api/slash/dispatch', {
     method: 'POST',
     body: JSON.stringify({ command, args }),
   }),

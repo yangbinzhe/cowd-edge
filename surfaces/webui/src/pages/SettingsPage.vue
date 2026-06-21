@@ -9,8 +9,13 @@ const defaultModel = ref('');
 const settingsError = ref('');
 const busyAction = ref('');
 const authResult = ref<any>(null);
-const authState = computed(() => localStorage.getItem('cowd-auth-token') ? 'stored in browser' : 'not stored');
 const origin = computed(() => location.origin);
+const accessMode = computed(() => {
+  if (authResult.value?.valid || authResult.value?.auth_required === false) return 'internal webui access ready';
+  if (authResult.value?.__offline) return 'gateway offline';
+  if (authResult.value?.error || authResult.value?.__error) return 'external auth required';
+  return 'same-origin gateway surface';
+});
 const providerModels = computed(() => store.providers?.models || []);
 const providerRows = computed(() => store.providers?.providers || []);
 const configuredModel = computed(() => store.providers?.configured_model || store.controlPlane?.configured_model || store.settings?.model || '');
@@ -68,10 +73,6 @@ async function verifyAuth() {
   });
 }
 
-function clearToken() {
-  localStorage.removeItem('cowd-auth-token');
-  authResult.value = { authenticated: false, status: 'cleared' };
-}
 </script>
 
 <template>
@@ -167,16 +168,16 @@ function clearToken() {
       </section>
 
       <section class="settings-section">
-        <h2>Security</h2>
-        <p class="security-note"><Shield :size="16" /> Auth token: {{ authState }}</p>
+        <h2>Gateway access</h2>
+        <p class="security-note"><Shield :size="16" /> WebUI uses same-origin internal access. Bearer auth remains the external API boundary.</p>
         <p class="security-note">Origin: {{ origin }}</p>
+        <p class="security-note">Mode: {{ accessMode }}</p>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="verifyAuth">Verify token</button>
-          <button class="ghost-action" type="button" @click="clearToken">Clear token</button>
+          <button class="ghost-action" type="button" @click="verifyAuth">Verify gateway access</button>
         </div>
         <dl v-if="authResult" class="contract-list">
           <dt>Status</dt>
-          <dd>{{ authResult.status || authResult.authenticated || 'unknown' }}</dd>
+          <dd>{{ authResult.valid === true ? 'valid' : (authResult.status || authResult.authenticated || 'unknown') }}</dd>
           <dt>Error</dt>
           <dd>{{ authResult.__error || authResult.error || '-' }}</dd>
         </dl>

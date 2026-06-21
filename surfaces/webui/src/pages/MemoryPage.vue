@@ -27,6 +27,7 @@ const entities = ref<any>({});
 const triples = ref<any>({});
 const symbolLinks = ref<any>({});
 const maintenance = ref<any>({});
+const lifecycle = ref<any>({});
 const maintenanceScan = ref<any>(null);
 const performance = ref<any>({});
 const runtime = ref<any>({});
@@ -151,6 +152,11 @@ async function updateEntry() {
   await loadLayer();
 }
 
+async function inspectLifecycle() {
+  if (!selectedEntry.value?.id) return;
+  lifecycle.value = await api.memoryLifecycle(selectedEntry.value.id);
+}
+
 async function deleteEntry() {
   if (!selectedEntry.value?.id) return;
   actionResult.value = await api.deleteMemoryEntry(selectedLayer.value, selectedEntry.value.id);
@@ -191,12 +197,15 @@ onMounted(refresh);
     <header class="page-header">
       <div>
         <h1>Memory Graph</h1>
-        <p>长期记忆、事实图谱、召回解释、维护候选和结构化数据内核统一管理。</p>
+        <p>长期记忆、召回解释、维护候选和结构化事实入口集中管理。</p>
       </div>
-      <button class="primary-action" type="button" :disabled="loading" @click="refresh">
-        <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh memory' }}
-      </button>
+      <div class="button-row">
+        <RouterLink class="ghost-action" to="/reality">Open Reality Core</RouterLink>
+        <button class="primary-action" type="button" :disabled="loading" @click="refresh">
+          <RefreshCw :size="15" />
+          {{ loading ? 'Loading' : 'Refresh memory' }}
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
@@ -293,9 +302,11 @@ onMounted(refresh);
               <div class="button-row">
                 <button class="primary-action" type="button" @click="createEntry">Register memory fact</button>
                 <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="updateEntry">Update selected</button>
+                <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="inspectLifecycle">Inspect lifecycle</button>
                 <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="deleteEntry">Archive selected</button>
               </div>
               <RequestReceipt :receipt="actionResult" title="Memory layer receipt" />
+              <RawPayload title="Memory lifecycle detail" :data="lifecycle" />
             </article>
           </div>
         </section>

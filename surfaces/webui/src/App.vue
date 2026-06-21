@@ -2,8 +2,8 @@
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  Activity, Brain, Boxes, ClipboardCheck, Layers, MessageSquare,
-  Network, RadioTower, Settings, Wrench,
+  Activity, Brain, Boxes, CircleDot, ClipboardCheck, Layers, MessageSquare,
+  Network, PanelsTopLeft, RadioTower, Settings, Wrench,
 } from 'lucide-vue-next';
 import { useAppStore } from './stores/app';
 import type { NavItem } from './types';
@@ -20,10 +20,12 @@ const nav: NavItem[] = [
   { id: 'chat', label: 'Chat', route: '/chat', icon: MessageSquare, group: 'Core' },
   { id: 'runtime', label: 'Runtime', route: '/runtime', icon: Activity, group: 'Core' },
   { id: 'context', label: 'Context', route: '/context', icon: Layers, group: 'Core' },
-  { id: 'memory', label: 'Memory', route: '/memory', icon: Brain, group: 'Knowledge' },
+  { id: 'reality', label: 'Reality Core', route: '/reality', icon: CircleDot, group: 'Core' },
+  { id: 'memory', label: 'Memory', route: '/memory', icon: Brain, group: 'Reality' },
   { id: 'skills', label: 'Skills', route: '/skills', icon: Boxes, group: 'Automation' },
   { id: 'agents', label: 'Agents', route: '/agents', icon: Network, group: 'Automation' },
   { id: 'tools', label: 'Tools', route: '/tools', icon: Wrench, group: 'Automation' },
+  { id: 'surfaces', label: 'Surfaces', route: '/surfaces', icon: PanelsTopLeft, group: 'Channels' },
   { id: 'gateway', label: 'Gateway', route: '/gateway', icon: RadioTower, group: 'Channels' },
   ...pluginNavItems,
   { id: 'audit', label: 'Audit', route: '/audit', icon: ClipboardCheck, group: 'System' },

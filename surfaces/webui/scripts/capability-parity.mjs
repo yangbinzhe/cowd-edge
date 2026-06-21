@@ -22,12 +22,14 @@ const version = process.env.COWD_VERSION || 'v0.9.245';
 const gate = process.argv.includes('--gate');
 
 const modules = [
-  { id: 'runtime', page: 'RuntimePage.vue', routes: ['/api/runtime'], tui: ['runtime_activity_panel.rs', 'system_status_bar.rs'], cli: ['gateway', 'doctor'] },
+  { id: 'runtime', page: 'RuntimePage.vue', routes: ['/api/runtime', '/api/growth'], tui: ['runtime_activity_panel.rs', 'system_status_bar.rs'], cli: ['gateway', 'doctor'] },
   { id: 'context', page: 'ContextPage.vue', routes: ['/api/context', '/api/evidence'], tui: ['context_panel.rs', 'context_suggestions.rs'], cli: ['prompt', 'compact'] },
-  { id: 'memory', page: 'MemoryPage.vue', routes: ['/api/memory', '/api/cowd/structured'], tui: ['memory_panel.rs', 'l4_knowledge_view.rs'], cli: ['Config'] },
+  { id: 'memory', page: 'MemoryPage.vue', routes: ['/api/memory', '/api/cowd/structured'], tui: ['memory_panel.rs', 'l4_memory_view.rs'], cli: ['Config'] },
+  { id: 'reality', page: 'RealityCorePage.vue', routes: ['/api/reality'], tui: ['gateway_panel.rs', 'runtime_control_store.rs', 'gateway_client.rs'], cli: ['gateway'] },
   { id: 'skills', page: 'SkillsPage.vue', routes: ['/api/skills'], tui: ['skills_panel.rs'], cli: ['Skill'] },
   { id: 'agents', page: 'AgentsPage.vue', routes: ['/api/agents', '/api/tasks'], tui: ['agent_team_panel.rs', 'agents_overlay.rs'], cli: ['prompt'] },
-  { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/commands'], tui: ['tool_ops_panel.rs', 'gateway_client.rs', 'runtime_activity_panel.rs'], cli: ['prompt'] },
+  { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/slash'], tui: ['tool_ops_panel.rs', 'gateway_client.rs', 'runtime_activity_panel.rs'], cli: ['prompt'] },
+  { id: 'surfaces', page: 'SurfacePage.vue', routes: ['/api/surfaces'], tui: ['surface_panel.rs', 'gateway_panel.rs'], cli: ['gateway'] },
   { id: 'gateway', page: 'GatewayPage.vue', routes: ['/api/connectors', '/api/cross-plane', '/api/platforms'], tui: ['gateway_panel.rs', 'approval_cockpit_panel.rs'], cli: ['gateway'] },
   { id: 'mfg', page: 'MfgPage.vue', routes: ['/api/apps/mfg', '/api/matrix'], tui: ['goal_workbench_panel.rs', 'task_decomposition_view.rs'], cli: ['gateway'] },
   { id: 'audit', page: 'AuditPage.vue', routes: ['/api/audit', '/api/usage', '/api/cowd/release-gate'], tui: ['export_dialog.rs', 'approval_cockpit_panel.rs'], cli: ['Doctor'] },
@@ -129,18 +131,18 @@ const moduleReports = modules.map((module) => {
   if (!capability.length) findings.push('missing capability projection endpoint');
   if (!tui.length) findings.push('missing TUI projection evidence');
   if (!cli.length) findings.push('missing CLI core access evidence');
-  if (module.id === 'mfg' && !(pageText.includes('manufacturing application layer') && pageText.includes('cowd kernel'))) {
-    findings.push('MFG boundary text is missing from WebUI');
+  if (module.id === 'mfg' && !(pageText.includes('Matrix Engine') && pageText.includes('制造领域应用'))) {
+    findings.push('MFG Matrix application boundary text is missing from WebUI');
   }
   if (module.id === 'mfg') {
-    if (!runtimeCapability.includes('cowd.structured_data.core') || !runtimeCapability.includes('CowdCapabilityLayer::Kernel')) {
-      findings.push('Structured data kernel capability is not declared');
+    if (!runtimeCapability.includes('cowd.matrix.engine') || !runtimeCapability.includes('CowdCapabilityKind::StructuredData')) {
+      findings.push('Matrix Engine must be declared as a Reality Core structured-data engine');
     }
-    if (!runtimeCapability.includes('capability_registry_excludes_matrix_and_mfg_application_boundaries')) {
-      findings.push('Runtime capability registry must exclude Matrix/MFG application boundaries');
+    if (!runtimeCapability.includes('capability_registry_declares_matrix_as_reality_core_engine_without_mfg_ownership')) {
+      findings.push('Runtime capability registry must guard Matrix as Reality Core engine without MFG ownership');
     }
-    if (!runtimeCapability.includes('registry.capability("cowd.matrix.runtime").is_none()')) {
-      findings.push('Runtime capability registry must not reintroduce legacy Matrix capability id');
+    if (runtimeCapability.includes('cowd.matrix.runtime')) {
+      findings.push('Runtime capability registry must not reintroduce legacy Matrix runtime capability id');
     }
     if (!matrixBoundaryTest.includes('fact_kernel_is_consumed_by_memory_and_matrix_engines')) {
       findings.push('Matrix/fact-kernel source boundary test is missing');
@@ -157,6 +159,23 @@ const moduleReports = modules.map((module) => {
   }
   if (module.id === 'memory' && !referencesAny(tuiSources, ['structured_sources', 'structured_facts', 'structured_evidence', 'structured_watermarks'])) {
     findings.push('TUI structured data projection is missing');
+  }
+  if (module.id === 'reality') {
+    const requiredRealityTerms = [
+      'Reality Core',
+      'Fact Flow',
+      'realityStatus',
+      'realityFlow',
+      'realityBoundaries',
+    ];
+    for (const term of requiredRealityTerms) {
+      if (!pageText.includes(term) && !read(path.join(webuiRoot, 'src/api/client.ts')).includes(term)) {
+        findings.push(`Reality Core WebUI evidence missing ${term}`);
+      }
+    }
+    for (const term of ['reality_status', 'reality_flow', 'reality_boundaries', 'gateway_reality_core', 'gateway_fact_flow']) {
+      if (!tuiSources.includes(term)) findings.push(`TUI Reality Core projection is missing ${term}`);
+    }
   }
   if (module.id === 'tools') {
     const requiredToolOpsTerms = [
@@ -210,7 +229,8 @@ const report = {
     'WebUI is the strongest management surface and must expose complete management workflows.',
     'TUI keeps the same core capability set with console-appropriate interaction density.',
     'CLI stays minimal and controls only kernel entry, import/view/status/start workflows.',
-    'MFG remains an application layer over cowd; structured data remains cowd kernel capability.',
+    'Reality Core is the visible fact system boundary; Fact Flow is the runtime trace across Memory, Matrix, Growth, Context, and Audit.',
+    'Matrix Engine is a Reality Core structured-data engine; MFG remains an application layer over Matrix and must not own the core engine.',
   ],
   totals: {
     modules: moduleReports.length,

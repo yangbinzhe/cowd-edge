@@ -19,7 +19,10 @@ const result = ref<any>(null);
 const incidentTitle = ref('Line A torque deviation threatens QA-2026-0616 shipment');
 const selectedIncidentId = ref('');
 const selectedSkillId = ref('');
+const selectedSkillRunId = ref('');
 const selectedActionId = ref('');
+const selectedCaseId = ref('');
+const selectedPlaybookId = ref('webui-playbook');
 const cockpitProfileId = ref('webui-manufacturing');
 const cockpitOwnerRef = ref('user:webui-operator');
 const cockpitReportId = ref('');
@@ -63,6 +66,7 @@ const skills = computed(() => items(state.value?.skills, 'items'));
 const room = computed(() => state.value?.room || {});
 const analysis = computed(() => room.value?.analysis || result.value?.analysis || result.value?.operational_analysis);
 const recommendedActions = computed(() => analysis.value?.recommended_actions || []);
+const skillRuns = computed(() => room.value?.skill_runs || room.value?.skills || []);
 const contractSummary = computed(() => ({
   count: (mfgWriteContracts as any[]).length,
   domains: Array.from(new Set((mfgWriteContracts as any[]).map((contract) => contract.domain))).join(', '),
@@ -649,7 +653,32 @@ async function recommendPlaybooks() {
 async function promoteCase() {
   if (!selectedIncidentId.value) return;
   result.value = await api.mfgPromoteIncidentCase(selectedIncidentId.value);
+  selectedCaseId.value = result.value?.case?.case_id || result.value?.case_id || selectedCaseId.value;
   await openIncidentRoom();
+}
+
+async function inspectCase() {
+  if (!selectedCaseId.value) return;
+  result.value = await api.mfgCase(selectedCaseId.value);
+}
+
+async function searchCases() {
+  result.value = await api.mfgCaseSearch(incidentTitle.value);
+}
+
+async function inspectPlaybook() {
+  if (!selectedPlaybookId.value) return;
+  result.value = await api.mfgPlaybook(selectedPlaybookId.value);
+}
+
+async function upsertPlaybook() {
+  result.value = await api.mfgPlaybookUpsert({
+    playbook_id: selectedPlaybookId.value,
+    title: 'WebUI manufacturing triage',
+    domain: 'server_manufacturing',
+    steps: ['confirm metric lineage', 'open incident room', 'plan governed action'],
+    risk: 'medium',
+  });
 }
 
 async function planSkills() {
@@ -662,7 +691,13 @@ async function planSkills() {
 async function runSkill() {
   if (!selectedIncidentId.value || !selectedSkillId.value) return;
   result.value = await api.mfgRunSkill(selectedIncidentId.value, selectedSkillId.value);
+  selectedSkillRunId.value = result.value?.skill_run?.run_id || result.value?.run_id || selectedSkillRunId.value;
   await openIncidentRoom();
+}
+
+async function inspectSkillRun() {
+  if (!selectedSkillRunId.value) return;
+  result.value = await api.mfgSkillRun(selectedSkillRunId.value);
 }
 
 async function executeAction() {
@@ -741,12 +776,15 @@ onMounted(refresh);
     <header class="page-header">
       <div>
         <h1>MFG Manufacturing Application</h1>
-        <p>MFG is the manufacturing application layer on top of the cowd kernel. This page manages its real domain data, incidents, skills, action bridge, and cockpit reports.</p>
+        <p>MFG 是 Matrix Engine 的制造领域应用，负责领域数据、事件、技能、动作桥和报告。</p>
       </div>
-      <button class="primary-action" type="button" :disabled="loading" @click="refresh">
-        <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh MFG' }}
-      </button>
+      <div class="button-row">
+        <RouterLink class="ghost-action" to="/reality?section=core-map">Open Reality Core</RouterLink>
+        <button class="primary-action" type="button" :disabled="loading" @click="refresh">
+          <RefreshCw :size="15" />
+          {{ loading ? 'Loading' : 'Refresh MFG' }}
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
@@ -1052,6 +1090,22 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="recommendPlaybooks">Recommend playbooks</button>
           <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="promoteCase">Promote case</button>
         </div>
+        <div class="memory-form-row">
+          <label class="field-line">
+            Case id
+            <input v-model="selectedCaseId" type="text" />
+          </label>
+          <label class="field-line">
+            Playbook id
+            <input v-model="selectedPlaybookId" type="text" />
+          </label>
+        </div>
+        <div class="button-row">
+          <button class="ghost-action" type="button" @click="searchCases">Search cases</button>
+          <button class="ghost-action" type="button" :disabled="!selectedCaseId" @click="inspectCase">Inspect case</button>
+          <button class="ghost-action" type="button" :disabled="!selectedPlaybookId" @click="inspectPlaybook">Inspect playbook</button>
+          <button class="ghost-action" type="button" :disabled="!selectedPlaybookId" @click="upsertPlaybook">Upsert playbook</button>
+        </div>
         <label class="field-line">
           Recommended action
           <select v-model="selectedActionId">
@@ -1074,7 +1128,7 @@ onMounted(refresh);
           @live="bridgeExecution"
         />
         <RequestReceipt :receipt="result" title="Action receipt" />
-        <RawPayload title="Analysis action result" :data="{ analysis, executions: room?.executions, playbooks: room?.playbooks }" />
+        <RawPayload title="Analysis action result" :data="{ analysis, executions: room?.executions, playbooks: room?.playbooks, case_id: selectedCaseId, playbook_id: selectedPlaybookId }" />
       </article>
 
       <article class="management-panel" data-section="skills">
@@ -1095,8 +1149,14 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="planSkills">Plan skills</button>
           <button class="primary-action" type="button" :disabled="!selectedIncidentId || !selectedSkillId" @click="runSkill">Run skill</button>
         </div>
+        <label class="field-line">
+          Skill run id
+          <input v-model="selectedSkillRunId" type="text" />
+        </label>
+        <button class="ghost-action" type="button" :disabled="!selectedSkillRunId" @click="inspectSkillRun">Inspect skill run</button>
         <DataTable v-if="skills.length" :rows="skills.slice(0, 8)" :columns="['skill_id', 'name', 'risk', 'status']" />
-        <RawPayload title="Manufacturing skill run detail" :data="{ skills: state?.skills, skill_runs: room?.skill_runs || result?.skill_run }" />
+        <DataTable v-if="skillRuns.length" :rows="skillRuns.slice(0, 8)" />
+        <RawPayload title="Manufacturing skill run detail" :data="{ skills: state?.skills, skill_runs: skillRuns, result }" />
       </article>
 
       <article class="management-panel" data-section="reports">

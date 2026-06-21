@@ -9,12 +9,14 @@ import ChatPage from './pages/ChatPage.vue';
 import AgentsPage from './pages/AgentsPage.vue';
 import AuditPage from './pages/AuditPage.vue';
 import MemoryPage from './pages/MemoryPage.vue';
+import RealityCorePage from './pages/RealityCorePage.vue';
 import RuntimePage from './pages/RuntimePage.vue';
 import ContextPage from './pages/ContextPage.vue';
 import GatewayPage from './pages/GatewayPage.vue';
 import MfgPage from './pages/MfgPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
 import SkillsPage from './pages/SkillsPage.vue';
+import SurfacePage from './pages/SurfacePage.vue';
 import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
@@ -32,9 +34,11 @@ function mountApp(path = '/chat') {
       { path: '/runtime', component: RuntimePage },
       { path: '/context', component: ContextPage },
       { path: '/memory', component: MemoryPage },
+      { path: '/reality', component: RealityCorePage },
       { path: '/skills', component: SkillsPage },
       { path: '/agents', component: AgentsPage },
       { path: '/tools', component: ToolsPage },
+      { path: '/surfaces', component: SurfacePage },
       { path: '/gateway', component: GatewayPage },
       ...pluginRoutes,
       { path: '/mfg', component: MfgPage },
@@ -292,7 +296,7 @@ describe('Cowd Vue WebUI shell', () => {
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
       if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
       if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/commands') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
       if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
       if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
@@ -346,14 +350,14 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/cowd/release-gate', expect.any(Object));
   });
 
-  it('verifies auth through the backend instead of showing a fake success', async () => {
+  it('verifies same-origin gateway access through the backend instead of managing browser tokens', async () => {
     const fetchMock = vi.fn((path: RequestInfo | URL) => {
       const url = String(path);
-      if (url === '/api/auth/verify') return Promise.resolve(new Response(JSON.stringify({ authenticated: true, status: 'verified' }), { status: 200 }));
+      if (url === '/api/auth/verify') return Promise.resolve(new Response(JSON.stringify({ valid: true, auth_required: true }), { status: 200 }));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
       if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
       if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
-      if (url === '/api/commands') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
       if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ dir: '', files: [] })));
       return Promise.resolve(new Response(JSON.stringify({})));
@@ -361,9 +365,46 @@ describe('Cowd Vue WebUI shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     const wrapper = await mountApp('/settings');
     await settleAsync();
-    await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('Verify token'))?.trigger('click');
+    await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('Verify gateway access'))?.trigger('click');
     await settleAsync();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/verify', expect.any(Object));
+    expect(wrapper.text()).toContain('same-origin internal access');
+  });
+
+  it('renders runtime growth loop from gateway growth endpoints', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
+      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
+      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({ configured_model: 'DeepSeek-v4-flash', provider_count: 1, provider_model_count: 2 })));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
+      if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
+      if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
+      if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
+      if (url === '/api/runtime/config/effective') return Promise.resolve(new Response(JSON.stringify({ source: 'test' })));
+      if (url === '/api/runtime/session-leases') return Promise.resolve(new Response(JSON.stringify({ leases: [] })));
+      if (url === '/api/approval/pending') return Promise.resolve(new Response(JSON.stringify({ pending: [] })));
+      if (url.startsWith('/api/runtime/timeline')) return Promise.resolve(new Response(JSON.stringify({ events: [{ sequence: 1, kind: 'turn', status: 'complete', detail: 'done' }] })));
+      if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ tasks: [{ id: 'task-1', status: 'done', objective: 'align webui', current_phase: 'review' }] })));
+      if (url === '/api/growth/status') return Promise.resolve(new Response(JSON.stringify({ status: 'ready', event_count: 1, promotion_count: 1, sources: { risk_gate: 1 } })));
+      if (url === '/api/growth/events') return Promise.resolve(new Response(JSON.stringify({
+        events: [{ id: 'growth-1', source_event_kind: 'risk_gate', selected_mode: 'promote', risk: 'low', created_at: '2026-06-21T00:00:00Z' }],
+        promotions: [{ target: 'memory', status: 'accepted', target_id: 'mem-1', summary: 'promoted stable lesson' }],
+      })));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = await mountApp('/runtime');
+    await settleAsync();
+    await settleAsync();
+    expect(wrapper.text()).toContain('Growth loop');
+    expect(wrapper.text()).toContain('risk_gate');
+    expect(wrapper.text()).toContain('memory');
+    expect(fetchMock).toHaveBeenCalledWith('/api/growth/status', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/growth/events', expect.any(Object));
   });
 
   it('calls real cross-plane identity grant and action endpoints', async () => {
@@ -399,6 +440,86 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/cross-plane/grants/grant-1', expect.objectContaining({ method: 'DELETE' }));
   });
 
+  it('calls slash and surface host endpoints through the current gateway contracts', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, commands: [], history: [] }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    await api.commands();
+    await api.commandHistory();
+    await api.resolveCommand('/status', 'webui', { source: 'test' });
+    await api.executeCommand('/status', { verbose: true });
+    await api.surfaceRegistry();
+    await api.surfaceHostHealth();
+    await api.surfaceDetail('webui');
+    await api.surfaceRoutes('webui');
+    await api.surfaceResources('webui');
+    await api.surfaceHealth('webui');
+    await api.surfaceEvents('webui');
+    await api.surfaceSend('webui', 'operator', 'hello');
+    await api.surfaceAction('webui', 'health', { source: 'test' });
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/slash?surface=webui', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/slash/history', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/slash/resolve', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/slash/dispatch', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/health', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/routes', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/resources', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/health', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/events', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/send', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/action', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('renders SurfaceHost registry, health, routes, resources, events, and dispatch controls', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
+      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
+      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
+      if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
+      if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
+      if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
+      if (url === '/api/surfaces') return Promise.resolve(new Response(JSON.stringify({
+        kind: 'surface.registry',
+        registry: {
+          surfaces: [
+            { id: 'webui', name: 'WebUI', kind: 'web', status: 'ready', lifecycle: 'builtin', capabilities: ['chat'], routes: [{ path: '/s/webui/*path' }], resources: [{ path: '/' }] },
+          ],
+        },
+      })));
+      if (url === '/api/surfaces/health') return Promise.resolve(new Response(JSON.stringify({
+        kind: 'surface.health',
+        status: 'ready',
+        host: { status: 'ready', surface_count: 1, external_surface_count: 0, route_count: 1, resource_count: 1 },
+      })));
+      if (url === '/api/surfaces/webui') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.detail', surface: { id: 'webui', name: 'WebUI', kind: 'web' } })));
+      if (url === '/api/surfaces/webui/routes') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.routes', routes: [{ method: 'GET', path: '/s/webui/*path', target: 'static' }] })));
+      if (url === '/api/surfaces/webui/resources') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.resources', resources: [{ path: '/', file_path: 'dist/index.html', content_type: 'text/html', spa_fallback: true }] })));
+      if (url === '/api/surfaces/webui/health') return Promise.resolve(new Response(JSON.stringify({ ok: true, status: 'ready' })));
+      if (url === '/api/surfaces/webui/events') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.events', events: [{ kind: 'ready', status: 'ready', message: 'booted' }] })));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = await mountApp('/surfaces');
+    await settleAsync();
+    await settleAsync();
+    expect(wrapper.text()).toContain('Surface Host');
+    expect(wrapper.text()).toContain('Surface registry');
+    expect(wrapper.text()).toContain('WebUI');
+    expect(wrapper.text()).toContain('Routes');
+    expect(wrapper.text()).toContain('Resources');
+    expect(wrapper.text()).toContain('Dispatch');
+    expect(wrapper.text()).toContain('Events');
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/events', expect.any(Object));
+  });
+
   it('loads skill detail and files from real skill management endpoints', async () => {
     const fetchMock = vi.fn((path: RequestInfo | URL) => {
       const url = String(path);
@@ -406,7 +527,7 @@ describe('Cowd Vue WebUI shell', () => {
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
       if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
       if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/commands') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
       if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
       if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
@@ -441,7 +562,7 @@ describe('Cowd Vue WebUI shell', () => {
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
       if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
       if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/commands') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
       if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
       if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
@@ -484,7 +605,7 @@ describe('Cowd Vue WebUI shell', () => {
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
       if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
       if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/commands') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
       if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
       if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));

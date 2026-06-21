@@ -92,10 +92,13 @@ onMounted(refresh);
         <h1>Context Builder</h1>
         <p>上下文包构建、历史包络、推荐动作和证据解析集中管理。</p>
       </div>
-      <button class="primary-action" type="button" :disabled="loading" @click="refresh">
-        <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Build context' }}
-      </button>
+      <div class="button-row">
+        <RouterLink class="ghost-action" :to="`/reality?section=fact-flow&session_id=${encodeURIComponent(sessionId)}`">Open Fact Flow</RouterLink>
+        <button class="primary-action" type="button" :disabled="loading" @click="refresh">
+          <RefreshCw :size="15" />
+          {{ loading ? 'Loading' : 'Build context' }}
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>

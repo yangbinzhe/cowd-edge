@@ -29,16 +29,19 @@ const chatText = read(files.chat);
 const toolsText = read(files.tools);
 const capabilitiesText = read(files.capabilities);
 const failures = [];
+const legacyCommandsPath = `/api/${'commands'}`;
 
 for (const required of [
   "commands: (surface = 'webui')",
   'resolveCommand:',
-  "'/api/commands/resolve'",
+  "'/api/slash/resolve'",
   'executeCommand:',
-  "'/api/commands/execute'",
+  "'/api/slash/dispatch'",
 ]) {
   if (!clientText.includes(required)) failures.push(`client missing ${required}`);
 }
+
+if (clientText.includes(legacyCommandsPath)) failures.push(`client still references legacy ${legacyCommandsPath}`);
 
 if (!storeText.includes('api.resolveCommand(command')) failures.push('store executeCommand does not resolve before execute');
 if (!storeText.includes('api.executeCommand(resolvedCommand')) failures.push('store executeCommand does not execute resolved command');
@@ -70,7 +73,7 @@ const report = {
   version,
   generated_at: new Date().toISOString(),
   status: failures.length ? 'fail' : 'pass',
-  scope: 'command action flow must use gateway command registry, resolve, and execute; static capabilities remain page coverage metadata only',
+  scope: 'command action flow must use slash registry, resolve, and dispatch; static capabilities remain page coverage metadata only',
   failures,
 };
 

@@ -74,7 +74,7 @@ const pageRequirements = [
   },
   {
     file: 'src/pages/SettingsPage.vue',
-    terms: ['Model count', 'Profiles', 'Approval policy', 'Auth token', 'Appearance'],
+    terms: ['Model count', 'Profiles', 'Approval policy', 'Gateway access', 'Appearance'],
   },
 ];
 

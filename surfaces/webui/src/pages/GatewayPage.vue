@@ -20,11 +20,17 @@ const identityId = ref('');
 const grantId = ref('');
 const executeMode = ref('dry_run');
 const idempotencyKey = ref('');
+const platformName = ref('wechat-ilink');
+const wechatBotType = ref('3');
+const wechatQrCode = ref('');
+const mockDocsTool = ref('search');
 
 const accounts = computed(() => Array.isArray(state.value.accounts?.accounts) ? state.value.accounts.accounts : []);
 const capabilities = computed(() => Array.isArray(state.value.capabilities?.capabilities) ? state.value.capabilities.capabilities : []);
 const resources = computed(() => Array.isArray(state.value.resources?.resources) ? state.value.resources.resources : Array.isArray(state.value.resources?.items) ? state.value.resources.items : []);
 const mcpServers = computed(() => Array.isArray(state.value.mcp?.servers) ? state.value.mcp.servers : []);
+const surfaces = computed(() => Array.isArray(state.value.surfaces?.registry?.surfaces) ? state.value.surfaces.registry.surfaces : []);
+const surfaceHost = computed(() => state.value.surfaceHealth?.host || state.value.surfaceHealth || {});
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
 const identities = computed(() => Array.isArray(state.value.identities?.identities) ? state.value.identities.identities : []);
 const grants = computed(() => Array.isArray(state.value.grants?.grants) ? state.value.grants.grants : []);
@@ -64,6 +70,22 @@ const grantRows = computed(() => grants.value.slice(0, 12).map((item: any) => ({
   capability: item.capability,
   type: item.grant_type,
 })));
+const surfaceRows = computed(() => surfaces.value.slice(0, 12).map((item: any) => ({
+  id: item.id,
+  name: item.name || item.id || '-',
+  kind: item.kind || '-',
+  lifecycle: item.lifecycle || '-',
+  routes: Array.isArray(item.routes) ? item.routes.length : Number(item.routes || 0),
+  resources: Array.isArray(item.resources) ? item.resources.length : Number(item.resources || 0),
+})));
+const mockDocsRows = computed(() => {
+  const tools = state.value.mockDocs?.tools || state.value.mockDocs?.items || [];
+  return Array.isArray(tools) ? tools.slice(0, 10).map((item: any) => ({
+    name: item.name || item.id || item.tool || '-',
+    description: item.description || item.summary || '-',
+    risk: item.risk || '-',
+  })) : [];
+});
 
 function crossPlaneAction() {
   return {
@@ -85,13 +107,17 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, summary, nextAccounts, nextCapabilities, nextResources, mcp, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, mockDocs, surfacesData, surfaceHealth, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
       api.platforms(),
+      api.platform(platformName.value),
       api.connectorsSummary(),
       api.connectorAccounts(),
       api.connectorCapabilities(),
       api.connectorResources(),
       api.connectorMcpServers(),
+      api.mockDocsTools(),
+      api.surfaceRegistry(),
+      api.surfaceHostHealth(),
       api.crossPlaneSummary(),
       api.crossPlaneIdentities(),
       api.crossPlaneGrants(),
@@ -99,7 +125,7 @@ async function refresh() {
       api.crossPlaneAdapters(),
       api.crossPlaneExecutions(),
     ]);
-    state.value = { platforms, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, mockDocs, surfaces: surfacesData, surfaceHealth, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
     if (!resourceRef.value) {
       resourceRef.value = resources.value[0]?.reference || resources.value[0]?.resource_ref || '';
     }
@@ -110,6 +136,24 @@ async function refresh() {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadPlatform() {
+  state.value = { ...(state.value || {}), platformDetail: await api.platform(platformName.value) };
+}
+
+async function startWechatQr() {
+  actionResult.value = await api.wechatIlinkQrStart(wechatBotType.value);
+  wechatQrCode.value = actionResult.value?.data?.qrcode || actionResult.value?.data?.qr_code || wechatQrCode.value;
+}
+
+async function pollWechatQr() {
+  if (!wechatQrCode.value) return;
+  actionResult.value = await api.wechatIlinkQrPoll(wechatQrCode.value, location.origin);
+}
+
+async function executeMockDocsTool() {
+  actionResult.value = await api.mockDocsExecute(mockDocsTool.value, { query: resourceRef.value || 'cowd gateway' });
 }
 
 async function revalidateResource() {
@@ -226,13 +270,29 @@ onMounted(refresh);
         <small>executions recorded</small>
       </article>
       <article class="metric-card" data-tone="info">
+        <span>Surfaces</span>
+        <strong>{{ surfaces.length }}</strong>
+        <small>{{ surfaceHost.status || state.surfaceHealth?.status || 'host' }}</small>
+      </article>
+      <article class="metric-card" data-tone="info">
         <span>Identity/Grants</span>
         <strong>{{ identities.length }}/{{ grants.length }}</strong>
         <small>control-plane bindings</small>
       </article>
     </section>
 
-    <section class="gateway-grid">
+      <section class="gateway-grid">
+      <section class="management-panel gateway-panel wide" data-section="surfaces">
+        <header>
+          <h2>Surface host</h2>
+          <StatusPill :status="state.surfaceHealth?.__offline ? 'offline' : (surfaceHost.status || state.surfaceHealth?.status || 'ready')" />
+        </header>
+        <p>Gateway owns external ingress, static forwarding, callback routing, and result delivery across WebUI, TUI, and external message surfaces.</p>
+        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['id', 'name', 'kind', 'lifecycle', 'routes', 'resources']" />
+        <EmptyState v-else title="No surfaces" detail="SurfaceHost 未返回可用 surface，或 Gateway 尚未启动。" />
+        <RawPayload title="Surface host health" :data="state.surfaceHealth || {}" />
+      </section>
+
       <section class="management-panel gateway-panel wide">
         <header>
           <h2>Platforms and connectors</h2>
@@ -241,6 +301,40 @@ onMounted(refresh);
         <DataTable v-if="accountRows.length" :rows="accountRows" :columns="['provider', 'account', 'status', 'scopes']" />
         <EmptyState v-else title="No connector accounts" detail="配置平台账号后会在这里展示。" />
         <RawPayload title="Platforms" :data="state.platforms || {}" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="connectors">
+        <header>
+          <h2>Channel and connector diagnostics</h2>
+          <span>{{ platformName }}</span>
+        </header>
+        <div class="memory-form-row">
+          <label class="field-line">
+            Platform
+            <input v-model="platformName" type="text" />
+          </label>
+          <label class="field-line">
+            WeChat bot type
+            <input v-model="wechatBotType" type="text" />
+          </label>
+        </div>
+        <label class="field-line">
+          WeChat QR code
+          <input v-model="wechatQrCode" type="text" />
+        </label>
+        <div class="button-row">
+          <button class="ghost-action" type="button" @click="loadPlatform">Load platform</button>
+          <button class="ghost-action" type="button" @click="startWechatQr">Start QR</button>
+          <button class="ghost-action" type="button" :disabled="!wechatQrCode" @click="pollWechatQr">Poll QR</button>
+        </div>
+        <DataTable v-if="mockDocsRows.length" :rows="mockDocsRows" :columns="['name', 'description', 'risk']" />
+        <label class="field-line">
+          Mock docs tool
+          <input v-model="mockDocsTool" type="text" />
+        </label>
+        <button class="ghost-action" type="button" @click="executeMockDocsTool">Execute mock docs tool</button>
+        <RequestReceipt :receipt="actionResult" title="Channel diagnostic receipt" />
+        <RawPayload title="Channel diagnostic detail" :data="{ platform: state.platformDetail, mockDocs: state.mockDocs }" />
       </section>
 
       <section class="management-panel gateway-panel">

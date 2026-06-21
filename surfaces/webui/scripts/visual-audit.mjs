@@ -18,6 +18,7 @@ const routes = [
   { id: 'memory', path: '/#/memory' },
   { id: 'skills', path: '/#/skills' },
   { id: 'agents', path: '/#/agents' },
+  { id: 'surfaces', path: '/#/surfaces' },
   { id: 'gateway', path: '/#/gateway' },
   { id: 'mfg', path: '/#/apps/mfg' },
   { id: 'audit', path: '/#/audit' },
