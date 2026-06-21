@@ -3,7 +3,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = resolve(__dirname, '..', '..');
+const surfaceRoot = resolve(__dirname, '..', '..');
+const workspaceRoot = resolve(surfaceRoot, '..');
 const webuiRoot = resolve(__dirname, '..');
 const planRoot = process.env.COWD_PLAN_ROOT || resolve(workspaceRoot, 'plan', '0617-最终目标收口');
 const version = process.env.COWD_VERSION || 'v0.9.243';

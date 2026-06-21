@@ -4,7 +4,8 @@ import path from 'node:path';
 import process from 'node:process';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
-const workspaceRoot = path.resolve(webuiRoot, '..');
+const surfaceRoot = path.resolve(webuiRoot, '../..');
+const workspaceRoot = path.resolve(surfaceRoot, '..');
 const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0618-架构最终重构路线');
 const reportDir = path.join(planRoot, 'reports');
 const version = process.env.COWD_VERSION || 'v0.9.294';

@@ -4,11 +4,18 @@ import path from 'node:path';
 import process from 'node:process';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
-const workspaceRoot = path.resolve(webuiRoot, '..');
+const surfaceRoot = path.resolve(webuiRoot, '../..');
+const workspaceRoot = path.resolve(surfaceRoot, '..');
 const backendRoot = process.env.COWD_BACKEND_REPO
-  || [path.join(workspaceRoot, 'dev-iacc'), path.join(workspaceRoot, 'cowd')]
-    .find((candidate) => fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes.rs')))
-  || workspaceRoot;
+  || [
+    path.join(workspaceRoot, 'cowd-develop'),
+    path.join(workspaceRoot, 'cowd'),
+    path.join(workspaceRoot, 'dev-iacc'),
+  ].find((candidate) => (
+    fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes.rs'))
+    || fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes.rs'))
+  ))
+  || surfaceRoot;
 const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
 const reportDir = path.join(planRoot, 'reports');
 const version = process.env.COWD_VERSION || 'v0.9.245';
@@ -17,13 +24,13 @@ const gate = process.argv.includes('--gate');
 const modules = [
   { id: 'runtime', page: 'RuntimePage.vue', routes: ['/api/runtime'], tui: ['runtime_activity_panel.rs', 'system_status_bar.rs'], cli: ['gateway', 'doctor'] },
   { id: 'context', page: 'ContextPage.vue', routes: ['/api/context', '/api/evidence'], tui: ['context_panel.rs', 'context_suggestions.rs'], cli: ['prompt', 'compact'] },
-  { id: 'memory', page: 'MemoryPage.vue', routes: ['/api/memory', '/api/cowd/structured'], tui: ['memory_panel.rs', 'l4_knowledge_view.rs'], cli: ['import-session'] },
-  { id: 'skills', page: 'SkillsPage.vue', routes: ['/api/skills'], tui: ['skills_panel.rs'], cli: ['skills'] },
+  { id: 'memory', page: 'MemoryPage.vue', routes: ['/api/memory', '/api/cowd/structured'], tui: ['memory_panel.rs', 'l4_knowledge_view.rs'], cli: ['Config'] },
+  { id: 'skills', page: 'SkillsPage.vue', routes: ['/api/skills'], tui: ['skills_panel.rs'], cli: ['Skill'] },
   { id: 'agents', page: 'AgentsPage.vue', routes: ['/api/agents', '/api/tasks'], tui: ['agent_team_panel.rs', 'agents_overlay.rs'], cli: ['prompt'] },
   { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/commands'], tui: ['tool_ops_panel.rs', 'gateway_client.rs', 'runtime_activity_panel.rs'], cli: ['prompt'] },
   { id: 'gateway', page: 'GatewayPage.vue', routes: ['/api/connectors', '/api/cross-plane', '/api/platforms'], tui: ['gateway_panel.rs', 'approval_cockpit_panel.rs'], cli: ['gateway'] },
   { id: 'mfg', page: 'MfgPage.vue', routes: ['/api/apps/mfg', '/api/matrix'], tui: ['goal_workbench_panel.rs', 'task_decomposition_view.rs'], cli: ['gateway'] },
-  { id: 'audit', page: 'AuditPage.vue', routes: ['/api/audit', '/api/usage', '/api/cowd/release-gate'], tui: ['export_dialog.rs', 'approval_cockpit_panel.rs'], cli: ['doctor'] },
+  { id: 'audit', page: 'AuditPage.vue', routes: ['/api/audit', '/api/usage', '/api/cowd/release-gate'], tui: ['export_dialog.rs', 'approval_cockpit_panel.rs'], cli: ['Doctor'] },
 ];
 
 function read(file) {
@@ -38,8 +45,12 @@ function walk(target) {
 }
 
 function extractBackendRoutes() {
-  const files = walk(path.join(backendRoot, 'crates/cowd-cli/src/api_routes')).filter((file) => file.endsWith('.rs'));
-  files.push(path.join(backendRoot, 'crates/cowd-cli/src/api_routes.rs'));
+  const files = [
+    ...walk(path.join(backendRoot, 'crates/gateway/src/api_routes')).filter((file) => file.endsWith('.rs')),
+    path.join(backendRoot, 'crates/gateway/src/api_routes.rs'),
+    ...walk(path.join(backendRoot, 'crates/cowd-cli/src/api_routes')).filter((file) => file.endsWith('.rs')),
+    path.join(backendRoot, 'crates/cowd-cli/src/api_routes.rs'),
+  ];
   const routes = [];
   for (const file of files) {
     const text = read(file);
@@ -77,17 +88,30 @@ function referencesAny(text, needles) {
 const backendRoutes = extractBackendRoutes();
 const clientEndpoints = extractClientEndpoints();
 const capabilityEndpoints = extractCapabilityEndpoints();
-const tuiFiles = walk(path.join(backendRoot, 'crates/cowd-cli/src/tui')).map((file) => path.basename(file));
-const tuiSources = walk(path.join(backendRoot, 'crates/cowd-cli/src/tui'))
+const tuiFiles = [
+  ...walk(path.join(backendRoot, 'crates/tui/src')),
+  ...walk(path.join(backendRoot, 'crates/cowd-cli/src/tui')),
+].map((file) => path.basename(file));
+const tuiSources = [
+  ...walk(path.join(backendRoot, 'crates/tui/src')),
+  ...walk(path.join(backendRoot, 'crates/cowd-cli/src/tui')),
+]
   .filter((file) => file.endsWith('.rs'))
   .map((file) => read(file))
   .join('\n');
-const cliMain = read(path.join(backendRoot, 'crates/cowd-cli/src/main.rs'));
-const cliMod = read(path.join(backendRoot, 'crates/cowd-cli/src/cli/mod.rs'));
+const cliMain = read(path.join(backendRoot, 'crates/cli/src/main.rs')) || read(path.join(backendRoot, 'crates/cowd-cli/src/main.rs'));
+const cliMod = read(path.join(backendRoot, 'crates/cli/src/lib.rs')) || read(path.join(backendRoot, 'crates/cowd-cli/src/cli/mod.rs'));
 const cliText = `${cliMain}\n${cliMod}`;
 const runtimeCapability = read(path.join(backendRoot, 'crates/runtime/src/capability.rs'));
-const matrixBoundaryTest = read(path.join(backendRoot, 'crates/runtime/tests/matrix_mfg_boundary.rs'));
-const matrixMfgRoutes = read(path.join(backendRoot, 'crates/cowd-cli/src/api_routes/matrix_mfg_routes.rs'));
+const matrixBoundaryTest = [
+  read(path.join(backendRoot, 'crates/gateway/tests/gateway_runtimehost_architecture.rs')),
+  read(path.join(backendRoot, 'crates/runtime/tests/matrix_mfg_boundary.rs')),
+].join('\n');
+const matrixMfgRoutes = [
+  read(path.join(backendRoot, 'crates/gateway/src/api_routes/matrix_routes.rs')),
+  read(path.join(backendRoot, 'crates/gateway/src/api_routes/mfg_routes.rs')),
+  read(path.join(backendRoot, 'crates/cowd-cli/src/api_routes/matrix_mfg_routes.rs')),
+].join('\n');
 const mfgContracts = read(path.join(webuiRoot, 'src/data/mfgWriteContracts.json'));
 
 const moduleReports = modules.map((module) => {
@@ -109,17 +133,17 @@ const moduleReports = modules.map((module) => {
     findings.push('MFG boundary text is missing from WebUI');
   }
   if (module.id === 'mfg') {
-    if (!runtimeCapability.includes('cowd.matrix.runtime') || !runtimeCapability.includes('CowdCapabilityLayer::Kernel')) {
-      findings.push('Matrix kernel capability is not declared');
+    if (!runtimeCapability.includes('cowd.structured_data.core') || !runtimeCapability.includes('CowdCapabilityLayer::Kernel')) {
+      findings.push('Structured data kernel capability is not declared');
     }
-    if (!runtimeCapability.includes('mfg.manufacturing.application') || !runtimeCapability.includes('CowdCapabilityLayer::Application')) {
-      findings.push('MFG application capability is not declared');
+    if (!runtimeCapability.includes('capability_registry_excludes_matrix_and_mfg_application_boundaries')) {
+      findings.push('Runtime capability registry must exclude Matrix/MFG application boundaries');
     }
-    if (!runtimeCapability.includes('"cowd.matrix.runtime".to_string()')) {
-      findings.push('MFG capability dependency on Matrix is missing');
+    if (!runtimeCapability.includes('registry.capability("cowd.matrix.runtime").is_none()')) {
+      findings.push('Runtime capability registry must not reintroduce legacy Matrix capability id');
     }
-    if (!matrixBoundaryTest.includes('matrix_kernel_has_no_mfg_or_manufacturing_coupling')) {
-      findings.push('Matrix/MFG source boundary test is missing');
+    if (!matrixBoundaryTest.includes('fact_kernel_is_consumed_by_memory_and_matrix_engines')) {
+      findings.push('Matrix/fact-kernel source boundary test is missing');
     }
     if (!matrixMfgRoutes.includes('/api/matrix/') || !matrixMfgRoutes.includes('/api/apps/mfg/')) {
       findings.push('Matrix and MFG routes are not split by kernel/application boundary');

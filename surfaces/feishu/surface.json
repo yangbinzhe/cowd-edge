@@ -1,0 +1,28 @@
+{
+  "schema": "cowd.surface.v1",
+  "id": "feishu",
+  "name": "Feishu Surface",
+  "version": "0.9.353",
+  "kind": "external-integration",
+  "entry": "./cowd-surface-feishu",
+  "transport": "stdio-jsonl",
+  "lifecycle": "managed",
+  "capabilities": ["ingress", "egress", "callback", "health"],
+  "routes": [
+    {
+      "kind": "callback",
+      "path": "/events",
+      "method": "POST",
+      "public": true
+    }
+  ],
+  "resources": [],
+  "health": {
+    "mode": "jsonl",
+    "interval_ms": 30000
+  },
+  "config_schema": {
+    "required": ["app_id", "app_secret"]
+  },
+  "default_enabled": false
+}

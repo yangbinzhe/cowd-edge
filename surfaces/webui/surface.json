@@ -1,0 +1,26 @@
+{
+  "schema": "cowd.surface.v1",
+  "id": "webui",
+  "name": "Cowd WebUI",
+  "version": "0.9.353",
+  "kind": "web-surface",
+  "entry": null,
+  "transport": "stdio-jsonl",
+  "lifecycle": "builtin",
+  "capabilities": ["runtime", "session", "memory", "matrix", "tools", "skills", "gateway"],
+  "routes": [],
+  "resources": [
+    {
+      "kind": "static",
+      "mount": "/",
+      "dir": "dist",
+      "spa": true
+    }
+  ],
+  "health": {
+    "mode": "registry",
+    "interval_ms": 30000
+  },
+  "config_schema": null,
+  "default_enabled": true
+}

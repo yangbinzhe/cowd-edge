@@ -4,11 +4,18 @@ import path from 'node:path';
 import process from 'node:process';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
-const workspaceRoot = path.resolve(webuiRoot, '..');
+const surfaceRoot = path.resolve(webuiRoot, '../..');
+const workspaceRoot = path.resolve(surfaceRoot, '..');
 const backendRoot = process.env.COWD_BACKEND_REPO
-  || [path.join(workspaceRoot, 'dev-iacc'), path.join(workspaceRoot, 'cowd')]
-    .find((candidate) => fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes.rs')))
-  || workspaceRoot;
+  || [
+    path.join(workspaceRoot, 'cowd-develop'),
+    path.join(workspaceRoot, 'cowd'),
+    path.join(workspaceRoot, 'dev-iacc'),
+  ].find((candidate) => (
+    fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/system_routes.rs'))
+    || fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes/system_routes.rs'))
+  ))
+  || surfaceRoot;
 const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
 const reportDir = path.join(planRoot, 'reports');
 const version = process.env.COWD_VERSION || 'v0.9.246';
@@ -23,14 +30,25 @@ function hasAll(text, items) {
 }
 
 const files = {
-  backend: path.join(backendRoot, 'crates/cowd-cli/src/api_routes/system_routes.rs'),
+  backend: fs.existsSync(path.join(backendRoot, 'crates/gateway/src/api_routes/system_routes.rs'))
+    ? path.join(backendRoot, 'crates/gateway/src/api_routes/system_routes.rs')
+    : path.join(backendRoot, 'crates/cowd-cli/src/api_routes/system_routes.rs'),
+  backendService: fs.existsSync(path.join(backendRoot, 'crates/gateway/src/services/system_service.rs'))
+    ? path.join(backendRoot, 'crates/gateway/src/services/system_service.rs')
+    : path.join(backendRoot, 'crates/cowd-cli/src/system_service.rs'),
   client: path.join(webuiRoot, 'src/api/client.ts'),
   page: path.join(webuiRoot, 'src/pages/ToolsPage.vue'),
   capabilities: path.join(webuiRoot, 'src/data/capabilities.ts'),
   styles: path.join(webuiRoot, 'src/styles/base.css'),
-  tuiPanel: path.join(backendRoot, 'crates/cowd-cli/src/tui/components/tool_ops_panel.rs'),
-  tuiGatewayClient: path.join(backendRoot, 'crates/cowd-cli/src/tui/gateway_client.rs'),
-  tuiState: path.join(backendRoot, 'crates/cowd-cli/src/tui/state.rs'),
+  tuiPanel: fs.existsSync(path.join(backendRoot, 'crates/tui/src/components/tool_ops_panel.rs'))
+    ? path.join(backendRoot, 'crates/tui/src/components/tool_ops_panel.rs')
+    : path.join(backendRoot, 'crates/cowd-cli/src/tui/components/tool_ops_panel.rs'),
+  tuiGatewayClient: fs.existsSync(path.join(backendRoot, 'crates/tui/src/gateway_client.rs'))
+    ? path.join(backendRoot, 'crates/tui/src/gateway_client.rs')
+    : path.join(backendRoot, 'crates/cowd-cli/src/tui/gateway_client.rs'),
+  tuiState: fs.existsSync(path.join(backendRoot, 'crates/tui/src/state.rs'))
+    ? path.join(backendRoot, 'crates/tui/src/state.rs')
+    : path.join(backendRoot, 'crates/cowd-cli/src/tui/state.rs'),
 };
 
 const requiredBackendRoutes = [
@@ -80,7 +98,7 @@ const requiredHeadings = [
   'Risk preflight',
 ];
 
-const backendText = read(files.backend);
+const backendText = `${read(files.backend)}\n${read(files.backendService)}`;
 const clientText = read(files.client);
 const pageText = read(files.page);
 const capabilitiesText = read(files.capabilities);

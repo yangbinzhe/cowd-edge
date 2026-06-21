@@ -1,0 +1,28 @@
+{
+  "schema": "cowd.surface.v1",
+  "id": "wecom",
+  "name": "WeCom Surface",
+  "version": "0.9.353",
+  "kind": "external-integration",
+  "entry": "./cowd-surface-wecom",
+  "transport": "stdio-jsonl",
+  "lifecycle": "managed",
+  "capabilities": ["ingress", "egress", "callback", "crypto", "health"],
+  "routes": [
+    {
+      "kind": "callback",
+      "path": "/events",
+      "method": "POST",
+      "public": true
+    }
+  ],
+  "resources": [],
+  "health": {
+    "mode": "jsonl",
+    "interval_ms": 30000
+  },
+  "config_schema": {
+    "required": ["corp_id", "corp_secret", "agent_id"]
+  },
+  "default_enabled": false
+}

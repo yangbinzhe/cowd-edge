@@ -4,11 +4,18 @@ import path from 'node:path';
 import process from 'node:process';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
-const workspaceRoot = path.resolve(webuiRoot, '..');
+const surfaceRoot = path.resolve(webuiRoot, '../..');
+const workspaceRoot = path.resolve(surfaceRoot, '..');
 const backendRoot = process.env.COWD_BACKEND_REPO
-  || [path.join(workspaceRoot, 'dev-iacc'), path.join(workspaceRoot, 'cowd')]
-    .find((candidate) => fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes.rs')))
-  || workspaceRoot;
+  || [
+    path.join(workspaceRoot, 'cowd-develop'),
+    path.join(workspaceRoot, 'cowd'),
+    path.join(workspaceRoot, 'dev-iacc'),
+  ].find((candidate) => (
+    fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes.rs'))
+    || fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes.rs'))
+  ))
+  || surfaceRoot;
 const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
 const reportDir = path.join(planRoot, 'reports');
 const version = process.env.COWD_VERSION || 'v0.9.241';
@@ -25,6 +32,8 @@ const testDirs = [
   webuiRoot,
 ];
 const routeDirs = [
+  path.join(backendRoot, 'crates/gateway/src/api_routes'),
+  path.join(backendRoot, 'crates/gateway/src/api_routes.rs'),
   path.join(backendRoot, 'crates/cowd-cli/src/api_routes'),
   path.join(backendRoot, 'crates/cowd-cli/src/api_routes.rs'),
 ];

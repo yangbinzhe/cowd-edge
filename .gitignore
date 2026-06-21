@@ -1,5 +1,8 @@
 node_modules/
 dist/
+target/
+plan/
+surfaces/plan/
 test-results/
 coverage/
 .DS_Store
