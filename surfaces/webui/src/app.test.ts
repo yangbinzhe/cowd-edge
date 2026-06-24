@@ -270,6 +270,41 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/relations', expect.any(Object));
   });
 
+  it('writes Mission Control operations with gateway contracts', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.startMissionTeamRuntime('mission-a', 'inspect runtime evidence', 'register_only');
+    await api.routeMissionCommand({
+      from_session_id: 'mission-a',
+      target_ref: 'mission-b',
+      command: 'summarize blockers',
+    });
+    await api.consumeMissionSessionCommand('mission-b', 'command-1', 'start_turn');
+    await api.decideMissionApproval('approval-1', false, 'unsafe');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/sessions/mission-a/teams/runtime', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ objective: 'inspect runtime evidence', execution_mode: 'register_only' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/route', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        from_session_id: 'mission-a',
+        target_ref: 'mission-b',
+        command: 'summarize blockers',
+      }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/sessions/mission-b/inbox/command-1/consume', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ mode: 'start_turn' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/approvals/approval-1/decision', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ approved: false, decided_by: 'webui', reason: 'unsafe' }),
+    }));
+  });
+
   it('wraps write failures with endpoint method payload and retry metadata', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response('write failed', { status: 503, statusText: 'Unavailable' })));
     vi.stubGlobal('fetch', fetchMock);

@@ -142,10 +142,8 @@ async function routeToSession() {
   if (!activeSession.value || !routeTarget.value.trim() || !routeCommand.value.trim()) return;
   actionResult.value = await api.routeMissionCommand({
     from_session_id: activeSession.value,
-    target: routeTarget.value.trim(),
+    target_ref: routeTarget.value.trim(),
     command: routeCommand.value.trim(),
-    kind: 'delegate',
-    payload: {},
   });
   await refresh();
 }
