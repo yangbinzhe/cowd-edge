@@ -1,14 +1,32 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
-import { Bot, Boxes, Folder, Paperclip, Send, Square, Zap } from 'lucide-vue-next';
+import { Bot, Boxes, Brain, CircleDot, FileText, Folder, Paperclip, RotateCcw, Send, Square, Zap } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
 const store = useAppStore();
 const draft = ref('');
 const sending = ref(false);
 const contextUsage = computed(() => store.contextUsagePercent);
 const modelLabel = computed(() => store.selectedModel || 'Select model');
+const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
+const chatContext = computed(() => [
+  { label: 'Session', value: store.activeSessionId || 'new session' },
+  { label: 'Model', value: modelLabel.value },
+  { label: 'Profile', value: store.selectedProfile || 'default' },
+  { label: 'Context', value: contextUsage.value === null ? store.contextUsageSource : `${contextUsage.value}%`, tone: contextUsage.value && contextUsage.value > 85 ? 'warn' : 'success' },
+  { label: 'Tools', value: String(store.toolCallCount) },
+  { label: 'Memory', value: `${store.memoryRecallCount}/${store.memoryEvidenceCount}` },
+]);
+const cleanCounters = computed(() => [
+  { label: '工具调用', value: store.toolCallCount },
+  { label: '记忆唤起', value: store.memoryRecallCount },
+  { label: '记忆证据', value: store.memoryEvidenceCount },
+]);
+const runStatus = computed(() => store.currentRun?.status || 'idle');
+const runIdentity = computed(() => store.currentRun?.run_id || store.currentRun?.turn_id || store.activeSessionId || 'no active run');
+const visibleStages = computed(() => store.runStageSummary.filter((stage: any) => stage.status !== 'missing' || isPanorama.value));
 
 async function submit() {
   const text = draft.value.trim();
@@ -35,6 +53,11 @@ async function submit() {
   await nextTick();
 }
 
+async function stop() {
+  await store.stopCurrentTurn();
+  sending.value = false;
+}
+
 async function chooseCommand(command: any) {
   const name = command.name || command;
   if (name === '/model') {
@@ -58,16 +81,65 @@ async function chooseCommand(command: any) {
     <header class="page-header chat-topbar">
       <div>
         <h1>Cowd Chat</h1>
-        <p>正文优先展示，工具调用、思考、上下文和文件路径由右侧 Activity/Workspace 承接。</p>
+        <p>{{ isPanorama ? '全景展示正文、工具、上下文、Reality 证据和运行轨迹。' : '纯净展示只保留正文和必要计数，减少额外投影刷新。' }}</p>
       </div>
-      <div class="status-strip">
-        <span>{{ store.health?.status || 'local' }}</span>
-        <button type="button" @click="store.openModal('model')">{{ modelLabel }}</button>
+      <div class="chat-top-actions">
+        <div class="mode-switch" role="group" aria-label="Chat display mode">
+          <button type="button" :class="{ active: isPanorama }" @click="store.setChatDisplayMode('panorama')">全景</button>
+          <button type="button" :class="{ active: !isPanorama }" @click="store.setChatDisplayMode('clean')">纯净</button>
+        </div>
+        <div class="status-strip">
+          <span>{{ store.health?.status || 'local' }}</span>
+          <button type="button" @click="store.openModal('model')">{{ modelLabel }}</button>
+        </div>
       </div>
     </header>
+    <PrimaryContextBar v-if="isPanorama" :items="chatContext" />
+    <div v-else class="clean-counts" aria-label="Clean mode counters">
+      <span v-for="item in cleanCounters" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</span>
+    </div>
+    <nav v-if="isPanorama" class="chat-workbench-links" aria-label="Chat workbench links">
+      <RouterLink class="ghost-action" to="/runtime">Inspect runtime</RouterLink>
+      <RouterLink class="ghost-action" to="/context">Build context</RouterLink>
+      <RouterLink class="ghost-action" to="/reality">Reality flow</RouterLink>
+      <RouterLink class="ghost-action" to="/tools">Review tools</RouterLink>
+      <RouterLink class="ghost-action" to="/audit">Open audit</RouterLink>
+    </nav>
+    <section v-if="isPanorama" class="run-panorama" aria-label="Current run panorama">
+      <div class="run-card primary">
+        <span>Run status</span>
+        <strong>{{ runStatus }}</strong>
+        <small>{{ runIdentity }}</small>
+      </div>
+      <div class="run-stage-grid">
+        <button
+          v-for="stage in visibleStages"
+          :key="stage.id"
+          class="stage-pill"
+          type="button"
+          :data-status="stage.status"
+          @click="stage.id === 'context' ? store.openCompanion('evidence') : store.openCompanion('activity')"
+        >
+          <CircleDot :size="13" />
+          <span>{{ stage.label }}</span>
+          <strong>{{ stage.count }}</strong>
+        </button>
+      </div>
+      <div class="run-actions">
+        <button class="ghost-action" type="button" @click="store.openCompanion('evidence')"><Brain :size="15" /> Evidence</button>
+        <button class="ghost-action" type="button" @click="store.openCompanion('workspace')"><FileText :size="15" /> Files {{ store.currentRunFiles.length }}</button>
+        <button class="ghost-action" type="button" @click="store.retryLastUserTurn"><RotateCcw :size="15" /> Retry</button>
+        <button class="danger-action" type="button" @click="stop"><Square :size="15" /> Stop</button>
+      </div>
+    </section>
 
     <div class="transcript" aria-label="Chat transcript">
       <article v-for="turn in store.turns" :key="turn.id" class="turn" :data-role="turn.role">
+        <div v-if="isPanorama && (turn.sequence || turn.tool_name || turn.status === 'streaming')" class="message-meta">
+          <span>{{ turn.status || 'complete' }}</span>
+          <span v-if="turn.sequence">#{{ turn.sequence }}</span>
+          <span v-if="turn.tool_name">{{ turn.tool_name }}</span>
+        </div>
         <MarkdownBlock :content="turn.content" />
       </article>
     </div>
@@ -85,7 +157,7 @@ async function chooseCommand(command: any) {
         <div class="composer-actions">
           <button class="icon-action" type="button" @click="store.openCompanion('workspace')"><Paperclip :size="16" /></button>
           <button class="ghost-action" type="button" @click="store.openModal('commands')"><Zap :size="15" /> Commands</button>
-          <button v-if="sending" class="primary-action" type="button"><Square :size="15" /> Stop</button>
+          <button v-if="sending" class="primary-action" type="button" @click="stop"><Square :size="15" /> Stop</button>
           <button v-else class="primary-action" type="button" :disabled="!draft.trim()" @click="submit"><Send :size="15" /> Send</button>
         </div>
       </div>

@@ -84,17 +84,37 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.companion-tabs').text()).toContain('Activity');
     expect(wrapper.get('.companion-tabs').text()).toContain('Thinking');
     expect(wrapper.get('.companion-tabs').text()).toContain('Workspace');
+    expect(wrapper.get('.companion-tabs').text()).toContain('Evidence');
     expect(wrapper.get('.companion-tabs').text()).toContain('Inspector');
   });
 
-  it('renders chat, composer, markdown body, and context meter', async () => {
+  it('renders chat, composer, panorama controls, markdown body, and context meter', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
     expect(wrapper.get('.transcript').exists()).toBe(true);
     expect(wrapper.get('.composer textarea').exists()).toBe(true);
     expect(wrapper.get('.context-meter').exists()).toBe(true);
+    expect(wrapper.get('.mode-switch').text()).toContain('全景');
+    expect(wrapper.get('.run-panorama').exists()).toBe(true);
+    expect(wrapper.get('.companion-panel').exists()).toBe(true);
     expect(wrapper.text()).toContain('Context not reported');
     expect(wrapper.get('.chat-page').exists()).toBe(true);
+  });
+
+  it('switches Chat into clean mode and hides panorama projections', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.currentTimeline = { events: [{ kind: 'ToolStart' }, { kind: 'ToolComplete' }, { kind: 'memory_recall' }] };
+    store.currentRealityFlow = { stages: [{ kind: 'memory.promoted' }, { kind: 'memory.held' }, { kind: 'context.fact' }] };
+    await wrapper.findAll('.mode-switch button').find((button) => button.text() === '纯净')?.trigger('click');
+    await settle();
+    expect(store.chatDisplayMode).toBe('clean');
+    expect(wrapper.find('.run-panorama').exists()).toBe(false);
+    expect(wrapper.find('.companion-panel').exists()).toBe(false);
+    expect(wrapper.get('.clean-counts').text()).toContain('工具调用');
+    expect(wrapper.get('.clean-counts').text()).toContain('记忆唤起');
+    expect(wrapper.get('.clean-counts').text()).toContain('记忆证据');
   });
 
   it('renders Workspace rename controls and Inspector tab from real store state', async () => {
@@ -118,18 +138,51 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/tools');
     await settle();
     expect(wrapper.text()).toContain('Tools Registry');
+    expect(wrapper.text()).toContain('Tool operation flow');
     expect(wrapper.findAll('.metric-card').length).toBe(4);
     expect(wrapper.find('.capability-sidebar').exists()).toBe(true);
     expect(wrapper.find('.session-sidebar').exists()).toBe(false);
     expect(wrapper.findAll('.section-row').length).toBe(7);
     expect(wrapper.text()).toContain('Execution planner');
     expect(wrapper.text()).toContain('Mutation transactions');
+    expect(wrapper.text()).toContain('Apply workspace mutation');
     expect(wrapper.text()).toContain('Checkpoints');
+    expect(wrapper.text()).toContain('Restore checkpoint');
     expect(wrapper.text()).toContain('Tool cache');
     expect(wrapper.text()).toContain('Tool ledger');
     expect(wrapper.text()).toContain('Risk preflight');
     expect(wrapper.find('.capability-sidebar').text()).not.toContain('Memory');
     expect(wrapper.find('.capability-sidebar').text()).not.toContain('Settings');
+  });
+
+  it('renders gateway governance panels and evidence surfaces', async () => {
+    const wrapper = await mountApp('/gateway');
+    await settle();
+    expect(wrapper.text()).toContain('Gateway and Cross-plane');
+    expect(wrapper.text()).toContain('Promote connector resource to memory');
+    expect(wrapper.text()).toContain('Execute cross-plane action');
+    expect(wrapper.text()).toContain('Manage cross-plane identity');
+    expect(wrapper.text()).toContain('Create cross-plane grant');
+    expect(wrapper.text()).toContain('Gateway evidence trace');
+    expect(wrapper.text()).toContain('Gateway selected detail');
+  });
+
+  it('renders context workbench evidence and detail surfaces', async () => {
+    const wrapper = await mountApp('/context');
+    await settle();
+    expect(wrapper.text()).toContain('Context Builder');
+    expect(wrapper.text()).toContain('Context assembly flow');
+    expect(wrapper.text()).toContain('Context evidence trace');
+    expect(wrapper.text()).toContain('Context selected detail');
+  });
+
+  it('renders audit workbench evidence and selected detail surfaces', async () => {
+    const wrapper = await mountApp('/audit');
+    await settle();
+    expect(wrapper.text()).toContain('Audit and Governance');
+    expect(wrapper.text()).toContain('Evidence flow');
+    expect(wrapper.text()).toContain('Audit evidence trace');
+    expect(wrapper.text()).toContain('Audit selected evidence');
   });
 
   it('calls real tool operation endpoints through the backend', async () => {
@@ -186,6 +239,35 @@ describe('Cowd Vue WebUI shell', () => {
       method: 'POST',
       body: JSON.stringify({ path: 'docs/a.md', label: 'A doc', kind: 'workspace_file' }),
     }));
+  });
+
+  it('requests current session cancellation through a write receipt endpoint', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ cancelled: true }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    const receipt = await api.cancelSessionTurn('session-1');
+    expect(receipt.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/cancel', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('reads Mission Control projections through gateway endpoints', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL) => Promise.resolve(new Response(JSON.stringify({
+      mission: {
+        active_session_id: 'mission-a',
+        sessions: [{ session_id: 'mission-a', title: 'Mission A', status: 'active' }],
+        events: [],
+        approval_projection: { pending_count: 1 },
+        relation_projection: { relation_count: 2 },
+      },
+      approvals: { pending_count: 1, requests: [] },
+      relations: { relation_count: 2, relations: [] },
+    }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    await api.missionProjection();
+    await api.missionApprovals();
+    await api.missionRelations();
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/projection', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/approvals', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/relations', expect.any(Object));
   });
 
   it('wraps write failures with endpoint method payload and retry metadata', async () => {
@@ -258,14 +340,14 @@ describe('Cowd Vue WebUI shell', () => {
     await api.mfgIngestFact([{ fact_type: 'quality', source_ref: 'source-pack://sp-1' }]);
     await api.mfgSeedDomain();
     await api.mfgSeedOntology();
-    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/source-packs/upsert', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/entities/upsert', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/relations/upsert', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/compute/jobs/job-1/run', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/upsert', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/entities/upsert', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/relations/upsert', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/compute/jobs/job-1/run', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/analyses/analysis-1/actions/action-1/execute', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/executions/exec-1/cross-plane/execute', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/reports/report-1/delivery/retry', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/facts/ingest', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/facts/ingest', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/domain/server-manufacturing/seed', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/ontology/server-manufacturing/seed', expect.objectContaining({ method: 'POST' }));
   });
@@ -302,9 +384,9 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
       if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
       if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
-      if (url === '/api/matrix/health') return Promise.resolve(new Response(JSON.stringify({ status: 'ready', fact_count: 2, schema_version: 'test' })));
-      if (url === '/api/matrix/metrics') return Promise.resolve(new Response(JSON.stringify({ metrics: [{ metric_id: 'torque_deviation_rate', name: 'Torque deviation', unit: '%' }] })));
-      if (url === '/api/matrix/entities') return Promise.resolve(new Response(JSON.stringify({ entities: [{ entity_id: 'line-a', entity_type: 'manufacturing_line', canonical_key: 'line:A', display_name: 'Line A' }] })));
+      if (url === '/api/apps/mfg/reality/health') return Promise.resolve(new Response(JSON.stringify({ status: 'ready', fact_count: 2, schema_version: 'test' })));
+      if (url === '/api/apps/mfg/reality/metrics') return Promise.resolve(new Response(JSON.stringify({ metrics: [{ metric_id: 'torque_deviation_rate', name: 'Torque deviation', unit: '%' }] })));
+      if (url === '/api/apps/mfg/reality/entities') return Promise.resolve(new Response(JSON.stringify({ entities: [{ entity_id: 'line-a', entity_type: 'manufacturing_line', canonical_key: 'line:A', display_name: 'Line A' }] })));
       if (url === '/api/apps/mfg/decision-trace') return Promise.resolve(new Response(JSON.stringify({
         kind: 'mfg.decision_trace',
         chain: 'source -> fact -> metric -> evidence -> incident -> action -> report',
@@ -326,8 +408,12 @@ describe('Cowd Vue WebUI shell', () => {
     const domains = new Set((mfgWriteContracts as any[]).map((contract) => contract.domain));
     expect(domains).toEqual(new Set(['Cockpit', 'Data Plane', 'Entities', 'Evidence', 'Facts', 'Incidents', 'Metrics']));
     expect(wrapper.findAll('.governed-action-panel').length).toBeGreaterThanOrEqual(7);
-    expect(wrapper.text()).toContain('Governed write contracts');
-    expect(wrapper.text()).toContain('cowd owns structured data');
+    expect(wrapper.text()).toContain('MFG value flow');
+    expect(wrapper.text()).toContain('Reality Core projection');
+    expect(wrapper.text()).toContain('/api/apps/mfg/reality/*');
+    expect(wrapper.text()).toContain('Reality Core owns fact, memory, matrix');
+    expect(wrapper.text()).toContain('MFG owns manufacturing workflows');
+    expect(wrapper.text()).not.toContain('Open Reality Core');
     expect(wrapper.text()).toContain('Source pack upsert');
     expect(wrapper.text()).toContain('Manufacturing fact ingest');
     expect(wrapper.text()).toContain('Metric compute run');
@@ -369,6 +455,10 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/verify', expect.any(Object));
     expect(wrapper.text()).toContain('same-origin internal access');
+    expect(wrapper.text()).toContain('Configuration flow');
+    expect(wrapper.text()).toContain('Save runtime model config');
+    expect(wrapper.text()).toContain('Update approval policy');
+    expect(wrapper.text()).toContain('Settings write receipt');
   });
 
   it('renders runtime growth loop from gateway growth endpoints', async () => {
@@ -387,6 +477,17 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/runtime/config/effective') return Promise.resolve(new Response(JSON.stringify({ source: 'test' })));
       if (url === '/api/runtime/session-leases') return Promise.resolve(new Response(JSON.stringify({ leases: [] })));
       if (url === '/api/approval/pending') return Promise.resolve(new Response(JSON.stringify({ pending: [] })));
+      if (url === '/api/mission/projection') return Promise.resolve(new Response(JSON.stringify({
+        mission: {
+          active_session_id: 'mission-a',
+          sessions: [{ session_id: 'mission-a', title: 'Mission A', status: 'active', active_team_ids: ['team-a'], active_agent_ids: ['agent-a'] }],
+          events: [{ sequence: 1, event_type: 'mission.session.started', session_id: 'mission-a', message: 'started' }],
+          approval_projection: { pending_count: 0 },
+          relation_projection: { relation_count: 0 },
+        },
+      })));
+      if (url === '/api/mission/approvals') return Promise.resolve(new Response(JSON.stringify({ approvals: { pending_count: 0, requests: [] } })));
+      if (url === '/api/mission/relations') return Promise.resolve(new Response(JSON.stringify({ relations: { relation_count: 0, relations: [] } })));
       if (url.startsWith('/api/runtime/timeline')) return Promise.resolve(new Response(JSON.stringify({ events: [{ sequence: 1, kind: 'turn', status: 'complete', detail: 'done' }] })));
       if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ tasks: [{ id: 'task-1', status: 'done', objective: 'align webui', current_phase: 'review' }] })));
       if (url === '/api/growth/status') return Promise.resolve(new Response(JSON.stringify({ status: 'ready', event_count: 1, promotion_count: 1, sources: { risk_gate: 1 } })));
@@ -401,10 +502,14 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('Growth loop');
+    expect(wrapper.text()).toContain('Mission Control');
+    expect(wrapper.text()).toContain('Mission A');
+    expect(wrapper.text()).toContain('Runtime flow');
     expect(wrapper.text()).toContain('risk_gate');
     expect(wrapper.text()).toContain('memory');
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/status', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/events', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/projection', expect.any(Object));
   });
 
   it('calls real cross-plane identity grant and action endpoints', async () => {
@@ -511,6 +616,7 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     expect(wrapper.text()).toContain('Surface Host');
     expect(wrapper.text()).toContain('Surface registry');
+    expect(wrapper.text()).toContain('Surface lifecycle');
     expect(wrapper.text()).toContain('WebUI');
     expect(wrapper.text()).toContain('Routes');
     expect(wrapper.text()).toContain('Resources');
@@ -547,6 +653,10 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('Skills Console');
+    expect(wrapper.text()).toContain('Skill lifecycle');
+    expect(wrapper.text()).toContain('Run skill action');
+    expect(wrapper.text()).toContain('Skill evidence trace');
+    expect(wrapper.text()).toContain('Skill selected detail');
     expect(wrapper.text()).toContain('SKILL.md');
     expect(wrapper.find('.markdown-body h1').text()).toBe('test');
     await wrapper.find('.run-list article').trigger('click');
@@ -624,6 +734,8 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('Agents Workbench');
+    expect(wrapper.text()).toContain('Agent graph evidence');
+    expect(wrapper.text()).toContain('Agent selected detail');
     expect(wrapper.text()).toContain('Agent directory');
     expect(wrapper.text()).toContain('Discover team');
     expect(wrapper.text()).toContain('Task control');

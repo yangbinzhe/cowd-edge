@@ -7,6 +7,10 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -21,6 +25,7 @@ const recommendations = ref<any>({});
 const evidence = ref<any>({});
 const actionResult = ref<any>(null);
 const recommendationText = ref('Context recommendation acknowledged from WebUI.');
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 const sessionId = computed(() => store.activeSessionId || 'api-context');
 const contextItems = computed(() => {
   const direct = envelope.value?.envelope?.items || envelope.value?.items || envelope.value?.context?.items;
@@ -52,6 +57,35 @@ const recommendationRows = computed(() => {
   }));
 });
 const envelopeId = computed(() => envelope.value?.envelope_id || envelope.value?.envelope?.id || historyRows.value[0]?.envelope || '');
+const contextStatus = computed(() => envelope.value?.__offline ? 'blocked' : itemRows.value.length ? 'ready' : 'idle');
+const contextBar = computed(() => [
+  { label: 'Session', value: sessionId.value },
+  { label: 'Profile', value: profile.value },
+  { label: 'Items', value: itemRows.value.length, tone: itemRows.value.length ? 'success' : 'warn' },
+  { label: 'Envelope', value: envelopeId.value || 'pending' },
+]);
+const contextWorkflow = computed(() => [
+  { id: 'packet', label: 'Packet', status: contextStatus.value, count: itemRows.value.length },
+  { id: 'budget', label: 'Budget', status: envelope.value?.budget ? 'ready' : 'idle', description: envelope.value?.budget?.total || 'not reported' },
+  { id: 'evidence', label: 'Evidence', status: evidence.value?.__offline ? 'blocked' : evidence.value?.kind ? 'ready' : 'idle', description: evidenceRef.value },
+  { id: 'history', label: 'History', status: historyRows.value.length ? 'ready' : 'idle', count: historyRows.value.length },
+]);
+const contextEvidence = computed(() => [
+  ...itemRows.value.slice(0, 4).map((row) => ({
+    id: String(row.source || row.role || ''),
+    kind: String(row.role || 'context item'),
+    status: row.score !== '-' ? 'ready' : 'recorded',
+    summary: String(row.text || '-'),
+    source: String(row.source || row.authority || 'context'),
+  })),
+  ...(evidence.value && !evidence.value.__offline ? [{
+    id: evidenceRef.value,
+    kind: evidence.value.kind || 'resolved evidence',
+    status: evidence.value.status || 'ready',
+    summary: evidence.value.summary || evidence.value.ref || evidenceRef.value,
+    source: evidence.value.source || 'gateway.evidence',
+  }] : []),
+]);
 
 async function refresh() {
   loading.value = true;
@@ -102,6 +136,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="contextBar" />
+    <WorkflowStrip :steps="contextWorkflow" title="Context assembly flow" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -145,8 +181,9 @@ onMounted(refresh);
           <Search :size="15" />
           Build packet
         </button>
-        <DataTable v-if="itemRows.length" :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" />
+        <DataTable v-if="itemRows.length" :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No context items" detail="当前查询没有可展示的上下文项，或后端离线。" />
+        <EvidenceTrace :items="contextEvidence" title="Context evidence trace" />
       </section>
 
       <section class="management-panel context-panel">
@@ -177,7 +214,7 @@ onMounted(refresh);
           Acknowledge
         </button>
         <RequestReceipt :receipt="actionResult" title="Recommendation receipt" />
-        <DataTable v-if="recommendationRows.length" :rows="recommendationRows" :columns="['id', 'action', 'count', 'status']" />
+        <DataTable v-if="recommendationRows.length" :rows="recommendationRows" :columns="['id', 'action', 'count', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No recommendation stats" detail="推荐动作统计会在后端有历史数据时展示。" />
       </section>
 
@@ -186,8 +223,9 @@ onMounted(refresh);
           <h2>History and raw envelope</h2>
           <span>{{ historyRows.length }} history rows</span>
         </header>
-        <DataTable v-if="historyRows.length" :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" />
+        <DataTable v-if="historyRows.length" :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No context history" detail="持久化 session store 没有返回上下文历史。" />
+        <DetailDrawer title="Context selected detail" :row="selectedDetail" @close="selectedDetail = null" />
         <RawPayload title="Current envelope" :data="envelope" />
         <RawPayload title="Action result" :data="actionResult || recommendations" />
       </section>

@@ -7,6 +7,10 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -35,6 +39,7 @@ const artifactLabel = ref('');
 const artifactValue = ref('');
 const reviewResult = ref('');
 const failureReason = ref('');
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 const agentRows = computed(() => (Array.isArray(directory.value?.agents) ? directory.value.agents : Array.isArray(catalog.value?.agents) ? catalog.value.agents : []).map((agent: any) => ({
   name: agent.name,
@@ -62,6 +67,37 @@ const reputationRows = computed(() => (Array.isArray(reputation.value?.items) ? 
   status: item.status ?? '-',
 })));
 const openTasks = computed(() => taskItems.value.filter((task: any) => !['completed', 'cancelled'].includes(String(task.status))).length);
+const agentsContext = computed(() => [
+  { label: 'Agents', value: agentRows.value.length, tone: agentRows.value.length ? 'success' : 'warn' },
+  { label: 'Profiles', value: teamProfileItems.value.length },
+  { label: 'Open tasks', value: openTasks.value, tone: openTasks.value ? 'warn' : 'success' },
+  { label: 'Graph nodes', value: graphNodes.value.length },
+]);
+const agentsWorkflow = computed(() => [
+  { id: 'catalog', label: 'Discover', status: agentRows.value.length ? 'ready' : 'idle', count: agentRows.value.length },
+  { id: 'discovery', label: 'Profile', status: teamProfileItems.value.length ? 'ready' : 'idle', count: teamProfileItems.value.length },
+  { id: 'tasks', label: 'Task', status: selectedTask.value ? 'active' : 'idle', description: selectedTask.value?.status || 'none' },
+  { id: 'tasks', label: 'Phase', status: currentPhase.value ? 'active' : 'idle', description: currentPhase.value?.status || 'pending' },
+  { id: 'graph', label: 'Graph', status: graphNodes.value.length ? 'ready' : 'idle', count: graphNodes.value.length },
+  { id: 'reviews', label: 'Review', status: reviewResult.value ? 'done' : 'idle' },
+  { id: 'runs', label: 'Run', status: runItems.value.length ? 'ready' : 'idle', count: runItems.value.length },
+]);
+const agentEvidence = computed(() => [
+  ...graphNodes.value.slice(0, 4).map((node: any) => ({
+    id: node.id,
+    kind: node.role || 'agent graph node',
+    status: node.status || 'ready',
+    summary: node.objective || node.title || node.id,
+    source: node.assigned_agent || 'agent.graph',
+  })),
+  ...runItems.value.slice(0, 3).map((run: any) => ({
+    id: run.graph_id || run.run_id || run.id,
+    kind: 'agent run',
+    status: run.status || 'recorded',
+    summary: run.objective || run.graph_id || run.run_id || 'agent run',
+    source: 'gateway.agents.runs',
+  })),
+]);
 
 async function refresh() {
   loading.value = true;
@@ -326,6 +362,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="agentsContext" />
+    <WorkflowStrip :steps="agentsWorkflow" title="Agent collaboration flow" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -356,7 +394,7 @@ onMounted(refresh);
           <h2>Agent directory</h2>
           <span>{{ agentRows.length }} definitions</span>
         </header>
-        <DataTable v-if="agentRows.length" :rows="agentRows" :columns="['name', 'active', 'source', 'model', 'description']" />
+        <DataTable v-if="agentRows.length" :rows="agentRows" :columns="['name', 'active', 'source', 'model', 'description']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No agents registered" detail="后端没有发现 .cowd/agents、~/.cowd/agents 或 $CC_CONFIG_HOME/agents 定义。" />
       </section>
 
@@ -370,10 +408,10 @@ onMounted(refresh);
           <input v-model="discoverQuery" type="search" placeholder="Task for team discovery" @keyup.enter="discoverAgents" />
         </label>
         <button class="primary-action" type="button" @click="discoverAgents">Assemble team</button>
-        <DataTable v-if="discoveredRows.length" :rows="discoveredRows" :columns="['agent_id', 'role', 'reputation', 'status']" />
+        <DataTable v-if="discoveredRows.length" :rows="discoveredRows" :columns="['agent_id', 'role', 'reputation', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No matching team" detail="发现协议没有找到满足任务描述的 agent。" />
         <RawPayload title="Auto assembled team" :data="discovery.team || {}" />
-        <DataTable v-if="reputationRows.length" :rows="reputationRows" :columns="['agent_id', 'reputation', 'status']" />
+        <DataTable v-if="reputationRows.length" :rows="reputationRows" :columns="['agent_id', 'reputation', 'status']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel agents-panel wide" data-section="discovery">
@@ -389,7 +427,7 @@ onMounted(refresh);
               class="memory-entry-row"
               :class="{ active: selectedProfileId === profile.id }"
               type="button"
-              @click="selectTeamProfile(profile.id)"
+              @click="selectTeamProfile(profile.id); selectedDetail = profile"
             >
               <strong>{{ profile.name }}</strong>
               <span>{{ profile.id }}</span>
@@ -442,7 +480,7 @@ onMounted(refresh);
               class="memory-entry-row"
               :class="{ active: selectedTaskId === task.id }"
               type="button"
-              @click="selectTask(task.id)"
+              @click="selectTask(task.id); selectedDetail = task"
             >
               <strong>{{ task.objective || task.id }}</strong>
               <span>{{ task.id }}</span>
@@ -488,7 +526,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!currentPhase" @click="reviewPhase(true)">Review complete</button>
         </div>
         <RequestReceipt :receipt="actionResult" title="Phase receipt" />
-        <DataTable v-if="phaseItems.length" :rows="phaseItems" />
+        <DataTable v-if="phaseItems.length" :rows="phaseItems" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No phases" detail="阶段用于 TDD 目标、计划、验收和测试命令闭环。" />
       </section>
 
@@ -532,7 +570,7 @@ onMounted(refresh);
           </button>
         </div>
         <div class="agent-graph-lanes">
-          <article v-for="node in graphNodes" :key="node.id">
+          <article v-for="node in graphNodes" :key="node.id" role="button" tabindex="0" @click="selectedDetail = node" @keydown.enter.prevent="selectedDetail = node">
             <strong>{{ node.title }}</strong>
             <StatusPill :status="node.status" />
             <p>{{ node.objective }}</p>
@@ -540,6 +578,7 @@ onMounted(refresh);
           </article>
         </div>
         <EmptyState v-if="!graphNodes.length" title="No agent graph" detail="选择任务后可以生成 planner/executor/reviewer 执行图。" />
+        <EvidenceTrace :items="agentEvidence" title="Agent graph evidence" />
         <RequestReceipt :receipt="actionResult || graph" title="Agent graph receipt" />
       </section>
 
@@ -549,6 +588,7 @@ onMounted(refresh);
           <span>{{ runItems.length }} graphs</span>
         </header>
         <RawPayload title="Agent runs" :data="runs" />
+        <DetailDrawer title="Agent selected detail" :row="selectedDetail" @close="selectedDetail = null" />
         <RequestReceipt :receipt="actionResult || profileResult" title="Agent action receipt" />
         <RawPayload title="Action result" :data="actionResult || graph" />
       </section>

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { api, normalizeActivity, providerModels, type EndpointSnapshot } from '../api/client';
-import type { ActivityEvent, ChatTurn, CompanionTab, NavId, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
+import type { ActivityEvent, ChatDisplayMode, ChatTurn, CompanionTab, NavId, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
 
 function blockText(block: any): string {
   if (!block) return '';
@@ -27,6 +27,15 @@ export const useAppStore = defineStore('app', () => {
   const turns = ref<ChatTurn[]>([]);
   const activity = ref<ActivityEvent[]>([]);
   const companionTab = ref<CompanionTab>('activity');
+  const chatDisplayMode = ref<ChatDisplayMode>('panorama');
+  const currentRun = ref<any>(null);
+  const currentContextEnvelope = ref<any>(null);
+  const currentRealityFlow = ref<any>({});
+  const currentTimeline = ref<any>({});
+  const selectedActivity = ref<Record<string, unknown> | null>(null);
+  const liveToolCount = ref(0);
+  const liveMemoryRecallCount = ref(0);
+  const liveMemoryEvidenceCount = ref(0);
   const workspaceRoot = ref('');
   const workspaceDir = ref('');
   const workspaceFiles = ref<WorkspaceFile[]>([]);
@@ -69,6 +78,71 @@ export const useAppStore = defineStore('app', () => {
     return models.length ? models : (selectedModel.value ? [selectedModel.value] : []);
   });
   const availableProfiles = computed(() => profiles.value.map((profile: any) => profile.id || profile.name).filter(Boolean));
+  const toolCallCount = computed(() => {
+    const timelineEvents = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
+    const timelineCount = timelineEvents.filter((event: any) => String(event.kind || event.event_type || event.type || '').toLowerCase().includes('tool')).length;
+    return Math.max(liveToolCount.value, timelineCount);
+  });
+  const memoryRecallCount = computed(() => {
+    const timelineEvents = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
+    const timelineCount = timelineEvents.filter((event: any) => {
+      const kind = String(event.kind || event.event_type || event.type || '').toLowerCase();
+      return kind.includes('memory') || kind.includes('recall');
+    }).length;
+    return Math.max(liveMemoryRecallCount.value, timelineCount);
+  });
+  const memoryEvidenceCount = computed(() => {
+    const stages = Array.isArray(currentRealityFlow.value?.stages) ? currentRealityFlow.value.stages : [];
+    const memoryStages = stages.filter((stage: any) => String(stage.kind || '').toLowerCase().includes('memory'));
+    return Math.max(liveMemoryEvidenceCount.value, memoryStages.length);
+  });
+  const runStageSummary = computed(() => {
+    const events = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
+    const stageIds = [
+      ['intake', ['message', 'turn', 'runtimerun']],
+      ['context', ['context']],
+      ['memory', ['memory', 'recall']],
+      ['governance', ['approval', 'policy', 'risk']],
+      ['task', ['task']],
+      ['execution', ['tool', 'scheduler']],
+      ['agent', ['agent', 'workgraph']],
+      ['channel', ['channel', 'platform', 'cross_plane']],
+    ];
+    return stageIds.map(([id, needles]) => {
+      const matched = events.filter((event: any) => {
+        const haystack = `${event.scope || ''} ${event.kind || ''} ${event.event_type || ''} ${event.type || ''}`.toLowerCase();
+        return (needles as string[]).some((needle) => haystack.includes(needle));
+      });
+      const failed = matched.some((event: any) => String(event.status || '').toLowerCase().includes('fail') || String(event.kind || '').toLowerCase().includes('error'));
+      return {
+        id,
+        label: String(id).replace(/^\w/, (char) => char.toUpperCase()),
+        status: failed ? 'failed' : matched.length ? 'observed' : id === 'channel' ? 'optional' : 'missing',
+        count: matched.length,
+      };
+    });
+  });
+  const currentRunFiles = computed(() => {
+    const fileMap = new Map<string, any>();
+    attachments.value.forEach((attachment) => {
+      fileMap.set(attachment.path, {
+        path: attachment.path,
+        kind: 'attachment',
+        status: 'attached',
+        ref: attachment.ref_id,
+      });
+    });
+    const events = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
+    events.forEach((event: any) => {
+      const text = JSON.stringify(event);
+      const matches = text.match(/(?:workspace:\/\/file\/|path["': ]+)([A-Za-z0-9_./@-]+\.[A-Za-z0-9]+)/g) || [];
+      matches.forEach((match) => {
+        const path = match.replace(/^workspace:\/\/file\//, '').replace(/^path["': ]+/, '');
+        if (!fileMap.has(path)) fileMap.set(path, { path, kind: 'runtime-ref', status: event.status || 'observed', ref: event.kind || event.type });
+      });
+    });
+    return Array.from(fileMap.values());
+  });
 
   async function boot() {
     if (booted.value) return;
@@ -117,11 +191,18 @@ export const useAppStore = defineStore('app', () => {
       content: row.content || (row.blocks || []).map(blockText).join('') || '',
       status: 'complete',
       activity: [],
+      blocks: row.blocks || [],
+      sequence: row.sequence,
+      created_at_ms: row.created_at_ms,
+      tool_use_id: row.tool_use_id,
+      tool_name: row.tool_name,
+      token_usage: row.token_usage,
     }));
     if (!turns.value.length) turns.value = [{ id: 'empty', role: 'system', content: '当前 session 暂无消息。', status: 'complete' }];
     connectSessionStream(sessionId);
     await refreshContextUsage(sessionId);
     await loadAttachments(sessionId);
+    if (chatDisplayMode.value === 'panorama') await refreshChatProjection(sessionId);
   }
 
   async function refreshContextUsage(sessionId = activeSessionId.value) {
@@ -181,6 +262,7 @@ export const useAppStore = defineStore('app', () => {
       await createSession();
     }
     turns.value.push({ id: `local-${Date.now()}`, role: 'user', content, status: 'complete' });
+    resetCurrentRun(content);
     ensureStreamingAssistantTurn();
     companionTab.value = 'activity';
     activity.value.unshift({ id: `send-${Date.now()}`, kind: 'runtime', title: 'Message queued', detail: content.slice(0, 140), status: 'pending' });
@@ -189,6 +271,7 @@ export const useAppStore = defineStore('app', () => {
       await api.sendMessage(activeSessionId.value, contentWithAttachments);
       await loadMessages(activeSessionId.value);
       await loadActivity();
+      if (chatDisplayMode.value === 'panorama') await refreshChatProjection(activeSessionId.value, content);
     } catch (error) {
       turns.value.push({
         id: `error-${Date.now()}`,
@@ -206,7 +289,36 @@ export const useAppStore = defineStore('app', () => {
       return;
     }
     const data: any = await api.runtimeTimeline(activeSessionId.value);
+    currentTimeline.value = data;
     activity.value = normalizeActivity(data.events || data.timeline || []);
+  }
+
+  async function refreshChatProjection(sessionId = activeSessionId.value, query = '') {
+    if (!sessionId || chatDisplayMode.value !== 'panorama') return;
+    const [timeline, reality, context] = await Promise.all([
+      api.runtimeTimeline(sessionId),
+      api.realityFlow(sessionId, 80),
+      api.contextCurrent(sessionId, query, 'main_turn'),
+    ]);
+    currentTimeline.value = timeline;
+    currentRealityFlow.value = reality;
+    if (!currentContextEnvelope.value || context?.identity || context?.envelope) currentContextEnvelope.value = context.envelope || context;
+  }
+
+  function resetCurrentRun(prompt = '') {
+    currentRun.value = {
+      run_id: '',
+      turn_id: '',
+      status: 'queued',
+      prompt,
+      started_at_ms: Date.now(),
+    };
+    currentContextEnvelope.value = null;
+    currentRealityFlow.value = {};
+    currentTimeline.value = {};
+    liveToolCount.value = 0;
+    liveMemoryRecallCount.value = 0;
+    liveMemoryEvidenceCount.value = 0;
   }
 
   function connectSessionStream(sessionId: string) {
@@ -254,6 +366,7 @@ export const useAppStore = defineStore('app', () => {
 
     if (type === 'TurnStarted') {
       ensureStreamingAssistantTurn();
+      currentRun.value = { ...(currentRun.value || {}), status: 'running', started_at_ms: currentRun.value?.started_at_ms || Date.now() };
       recordLiveActivity('runtime', 'Turn started', '', 'running');
       return;
     }
@@ -271,6 +384,7 @@ export const useAppStore = defineStore('app', () => {
 
     if (type === 'ToolStart' || type === 'ToolProgress' || type === 'ToolComplete') {
       companionTab.value = 'activity';
+      if (type === 'ToolStart') liveToolCount.value += 1;
       recordLiveActivity(
         'tool',
         event.name || type,
@@ -281,18 +395,41 @@ export const useAppStore = defineStore('app', () => {
     }
 
     if (type === 'ContextEnvelope') {
+      const envelope = event.envelope || event;
+      currentContextEnvelope.value = envelope;
+      currentRun.value = {
+        ...(currentRun.value || {}),
+        run_id: event.run_id || currentRun.value?.run_id || '',
+        turn_id: event.turn_id || currentRun.value?.turn_id || '',
+        context_envelope_id: event.envelope_id || envelope.envelope_id || envelope.id || '',
+      };
+      const envelopeItems = [
+        ...(Array.isArray(envelope.items) ? envelope.items : []),
+        ...(Array.isArray(envelope.context_items) ? envelope.context_items : []),
+        ...(Array.isArray(envelope.evidence) ? envelope.evidence : []),
+      ];
+      const memoryItems = envelopeItems.filter((item: any) => {
+        const text = `${item.kind || ''} ${item.source || ''} ${item.source_type || ''} ${item.ref || ''}`.toLowerCase();
+        return text.includes('memory') || text.includes('recall');
+      });
+      const envelopeText = JSON.stringify(event).toLowerCase();
+      const memoryMentions = (envelopeText.match(/memory|recall/g) || []).length;
+      liveMemoryEvidenceCount.value = Math.max(liveMemoryEvidenceCount.value, memoryItems.length || Math.min(memoryMentions, 99));
       recordLiveActivity('context', 'Context envelope', event.envelope_id || event.run_id || '', 'complete');
       return;
     }
 
     if (type === 'TurnComplete') {
+      currentRun.value = { ...(currentRun.value || {}), status: 'complete', completed_at_ms: Date.now(), iterations: event.iterations };
       completeAssistantTurn(event.response || event.text || '');
       recordLiveActivity('runtime', 'Turn complete', event.iterations ? `${event.iterations} iterations` : '', 'complete');
+      if (chatDisplayMode.value === 'panorama') refreshChatProjection(activeSessionId.value).catch(() => undefined);
       return;
     }
 
     if (type === 'TurnError') {
       companionTab.value = 'inspector';
+      currentRun.value = { ...(currentRun.value || {}), status: 'error', error: event.error || 'Turn failed', completed_at_ms: Date.now() };
       completeAssistantTurn(event.error || 'Turn failed', 'error');
       recordLiveActivity('error', 'Turn failed', event.error || '', 'error');
       return;
@@ -345,6 +482,36 @@ export const useAppStore = defineStore('app', () => {
       activity.value.unshift(event);
     }
     activity.value = activity.value.slice(0, 80);
+    const lower = `${title} ${detail}`.toLowerCase();
+    if (kind === 'context' && (lower.includes('memory') || lower.includes('recall'))) liveMemoryRecallCount.value += 1;
+  }
+
+  async function stopCurrentTurn() {
+    if (!activeSessionId.value) return;
+    const receipt = await api.cancelSessionTurn(activeSessionId.value);
+    currentRun.value = { ...(currentRun.value || {}), status: 'cancel_requested', cancel_receipt: receipt };
+    activity.value.unshift({
+      id: `cancel-${Date.now()}`,
+      kind: receipt.ok ? 'runtime' : 'error',
+      title: 'Turn cancel requested',
+      detail: receipt.error || receipt.payload_summary || activeSessionId.value,
+      status: receipt.ok ? 'complete' : 'error',
+    });
+    return receipt;
+  }
+
+  async function retryLastUserTurn() {
+    const lastUser = [...turns.value].reverse().find((turn) => turn.role === 'user' && turn.content.trim());
+    if (!lastUser) return;
+    await send(lastUser.content);
+  }
+
+  function setChatDisplayMode(mode: ChatDisplayMode) {
+    chatDisplayMode.value = mode;
+    if (mode === 'panorama' && activeSessionId.value) {
+      refreshChatProjection(activeSessionId.value).catch(() => undefined);
+      loadActivity().catch(() => undefined);
+    }
   }
 
   async function loadWorkspace(dir = workspaceDir.value) {
@@ -641,6 +808,17 @@ export const useAppStore = defineStore('app', () => {
     turns,
     activity,
     companionTab,
+    chatDisplayMode,
+    currentRun,
+    currentContextEnvelope,
+    currentRealityFlow,
+    currentTimeline,
+    selectedActivity,
+    toolCallCount,
+    memoryRecallCount,
+    memoryEvidenceCount,
+    runStageSummary,
+    currentRunFiles,
     workspaceRoot,
     workspaceDir,
     workspaceFiles,
@@ -680,6 +858,7 @@ export const useAppStore = defineStore('app', () => {
     compactSession,
     send,
     loadActivity,
+    refreshChatProjection,
     loadWorkspace,
     openFile,
     loadAttachments,
@@ -692,6 +871,9 @@ export const useAppStore = defineStore('app', () => {
     saveFile,
     resetFile,
     openCompanion,
+    stopCurrentTurn,
+    retryLastUserTurn,
+    setChatDisplayMode,
     selectSection,
     openModal,
     closeModal,

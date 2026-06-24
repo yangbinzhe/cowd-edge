@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Brain, ChevronUp, Eye, FilePenLine, FilePlus2, FileText, Folder, FolderPlus, Info, Link2, RotateCcw, Save, Search, Trash2, Upload, Workflow, X } from 'lucide-vue-next';
+import { Brain, ChevronUp, CircleDot, Eye, FilePenLine, FilePlus2, FileText, Folder, FolderPlus, Info, Link2, RotateCcw, Save, Search, Trash2, Upload, Workflow, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from './MarkdownBlock.vue';
 
@@ -32,6 +32,16 @@ const rawFileUrl = computed(() => `/api/file/raw?path=${encodeURIComponent(store
 const canEdit = computed(() => !!store.selectedFile && !isImage.value);
 const thinkingEvents = computed(() => store.activity.filter((event) => event.kind === 'think'));
 const inspectorEvents = computed(() => store.activity.filter((event) => event.kind === 'error' || event.status === 'error'));
+const contextItems = computed(() => {
+  const envelope = store.currentContextEnvelope || {};
+  return [
+    ...(Array.isArray(envelope.items) ? envelope.items : []),
+    ...(Array.isArray(envelope.context_items) ? envelope.context_items : []),
+    ...(Array.isArray(envelope.evidence) ? envelope.evidence : []),
+  ].slice(0, 12);
+});
+const realityStages = computed(() => (Array.isArray(store.currentRealityFlow?.stages) ? store.currentRealityFlow.stages : []).slice(0, 12));
+const timelineEvents = computed(() => (Array.isArray(store.currentTimeline?.events) ? store.currentTimeline.events : []).slice(0, 14));
 
 function openFile(path: string, kind: string) {
   if (kind === 'dir') store.loadWorkspace(path);
@@ -86,6 +96,10 @@ async function commitRename() {
         <Folder :size="15" />
         <span>Workspace</span>
       </button>
+      <button :class="{ active: store.companionTab === 'evidence' }" type="button" @click="store.openCompanion('evidence')">
+        <CircleDot :size="15" />
+        <span>Evidence</span>
+      </button>
       <button :class="{ active: store.companionTab === 'inspector' }" type="button" @click="store.openCompanion('inspector')">
         <Info :size="15" />
         <span>Inspector</span>
@@ -98,7 +112,7 @@ async function commitRename() {
         <span>{{ store.activity.length }} events</span>
       </div>
       <div class="activity-list">
-        <article v-for="event in store.activity" :key="event.id" class="activity-item" :data-kind="event.kind">
+        <article v-for="event in store.activity" :key="event.id" class="activity-item" :data-kind="event.kind" @click="store.selectedActivity = event">
           <div>
             <strong>{{ event.title }}</strong>
             <p>{{ event.detail || 'No detail available.' }}</p>
@@ -215,6 +229,81 @@ async function commitRename() {
       </div>
     </section>
 
+    <section v-else-if="store.companionTab === 'evidence'" class="companion-body evidence-tab">
+      <div class="panel-title">
+        <h2>Run evidence</h2>
+        <span>{{ store.toolCallCount }} tools</span>
+      </div>
+      <dl class="detail-list evidence-summary">
+        <dt>Status</dt>
+        <dd>{{ store.currentRun?.status || 'idle' }}</dd>
+        <dt>Run</dt>
+        <dd>{{ store.currentRun?.run_id || store.currentRun?.turn_id || store.activeSessionId || '-' }}</dd>
+        <dt>Context</dt>
+        <dd>{{ store.currentRun?.context_envelope_id || store.currentContextEnvelope?.id || '-' }}</dd>
+        <dt>Memory</dt>
+        <dd>{{ store.memoryRecallCount }} recall / {{ store.memoryEvidenceCount }} evidence</dd>
+      </dl>
+      <div class="stage-list">
+        <article v-for="stage in store.runStageSummary" :key="stage.id" class="stage-row" :data-status="stage.status">
+          <strong>{{ stage.label }}</strong>
+          <span>{{ stage.status }}</span>
+          <small>{{ stage.count }}</small>
+        </article>
+      </div>
+
+      <div class="panel-title compact">
+        <h2>Context envelope</h2>
+        <span>{{ contextItems.length }} items</span>
+      </div>
+      <div class="evidence-list">
+        <article v-for="item in contextItems" :key="String(item.id || item.ref || item.path || JSON.stringify(item).slice(0, 40))" class="evidence-item">
+          <strong>{{ item.title || item.kind || item.source || item.ref || 'context item' }}</strong>
+          <p>{{ item.summary || item.text || item.path || item.content || JSON.stringify(item).slice(0, 180) }}</p>
+        </article>
+        <div v-if="!contextItems.length" class="empty-state">
+          <strong>No context evidence</strong>
+          <p>ContextEnvelope events or current context API results will appear here.</p>
+        </div>
+      </div>
+
+      <div class="panel-title compact">
+        <h2>Reality flow</h2>
+        <span>{{ realityStages.length }} stages</span>
+      </div>
+      <div class="evidence-list">
+        <article v-for="stage in realityStages" :key="String(stage.id || stage.kind || stage.ref || JSON.stringify(stage).slice(0, 40))" class="evidence-item">
+          <strong>{{ stage.kind || stage.stage || stage.status || 'reality stage' }}</strong>
+          <p>{{ stage.summary || stage.detail || stage.message || JSON.stringify(stage).slice(0, 180) }}</p>
+        </article>
+      </div>
+
+      <div class="panel-title compact">
+        <h2>Files</h2>
+        <span>{{ store.currentRunFiles.length }}</span>
+      </div>
+      <div class="evidence-list">
+        <article v-for="file in store.currentRunFiles" :key="file.path" class="evidence-item">
+          <strong>{{ file.path }}</strong>
+          <p>{{ file.kind }} · {{ file.status }} · {{ file.ref }}</p>
+        </article>
+      </div>
+
+      <div class="panel-title compact">
+        <h2>Timeline</h2>
+        <span>{{ timelineEvents.length }}</span>
+      </div>
+      <div class="activity-list">
+        <article v-for="event in timelineEvents" :key="String(event.sequence || event.id || JSON.stringify(event).slice(0, 40))" class="activity-item" :data-kind="String(event.kind || event.type || 'runtime').toLowerCase().includes('error') ? 'error' : 'runtime'">
+          <div>
+            <strong>{{ event.kind || event.type || event.event_type || 'event' }}</strong>
+            <p>{{ event.summary || event.detail || event.status || JSON.stringify(event).slice(0, 180) }}</p>
+          </div>
+          <span>{{ event.status || event.sequence || 'seen' }}</span>
+        </article>
+      </div>
+    </section>
+
     <section v-else class="companion-body">
       <div class="panel-title">
         <h2>Inspector</h2>
@@ -229,6 +318,8 @@ async function commitRename() {
         <dd>{{ store.fileError || '-' }}</dd>
         <dt>Context</dt>
         <dd>{{ store.contextUsagePercent === null ? store.contextUsageSource : `${store.contextUsagePercent}%` }}</dd>
+        <dt>Selected activity</dt>
+        <dd>{{ store.selectedActivity?.title || '-' }}</dd>
       </dl>
       <div class="activity-list">
         <article v-for="event in inspectorEvents" :key="event.id" class="activity-item" data-kind="error">

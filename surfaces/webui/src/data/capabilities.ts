@@ -229,7 +229,7 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
   mfg: spec(
     'mfg',
     'MFG Manufacturing Application',
-    'MFG 是制造领域上层应用，运行在 cowd 内核的数据、记忆、上下文与跨平面能力之上。',
+    'MFG 是独立制造应用，运行在 Reality Core、Matrix Engine、Memory、Context 与跨平面能力之上。',
     [
       { id: 'data-plane', label: 'Data plane', description: 'Manufacturing data ingest planning, source packs, and connector runs.' },
       { id: 'entities', label: 'Entities', description: 'Manufacturing entities, source key resolution, relations, and impact paths.' },
@@ -237,14 +237,14 @@ export const capabilitySpecs: Record<CapabilityId, CapabilitySpec> = {
       { id: 'incidents', label: 'Incidents', description: 'Incident room, evidence quality, playbooks, skills, and actions.' },
     ],
     [
-      { label: 'Ingest manufacturing facts', kind: 'primary', endpoint: '/api/matrix/facts/ingest' },
-      { label: 'Plan compute job', kind: 'secondary', endpoint: '/api/matrix/compute/jobs/plan' },
+      { label: 'Refresh MFG app', kind: 'primary', endpoint: '/api/apps/mfg/app' },
+      { label: 'Open command center', kind: 'secondary', endpoint: '/api/apps/mfg/command-center' },
       { label: 'Generate report', kind: 'secondary', endpoint: '/api/apps/mfg/cockpit/profiles/:id/reports/generate' },
     ],
     [
       { label: 'API', value: '/api/apps/mfg/app' },
-      { label: 'Boundary', value: 'Application layer, not cowd kernel' },
-      { label: 'Kernel dependency', value: 'Structured data, memory, context, cross-plane' },
+      { label: 'Boundary', value: 'Independent application layer, not Reality Core management' },
+      { label: 'Kernel dependency', value: 'Reality Core, Matrix Engine, memory, context, cross-plane' },
     ],
   ),
   audit: spec(

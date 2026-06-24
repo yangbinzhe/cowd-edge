@@ -10,6 +10,7 @@ import './styles/base.css';
 const routes = [
   { path: '/', redirect: '/chat' },
   { path: '/chat', component: ChatPage, meta: { label: 'Chat' } },
+  { path: '/mission', component: () => import('./pages/MissionControlPage.vue') },
   { path: '/runtime', component: () => import('./pages/RuntimePage.vue') },
   { path: '/context', component: () => import('./pages/ContextPage.vue') },
   { path: '/reality', component: () => import('./pages/RealityCorePage.vue') },

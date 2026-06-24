@@ -95,7 +95,7 @@ const metricId = 'torque_deviation_rate';
 
 const steps = [];
 steps.push(await request('gateway health', 'GET', '/health'));
-steps.push(await request('matrix health', 'GET', '/api/matrix/health'));
+steps.push(await request('matrix health', 'GET', '/api/apps/mfg/reality/health'));
 steps.push(await request('mfg app descriptor', 'GET', '/api/apps/mfg/app'));
 steps.push(await request('structured ingest plan', 'POST', '/api/cowd/structured/ingest-plan', {
   source_ref: sourceRef,
@@ -104,7 +104,7 @@ steps.push(await request('structured ingest plan', 'POST', '/api/cowd/structured
   raw_checksum: `sha256:${stamp}`,
   metric_ids: [metricId],
 }));
-steps.push(await request('matrix data-plane ingest plan', 'POST', '/api/matrix/data-plane/ingest-plan', {
+steps.push(await request('matrix data-plane ingest plan', 'POST', '/api/apps/mfg/reality/data-plane/ingest-plan', {
   ingest: {
     source_ref: sourceRef,
     fact_type: factType,
@@ -114,13 +114,13 @@ steps.push(await request('matrix data-plane ingest plan', 'POST', '/api/matrix/d
     metric_ids: [metricId],
   },
 }));
-steps.push(await request('metric attention plan', 'POST', '/api/matrix/metrics/attention-plan', {
+steps.push(await request('metric attention plan', 'POST', '/api/apps/mfg/reality/metrics/attention-plan', {
   trigger_fact_type: factType,
   entity_scope: 'line:A',
   period: 'latest',
   limit: 5,
 }));
-steps.push(await request('compute job plan', 'POST', '/api/matrix/compute/jobs/plan', {
+steps.push(await request('compute job plan', 'POST', '/api/apps/mfg/reality/compute/jobs/plan', {
   job: {
     trigger_fact_type: factType,
     trigger_fact_refs: [],
@@ -130,7 +130,7 @@ steps.push(await request('compute job plan', 'POST', '/api/matrix/compute/jobs/p
     priority: 0.7,
   },
 }));
-const evidence = await request('evidence build', 'POST', '/api/matrix/evidence/build', {
+const evidence = await request('evidence build', 'POST', '/api/apps/mfg/reality/evidence/build', {
   problem_statement: 'Live smoke validates Matrix to MFG decision trace.',
 }, { allowDegraded: true });
 steps.push(evidence);

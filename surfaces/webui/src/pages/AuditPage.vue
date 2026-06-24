@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 import { api } from '../api/client';
-import ChartPanel from '../components/ChartPanel.vue';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
+const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
 const loading = ref(false);
 const error = ref('');
 const state = ref<any>({});
@@ -14,6 +18,7 @@ const source = ref('all');
 const limit = ref(50);
 const offset = ref(0);
 const releaseSurface = ref('webui');
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 function items(collection: any, key: string) {
   return Array.isArray(collection?.[key]) ? collection[key] : Array.isArray(collection) ? collection : [];
@@ -65,6 +70,42 @@ const usageChart = computed(() => {
 const releaseChart = computed(() => releaseRows.value.length
   ? releaseRows.value.map((check) => ({ name: check.name || 'check', value: check.status === 'pass' ? 100 : 25 }))
   : []);
+const auditContext = computed(() => [
+  { label: 'Audit records', value: auditRecords.value.length },
+  { label: 'Approvals', value: approvalHistory.value.length },
+  { label: 'Cross-plane', value: crossPlaneRecords.value.length },
+  { label: 'Release checks', value: releaseChecks.value.length, tone: releaseChecks.value.length ? 'warn' : 'default' },
+]);
+const auditWorkflow = computed(() => [
+  { id: 'logs', label: 'Export', status: auditRows.value.length ? 'ready' : 'idle', count: auditRows.value.length },
+  { id: 'usage', label: 'Usage', status: usageChart.value.length ? 'ready' : 'idle', count: usageChart.value.length },
+  { id: 'release', label: 'Release', status: releaseRows.value.some((row) => row.status !== 'pass') ? 'blocked' : 'ready', count: releaseRows.value.length },
+  { id: 'approvals', label: 'Approval', status: approvalRows.value.length ? 'ready' : 'idle', count: approvalRows.value.length },
+  { id: 'cross-plane', label: 'Cross-plane', status: crossPlaneRows.value.length ? 'ready' : 'idle', count: crossPlaneRows.value.length },
+]);
+const auditEvidence = computed(() => [
+  ...auditRows.value.slice(0, 3).map((row) => ({
+    id: String(row.id || ''),
+    kind: `audit:${row.source || 'record'}`,
+    status: 'recorded',
+    summary: String(row.summary || row.id || '-'),
+    source: 'gateway.audit',
+  })),
+  ...approvalRows.value.slice(0, 2).map((row) => ({
+    id: String(row.id || ''),
+    kind: 'approval',
+    status: String(row.decision || 'recorded'),
+    summary: String(row.command || row.id || '-'),
+    source: 'gateway.approval',
+  })),
+  ...crossPlaneRows.value.slice(0, 2).map((row) => ({
+    id: String(row.id || ''),
+    kind: 'cross-plane',
+    status: String(row.result || 'recorded'),
+    summary: String(row.summary || row.capability || '-'),
+    source: 'gateway.cross-plane',
+  })),
+]);
 
 async function refresh() {
   loading.value = true;
@@ -106,6 +147,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="auditContext" />
+    <WorkflowStrip :steps="auditWorkflow" title="Evidence flow" />
 
     <section class="metric-row">
       <article class="metric-card" data-tone="info">
@@ -149,8 +192,9 @@ onMounted(refresh);
             <input v-model.number="offset" type="number" min="0" @change="refresh" />
           </label>
         </div>
-        <DataTable v-if="auditRows.length" :rows="auditRows" :columns="['source', 'id', 'summary', 'timestamp']" />
+        <DataTable v-if="auditRows.length" :rows="auditRows" :columns="['source', 'id', 'summary', 'timestamp']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No audit records" detail="审批或记忆审计产生后会在这里展示。" />
+        <EvidenceTrace :items="auditEvidence" title="Audit evidence trace" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="usage">
@@ -185,7 +229,7 @@ onMounted(refresh);
         </label>
         <ChartPanel v-if="releaseChart.length" title="Release gate coverage" kind="radar" :data="releaseChart" />
         <EmptyState v-else title="No release checks" detail="发布门禁返回检查项后再展示覆盖图。" />
-        <DataTable v-if="releaseRows.length" :rows="releaseRows" :columns="['name', 'status', 'detail']" />
+        <DataTable v-if="releaseRows.length" :rows="releaseRows" :columns="['name', 'status', 'detail']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="approvals">
@@ -193,7 +237,7 @@ onMounted(refresh);
           <h2>Approval history</h2>
           <span>{{ approvalRows.length }} shown</span>
         </header>
-        <DataTable v-if="approvalRows.length" :rows="approvalRows" :columns="['id', 'command', 'decision', 'resolved']" />
+        <DataTable v-if="approvalRows.length" :rows="approvalRows" :columns="['id', 'command', 'decision', 'resolved']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No approvals" detail="审批记录为空或 approval gate 未启用。" />
       </section>
 
@@ -202,7 +246,7 @@ onMounted(refresh);
           <h2>Governance evidence</h2>
           <span>{{ crossPlaneRows.length }} records</span>
         </header>
-        <DataTable v-if="crossPlaneRows.length" :rows="crossPlaneRows" :columns="['id', 'result', 'capability', 'summary']" />
+        <DataTable v-if="crossPlaneRows.length" :rows="crossPlaneRows" :columns="['id', 'result', 'capability', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No cross-plane audit" detail="跨平面动作执行后会产生治理证据。" />
       </section>
 
@@ -211,7 +255,8 @@ onMounted(refresh);
           <h2>Execution receipts</h2>
           <span>{{ executionRows.length }} receipts</span>
         </header>
-        <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" />
+        <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" @row-click="selectedDetail = $event" />
+        <DetailDrawer title="Audit selected evidence" :row="selectedDetail" @close="selectedDetail = null" />
         <RawPayload title="Governance payload" :data="{ capabilities: state.capabilities, projection: state.projection, surfaces: state.surfaces }" />
       </section>
     </section>

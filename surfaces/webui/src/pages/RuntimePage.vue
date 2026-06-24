@@ -7,6 +7,10 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -18,6 +22,9 @@ const runtimeSnapshot = ref<any>({});
 const sourceAudit = ref<any>({});
 const sourceRepairPlan = ref<any>({});
 const runtimeTurns = ref<any>({});
+const missionProjection = ref<any>({});
+const missionApprovals = ref<any>({});
+const missionRelations = ref<any>({});
 const effectiveConfig = ref<any>({});
 const leases = ref<any>({});
 const approvals = ref<any>([]);
@@ -31,8 +38,27 @@ const leaseOwner = ref('webui');
 const leaseMode = ref('shared');
 const turnPrompt = ref('Summarize current runtime state and blockers');
 const selectedTurnId = ref('');
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 const sessionId = computed(() => store.activeSessionId || 'api-context');
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
+const mission = computed(() => missionProjection.value?.mission || {});
+const missionSessions = computed(() => Array.isArray(mission.value?.sessions) ? mission.value.sessions : []);
+const missionEvents = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
+const missionApprovalProjection = computed(() => mission.value?.approval_projection || missionApprovals.value?.approvals || {});
+const missionRelationProjection = computed(() => mission.value?.relation_projection || missionRelations.value?.relations || {});
+const missionSessionRows = computed(() => missionSessions.value.slice(0, 12).map((session: any) => ({
+  id: session.session_id || session.id || '-',
+  title: session.title || session.session_id || '-',
+  status: session.status || '-',
+  teams: Array.isArray(session.active_team_ids) ? session.active_team_ids.length : 0,
+  agents: Array.isArray(session.active_agent_ids) ? session.active_agent_ids.length : 0,
+})));
+const missionEventRows = computed(() => missionEvents.value.slice(0, 10).map((event: any) => ({
+  sequence: event.sequence ?? '-',
+  type: event.event_type || event.kind || event.type || '-',
+  session: event.session_id || '-',
+  message: event.message || event.summary || '-',
+})));
 const timelineRows = computed(() => (Array.isArray(timeline.value?.events) ? timeline.value.events : []).slice(0, 16).map((event: any) => ({
   sequence: event.sequence ?? event.id ?? '-',
   scope: event.scope || event.kind || event.type || '-',
@@ -72,6 +98,51 @@ const growthSources = computed(() => {
   if (Array.isArray(sources)) return sources.length;
   return sources && typeof sources === 'object' ? Object.keys(sources).length : 0;
 });
+const runtimeContext = computed(() => [
+  { label: 'Session', value: sessionId.value },
+  { label: 'Model', value: controlPlane.value.configured_model || effectiveConfig.value?.model || 'unresolved' },
+  { label: 'Provider', value: controlPlane.value.provider_count ?? 0, tone: controlPlane.value.provider_count ? 'success' : 'warn' },
+  { label: 'Readiness', value: controlPlane.value.production_ready === true ? 'production ready' : 'attention', tone: controlPlane.value.production_ready === true ? 'success' : 'warn' },
+]);
+const runtimeWorkflow = computed(() => [
+  { id: 'overview', label: 'Config', status: controlPlane.value.degraded ? 'degraded' : 'ready', count: controlPlane.value.provider_count ?? 0, description: 'providers' },
+  { id: 'runs', label: 'Lease', status: leases.value?.__offline ? 'blocked' : 'ready', count: Array.isArray(leases.value?.leases) ? leases.value.leases.length : 0 },
+  { id: 'runs', label: 'Turn', status: turnRows.value.length ? 'active' : 'idle', count: turnRows.value.length },
+  { id: 'mission', label: 'Mission', status: missionSessions.value.length ? 'ready' : 'idle', count: missionSessions.value.length },
+  { id: 'timeline', label: 'Timeline', status: timelineRows.value.length ? 'ready' : 'idle', count: timelineRows.value.length },
+  { id: 'policy', label: 'Approval', status: approvalItems.value.length ? 'blocked' : 'ready', count: approvalItems.value.length },
+  { id: 'growth', label: 'Growth', status: growthPromotionRows.value.length ? 'done' : 'idle', count: growthEventRows.value.length },
+]);
+const runtimeEvidence = computed(() => [
+  ...timelineRows.value.slice(0, 5).map((row: any) => ({
+    id: String(row.sequence || ''),
+    kind: row.kind || 'runtime.event',
+    status: row.status || 'recorded',
+    summary: row.detail || row.scope || 'runtime timeline event',
+    source: `runtime.timeline:${row.scope || 'global'}`,
+  })),
+  ...growthEventRows.value.slice(0, 4).map((row: any) => ({
+    id: String(row.id || ''),
+    kind: 'growth.event',
+    status: row.risk || row.mode || 'recorded',
+    summary: row.source || 'growth event',
+    source: 'runtime.growth',
+  })),
+  ...growthPromotionRows.value.slice(0, 3).map((row: any) => ({
+    id: String(row.target_id || row.target || ''),
+    kind: `promotion.${row.target || 'target'}`,
+    status: row.status || 'recorded',
+    summary: row.summary || row.target_id || 'growth promotion',
+    source: 'runtime.growth.promotions',
+  })),
+  ...approvalItems.value.slice(0, 3).map((approval: any) => ({
+    id: String(approval.id || approval.request_id || ''),
+    kind: 'approval.pending',
+    status: 'blocked',
+    summary: approval.summary || approval.reason || approval.command || 'approval request',
+    source: 'runtime.approval',
+  })),
+].filter((item) => item.id || item.summary));
 
 async function refresh() {
   loading.value = true;
@@ -84,6 +155,9 @@ async function refresh() {
       nextSourceAudit,
       nextRepairPlan,
       nextTurns,
+      nextMission,
+      nextMissionApprovals,
+      nextMissionRelations,
       nextConfig,
       nextLeases,
       nextApprovals,
@@ -98,6 +172,9 @@ async function refresh() {
       api.runtimeSourceAudit(),
       api.runtimeSourceRepairPlan(),
       api.runtimeTurns(),
+      api.missionProjection(),
+      api.missionApprovals(),
+      api.missionRelations(),
       api.effectiveConfig(),
       api.runtimeSessionLeases(),
       api.approvalPending(),
@@ -112,6 +189,9 @@ async function refresh() {
     sourceAudit.value = nextSourceAudit;
     sourceRepairPlan.value = nextRepairPlan;
     runtimeTurns.value = nextTurns;
+    missionProjection.value = nextMission;
+    missionApprovals.value = nextMissionApprovals;
+    missionRelations.value = nextMissionRelations;
     effectiveConfig.value = nextConfig;
     leases.value = nextLeases;
     approvals.value = nextApprovals;
@@ -136,6 +216,7 @@ async function submitTurn() {
 async function inspectTurn() {
   if (!selectedTurnId.value) return;
   actionResult.value = await api.runtimeTurn(selectedTurnId.value);
+  selectedDetail.value = actionResult.value?.turn || actionResult.value;
 }
 
 async function cancelTurn() {
@@ -184,6 +265,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="runtimeContext" />
+    <WorkflowStrip :steps="runtimeWorkflow" title="Runtime flow" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -200,6 +283,11 @@ onMounted(refresh);
         <span>Pending approvals</span>
         <strong>{{ approvalItems.length }}</strong>
         <small>{{ taskRows.length }} visible tasks</small>
+      </article>
+      <article class="metric-card" data-tone="info">
+        <span>Mission sessions</span>
+        <strong>{{ missionSessions.length }}</strong>
+        <small>{{ mission.active_session_id || 'no active mission' }}</small>
       </article>
       <article class="metric-card" data-tone="warning">
         <span>Growth events</span>
@@ -248,6 +336,27 @@ onMounted(refresh);
         </dl>
         <RawPayload title="Runtime snapshot detail" :data="runtimeSnapshot" />
         <RawPayload title="Runtime source audit detail" :data="{ audit: sourceAudit, repair: sourceRepairPlan }" />
+      </section>
+
+      <section class="management-panel runtime-panel wide" data-section="mission">
+        <header>
+          <h2>Mission Control</h2>
+          <StatusPill :status="missionProjection.__offline ? 'offline' : (missionSessions.length ? 'ready' : 'idle')" />
+        </header>
+        <dl class="detail-list">
+          <dt>Active session</dt>
+          <dd>{{ mission.active_session_id || '-' }}</dd>
+          <dt>Sessions</dt>
+          <dd>{{ missionSessions.length }}</dd>
+          <dt>Pending approvals</dt>
+          <dd>{{ missionApprovalProjection.pending_count ?? 0 }}</dd>
+          <dt>Relations</dt>
+          <dd>{{ missionRelationProjection.relation_count ?? 0 }}</dd>
+        </dl>
+        <DataTable v-if="missionSessionRows.length" :rows="missionSessionRows" :columns="['id', 'title', 'status', 'teams', 'agents']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else title="No mission sessions" detail="Mission Runtime 尚未返回 session，或 Gateway 处于离线状态。" />
+        <DataTable v-if="missionEventRows.length" :rows="missionEventRows" :columns="['sequence', 'type', 'session', 'message']" @row-click="selectedDetail = $event" />
+        <RawPayload title="Mission projection detail" :data="{ projection: missionProjection, approvals: missionApprovals, relations: missionRelations }" />
       </section>
 
       <section class="management-panel runtime-panel" data-section="runs">
@@ -301,7 +410,7 @@ onMounted(refresh);
           <h2>Runtime timeline</h2>
           <StatusPill :status="timeline.__offline ? 'offline' : 'ready'" />
         </header>
-        <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'detail']" />
+        <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No runtime events" detail="当前 session 没有可展示的运行时事件，或后端离线。" />
       </section>
 
@@ -310,7 +419,7 @@ onMounted(refresh);
           <h2>Task registry</h2>
           <span>{{ taskRows.length }} tasks</span>
         </header>
-        <DataTable v-if="taskRows.length" :rows="taskRows" :columns="['id', 'status', 'objective', 'current_phase', 'failures']" />
+        <DataTable v-if="taskRows.length" :rows="taskRows" :columns="['id', 'status', 'objective', 'current_phase', 'failures']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No tasks" detail="目标任务和阶段验收会通过 task kernel 记录。" />
         <RawPayload title="Control payload" :data="controlPlane" />
       </section>
@@ -333,7 +442,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="inspectTurn">Inspect turn</button>
           <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="cancelTurn">Cancel turn</button>
         </div>
-        <DataTable v-if="turnRows.length" :rows="turnRows" :columns="['id', 'status', 'session', 'task', 'prompt']" />
+        <DataTable v-if="turnRows.length" :rows="turnRows" :columns="['id', 'status', 'session', 'task', 'prompt']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No runtime turns" detail="通过 Runtime service 提交的 turn 会在这里展示。" />
         <RequestReceipt :receipt="actionResult" title="Runtime turn receipt" />
         <RawPayload title="Runtime turn registry" :data="runtimeTurns" />
@@ -357,10 +466,12 @@ onMounted(refresh);
           <dt>Status</dt>
           <dd>{{ growthStatus.status || (growthStatus.__offline ? 'offline' : 'ready') }}</dd>
         </dl>
-        <DataTable v-if="growthEventRows.length" :rows="growthEventRows" :columns="['id', 'source', 'mode', 'risk', 'at']" />
+        <DataTable v-if="growthEventRows.length" :rows="growthEventRows" :columns="['id', 'source', 'mode', 'risk', 'at']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No growth events" detail="风险门禁后的成长事件会由后端记录并在这里展示。" />
-        <DataTable v-if="growthPromotionRows.length" :rows="growthPromotionRows" :columns="['target', 'status', 'target_id', 'summary']" />
+        <DataTable v-if="growthPromotionRows.length" :rows="growthPromotionRows" :columns="['target', 'status', 'target_id', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No promotions" detail="进入事实、记忆或矩阵的提升结果会作为 promotion 回执展示。" />
+        <EvidenceTrace :items="runtimeEvidence" title="Runtime evidence trace" />
+        <DetailDrawer title="Runtime selected detail" :row="selectedDetail" @close="selectedDetail = null" />
         <RawPayload title="Growth detail" :data="{ status: growthStatus, events: growthEvents }" />
       </section>
     </section>

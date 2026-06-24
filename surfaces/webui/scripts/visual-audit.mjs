@@ -54,8 +54,9 @@ try {
       let status = 'pass';
       let note = 'main shell rendered';
       try {
-        await page.goto(url, { waitUntil: 'networkidle' });
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
         await page.locator('.app-shell').waitFor({ state: 'visible' });
+        await page.waitForTimeout(350);
         const mainVisible = await page.locator('.content-stage, .chat-main, main, [role="main"]').first().isVisible().catch(() => false);
         const bodyText = (await page.locator('body').innerText()).trim();
         if (!mainVisible || bodyText.length < 80) {

@@ -5,6 +5,11 @@ import MarkdownIt from 'markdown-it';
 import { api } from '../api/client';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
+import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
 const loading = ref(false);
@@ -27,6 +32,7 @@ const selectedSkillId = ref('');
 const selectedFile = ref('SKILL.md');
 const selectedRunId = ref('');
 const actionResult = ref<any>(null);
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 const items = computed(() => Array.isArray(catalog.value?.items) ? catalog.value.items : []);
 const filteredItems = computed(() => items.value.filter((skill: any) => {
@@ -46,6 +52,59 @@ const skill = computed(() => detail.value?.skill || filteredItems.value.find((it
 const fileItems = computed(() => Array.isArray(files.value?.files) ? files.value.files : []);
 const runItems = computed(() => Array.isArray(runs.value?.items) ? runs.value.items : []);
 const markdownHtml = computed(() => markdown.render(rawFile.value?.content || ''));
+const skillContext = computed(() => [
+  { label: 'Skills', value: filteredItems.value.length, tone: filteredItems.value.length ? 'success' : 'warn' },
+  { label: 'Selected', value: selectedSkillId.value || 'none' },
+  { label: 'Files', value: fileItems.value.length },
+  { label: 'Runs', value: runItems.value.length },
+]);
+const skillWorkflow = computed(() => [
+  { id: 'catalog', label: 'Discover', status: filteredItems.value.length ? 'ready' : 'idle', count: filteredItems.value.length },
+  { id: 'projection', label: 'Validate', status: detail.value?.skill ? 'ready' : 'idle', description: selectedSkillId.value || 'none' },
+  { id: 'projection', label: 'Plan', status: actionResult.value ? 'active' : 'idle' },
+  { id: 'runs', label: 'Run', status: runItems.value.length ? 'ready' : 'idle', count: runItems.value.length },
+  { id: 'governance', label: 'Audit', status: runDetail.value?.id ? 'ready' : 'idle' },
+]);
+const skillActionContract = computed(() => ({
+  id: 'skills.action.run',
+  domain: 'skills',
+  title: 'Run skill action',
+  endpoint: selectedSkillId.value ? `/api/skills/${encodeURIComponent(selectedSkillId.value)}/action` : '/api/skills/:id/action',
+  method: 'POST',
+  summary: 'Validate and plan before running skill instructions. Live run is governed because it may invoke tools and affect runtime work.',
+  current_return: 'Skill action receipt and optional run record',
+  validate: 'validate action',
+  plan: 'plan action',
+  dry_run: 'plan action',
+  live: true,
+  live_policy: 'requires selected skill, action receipt, and run trace',
+  receipt: true,
+  audit_ref: true,
+  changed_refs: false,
+  approval_required: String(skill.value?.risk || '').toLowerCase().includes('high'),
+  kernel_boundary: 'Gateway skill service',
+  affected_refs: [selectedSkillId.value, skill.value?.path, skill.value?.source].filter(Boolean),
+  fields: [
+    { name: 'session_id', label: 'Session id', required: true, type: 'text' },
+    { name: 'skill_id', label: 'Skill id', required: true, type: 'text' },
+  ],
+}));
+const skillEvidence = computed(() => [
+  {
+    id: selectedSkillId.value,
+    kind: 'skill',
+    status: skill.value?.status || 'selected',
+    summary: skill.value?.description || skill.value?.name || selectedSkillId.value || 'no selected skill',
+    source: skill.value?.source || 'gateway.skills',
+  },
+  ...runItems.value.slice(0, 3).map((run: any) => ({
+    id: run.run_id || run.skill_run_id || run.id,
+    kind: 'skill run',
+    status: run.status || run.outcome || 'recorded',
+    summary: run.skill_id || run.skill_name || selectedSkillId.value,
+    source: 'gateway.skills.runs',
+  })),
+].filter((item) => item.id || item.summary));
 
 async function refresh() {
   loading.value = true;
@@ -99,6 +158,7 @@ async function loadRunDetail(run: any) {
   if (!id) return;
   selectedRunId.value = id;
   runDetail.value = await api.skillRunDetail(id);
+  selectedDetail.value = runDetail.value?.run || run;
 }
 
 watch(selectedSkillId, loadSelectedSkill);
@@ -119,8 +179,10 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="skillContext" />
+    <WorkflowStrip :steps="skillWorkflow" title="Skill lifecycle" />
 
-    <section class="skills-console">
+    <section class="skills-console" data-section="catalog">
       <aside class="skills-catalog">
         <header class="skills-toolbar">
           <label class="search-field">
@@ -170,7 +232,7 @@ onMounted(refresh);
       </aside>
 
       <main class="skills-detail">
-        <section class="management-panel">
+        <section class="management-panel" data-section="projection">
           <header>
             <h2>Detail</h2>
             <span>{{ skill.scope || 'unknown' }}</span>
@@ -189,15 +251,18 @@ onMounted(refresh);
             <dt>Tools</dt>
             <dd>{{ (skill.tools || []).join(', ') || '-' }}</dd>
           </dl>
-          <div class="button-row">
-            <button class="ghost-action" type="button" @click="runAction('validate')">Validate</button>
-            <button class="ghost-action" type="button" @click="runAction('plan')">Plan</button>
-            <button class="primary-action" type="button" @click="runAction('run')">Run</button>
-          </div>
+          <GovernedActionPanel
+            :contract="skillActionContract"
+            :payload="{ session_id: 'webui-skills', skill_id: selectedSkillId }"
+            :receipt="actionResult"
+            @plan="runAction('validate')"
+            @dry-run="runAction('plan')"
+            @live="runAction('run')"
+          />
           <RequestReceipt :receipt="actionResult" title="Skill action receipt" />
         </section>
 
-        <section class="management-panel">
+        <section class="management-panel" data-section="files">
           <header>
             <h2>Files</h2>
             <span>{{ fileItems.length }} entries</span>
@@ -229,7 +294,8 @@ onMounted(refresh);
             <h2>Runs and governance</h2>
             <span>{{ runItems.length }} runs</span>
           </header>
-          <div class="run-list">
+          <EvidenceTrace :items="skillEvidence" title="Skill evidence trace" />
+          <div class="run-list" data-section="runs">
             <article
               v-for="run in runItems.slice(0, 20)"
               :key="run.run_id || run.skill_run_id || run.id"
@@ -243,6 +309,7 @@ onMounted(refresh);
               <span>{{ run.status || run.outcome || 'recorded' }}</span>
             </article>
           </div>
+          <DetailDrawer title="Skill selected detail" :row="selectedDetail || skill" @close="selectedDetail = null" />
           <RawPayload title="Run detail" :data="runDetail || {}" />
           <RequestReceipt :receipt="actionResult || runDetail" title="Skill run receipt" />
           <RawPayload title="Action result" :data="actionResult || { projection, runs }" />

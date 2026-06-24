@@ -7,6 +7,8 @@ import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -19,6 +21,71 @@ const flow = ref<any>({});
 const promotions = ref<any>({});
 const boundaries = ref<any>({});
 const sessionFilter = ref('');
+const fallbackManagement = [
+  {
+    id: 'overview',
+    label: 'Reality overview',
+    mode: 'read',
+    owner: 'gateway.reality',
+    route: '/reality?section=overview',
+    scope: 'System health, engine readiness, contracts, latest growth event, and latest promotion receipt.',
+    api: ['/api/reality/status', '/api/reality/static'],
+  },
+  {
+    id: 'memory',
+    label: 'Memory Engine',
+    mode: 'read-write',
+    owner: 'gateway.memory',
+    route: '/memory',
+    scope: 'Memory layers, recall, fact checks, symbol links, maintenance candidates, and memory packets.',
+    api: ['/api/memory/status', '/api/memory/layers', '/api/memory/search', '/api/memory/maintenance', '/api/memory/packet'],
+  },
+  {
+    id: 'matrix',
+    label: 'Matrix Engine',
+    mode: 'read-write',
+    owner: 'gateway.matrix',
+    route: '/reality?section=matrix',
+    scope: 'Structured source packs, facts, entities, relations, metrics, evidence, quality gates, and lineage.',
+    api: ['/api/matrix/*'],
+  },
+  {
+    id: 'growth',
+    label: 'Growth Channel',
+    mode: 'read',
+    owner: 'gateway.growth',
+    route: '/reality?section=fact-flow',
+    scope: 'Runtime growth events, promotion decisions, Memory/Matrix targets, and held conflict boundaries.',
+    api: ['/api/growth/status', '/api/growth/events', '/api/reality/flow', '/api/reality/promotions'],
+  },
+  {
+    id: 'context',
+    label: 'Context Bridge',
+    mode: 'read-write',
+    owner: 'gateway.context',
+    route: '/context',
+    scope: 'Current context packets, evidence routing, budget pressure, and session recommendations.',
+    api: ['/api/context/current', '/api/evidence/resolve', '/api/sessions/:id/context/recommendations'],
+  },
+  {
+    id: 'audit',
+    label: 'Audit Trace',
+    mode: 'read',
+    owner: 'gateway.audit',
+    route: '/audit',
+    scope: 'Approval history, risk receipts, cross-plane audit, runtime executions, and release gates.',
+    api: ['/api/audit/*', '/api/approval/*', '/api/cross-plane/audit', '/api/cowd/release-gate'],
+  },
+  {
+    id: 'gateway',
+    label: 'Gateway Control',
+    mode: 'read-write',
+    owner: 'gateway.system',
+    route: '/gateway',
+    scope: 'Surfaces, connector health, platform channels, runtime service contracts, and backend readiness.',
+    api: ['/api/surfaces/*', '/api/connectors/*', '/api/platforms', '/api/runtime/control-plane'],
+  },
+];
 
 const activeSessionId = computed(() => sessionFilter.value.trim() || store.activeSessionId || '');
 const activeSection = computed(() => String(route.query.section || 'overview'));
@@ -30,6 +97,20 @@ const sectionTabs = [
   { id: 'evidence', label: 'Evidence' },
   { id: 'audit', label: 'Audit' },
 ];
+const realityContext = computed(() => [
+  { label: 'Session', value: activeSessionId.value || 'global' },
+  { label: 'Engines', value: engineRows.value.length, tone: engineRows.value.length ? 'success' : 'warn' },
+  { label: 'Fact stages', value: factFlowRows.value.length },
+  { label: 'Promotions', value: promotionRows.value.length },
+]);
+const realityWorkflow = computed(() => [
+  { id: 'overview', label: 'Engines', status: engineRows.value.length ? 'ready' : 'idle', count: engineRows.value.length },
+  { id: 'core-map', label: 'Core map', status: coreRows.value.length ? 'ready' : 'idle', count: coreRows.value.length },
+  { id: 'fact-flow', label: 'Fact Flow', status: factFlowRows.value.length ? 'active' : 'idle', count: factFlowRows.value.length },
+  { id: 'evidence', label: 'Evidence', status: evidenceRows.value.length ? 'ready' : 'idle', count: evidenceRows.value.length },
+  { id: 'promotions', label: 'Promotion', status: promotionRows.value.length ? 'done' : 'idle', count: promotionRows.value.length },
+  { id: 'boundaries', label: 'Boundary', status: boundaryRows.value.length ? 'ready' : 'idle', count: boundaryRows.value.length },
+]);
 const engineRows = computed(() => {
   const engines = status.value?.engines || {};
   return Object.entries(engines).map(([id, value]: [string, any]) => ({
@@ -79,7 +160,7 @@ const boundaryRows = computed(() => {
   }));
 });
 const managementRows = computed(() => {
-  const rows = staticProjection.value?.management || [];
+  const rows = staticProjection.value?.management || fallbackManagement;
   return (Array.isArray(rows) ? rows : []).map((item: any) => ({
     id: item.id || '-',
     label: item.label || item.id || '-',
@@ -150,6 +231,8 @@ onMounted(() => {
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="realityContext" />
+    <WorkflowStrip :steps="realityWorkflow" title="Reality evidence flow" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card">

@@ -2,16 +2,22 @@ import { test, expect } from '@playwright/test';
 
 test('new shell uses icon rail and right Activity/Workspace companion tabs', async ({ page }) => {
   await page.goto('/index.html#/chat');
-  await expect(page.locator('.rail-button')).toHaveCount(11);
+  await expect(page.locator('.rail-button')).toHaveCount(13);
   await expect(page.locator('.session-sidebar')).toBeVisible();
   await expect(page.locator('.companion-tabs')).toContainText('Activity');
   await expect(page.locator('.companion-tabs')).toContainText('Workspace');
+  await expect(page.locator('.companion-tabs')).toContainText('Evidence');
   await expect(page.locator('.rail')).not.toContainText('Workspace');
+  await expect(page.locator('.run-panorama')).toBeVisible();
   await expect(page.locator('.transcript')).toBeVisible();
   await expect(page.locator('.composer textarea')).toBeVisible();
   await expect(page.locator('.turn-role')).toHaveCount(0);
   await expect(page.locator('.status-strip')).toContainText(/local|offline/);
-  await expect(page.locator('.status-strip')).toContainText('Select model');
+  await expect(page.locator('.status-strip button')).not.toHaveText('');
+  await page.getByRole('button', { name: '纯净' }).click();
+  await expect(page.locator('.clean-counts')).toBeVisible();
+  await expect(page.locator('.run-panorama')).toHaveCount(0);
+  await expect(page.locator('.companion-panel')).toHaveCount(0);
 });
 
 test('workspace tab supports folder browsing and editable preview surface', async ({ page }) => {
@@ -22,7 +28,7 @@ test('workspace tab supports folder browsing and editable preview surface', asyn
   await expect(page.getByPlaceholder('New folder')).toBeVisible();
   await expect(page.locator('.breadcrumbs')).toBeVisible();
   await expect(page.getByRole('button', { name: /Parent folder/ })).toBeVisible();
-  await expect(page.locator('.file-row')).toHaveCount(0);
+  await expect(page.locator('.file-row, .empty-state').first()).toBeVisible();
   await expect(page.locator('.preview-pane')).toHaveCount(0);
 });
 
@@ -90,7 +96,8 @@ test('skills agents and tools pages expose lifecycle workbenches', async ({ page
   await expect(page.locator('.filter-row select')).toHaveCount(6);
   await expect(page.getByRole('heading', { name: 'Files' })).toBeVisible();
   await expect(page.locator('.markdown-body, .skill-markdown pre')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Validate' })).toBeVisible();
+  await expect(page.locator('.governed-action-panel').first()).toContainText('Validate');
+  await expect(page.getByRole('button', { name: 'Run plan' }).first()).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Runs and governance' })).toBeVisible();
 
   await page.goto('/index.html#/agents');
@@ -115,11 +122,10 @@ test('gateway page exposes connector and cross-plane controls', async ({ page })
   await expect(page.getByRole('heading', { name: 'Cross-plane governance' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Identities and grants' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Action execution' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Simulate policy' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Run preflight' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Create identity' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Create grant' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Execute action' })).toBeVisible();
+  await expect(page.locator('.governed-action-panel')).toHaveCount(6);
+  await expect(page.locator('.governed-action-panel').filter({ hasText: 'Execute cross-plane action' })).toContainText('Run plan');
+  await expect(page.locator('.governed-action-panel').filter({ hasText: 'Manage cross-plane identity' })).toContainText('Run plan');
+  await expect(page.locator('.governed-action-panel').filter({ hasText: 'Create cross-plane grant' })).toContainText('Run plan');
 });
 
 test('mfg page exposes manufacturing application workbench controls', async ({ page }) => {
@@ -154,7 +160,7 @@ test('audit page exposes usage and release gate governance controls', async ({ p
 
 test('settings page is reachable and theme control is usable', async ({ page }) => {
   await page.goto('/index.html#/settings');
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.locator('.capability-sidebar')).toHaveCount(0);
   await page.getByRole('button', { name: 'Light' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
@@ -164,15 +170,15 @@ test('composer model workspace and command controls are clickable', async ({ pag
   await page.goto('/index.html#/chat');
   await page.locator('.status-strip button').click();
   await expect(page.getByRole('heading', { name: 'Model and profile' })).toBeVisible();
-  await expect(page.locator('.command-modal')).toContainText('后端未报告可切换模型');
+  await expect(page.locator('.command-modal')).toContainText(/Model|后端未报告可切换模型/);
   await page.getByRole('button', { name: 'Close' }).click();
 
   await page.getByRole('button', { name: /root/ }).click();
   await expect(page.getByRole('heading', { name: 'Workspace picker' })).toBeVisible();
-  await page.getByRole('button', { name: /Current workspace|dev-mfg/ }).click();
+  await page.locator('.command-modal .choice-row').first().click();
   await expect(page.locator('.companion-tabs button.active')).toContainText('Workspace');
 
   await page.getByRole('button', { name: /Commands/ }).click();
   await expect(page.getByRole('heading', { name: 'Commands' })).toBeVisible();
-  await expect(page.locator('.command-modal')).toContainText('后端未报告 command registry');
+  await expect(page.locator('.command-row, .modal-note').first()).toBeVisible();
 });

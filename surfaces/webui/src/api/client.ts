@@ -193,6 +193,16 @@ async function endpoint(label: string, path: string, init: RequestInit = {}): Pr
 const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: string) => {
   const sid = encodeURIComponent(sessionId || 'api-context');
   const routes: Record<Exclude<NavId, 'chat' | 'settings'>, Array<[string, string]>> = {
+    mission: [
+      ['Mission projection', '/api/mission/projection'],
+      ['Mission approvals', '/api/mission/approvals'],
+      ['Mission relations', '/api/mission/relations'],
+      ['Session detail', `/api/mission/sessions/${sid}`],
+      ['Session inbox', `/api/mission/sessions/${sid}/inbox`],
+      ['Pending approvals', '/api/approval/pending'],
+      ['Runtime timeline', `/api/runtime/timeline?session_id=${sid}&limit=80`],
+      ['Reality flow', `/api/reality/flow?session_id=${sid}&limit=80`],
+    ],
     runtime: [
       ['Control plane', '/api/runtime/control-plane'],
       ['Runtime status', '/api/runtime/status'],
@@ -201,6 +211,9 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['Runtime turns', '/api/runtime/turns'],
       ['Effective config', '/api/runtime/config/effective'],
       ['Session leases', '/api/runtime/session-leases'],
+      ['Mission projection', '/api/mission/projection'],
+      ['Mission approvals', '/api/mission/approvals'],
+      ['Mission relations', '/api/mission/relations'],
       ['Timeline', `/api/runtime/timeline?session_id=${sid}&limit=80`],
       ['Growth status', '/api/growth/status'],
       ['Growth events', '/api/growth/events'],
@@ -254,10 +267,10 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
     ],
     mfg: [
       ['App descriptor', '/api/apps/mfg/app'],
-      ['Health', '/api/matrix/health'],
-      ['Metrics', '/api/matrix/metrics'],
-      ['Entities', '/api/matrix/entities'],
-      ['Changes', '/api/matrix/changes'],
+      ['Health', '/api/apps/mfg/reality/health'],
+      ['Metrics', '/api/apps/mfg/reality/metrics'],
+      ['Entities', '/api/apps/mfg/reality/entities'],
+      ['Changes', '/api/apps/mfg/reality/changes'],
       ['Incidents', '/api/apps/mfg/incidents'],
       ['Skills', '/api/apps/mfg/skills'],
       ['Command center', '/api/apps/mfg/command-center'],
@@ -289,6 +302,7 @@ export const api = {
   }),
   deleteSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   compactSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/compact`, { method: 'POST' }),
+  cancelSessionTurn: (sessionId: string) => writeWithReceipt(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }),
   sessionStats: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/stats`, {}),
   updateSession: (sessionId: string, patch: Record<string, unknown>) => write(`/api/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'PATCH',
@@ -350,6 +364,29 @@ export const api = {
   }),
   runtimeTurn: (id: string) => read(`/api/runtime/turns/${encodeURIComponent(id)}`, {}),
   cancelRuntimeTurn: (id: string) => writeWithReceipt(`/api/runtime/turns/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  missionProjection: () => read('/api/mission/projection', { mission: { sessions: [], events: [], approval_projection: {}, relation_projection: {} } }),
+  missionApprovals: () => read('/api/mission/approvals', { approvals: { requests: [], pending_count: 0 } }),
+  missionRelations: () => read('/api/mission/relations', { relations: { relations: [], proxies: [] } }),
+  missionSessionDetail: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}`, {}),
+  missionSessionInbox: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox`, { commands: [], summary: {} }),
+  consumeMissionSessionCommand: (sessionId: string, commandId: string, mode = 'mark_claimed_only') => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(commandId)}/consume`, {
+    method: 'POST',
+    body: JSON.stringify({ mode }),
+  }),
+  cancelMissionSessionCommand: (sessionId: string, commandId: string) => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(commandId)}/cancel`, { method: 'POST' }),
+  retryMissionSessionCommand: (sessionId: string, commandId: string) => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(commandId)}/retry`, { method: 'POST' }),
+  startMissionTeamRuntime: (sessionId: string, objective: string, executionMode = 'provider_in_process') => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/teams/runtime`, {
+    method: 'POST',
+    body: JSON.stringify({ objective, execution_mode: executionMode }),
+  }),
+  routeMissionCommand: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/route', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  decideMissionApproval: (approvalId: string, approved: boolean, reason = '') => writeWithReceipt(`/api/mission/approvals/${encodeURIComponent(approvalId)}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ approved, decided_by: 'webui', reason }),
+  }),
   realityStatus: () => read('/api/reality/status', {}),
   realityStatic: () => read('/api/reality/static', { core_map: [] }),
   realityFlow: (sessionId?: string, limit = 50) => {
@@ -464,7 +501,7 @@ export const api = {
   skillDetail: (id: string) => read(`/api/skills/${encodeURIComponent(id)}`, {}),
   skillFiles: (id: string) => read(`/api/skills/${encodeURIComponent(id)}/files`, {}),
   skillFileRaw: (id: string, path = 'SKILL.md') => read(`/api/skills/${encodeURIComponent(id)}/files/raw?path=${encodeURIComponent(path)}`, {}),
-  skillAction: (id: string, action: 'validate' | 'plan' | 'run', body: Record<string, unknown> = {}) => write(`/api/skills/${encodeURIComponent(id)}/actions/${action}`, {
+  skillAction: (id: string, action: 'validate' | 'plan' | 'run', body: Record<string, unknown> = {}) => writeWithReceipt(`/api/skills/${encodeURIComponent(id)}/actions/${action}`, {
     method: 'POST',
     body: JSON.stringify(body),
   }),
@@ -616,7 +653,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  crossPlaneExecute: (action: Record<string, unknown>, mode = 'dry_run', idempotency_key?: string) => write('/api/cross-plane/action/execute', {
+  crossPlaneExecute: (action: Record<string, unknown>, mode = 'dry_run', idempotency_key?: string) => writeWithReceipt('/api/cross-plane/action/execute', {
     method: 'POST',
     body: JSON.stringify({ action, mode, idempotency_key }),
   }),
@@ -631,10 +668,10 @@ export const api = {
   cowdSurfaces: () => read('/api/cowd/surfaces', {}),
   cowdReleaseGate: () => read('/api/cowd/release-gate', {}),
   mfgApp: () => read('/api/apps/mfg/app', {}),
-  mfgHealth: () => read('/api/matrix/health', {}),
+  mfgHealth: () => read('/api/apps/mfg/reality/health', {}),
   mfgProductionGovernance: () => read('/api/apps/mfg/production/governance', {}),
-  mfgDataPlaneHealth: () => read('/api/matrix/data-plane/health', {}),
-  mfgDataPlaneIngestPlan: (ingest: Record<string, unknown>) => write('/api/matrix/data-plane/ingest-plan', {
+  mfgDataPlaneHealth: () => read('/api/apps/mfg/reality/data-plane/health', {}),
+  mfgDataPlaneIngestPlan: (ingest: Record<string, unknown>) => write('/api/apps/mfg/reality/data-plane/ingest-plan', {
     method: 'POST',
     body: JSON.stringify({ ingest, session_id: 'webui-mfg' }),
   }),
@@ -647,86 +684,86 @@ export const api = {
     const suffix = query.toString();
     return read('/api/apps/mfg/decision-trace' + (suffix ? `?${suffix}` : ''), {});
   },
-  mfgSourcePackUpsert: (source_pack: Record<string, unknown>) => write('/api/matrix/source-packs/upsert', {
+  mfgSourcePackUpsert: (source_pack: Record<string, unknown>) => write('/api/apps/mfg/reality/source-packs/upsert', {
     method: 'POST',
     body: JSON.stringify({ source_pack, session_id: 'webui-mfg' }),
   }),
-  mfgSourcePack: (id: string) => read(`/api/matrix/source-packs/${encodeURIComponent(id)}`, {}),
-  mfgSourcePackValidate: (id: string) => write(`/api/matrix/source-packs/${encodeURIComponent(id)}/validate`, { method: 'POST' }),
-  mfgSourcePackDeltaPlan: (id: string) => write(`/api/matrix/source-packs/${encodeURIComponent(id)}/delta-plan`, { method: 'POST' }),
-  mfgSourcePackIngestFile: (id: string, facts: Record<string, unknown>[]) => write(`/api/matrix/source-packs/${encodeURIComponent(id)}/ingest-file`, {
+  mfgSourcePack: (id: string) => read(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}`, {}),
+  mfgSourcePackValidate: (id: string) => write(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/validate`, { method: 'POST' }),
+  mfgSourcePackDeltaPlan: (id: string) => write(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/delta-plan`, { method: 'POST' }),
+  mfgSourcePackIngestFile: (id: string, facts: Record<string, unknown>[]) => write(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/ingest-file`, {
     method: 'POST',
     body: JSON.stringify({ facts, session_id: 'webui-mfg' }),
   }),
-  mfgSourcePackConnectorPlan: (id: string, run?: Record<string, unknown>) => write(`/api/matrix/source-packs/${encodeURIComponent(id)}/connector-runs/plan`, {
+  mfgSourcePackConnectorPlan: (id: string, run?: Record<string, unknown>) => write(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/connector-runs/plan`, {
     method: 'POST',
     body: JSON.stringify({ run, session_id: 'webui-mfg' }),
   }),
-  mfgSourcePackConnectorRun: (id: string, run?: Record<string, unknown>) => write(`/api/matrix/source-packs/${encodeURIComponent(id)}/connector-runs/run`, {
+  mfgSourcePackConnectorRun: (id: string, run?: Record<string, unknown>) => write(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/connector-runs/run`, {
     method: 'POST',
     body: JSON.stringify({ run, session_id: 'webui-mfg' }),
   }),
-  mfgConnectorRun: (id: string) => read(`/api/matrix/connector-runs/${encodeURIComponent(id)}`, {}),
-  mfgMetrics: () => read('/api/matrix/metrics', {}),
-  mfgMetricDetail: (id: string) => read(`/api/matrix/metrics/${encodeURIComponent(id)}`, {}),
-  mfgMetricLineage: (id: string) => read(`/api/matrix/metrics/${encodeURIComponent(id)}/lineage`, {}),
-  mfgAttentionPlan: (body: Record<string, unknown>) => write('/api/matrix/metrics/attention-plan', {
+  mfgConnectorRun: (id: string) => read(`/api/apps/mfg/reality/connector-runs/${encodeURIComponent(id)}`, {}),
+  mfgMetrics: () => read('/api/apps/mfg/reality/metrics', {}),
+  mfgMetricDetail: (id: string) => read(`/api/apps/mfg/reality/metrics/${encodeURIComponent(id)}`, {}),
+  mfgMetricLineage: (id: string) => read(`/api/apps/mfg/reality/metrics/${encodeURIComponent(id)}/lineage`, {}),
+  mfgAttentionPlan: (body: Record<string, unknown>) => write('/api/apps/mfg/reality/metrics/attention-plan', {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  mfgMetricSnapshotMaterialize: (metric_ids: string[], scope_ref?: string) => write('/api/matrix/metrics/snapshots/materialize', {
+  mfgMetricSnapshotMaterialize: (metric_ids: string[], scope_ref?: string) => write('/api/apps/mfg/reality/metrics/snapshots/materialize', {
     method: 'POST',
     body: JSON.stringify({ metric_ids, scope_ref, session_id: 'webui-mfg' }),
   }),
-  mfgMetricRecompute: () => write('/api/matrix/metrics/recompute', { method: 'POST' }),
-  mfgMetricDependencyUpsert: (dependency: Record<string, unknown>) => write('/api/matrix/metric-dependencies/upsert', {
+  mfgMetricRecompute: () => write('/api/apps/mfg/reality/metrics/recompute', { method: 'POST' }),
+  mfgMetricDependencyUpsert: (dependency: Record<string, unknown>) => write('/api/apps/mfg/reality/metric-dependencies/upsert', {
     method: 'POST',
     body: JSON.stringify({ dependency, session_id: 'webui-mfg' }),
   }),
-  mfgMetricAffectedByFactType: (fact_type: string) => write('/api/matrix/metric-dependencies/affected-by-fact-type', {
+  mfgMetricAffectedByFactType: (fact_type: string) => write('/api/apps/mfg/reality/metric-dependencies/affected-by-fact-type', {
     method: 'POST',
     body: JSON.stringify({ fact_type, session_id: 'webui-mfg' }),
   }),
-  mfgComputeJobPlan: (job: Record<string, unknown>) => write('/api/matrix/compute/jobs/plan', {
+  mfgComputeJobPlan: (job: Record<string, unknown>) => write('/api/apps/mfg/reality/compute/jobs/plan', {
     method: 'POST',
     body: JSON.stringify({ job, session_id: 'webui-mfg' }),
   }),
-  mfgComputeJob: (id: string) => read(`/api/matrix/compute/jobs/${encodeURIComponent(id)}`, {}),
-  mfgComputeJobRun: (id: string) => write(`/api/matrix/compute/jobs/${encodeURIComponent(id)}/run`, { method: 'POST' }),
-  mfgEntities: () => read('/api/matrix/entities', {}),
-  mfgEntity: (id: string) => read(`/api/matrix/entities/${encodeURIComponent(id)}`, {}),
-  mfgEntityUpsert: (entity: Record<string, unknown>) => write('/api/matrix/entities/upsert', {
+  mfgComputeJob: (id: string) => read(`/api/apps/mfg/reality/compute/jobs/${encodeURIComponent(id)}`, {}),
+  mfgComputeJobRun: (id: string) => write(`/api/apps/mfg/reality/compute/jobs/${encodeURIComponent(id)}/run`, { method: 'POST' }),
+  mfgEntities: () => read('/api/apps/mfg/reality/entities', {}),
+  mfgEntity: (id: string) => read(`/api/apps/mfg/reality/entities/${encodeURIComponent(id)}`, {}),
+  mfgEntityUpsert: (entity: Record<string, unknown>) => write('/api/apps/mfg/reality/entities/upsert', {
     method: 'POST',
     body: JSON.stringify({ entity, session_id: 'webui-mfg' }),
   }),
-  mfgEntityResolveSourceKey: (source_system: string, source_key: string) => write('/api/matrix/entities/resolve-source-key', {
+  mfgEntityResolveSourceKey: (source_system: string, source_key: string) => write('/api/apps/mfg/reality/entities/resolve-source-key', {
     method: 'POST',
     body: JSON.stringify({ source_system, source_key, session_id: 'webui-mfg' }),
   }),
-  mfgEntityMatchCandidate: (left_entity_id: string, right_entity_id: string) => write('/api/matrix/entities/match-candidate', {
+  mfgEntityMatchCandidate: (left_entity_id: string, right_entity_id: string) => write('/api/apps/mfg/reality/entities/match-candidate', {
     method: 'POST',
     body: JSON.stringify({ left_entity_id, right_entity_id, session_id: 'webui-mfg' }),
   }),
-  mfgEntityConflictDecision: (body: Record<string, unknown>) => write('/api/matrix/entities/conflict-decision', {
+  mfgEntityConflictDecision: (body: Record<string, unknown>) => write('/api/apps/mfg/reality/entities/conflict-decision', {
     method: 'POST',
     body: JSON.stringify({ ...body, session_id: 'webui-mfg' }),
   }),
-  mfgEntityRelations: (id: string) => read(`/api/matrix/entities/${encodeURIComponent(id)}/relations`, {}),
-  mfgEntityImpactPath: (id: string) => read(`/api/matrix/entities/${encodeURIComponent(id)}/impact-path`, {}),
-  mfgRelationUpsert: (relation: Record<string, unknown>) => write('/api/matrix/relations/upsert', {
+  mfgEntityRelations: (id: string) => read(`/api/apps/mfg/reality/entities/${encodeURIComponent(id)}/relations`, {}),
+  mfgEntityImpactPath: (id: string) => read(`/api/apps/mfg/reality/entities/${encodeURIComponent(id)}/impact-path`, {}),
+  mfgRelationUpsert: (relation: Record<string, unknown>) => write('/api/apps/mfg/reality/relations/upsert', {
     method: 'POST',
     body: JSON.stringify({ relation, session_id: 'webui-mfg' }),
   }),
-  mfgChanges: () => read('/api/matrix/changes', {}),
-  mfgAttentionHot: () => read('/api/matrix/attention/hot', {}),
-  mfgEvidenceBuild: (body: Record<string, unknown>) => write('/api/matrix/evidence/build', {
+  mfgChanges: () => read('/api/apps/mfg/reality/changes', {}),
+  mfgAttentionHot: () => read('/api/apps/mfg/reality/attention/hot', {}),
+  mfgEvidenceBuild: (body: Record<string, unknown>) => write('/api/apps/mfg/reality/evidence/build', {
     method: 'POST',
     body: JSON.stringify({ ...body, session_id: 'webui-mfg' }),
   }),
-  mfgEvidence: (id: string) => read(`/api/matrix/evidence/${encodeURIComponent(id)}`, {}),
-  mfgEvidenceQualityGate: (id: string) => write(`/api/matrix/evidence/${encodeURIComponent(id)}/quality-gate`, { method: 'POST' }),
-  mfgEvidenceContext: (id: string) => read(`/api/matrix/evidence/${encodeURIComponent(id)}/context`, {}),
-  mfgQualityGate: (id: string) => read(`/api/matrix/quality-gates/${encodeURIComponent(id)}`, {}),
+  mfgEvidence: (id: string) => read(`/api/apps/mfg/reality/evidence/${encodeURIComponent(id)}`, {}),
+  mfgEvidenceQualityGate: (id: string) => write(`/api/apps/mfg/reality/evidence/${encodeURIComponent(id)}/quality-gate`, { method: 'POST' }),
+  mfgEvidenceContext: (id: string) => read(`/api/apps/mfg/reality/evidence/${encodeURIComponent(id)}/context`, {}),
+  mfgQualityGate: (id: string) => read(`/api/apps/mfg/reality/quality-gates/${encodeURIComponent(id)}`, {}),
   mfgIncidents: () => read('/api/apps/mfg/incidents', {}),
   mfgIncident: (id: string) => read(`/api/apps/mfg/incidents/${encodeURIComponent(id)}`, {}),
   mfgSkills: () => read('/api/apps/mfg/skills', {}),
@@ -793,7 +830,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  mfgIngestFact: (facts: Record<string, unknown>[]) => write('/api/matrix/facts/ingest', {
+  mfgIngestFact: (facts: Record<string, unknown>[]) => write('/api/apps/mfg/reality/facts/ingest', {
     method: 'POST',
     body: JSON.stringify({ facts, session_id: 'webui-mfg' }),
   }),

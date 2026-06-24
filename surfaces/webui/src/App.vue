@@ -2,7 +2,7 @@
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  Activity, Brain, Boxes, CircleDot, ClipboardCheck, Layers, MessageSquare,
+  Activity, Brain, Boxes, CircleDot, ClipboardCheck, Crosshair, Layers, MessageSquare,
   Network, PanelsTopLeft, RadioTower, Settings, Wrench,
 } from 'lucide-vue-next';
 import { useAppStore } from './stores/app';
@@ -18,6 +18,7 @@ const router = useRouter();
 
 const nav: NavItem[] = [
   { id: 'chat', label: 'Chat', route: '/chat', icon: MessageSquare, group: 'Core' },
+  { id: 'mission', label: 'Mission Control', route: '/mission', icon: Crosshair, group: 'Core' },
   { id: 'runtime', label: 'Runtime', route: '/runtime', icon: Activity, group: 'Core' },
   { id: 'context', label: 'Context', route: '/context', icon: Layers, group: 'Core' },
   { id: 'reality', label: 'Reality Core', route: '/reality', icon: CircleDot, group: 'Core' },
@@ -38,6 +39,9 @@ function go(item: NavItem) {
 
 const currentPage = computed(() => route.path.replace('/', '') || 'chat');
 const activeSection = computed(() => store.activeSectionByPage[currentPage.value] || String(route.query.section || ''));
+const isChatRoute = computed(() => route.path === '/chat' || route.path === '/');
+const shellMode = computed(() => isChatRoute.value ? store.chatDisplayMode : 'panorama');
+const showCompanion = computed(() => !isChatRoute.value || store.chatDisplayMode === 'panorama');
 
 onMounted(() => {
   store.boot();
@@ -45,7 +49,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :data-chat-mode="shellMode">
     <nav class="rail" aria-label="Cowd primary navigation">
       <button
         v-for="item in nav"
@@ -61,13 +65,13 @@ onMounted(() => {
       </button>
     </nav>
 
-    <SessionSidebar v-if="route.path === '/chat' || route.path === '/'" />
+    <SessionSidebar v-if="isChatRoute" />
     <CapabilitySidebar v-else-if="route.path !== '/settings'" />
 
     <main class="main-surface" :data-page="currentPage" :data-active-section="activeSection">
       <RouterView />
     </main>
 
-    <CompanionPanel />
+    <CompanionPanel v-if="showCompanion" />
   </div>
 </template>

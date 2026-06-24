@@ -7,6 +7,10 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -18,6 +22,7 @@ const messageText = ref('SurfaceHost readiness check from WebUI.');
 const actionName = ref('health');
 const actionPayloadText = ref(JSON.stringify({ source: 'webui', purpose: 'readiness-check' }, null, 2));
 const actionResult = ref<any>(null);
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 function registrySurfaces(payload: any) {
   const surfaces = payload?.registry?.surfaces || payload?.surfaces || [];
@@ -75,6 +80,50 @@ const eventRows = computed(() => eventItems.value.slice(0, 14).map((event: any) 
   message: event.message || event.text || event.detail || '-',
   at: event.at || event.timestamp || event.created_at || '-',
 })));
+const surfaceContext = computed(() => [
+  { label: 'Selected', value: selectedSurface.value },
+  { label: 'Surfaces', value: surfaces.value.length, tone: surfaces.value.length ? 'success' : 'warn' },
+  { label: 'Routes', value: totalRoutes.value },
+  { label: 'Resources', value: totalResources.value },
+]);
+const surfaceWorkflow = computed(() => [
+  { id: 'registry', label: 'Registry', status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
+  { id: 'health', label: 'Health', status: state.value.selectedHealth?.status === 'error' ? 'blocked' : 'ready', description: selectedSurface.value },
+  { id: 'routes', label: 'Routes', status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
+  { id: 'routes', label: 'Resources', status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
+  { id: 'dispatch', label: 'Dispatch', status: actionResult.value ? 'active' : 'idle' },
+  { id: 'events', label: 'Events', status: eventRows.value.length ? 'ready' : 'idle', count: eventRows.value.length },
+]);
+const surfaceEvidence = computed(() => [
+  ...routeRows.value.slice(0, 4).map((row: any) => ({
+    id: String(row.path || ''),
+    kind: 'surface.route',
+    status: row.status || 'declared',
+    summary: `${row.method || 'GET'} ${row.path || '-'}`,
+    source: row.target || selectedSurface.value,
+  })),
+  ...resourceRows.value.slice(0, 4).map((row: any) => ({
+    id: String(row.path || row.file || ''),
+    kind: 'surface.resource',
+    status: row.spa === 'true' ? 'spa' : 'static',
+    summary: row.file || row.path || 'resource',
+    source: selectedSurface.value,
+  })),
+  ...eventRows.value.slice(0, 5).map((row: any) => ({
+    id: String(row.at || row.message || ''),
+    kind: row.kind || 'surface.event',
+    status: row.status || 'recorded',
+    summary: row.message || row.kind || 'surface event',
+    source: selectedSurface.value,
+  })),
+  ...(actionResult.value ? [{
+    id: String(actionResult.value.request_id || actionResult.value.id || actionName.value),
+    kind: 'surface.dispatch',
+    status: actionResult.value.status || (actionResult.value.ok === false ? 'error' : 'ready'),
+    summary: actionResult.value.payload_summary || actionResult.value.error || actionName.value,
+    source: selectedSurface.value,
+  }] : []),
+].filter((item) => item.id || item.summary));
 
 async function loadSurface(id = selectedSurface.value) {
   if (!id) return;
@@ -111,6 +160,7 @@ async function refresh() {
 async function checkSurfaceHealth() {
   if (!selectedSurface.value) return;
   actionResult.value = await api.surfaceHealth(selectedSurface.value);
+  selectedDetail.value = actionResult.value;
   await loadSurface(selectedSurface.value);
 }
 
@@ -121,6 +171,7 @@ async function sendMessage() {
     source: 'webui',
     intent: 'surface-host-test',
   });
+  selectedDetail.value = actionResult.value;
   await loadSurface(selectedSurface.value);
 }
 
@@ -129,6 +180,7 @@ async function runAction() {
   try {
     const payload = JSON.parse(actionPayloadText.value || '{}');
     actionResult.value = await api.surfaceAction(selectedSurface.value, actionName.value, payload);
+    selectedDetail.value = actionResult.value;
     await loadSurface(selectedSurface.value);
   } catch (err) {
     actionError.value = err instanceof Error ? err.message : String(err);
@@ -152,6 +204,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="surfaceContext" />
+    <WorkflowStrip :steps="surfaceWorkflow" title="Surface lifecycle" />
 
     <section class="metric-row tools-metrics" data-section="health">
       <article class="metric-card" data-tone="success">
@@ -182,7 +236,7 @@ onMounted(refresh);
           <h2>Surface registry</h2>
           <StatusPill :status="state.registry?.__offline ? 'offline' : 'ready'" />
         </header>
-        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['id', 'name', 'kind', 'status', 'lifecycle', 'capabilities', 'routes', 'resources']" />
+        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['id', 'name', 'kind', 'status', 'lifecycle', 'capabilities', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No surfaces" detail="Gateway SurfaceHost 未返回可用 surface。" />
         <label class="field-line">
           Selected surface
@@ -210,7 +264,7 @@ onMounted(refresh);
           <h2>Routes</h2>
           <span>{{ routeRows.length }} entries</span>
         </header>
-        <DataTable v-if="routeRows.length" :rows="routeRows" :columns="['method', 'path', 'target', 'status']" />
+        <DataTable v-if="routeRows.length" :rows="routeRows" :columns="['method', 'path', 'target', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No routes" detail="该 surface 未声明 HTTP 路由。" />
       </section>
 
@@ -219,7 +273,7 @@ onMounted(refresh);
           <h2>Resources</h2>
           <span>{{ resourceRows.length }} entries</span>
         </header>
-        <DataTable v-if="resourceRows.length" :rows="resourceRows" :columns="['path', 'file', 'type', 'spa']" />
+        <DataTable v-if="resourceRows.length" :rows="resourceRows" :columns="['path', 'file', 'type', 'spa']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No resources" detail="该 surface 未声明静态资源挂载。" />
       </section>
 
@@ -263,8 +317,9 @@ onMounted(refresh);
           <h2>Events</h2>
           <span>{{ eventRows.length }} recent</span>
         </header>
-        <DataTable v-if="eventRows.length" :rows="eventRows" :columns="['kind', 'status', 'message', 'at']" />
+        <DataTable v-if="eventRows.length" :rows="eventRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No events" detail="当前 surface 尚无投递或回调事件。" />
+        <EvidenceTrace :items="surfaceEvidence" title="Surface evidence trace" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="events">
@@ -274,6 +329,7 @@ onMounted(refresh);
         </header>
         <RawPayload title="Selected surface" :data="selected || {}" />
         <RawPayload title="Host payload" :data="state.health || {}" />
+        <DetailDrawer title="Surface selected detail" :row="selectedDetail || selected" @close="selectedDetail = null" />
       </section>
     </section>
   </section>

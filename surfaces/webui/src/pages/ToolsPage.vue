@@ -6,6 +6,9 @@ import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
+import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -114,6 +117,21 @@ const ledgerRows = computed(() => toolLedger.value.slice(0, 16).map((event: any)
   at: event.timestamp || event.created_at || '-',
 })));
 const activeSessionId = computed(() => store.currentSessionId || 'api-context');
+const toolContext = computed(() => [
+  { label: 'Session', value: activeSessionId.value },
+  { label: 'Tools', value: tools.value.length, tone: tools.value.length ? 'success' : 'warn' },
+  { label: 'Checkpoints', value: checkpointRows.value.length },
+  { label: 'Ledger events', value: ledgerRows.value.length },
+]);
+const toolsWorkflow = computed(() => [
+  { id: 'registry', label: 'Registry', status: tools.value.length ? 'ready' : 'idle', count: tools.value.length },
+  { id: 'operations', label: 'Plan', status: fanoutRows.value.length ? 'done' : 'idle', count: fanoutRows.value.length },
+  { id: 'operations', label: 'Execute', status: result.value ? 'active' : 'idle', description: selectedTool.value },
+  { id: 'mutations', label: 'Mutation', status: mutationPreviewRows.value.length ? 'blocked' : 'idle', count: mutationPreviewRows.value.length },
+  { id: 'checkpoints', label: 'Checkpoint', status: checkpointRows.value.length ? 'ready' : 'idle', count: checkpointRows.value.length },
+  { id: 'ledger', label: 'Ledger', status: ledgerRows.value.length ? 'ready' : 'idle', count: ledgerRows.value.length },
+  { id: 'risk', label: 'Risk', status: state.value.crossPlane?.status === 'blocked' ? 'blocked' : 'ready', description: selectedCapability.value },
+]);
 
 function parseJsonArray(text: string, label: string) {
   const parsed = JSON.parse(text);
@@ -292,6 +310,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="toolContext" />
+    <WorkflowStrip :steps="toolsWorkflow" title="Tool operation flow" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card" data-tone="success">
@@ -322,7 +342,7 @@ onMounted(refresh);
           <h2>Tool registry</h2>
           <span>{{ tools.length }} tools</span>
         </header>
-        <DataTable v-if="toolRows.length" :rows="toolRows" :columns="['name', 'enabled', 'safety', 'cache', 'readonly', 'concurrency', 'tags']" />
+        <DataTable v-if="toolRows.length" searchable :rows="toolRows" :columns="['name', 'enabled', 'safety', 'cache', 'readonly', 'concurrency', 'tags']" />
         <EmptyState v-else title="No tools" detail="后端工具注册表为空或服务未启动。" />
         <div class="button-row">
           <label class="field-line compact-field">
@@ -386,6 +406,32 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="previewMutation">Preview mutation</button>
           <button class="primary-action" type="button" @click="applyMutation">Apply transaction</button>
         </div>
+        <GovernedActionPanel
+          :contract="{
+            id: 'tool.mutation.apply',
+            domain: 'tools',
+            title: 'Apply workspace mutation',
+            endpoint: '/api/tools/mutations/apply',
+            method: 'POST',
+            summary: 'Apply is allowed only after preview records expected hashes. Review changed files before committing the transaction.',
+            current_return: 'RequestReceipt with changed refs',
+            validate: 'expected hashes are present',
+            plan: '/api/tools/mutations/preview',
+            dry_run: '/api/tools/mutations/preview',
+            live: true,
+            live_policy: 'requires preview and receipt',
+            receipt: true,
+            audit_ref: true,
+            changed_refs: true,
+            approval_required: false,
+            kernel_boundary: 'Gateway Tools service'
+          }"
+          :payload="{ expected_hashes: expectedHashes, preview_rows: mutationPreviewRows.length }"
+          :receipt="result"
+          @plan="previewMutation"
+          @dry-run="previewMutation"
+          @live="applyMutation"
+        />
         <DataTable v-if="mutationPreviewRows.length" :rows="mutationPreviewRows" :columns="['path', 'status', 'expected_hash', 'changed']" />
         <RawPayload title="Expected hashes" :data="expectedHashes" />
       </section>
@@ -413,6 +459,32 @@ onMounted(refresh);
             {{ restoreArmedId === selectedCheckpointId ? 'Confirm restore' : 'Restore checkpoint' }}
           </button>
         </div>
+        <GovernedActionPanel
+          :contract="{
+            id: 'tool.checkpoint.restore',
+            domain: 'tools',
+            title: 'Restore checkpoint',
+            endpoint: '/api/tools/checkpoints/:id/restore',
+            method: 'POST',
+            summary: 'Restore can replace workspace files. Diff the checkpoint first, then confirm the same checkpoint id to execute.',
+            current_return: 'RequestReceipt with restored refs',
+            validate: 'checkpoint id is selected and armed',
+            plan: '/api/tools/checkpoints/:id/diff',
+            dry_run: '/api/tools/checkpoints/:id/diff',
+            live: true,
+            live_policy: 'requires explicit second click',
+            receipt: true,
+            audit_ref: true,
+            changed_refs: true,
+            approval_required: false,
+            kernel_boundary: 'Gateway Tools service'
+          }"
+          :payload="{ checkpoint_id: selectedCheckpointId, armed: restoreArmedId === selectedCheckpointId }"
+          :receipt="result"
+          @plan="diffCheckpoint()"
+          @dry-run="diffCheckpoint()"
+          @live="restoreCheckpoint()"
+        />
         <DataTable v-if="checkpointRows.length" :rows="checkpointRows" :columns="['id', 'label', 'files', 'created']" />
         <EmptyState v-else title="No checkpoints" detail="创建 checkpoint 后可进行 diff 与显式二次确认恢复。" />
       </section>
@@ -431,7 +503,7 @@ onMounted(refresh);
           <h2>Tool ledger</h2>
           <span>{{ ledgerRows.length }} recent events</span>
         </header>
-        <DataTable v-if="ledgerRows.length" :rows="ledgerRows" :columns="['seq', 'kind', 'status', 'tool', 'at']" />
+        <DataTable v-if="ledgerRows.length" searchable :rows="ledgerRows" :columns="['seq', 'kind', 'status', 'tool', 'at']" />
         <EmptyState v-else title="No tool ledger events" detail="执行工具后，runtime timeline 中的工具事件会在这里聚合展示。" />
         <RequestReceipt :receipt="result" title="Tool operation receipt" />
         <RawPayload title="Tool operation payload" :data="result || state.cache || {}" />

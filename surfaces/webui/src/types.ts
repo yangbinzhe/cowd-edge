@@ -1,8 +1,9 @@
 import type { Component } from 'vue';
 
-export type NavId = 'chat' | 'runtime' | 'context' | 'reality' | 'memory' | 'skills' | 'agents' | 'tools' | 'surfaces' | 'gateway' | 'mfg' | 'audit' | 'settings';
-export type CompanionTab = 'activity' | 'thinking' | 'workspace' | 'inspector';
+export type NavId = 'chat' | 'mission' | 'runtime' | 'context' | 'reality' | 'memory' | 'skills' | 'agents' | 'tools' | 'surfaces' | 'gateway' | 'mfg' | 'audit' | 'settings';
+export type CompanionTab = 'activity' | 'thinking' | 'workspace' | 'evidence' | 'inspector';
 export type Tone = 'neutral' | 'info' | 'success' | 'warn' | 'danger';
+export type ChatDisplayMode = 'panorama' | 'clean';
 
 export interface NavItem {
   id: NavId;
@@ -26,6 +27,12 @@ export interface ChatTurn {
   content: string;
   status?: 'streaming' | 'complete' | 'error';
   activity?: ActivityEvent[];
+  blocks?: Array<Record<string, unknown>>;
+  sequence?: number;
+  created_at_ms?: number;
+  tool_use_id?: string;
+  tool_name?: string;
+  token_usage?: Record<string, unknown>;
 }
 
 export interface ActivityEvent {

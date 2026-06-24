@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 import { api } from '../api/client';
 import { useAppStore } from '../stores/app';
-import ChartPanel from '../components/ChartPanel.vue';
 import DataTable from '../components/workbench/DataTable.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import ApiStateBanner from '../components/workbench/ApiStateBanner.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import mfgWriteContracts from '../data/mfgWriteContracts.json';
 
+const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
 const store = useAppStore();
 const loading = ref(false);
 const error = ref('');
@@ -147,6 +150,107 @@ const decisionTraceRows = computed(() => {
     },
   ];
 });
+const mfgContext = computed(() => [
+  { label: 'Application', value: 'MFG', tone: 'success' },
+  { label: 'Boundary', value: 'mfg -> reality' },
+  { label: 'Source pack', value: sourcePackId.value },
+  { label: 'Incident', value: selectedIncidentId.value || incidents.value[0]?.incident_id || 'pending', tone: incidents.value.length ? 'warn' : 'default' },
+]);
+const mfgWorkflow = computed(() => [
+  { id: 'data-plane', label: 'Source', status: sourcePackResult.value ? 'done' : 'idle', description: sourcePackId.value },
+  { id: 'data-plane', label: 'Fact', status: dataPlaneResult.value ? 'done' : 'idle', count: state.value?.health?.fact_count || 0 },
+  { id: 'entities', label: 'Entity', status: entities.value.length ? 'ready' : 'idle', count: entities.value.length },
+  { id: 'metrics', label: 'Metric', status: metrics.value.length ? 'ready' : 'idle', count: metrics.value.length },
+  { id: 'evidence', label: 'Evidence', status: evidenceResult.value ? 'active' : 'idle', description: evidenceId.value || 'pending' },
+  { id: 'incident-room', label: 'Incident', status: incidents.value.length ? 'blocked' : 'idle', count: incidents.value.length },
+  { id: 'actions', label: 'Action', status: result.value?.execution ? 'active' : 'idle', description: selectedActionId.value || 'dry-run' },
+  { id: 'reports', label: 'Report', status: cockpitReportId.value ? 'done' : 'idle', description: cockpitProfileId.value },
+]);
+const mfgLanes = computed(() => [
+  {
+    id: 'data-plane',
+    title: 'Reality input',
+    summary: 'Source packs, connector runs, fact ingest, and Reality Core projection.',
+    health: sourcePackResult.value || dataPlaneResult.value ? 'active' : 'ready',
+    count: state.value?.health?.fact_count || 0,
+    target: '#data-plane',
+  },
+  {
+    id: 'entities',
+    title: 'Operational graph',
+    summary: 'Entities, metrics, lineage, evidence packets, and quality gates.',
+    health: entities.value.length || metrics.value.length ? 'ready' : 'idle',
+    count: entities.value.length + metrics.value.length,
+    target: '#entities',
+  },
+  {
+    id: 'incident-room',
+    title: 'Incident response',
+    summary: 'Incident rooms, analysis, playbooks, MFG skills, and governed actions.',
+    health: incidents.value.length ? 'blocked' : 'idle',
+    count: incidents.value.length + recommendedActions.value.length,
+    target: '#incident-room',
+  },
+  {
+    id: 'reports',
+    title: 'Cockpit output',
+    summary: 'Profiles, reports, delivery state, retry policy, and cross-plane handoff.',
+    health: cockpitReportId.value ? 'done' : 'idle',
+    count: cockpitReportId.value ? 1 : 0,
+    target: '#reports',
+  },
+]);
+const mfgEvidence = computed(() => [
+  {
+    id: sourcePackId.value,
+    kind: 'mfg.source-pack',
+    status: sourcePackResult.value?.status || state.value?.dataPlane?.status || 'ready',
+    summary: `source-pack://${sourcePackId.value}`,
+    source: 'mfg.reality.data-plane',
+  },
+  {
+    id: selectedEntityId.value || entities.value[0]?.entity_id || 'entity-pending',
+    kind: 'mfg.entity',
+    status: entities.value.length ? 'ready' : 'idle',
+    summary: entities.value[0]?.display_name || selectedEntityId.value || 'entity graph pending',
+    source: 'mfg.reality.entities',
+  },
+  {
+    id: selectedMetricId.value,
+    kind: 'mfg.metric',
+    status: metrics.value.length ? 'ready' : 'idle',
+    summary: metrics.value[0]?.name || selectedMetricId.value,
+    source: 'mfg.reality.metrics',
+  },
+  {
+    id: evidenceId.value || evidenceResult.value?.packet_id || 'evidence-pending',
+    kind: 'mfg.evidence',
+    status: evidenceResult.value?.status || (evidenceResult.value ? 'active' : 'idle'),
+    summary: evidenceResult.value?.summary || evidenceId.value || 'evidence packet pending',
+    source: 'mfg.reality.evidence',
+  },
+  {
+    id: selectedIncidentId.value || incidents.value[0]?.incident_id || 'incident-pending',
+    kind: 'mfg.incident',
+    status: incidents.value[0]?.status || (incidents.value.length ? 'blocked' : 'idle'),
+    summary: incidents.value[0]?.title || incidentTitle.value,
+    source: 'mfg.incident-room',
+  },
+  {
+    id: selectedActionId.value || result.value?.execution?.execution_id || 'action-pending',
+    kind: 'mfg.action',
+    status: result.value?.execution?.status || (result.value ? 'active' : 'idle'),
+    summary: selectedActionId.value || result.value?.summary || 'governed action pending',
+    source: 'mfg.cross-plane',
+  },
+  {
+    id: cockpitReportId.value || cockpitProfileId.value,
+    kind: 'mfg.report',
+    status: cockpitReportId.value ? 'ready' : 'idle',
+    summary: cockpitReportId.value || cockpitProfileId.value,
+    source: 'mfg.cockpit',
+  },
+]);
 
 function quarantineReceipt(action: string, endpoint: string, payload: Record<string, unknown> = {}) {
   return {
@@ -403,7 +507,7 @@ function defaultSourcePack() {
 
 async function upsertSourcePack() {
   if (mfgLiveQuarantine) {
-    sourcePackResult.value = quarantineReceipt('Source pack upsert', '/api/matrix/source-packs/upsert', defaultSourcePack());
+    sourcePackResult.value = quarantineReceipt('Source pack upsert', '/api/apps/mfg/reality/source-packs/upsert', defaultSourcePack());
     return;
   }
   sourcePackResult.value = await api.mfgSourcePackUpsert(defaultSourcePack());
@@ -429,7 +533,7 @@ async function planConnectorRun() {
 
 async function executeConnectorRun() {
   if (mfgLiveQuarantine) {
-    sourcePackResult.value = quarantineReceipt('Connector run', `/api/matrix/source-packs/${sourcePackId.value}/connector-runs/run`, {
+    sourcePackResult.value = quarantineReceipt('Connector run', `/api/apps/mfg/reality/source-packs/${sourcePackId.value}/connector-runs/run`, {
       source_pack_id: sourcePackId.value,
       mode: 'dry_run',
     });
@@ -450,7 +554,7 @@ async function getConnectorRun() {
 
 async function upsertEntity() {
   if (mfgLiveQuarantine) {
-    entityResult.value = quarantineReceipt('Entity upsert', '/api/matrix/entities/upsert', {
+    entityResult.value = quarantineReceipt('Entity upsert', '/api/apps/mfg/reality/entities/upsert', {
       entity_id: selectedEntityId.value || 'new',
       entity_type: 'manufacturing_line',
     });
@@ -486,7 +590,7 @@ async function resolveEntitySourceKey() {
 async function upsertRelation() {
   if (!selectedEntityId.value || !relationTargetId.value) return;
   if (mfgLiveQuarantine) {
-    entityResult.value = quarantineReceipt('Relation upsert', '/api/matrix/relations/upsert', {
+    entityResult.value = quarantineReceipt('Relation upsert', '/api/apps/mfg/reality/relations/upsert', {
       from_entity_id: selectedEntityId.value,
       to_entity_id: relationTargetId.value,
     });
@@ -539,7 +643,7 @@ async function planComputeJob() {
 async function runComputeJob() {
   if (!computeJobId.value) return;
   if (mfgLiveQuarantine) {
-    metricResult.value = quarantineReceipt('Compute job run', `/api/matrix/compute/jobs/${computeJobId.value}/run`, {
+    metricResult.value = quarantineReceipt('Compute job run', `/api/apps/mfg/reality/compute/jobs/${computeJobId.value}/run`, {
       job_id: computeJobId.value,
     });
     return;
@@ -614,7 +718,7 @@ async function ingestManufacturingFacts() {
     return;
   }
   if (mfgLiveQuarantine) {
-    result.value = quarantineReceipt('Manufacturing fact ingest', '/api/matrix/facts/ingest', { facts });
+    result.value = quarantineReceipt('Manufacturing fact ingest', '/api/apps/mfg/reality/facts/ingest', { facts });
     return;
   }
   result.value = await api.mfgIngestFact(facts as Record<string, unknown>[]);
@@ -776,10 +880,9 @@ onMounted(refresh);
     <header class="page-header">
       <div>
         <h1>MFG Manufacturing Application</h1>
-        <p>MFG 是 Matrix Engine 的制造领域应用，负责领域数据、事件、技能、动作桥和报告。</p>
+        <p>MFG 是独立的制造应用，消费 Reality Core 与 Matrix Engine 的底层能力，但不承担底层引擎管理职责。</p>
       </div>
       <div class="button-row">
-        <RouterLink class="ghost-action" to="/reality?section=core-map">Open Reality Core</RouterLink>
         <button class="primary-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="15" />
           {{ loading ? 'Loading' : 'Refresh MFG' }}
@@ -793,8 +896,18 @@ onMounted(refresh);
       status="degraded"
       title="MFG live writes quarantined"
       detail="High-risk manufacturing writes stay visible but are disabled, dry-run-only, or receipt-wrapped until governed action flows land in v0.9.243."
-      endpoint="/api/apps/mfg/* + /api/matrix/*"
+      endpoint="/api/apps/mfg/*"
     />
+    <PrimaryContextBar :items="mfgContext" />
+    <WorkflowStrip :steps="mfgWorkflow" title="MFG value flow" />
+
+    <section class="mfg-lanes" aria-label="MFG workbench lanes">
+      <a v-for="lane in mfgLanes" :key="lane.id" class="mfg-lane" :href="lane.target" :data-status="lane.health">
+        <span>{{ lane.title }}</span>
+        <strong>{{ lane.count }}</strong>
+        <p>{{ lane.summary }}</p>
+      </a>
+    </section>
 
     <section class="metric-row" aria-label="MFG metrics">
       <article class="metric-card" data-tone="success">
@@ -841,16 +954,18 @@ onMounted(refresh);
 
       <article class="management-panel" data-section="overview">
         <header>
-          <h2>Governed write contracts</h2>
+          <h2>Reality Core projection</h2>
           <span>{{ contractSummary.count }} contracts</span>
         </header>
         <dl class="detail-list">
+          <dt>Projection API</dt>
+          <dd>/api/apps/mfg/reality/*</dd>
           <dt>Domains</dt>
           <dd>{{ contractSummary.domains }}</dd>
           <dt>Quarantined live writes</dt>
           <dd>{{ contractSummary.quarantined }}</dd>
           <dt>Core boundary</dt>
-          <dd>cowd owns structured data, memory, context, cross-plane policy, and audit; MFG owns manufacturing schema, workflows, metrics, incidents, and cockpit intent.</dd>
+          <dd>Reality Core owns fact, memory, matrix, context, cross-plane policy, and audit. MFG owns manufacturing workflows, incidents, skills, actions, cockpit profiles, and reports.</dd>
         </dl>
       </article>
 
@@ -862,9 +977,10 @@ onMounted(refresh);
         <p class="panel-note">Matrix turns structured manufacturing signals into facts, metrics, attention, evidence and incidents; MFG consumes that kernel trace to plan actions and reports.</p>
         <p class="panel-note">Trace source: {{ state?.decisionTrace?.kind || 'local fallback' }} / {{ state?.decisionTrace?.chain || 'source -> fact -> action' }}</p>
         <DataTable :rows="decisionTraceRows" :columns="['stage', 'ref', 'domain', 'signal', 'next']" />
+        <EvidenceTrace :items="mfgEvidence" title="MFG application evidence trace" />
       </article>
 
-      <article class="management-panel" data-section="data-plane">
+      <article id="data-plane" class="management-panel" data-section="data-plane">
         <header>
           <h2>Data plane and source packs</h2>
           <span>{{ state?.dataPlane?.status || 'unknown' }}</span>
@@ -941,7 +1057,7 @@ onMounted(refresh);
         <RawPayload title="Manufacturing ingest result" :data="{ metrics: state?.metrics, attention: state?.attention, changes: state?.changes }" />
       </article>
 
-      <article class="management-panel" data-section="entities">
+      <article id="entities" class="management-panel" data-section="entities">
         <header>
           <h2>Entities and impact graph</h2>
           <span>{{ entities.length }} entities</span>
@@ -1046,7 +1162,7 @@ onMounted(refresh);
         <RawPayload title="Evidence action result" :data="evidenceResult || {}" />
       </article>
 
-      <article class="management-panel" data-section="incident-room">
+      <article id="incident-room" class="management-panel" data-section="incident-room">
         <header>
           <h2>Incident room</h2>
           <span>{{ incidents.length }} incidents</span>
@@ -1159,7 +1275,7 @@ onMounted(refresh);
         <RawPayload title="Manufacturing skill run detail" :data="{ skills: state?.skills, skill_runs: skillRuns, result }" />
       </article>
 
-      <article class="management-panel" data-section="reports">
+      <article id="reports" class="management-panel" data-section="reports">
         <header>
           <h2>Cockpit reports</h2>
           <span>delivery/retry</span>

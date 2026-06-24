@@ -7,6 +7,10 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
+import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -34,6 +38,7 @@ const runtime = ref<any>({});
 const structured = ref<any>({});
 const structuredPlan = ref<any>(null);
 const actionResult = ref<any>(null);
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 const entryTitle = ref('Manufacturing quality signal');
 const entryContent = ref('Manufacturing line A reported repeated torque deviation on station 3 with batch QA-2026-0616.');
@@ -57,6 +62,50 @@ const tripleRows = computed(() => Array.isArray(triples.value?.triples) ? triple
 const candidateRows = computed(() => Array.isArray(maintenance.value?.candidates) ? maintenance.value.candidates : []);
 const linkCount = computed(() => Number(links.value?.total || links.value?.links?.length || 0));
 const healthLevel = computed(() => status.value?.kernel_health?.degraded ? 'degraded' : (status.value?.status || 'unknown'));
+const memoryContext = computed(() => [
+  { label: 'Engine', value: 'Reality Core / Memory' },
+  { label: 'Health', value: healthLevel.value, tone: healthLevel.value === 'ready' ? 'success' : 'warn' },
+  { label: 'Layer', value: selectedLayer.value },
+  { label: 'Links', value: linkCount.value },
+]);
+const memoryWorkflow = computed(() => [
+  { id: 'memory-layers', label: 'Layer', status: entries.value.length ? 'ready' : 'idle', count: entries.value.length },
+  { id: 'memory-recall', label: 'Recall', status: recallRows.value.length ? 'active' : 'idle', count: recallRows.value.length },
+  { id: 'memory-recall', label: 'Packet', status: packet.value?.items?.length ? 'ready' : 'idle', description: query.value },
+  { id: 'memory-graph', label: 'Entity', status: entityRows.value.length ? 'ready' : 'idle', count: entityRows.value.length },
+  { id: 'memory-maintenance', label: 'Maintenance', status: candidateRows.value.length ? 'blocked' : 'ready', count: candidateRows.value.length },
+  { id: 'memory-structured', label: 'Promotion', status: structuredPlan.value ? 'active' : 'idle', description: factType.value },
+]);
+const memoryEvidence = computed(() => [
+  ...recallRows.value.slice(0, 4).map((row: any) => ({
+    id: String(row.title || ''),
+    kind: 'memory.recall',
+    status: row.score !== undefined ? 'ready' : 'recorded',
+    summary: row.snippet || row.title || 'recall result',
+    source: row.layer || 'memory',
+  })),
+  ...((Array.isArray(packet.value?.items) ? packet.value.items : []) as any[]).slice(0, 3).map((item: any) => ({
+    id: String(item.id || item.ref || item.title || ''),
+    kind: item.kind || 'context.packet',
+    status: item.status || 'ready',
+    summary: item.summary || item.text || item.content || item.title || 'packet item',
+    source: item.source || item.layer || 'memory.packet',
+  })),
+  ...candidateRows.value.slice(0, 3).map((candidate: any) => ({
+    id: String(candidate.id || candidate.memory_id || ''),
+    kind: candidate.kind || 'memory.maintenance',
+    status: candidate.status || candidate.decision || 'candidate',
+    summary: candidate.summary || candidate.description || candidate.reason || 'maintenance candidate',
+    source: candidate.source || 'memory.maintenance',
+  })),
+  ...(structuredPlan.value ? [{
+    id: String(structuredPlan.value.plan_id || structuredPlan.value.id || factType.value),
+    kind: 'structured.ingest.plan',
+    status: structuredPlan.value.status || 'planned',
+    summary: structuredPlan.value.summary || sourceRef.value,
+    source: 'cowd.structured',
+  }] : []),
+].filter((item) => item.id || item.summary));
 
 async function refresh() {
   loading.value = true;
@@ -209,6 +258,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <PrimaryContextBar :items="memoryContext" />
+    <WorkflowStrip :steps="memoryWorkflow" title="Memory engine flow" />
 
     <section class="metric-row memory-overview">
       <article class="metric-card">
@@ -257,7 +308,7 @@ onMounted(refresh);
                 class="memory-entry-row"
                 :class="{ active: selectedEntryId === entry.id }"
                 type="button"
-                @click="selectedEntryId = entry.id"
+                @click="selectedEntryId = entry.id; selectedDetail = entry"
               >
                 <strong>{{ entry.title || entry.id }}</strong>
                 <span>{{ entry.content || entry.summary || entry.id }}</span>
@@ -323,7 +374,7 @@ onMounted(refresh);
           <div class="button-row">
             <button class="primary-action" type="button" @click="runRecall">Run recall</button>
           </div>
-          <DataTable v-if="recallRows.length" :rows="recallRows" :columns="['title', 'layer', 'priority', 'score', 'snippet']" />
+          <DataTable v-if="recallRows.length" :rows="recallRows" :columns="['title', 'layer', 'priority', 'score', 'snippet']" @row-click="selectedDetail = $event" />
           <EmptyState v-else title="No recall results" detail="当前查询没有匹配，或后端处于离线状态。" />
           <RawPayload title="Context packet" :data="packet" />
         </section>
@@ -336,12 +387,12 @@ onMounted(refresh);
           <div class="memory-tabs">
             <article>
               <h3>Entities</h3>
-              <DataTable v-if="entityRows.length" :rows="entityRows" />
+              <DataTable v-if="entityRows.length" :rows="entityRows" @row-click="selectedDetail = $event" />
               <EmptyState v-else title="No entities" detail="实体抽取结果会展示在这里。" />
             </article>
             <article>
               <h3>Triples</h3>
-              <DataTable v-if="tripleRows.length" :rows="tripleRows" />
+              <DataTable v-if="tripleRows.length" :rows="tripleRows" @row-click="selectedDetail = $event" />
               <EmptyState v-else title="No triples" detail="事实三元组会展示在这里。" />
             </article>
           </div>
@@ -361,7 +412,7 @@ onMounted(refresh);
           <button class="primary-action" type="button" @click="scanMaintenance">Scan candidates</button>
           <RequestReceipt :receipt="maintenanceScan || actionResult" title="Maintenance receipt" />
           <div class="maintenance-list">
-            <article v-for="candidate in candidateRows.slice(0, 12)" :key="candidate.id || candidate.memory_id">
+            <article v-for="candidate in candidateRows.slice(0, 12)" :key="candidate.id || candidate.memory_id" role="button" tabindex="0" @click="selectedDetail = candidate" @keydown.enter.prevent="selectedDetail = candidate">
               <div>
                 <strong>{{ candidate.kind || candidate.reason || candidate.id }}</strong>
                 <p>{{ candidate.summary || candidate.description || summarize(candidate) }}</p>
@@ -404,6 +455,8 @@ onMounted(refresh);
           <h2>Action evidence</h2>
           <span>latest write response</span>
         </header>
+          <EvidenceTrace :items="memoryEvidence" title="Memory evidence trace" />
+          <DetailDrawer title="Memory selected detail" :row="selectedDetail || selectedEntry" @close="selectedDetail = null" />
           <RequestReceipt :receipt="actionResult || structuredPlan" title="Memory action receipt" />
           <RawPayload title="Action result" :data="actionResult || searchResult" />
         </section>
