@@ -7,9 +7,11 @@ import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
+import type { EvidenceObject } from '../types/evidence';
 
 const store = useAppStore();
 const route = useRoute();
@@ -21,6 +23,7 @@ const flow = ref<any>({});
 const promotions = ref<any>({});
 const boundaries = ref<any>({});
 const sessionFilter = ref('');
+const selectedDetail = ref<Record<string, unknown> | null>(null);
 const fallbackManagement = [
   {
     id: 'overview',
@@ -186,6 +189,25 @@ const evidenceRows = computed(() => {
     })
     .slice(0, 120);
 });
+const selectedEvidence = computed<EvidenceObject | null>(() => {
+  const row: any = selectedDetail.value;
+  if (!row) return null;
+  const source = row.owner || row.event || row.engine || row.kind || 'reality.core';
+  const ref = String(row.reference || row.target_id || row.target || row.engine || row.boundary || row.id || source);
+  return {
+    ref,
+    kind: row.kind || row.target || row.boundary || row.engine || 'reality.fact',
+    source,
+    status: row.status || row.decision || 'recorded',
+    summary: row.summary || row.meaning || row.role || row.scope || row.detail || ref,
+    session_id: activeSessionId.value || undefined,
+    memory_id: String(row.memory_id || row.reference || '').startsWith('memory') ? String(row.memory_id || row.reference) : undefined,
+    matrix_ref: row.matrix_ref || row.target,
+    audit_ref: row.event,
+    route: `/reality?section=${encodeURIComponent(activeSection.value)}${activeSessionId.value ? `&session_id=${encodeURIComponent(activeSessionId.value)}` : ''}`,
+    raw: row,
+  };
+});
 
 async function refresh() {
   loading.value = true;
@@ -307,7 +329,7 @@ onMounted(() => {
           <h2>Core map</h2>
           <span>read-only service boundary</span>
         </header>
-        <DataTable v-if="coreRows.length" :rows="coreRows" :columns="['engine', 'status', 'writes', 'api', 'role']" />
+        <DataTable v-if="coreRows.length" :rows="coreRows" :columns="['engine', 'status', 'writes', 'api', 'role']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No core map" detail="Reality Core 静态投影暂不可用。" />
       </section>
 
@@ -316,7 +338,7 @@ onMounted(() => {
           <h2>Engine status</h2>
           <span>{{ status.generated_at || 'not loaded' }}</span>
         </header>
-        <DataTable v-if="engineRows.length" :rows="engineRows" :columns="['engine', 'status', 'service', 'operation', 'detail']" />
+        <DataTable v-if="engineRows.length" :rows="engineRows" :columns="['engine', 'status', 'service', 'operation', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No engine status" detail="Gateway 离线或 RealityService 尚未返回数据。" />
       </section>
 
@@ -325,7 +347,7 @@ onMounted(() => {
           <h2>Fact Flow</h2>
           <span>{{ flow.source || 'growth.promotions' }}</span>
         </header>
-        <DataTable v-if="factFlowRows.length" :rows="factFlowRows" :columns="['kind', 'status', 'decision', 'target', 'confidence', 'summary']" />
+        <DataTable v-if="factFlowRows.length" :rows="factFlowRows" :columns="['kind', 'status', 'decision', 'target', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No Fact Flow stages" detail="当前 session 还没有可展示的 growth/promotion 轨迹。" />
       </section>
 
@@ -334,7 +356,7 @@ onMounted(() => {
           <h2>Evidence</h2>
           <span>{{ evidenceRows.length }} refs</span>
         </header>
-        <DataTable v-if="evidenceRows.length" :rows="evidenceRows" :columns="['event', 'reference', 'kind', 'confidence', 'summary']" />
+        <DataTable v-if="evidenceRows.length" :rows="evidenceRows" :columns="['event', 'reference', 'kind', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No evidence refs" detail="当前 Fact Flow 没有返回证据引用，或 Gateway 处于离线降级状态。" />
       </section>
 
@@ -343,7 +365,7 @@ onMounted(() => {
           <h2>Promotion trace</h2>
           <span>{{ promotionRows.length }} receipts</span>
         </header>
-        <DataTable v-if="promotionRows.length" :rows="promotionRows" :columns="['target', 'status', 'target_id', 'summary']" />
+        <DataTable v-if="promotionRows.length" :rows="promotionRows" :columns="['target', 'status', 'target_id', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No promotions" detail="Growth Channel 还没有持久化晋升回执。" />
       </section>
 
@@ -352,15 +374,16 @@ onMounted(() => {
           <h2>Reality boundaries</h2>
           <span>Fact state</span>
         </header>
-        <DataTable v-if="boundaryRows.length" :rows="boundaryRows" :columns="['boundary', 'count', 'meaning']" />
+        <DataTable v-if="boundaryRows.length" :rows="boundaryRows" :columns="['boundary', 'count', 'meaning']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No boundary projection" detail="边界统计暂不可用。" />
       </section>
 
       <section class="management-panel reality-panel">
         <header>
-          <h2>Raw projection</h2>
-          <span>debug</span>
+          <h2>Evidence object detail</h2>
+          <span>semantic first</span>
         </header>
+        <EvidenceObjectDetail title="Reality selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
         <RawPayload title="Reality status" :data="status" />
       </section>
     </section>

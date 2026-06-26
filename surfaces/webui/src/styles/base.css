@@ -511,6 +511,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .segmented button { min-height: 32px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; }
 .segmented button.active { background: var(--surface-2); color: var(--text); border-color: var(--border); }
 .security-note { display: flex; gap: 8px; color: var(--text-muted); align-items: center; }
+.evidence-object-detail { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface-muted); display: grid; gap: 10px; }
+.evidence-object-detail > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.evidence-object-detail h2 { margin: 0; font-size: 14px; }
+.evidence-object-detail p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.evidence-object-fields dd { overflow-wrap: anywhere; }
+.evidence-ref-link { color: var(--accent); font-weight: 600; text-decoration: none; }
+.evidence-ref-link.muted { color: var(--text-muted); font-weight: 500; }
 
 @media (max-width: 1180px) {
   .app-shell { grid-template-columns: 52px minmax(0, 1fr) 340px; }

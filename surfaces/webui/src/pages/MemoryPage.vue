@@ -7,10 +7,11 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
-import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import type { EvidenceObject } from '../types/evidence';
 
 const loading = ref(false);
 const error = ref('');
@@ -57,8 +58,47 @@ const recallRows = computed(() => (Array.isArray(recallExplain.value?.results) ?
   score: item.score,
   snippet: item.snippet || item.content,
 })));
+const packetRows = computed(() => (Array.isArray(packet.value?.items) ? packet.value.items : []).slice(0, 12).map((item: any) => ({
+  id: item.id || item.ref || item.title || '-',
+  kind: item.kind || item.role || 'context.packet',
+  source: item.source || item.layer || '-',
+  score: item.score ?? item.authority ?? '-',
+  summary: item.summary || item.text || item.content || item.title || '-',
+})));
 const entityRows = computed(() => Array.isArray(entities.value?.entities) ? entities.value.entities.slice(0, 12) : []);
 const tripleRows = computed(() => Array.isArray(triples.value?.triples) ? triples.value.triples.slice(0, 12) : []);
+const symbolRows = computed(() => {
+  const rows = Array.isArray(symbolLinks.value?.links) ? symbolLinks.value.links : Array.isArray(symbolLinks.value?.items) ? symbolLinks.value.items : [];
+  return rows.slice(0, 12).map((item: any) => ({
+    symbol: item.symbol || item.source || symbolQuery.value,
+    target: item.target || item.ref || item.memory_id || '-',
+    kind: item.kind || item.type || 'symbol.link',
+    confidence: item.confidence ?? item.score ?? '-',
+    summary: item.summary || item.reason || item.path || '-',
+  }));
+});
+const structuredRows = computed(() => {
+  const facts = Array.isArray(structured.value?.facts?.facts) ? structured.value.facts.facts : Array.isArray(structured.value?.facts?.items) ? structured.value.facts.items : [];
+  const sources = Array.isArray(structured.value?.sources?.sources) ? structured.value.sources.sources : [];
+  return [
+    ...sources.slice(0, 6).map((source: any) => ({
+      id: source.id || source.source_ref || source.name || '-',
+      kind: 'structured.source',
+      status: source.status || '-',
+      owner: source.owner || source.system || '-',
+      summary: source.summary || source.description || source.path || '-',
+      raw: source,
+    })),
+    ...facts.slice(0, 8).map((fact: any) => ({
+      id: fact.id || fact.fact_id || fact.source_ref || '-',
+      kind: fact.fact_type || 'structured.fact',
+      status: fact.status || '-',
+      owner: fact.source_ref || '-',
+      summary: fact.summary || fact.value || fact.title || '-',
+      raw: fact,
+    })),
+  ];
+});
 const candidateRows = computed(() => Array.isArray(maintenance.value?.candidates) ? maintenance.value.candidates : []);
 const linkCount = computed(() => Number(links.value?.total || links.value?.links?.length || 0));
 const healthLevel = computed(() => status.value?.kernel_health?.degraded ? 'degraded' : (status.value?.status || 'unknown'));
@@ -106,6 +146,22 @@ const memoryEvidence = computed(() => [
     source: 'cowd.structured',
   }] : []),
 ].filter((item) => item.id || item.summary));
+const selectedEvidence = computed<EvidenceObject | null>(() => {
+  const row: any = selectedDetail.value || selectedEntry.value;
+  if (!row) return null;
+  const ref = String(row.id || row.memory_id || row.title || row.source_ref || row.fact_type || row.kind || 'memory');
+  return {
+    ref,
+    kind: row.kind || row.fact_type || row.category || 'memory.object',
+    source: row.source || row.source_layer || row.layer || 'memory',
+    status: row.status || row.priority || row.decision || 'recorded',
+    summary: row.summary || row.snippet || row.content || row.description || row.title || ref,
+    memory_id: row.memory_id || row.id,
+    matrix_ref: row.matrix_ref || row.source_ref || row.fact_type,
+    route: row.layer ? `/memory?layer=${encodeURIComponent(String(row.layer))}` : '/memory',
+    raw: row,
+  };
+});
 
 async function refresh() {
   loading.value = true;
@@ -236,6 +292,10 @@ function summarize(value: any, fallback = '-') {
   if (value === null || value === undefined || value === '') return fallback;
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
   return JSON.stringify(value).slice(0, 160);
+}
+
+function selectStructuredRow(row: Record<string, unknown>) {
+  selectedDetail.value = (row.raw as Record<string, unknown> | undefined) || row;
 }
 
 onMounted(refresh);
@@ -376,6 +436,7 @@ onMounted(refresh);
           </div>
           <DataTable v-if="recallRows.length" :rows="recallRows" :columns="['title', 'layer', 'priority', 'score', 'snippet']" @row-click="selectedDetail = $event" />
           <EmptyState v-else title="No recall results" detail="当前查询没有匹配，或后端处于离线状态。" />
+          <DataTable v-if="packetRows.length" :rows="packetRows" :columns="['id', 'kind', 'source', 'score', 'summary']" @row-click="selectedDetail = $event" />
           <RawPayload title="Context packet" :data="packet" />
         </section>
 
@@ -400,6 +461,7 @@ onMounted(refresh);
             Symbol lookup
             <input v-model="symbolQuery" type="text" @keyup.enter="runRecall" />
           </label>
+          <DataTable v-if="symbolRows.length" :rows="symbolRows" :columns="['symbol', 'target', 'kind', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
           <RawPayload title="Symbol links" :data="symbolLinks" />
           <RawPayload title="Clusters and runtime" :data="{ clusters, runtime, links }" />
         </section>
@@ -446,6 +508,7 @@ onMounted(refresh);
           </div>
           <button class="primary-action" type="button" @click="planStructuredIngest">Plan manufacturing ingest</button>
           <RequestReceipt :receipt="structuredPlan" title="Structured ingest plan receipt" />
+          <DataTable v-if="structuredRows.length" :rows="structuredRows" :columns="['id', 'kind', 'status', 'owner', 'summary']" @row-click="selectStructuredRow" />
           <RawPayload title="Structured collections" :data="structured" />
           <RawPayload title="Ingest plan" :data="structuredPlan || {}" />
         </section>
@@ -456,7 +519,7 @@ onMounted(refresh);
           <span>latest write response</span>
         </header>
           <EvidenceTrace :items="memoryEvidence" title="Memory evidence trace" />
-          <DetailDrawer title="Memory selected detail" :row="selectedDetail || selectedEntry" @close="selectedDetail = null" />
+          <EvidenceObjectDetail title="Memory selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
           <RequestReceipt :receipt="actionResult || structuredPlan" title="Memory action receipt" />
           <RawPayload title="Action result" :data="actionResult || searchResult" />
         </section>

@@ -575,9 +575,51 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Runtime flow');
     expect(wrapper.text()).toContain('risk_gate');
     expect(wrapper.text()).toContain('memory');
+    expect(wrapper.text()).toContain('Runtime selected evidence');
+    await wrapper.findAll('tbody tr').find((row) => row.text().includes('risk_gate'))?.trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Evidence drill-down payload');
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/status', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/events', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/control', expect.any(Object));
+  });
+
+  it('renders Reality Core evidence object detail from flow rows', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
+      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
+      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
+      if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
+      if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
+      if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
+      if (url === '/api/reality/status') return Promise.resolve(new Response(JSON.stringify({ reality_core: { status: 'ready' }, engines: { memory: { status: 'ready', role: 'recall' } } })));
+      if (url === '/api/reality/static') return Promise.resolve(new Response(JSON.stringify({ core_map: [{ id: 'memory', label: 'Memory Engine', status: 'ready', writes: true, api: '/api/memory/*', role: 'unstructured facts' }] })));
+      if (url.startsWith('/api/reality/flow')) return Promise.resolve(new Response(JSON.stringify({
+        source: 'test',
+        stages: [{ kind: 'memory.promotion', status: 'accepted', decision: 'promote', target_ref: 'memory:mem-1', confidence_bp: 9200, summary: 'stable fact' }],
+        events: [{ id: 'event-1', source_event_kind: 'runtime', confidence_bp: 9200, evidence_refs: [{ reference: 'memory:mem-1', kind: 'memory.fact', summary: 'stable fact' }] }],
+        promotions: [{ target: 'memory', status: 'accepted', target_id: 'mem-1', summary: 'stable fact' }],
+      })));
+      if (url.startsWith('/api/reality/promotions')) return Promise.resolve(new Response(JSON.stringify({ promotions: [{ target: 'memory', status: 'accepted', target_id: 'mem-1', summary: 'stable fact' }] })));
+      if (url === '/api/reality/boundaries') return Promise.resolve(new Response(JSON.stringify({ boundaries: [{ id: 'held', label: 'Held facts', count: 1, meaning: 'conflict review' }] })));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = await mountApp('/reality');
+    await settleAsync();
+    await settleAsync();
+    expect(wrapper.text()).toContain('Reality Core');
+    expect(wrapper.text()).toContain('Evidence object detail');
+    await wrapper.findAll('tbody tr').find((row) => row.text().includes('stable fact'))?.trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Reality selected evidence');
+    expect(wrapper.text()).toContain('memory.promotion');
+    expect(wrapper.text()).toContain('Evidence drill-down payload');
   });
 
   it('calls real cross-plane identity grant and action endpoints', async () => {
@@ -772,6 +814,10 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Layer entries');
     expect(wrapper.text()).toContain('Line A fact');
     expect(wrapper.text()).toContain('Structured data core');
+    expect(wrapper.text()).toContain('Memory selected evidence');
+    await wrapper.findAll('tbody tr').find((row) => row.text().includes('Line A fact'))?.trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Evidence drill-down payload');
     expect(fetchMock).toHaveBeenCalledWith('/api/memory/recall/explain?q=manufacturing%20quality%20anomaly&limit=12', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/cowd/structured/sources', expect.any(Object));
   });

@@ -7,11 +7,12 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
-import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
+import type { EvidenceObject } from '../types/evidence';
 
 const store = useAppStore();
 const loading = ref(false);
@@ -144,6 +145,24 @@ const runtimeEvidence = computed(() => [
     source: 'runtime.approval',
   })),
 ].filter((item) => item.id || item.summary));
+const selectedEvidence = computed<EvidenceObject | null>(() => {
+  const row: any = selectedDetail.value;
+  if (!row) return null;
+  const kind = row.kind || row.type || row.source || (row.prompt ? 'runtime.turn' : row.objective ? 'runtime.task' : 'runtime.evidence');
+  const ref = String(row.id || row.sequence || row.target_id || row.task || row.session || row.source || kind);
+  return {
+    ref,
+    kind,
+    source: row.source || row.scope || 'runtime',
+    status: row.status || row.phase || row.risk || row.mode || 'recorded',
+    summary: row.detail || row.summary || row.message || row.prompt || row.objective || ref,
+    session_id: row.session || row.session_id || sessionId.value,
+    turn_id: row.id && kind === 'runtime.turn' ? row.id : row.turn_id,
+    audit_ref: row.approval_id || row.request_id,
+    route: row.session || row.session_id ? `/runtime?session_id=${encodeURIComponent(String(row.session || row.session_id))}` : undefined,
+    raw: row,
+  };
+});
 
 async function refresh() {
   loading.value = true;
@@ -472,7 +491,7 @@ onMounted(refresh);
         <DataTable v-if="growthPromotionRows.length" :rows="growthPromotionRows" :columns="['target', 'status', 'target_id', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No promotions" detail="进入事实、记忆或矩阵的提升结果会作为 promotion 回执展示。" />
         <EvidenceTrace :items="runtimeEvidence" title="Runtime evidence trace" />
-        <DetailDrawer title="Runtime selected detail" :row="selectedDetail" @close="selectedDetail = null" />
+        <EvidenceObjectDetail title="Runtime selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
         <RawPayload title="Growth detail" :data="{ status: growthStatus, events: growthEvents }" />
       </section>
     </section>
