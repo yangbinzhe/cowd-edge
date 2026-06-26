@@ -235,6 +235,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .mission-grid.lower { grid-template-columns: minmax(0, 1.25fr) minmax(360px, .75fr); padding-bottom: 18px; }
 .mission-panel { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 14px; }
 .mission-panel.wide { min-height: 320px; }
+.mission-panel.governed-wide { grid-column: 1 / -1; }
 .mission-panel header { min-height: 32px; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
 .mission-panel h2 { margin: 0; font-size: 14px; line-height: 1.25; }
 .mission-panel header span { color: var(--text-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -244,11 +245,20 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .mission-command-list .button-row { justify-content: flex-end; flex-wrap: nowrap; }
 .mission-command-list .button-row .icon-action,
 .mission-command-list .button-row .danger-action { width: 30px; height: 30px; min-height: 30px; padding: 0; }
+.mission-preview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mission-action-preview { min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 11px; display: grid; gap: 8px; }
+.mission-action-preview header { margin: 0; min-height: 0; align-items: flex-start; }
+.mission-action-preview h3 { margin: 0; font-size: 13px; }
+.mission-action-preview p { margin: 4px 0 0; color: var(--text-muted); line-height: 1.45; }
+.mission-action-preview header span { flex: 0 0 auto; min-height: 24px; display: inline-flex; align-items: center; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-muted); }
+.mission-action-preview header span[data-risk="high"] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 42%, var(--border)); }
+.mission-action-preview header span[data-risk="medium"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 42%, var(--border)); }
+.mission-action-preview header span[data-risk="low"] { color: var(--success); border-color: color-mix(in srgb, var(--success) 36%, var(--border)); }
 .trace-panel { margin: 0 24px 18px; }
 .trace-panel .evidence-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
 @media (max-width: 1260px) {
-  .mission-grid, .mission-grid.lower { grid-template-columns: 1fr; }
+  .mission-grid, .mission-grid.lower, .mission-preview-grid { grid-template-columns: 1fr; }
 }
 .action-button[data-kind="primary"] { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); }
 .action-button[data-kind="danger"] { border-color: color-mix(in srgb, var(--danger) 58%, var(--border)); }

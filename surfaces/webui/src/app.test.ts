@@ -13,6 +13,7 @@ import RealityCorePage from './pages/RealityCorePage.vue';
 import RuntimePage from './pages/RuntimePage.vue';
 import ContextPage from './pages/ContextPage.vue';
 import GatewayPage from './pages/GatewayPage.vue';
+import MissionControlPage from './pages/MissionControlPage.vue';
 import MfgPage from './pages/MfgPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
 import SkillsPage from './pages/SkillsPage.vue';
@@ -40,6 +41,7 @@ function mountApp(path = '/chat') {
       { path: '/tools', component: ToolsPage },
       { path: '/surfaces', component: SurfacePage },
       { path: '/gateway', component: GatewayPage },
+      { path: '/mission', component: MissionControlPage },
       ...pluginRoutes,
       { path: '/mfg', component: MfgPage },
       { path: '/audit', component: AuditPage },
@@ -306,6 +308,11 @@ describe('Cowd Vue WebUI shell', () => {
     });
     await api.consumeMissionSessionCommand('mission-b', 'command-1', 'start_turn');
     await api.decideMissionApproval('approval-1', false, 'unsafe');
+    await api.stewardScheduler();
+    await api.tickStewardScheduler();
+    await api.stewardHandoff('steward-1');
+    await api.runtimeRecoveryReport();
+    await api.applyRuntimeRecovery();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/sessions/mission-a/teams/runtime', expect.objectContaining({
       method: 'POST',
@@ -327,6 +334,11 @@ describe('Cowd Vue WebUI shell', () => {
       method: 'POST',
       body: JSON.stringify({ approved: false, decided_by: 'webui', reason: 'unsafe' }),
     }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/stewards/scheduler', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/stewards/scheduler', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/stewards/steward-1/handoff', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/events/replay-report', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/events/recover', expect.objectContaining({ method: 'POST' }));
   });
 
   it('wraps write failures with endpoint method payload and retry metadata', async () => {
@@ -620,6 +632,70 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Reality selected evidence');
     expect(wrapper.text()).toContain('memory.promotion');
     expect(wrapper.text()).toContain('Evidence drill-down payload');
+  });
+
+  it('renders Mission Control governed previews before stewardship and recovery writes', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(path);
+      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
+      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
+      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
+      if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
+      if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
+      if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
+      if (url === '/api/mission/control') return Promise.resolve(new Response(JSON.stringify({
+        projection: {
+          mission: {
+            active_session_id: 'mission-a',
+            sessions: [{ session_id: 'mission-a', title: 'Mission A', status: 'active', active_team_ids: ['team-a'], active_agent_ids: ['agent-a'] }],
+            events: [{ event_type: 'mission.command.ready', status: 'ready', message: 'ready' }],
+            session_command_summary: { total: 1, pending: 1, running: 0 },
+            session_commands: [{ command_id: 'command-1', target_session_id: 'mission-a', status: 'pending', command: 'summarize' }],
+          },
+          teams: [{ team_id: 'team-a' }],
+          agents: [{ agent_id: 'agent-a' }],
+          approvals: { pending_count: 1, requests: [{ approval_id: 'approval-1', status: 'pending', summary: 'Need tool access', session_id: 'mission-a', risk: 'medium' }] },
+          relations: { relation_count: 1, relations: [] },
+          stewards: [{ id: 'steward-1', status: 'ready' }],
+          event_digest: { latest: [] },
+        },
+      })));
+      if (url === '/api/mission/approvals') return Promise.resolve(new Response(JSON.stringify({ approvals: { pending_count: 1, requests: [{ approval_id: 'approval-1', status: 'pending', summary: 'Need tool access', session_id: 'mission-a', risk: 'medium' }] } })));
+      if (url === '/api/mission/relations') return Promise.resolve(new Response(JSON.stringify({ relations: { relation_count: 1, relations: [] } })));
+      if (url === '/api/mission/sessions/mission-a') return Promise.resolve(new Response(JSON.stringify({ session_id: 'mission-a', tool_count: 2, memory_recall_count: 3 })));
+      if (url === '/api/mission/sessions/mission-a/inbox') return Promise.resolve(new Response(JSON.stringify({ summary: { total: 1, pending: 1 }, commands: [{ command_id: 'command-1', status: 'pending', command: 'summarize blockers' }] })));
+      if (url.startsWith('/api/runtime/timeline')) return Promise.resolve(new Response(JSON.stringify({ events: [{ kind: 'turn', status: 'ready', detail: 'running' }] })));
+      if (url.startsWith('/api/reality/flow')) return Promise.resolve(new Response(JSON.stringify({ events: [{ kind: 'memory.recall', status: 'ready', summary: 'fact' }] })));
+      if (url === '/api/mission/control/stewards/scheduler') return Promise.resolve(new Response(JSON.stringify({ status: init?.method === 'POST' ? 'ticked' : 'ready', decisions: [{ id: 'd1' }] })));
+      if (url === '/api/mission/control/stewards/steward-1/handoff') return Promise.resolve(new Response(JSON.stringify({ steward_id: 'steward-1', summary: 'handoff ready' })));
+      if (url === '/api/runtime/events/replay-report') return Promise.resolve(new Response(JSON.stringify({ gaps: [{ session_id: 'mission-a', kind: 'missing-event' }] })));
+      if (url === '/api/runtime/events/recover') return Promise.resolve(new Response(JSON.stringify({ recovered: true })));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = await mountApp('/mission');
+    await settleAsync();
+    await settleAsync();
+    expect(wrapper.text()).toContain('Governed actions');
+    expect(wrapper.text()).toContain('Dispatch session inbox');
+    expect(wrapper.text()).toContain('Runtime recovery');
+    expect(wrapper.text()).toContain('Need tool access');
+    expect(wrapper.get('button.danger-action[disabled]').text()).toContain('Apply recovery');
+    await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('Load steward state'))?.trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Steward scheduler state');
+    await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('Load recovery report'))?.trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Runtime recovery report');
+    expect(wrapper.text()).toContain('mission-a');
+    await wrapper.findAll('button.danger-action').find((button) => button.text().includes('Apply recovery'))?.trigger('click');
+    await settleAsync();
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/events/recover', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/mission/projection', expect.any(Object));
   });
 
   it('calls real cross-plane identity grant and action endpoints', async () => {

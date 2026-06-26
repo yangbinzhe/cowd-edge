@@ -8,6 +8,7 @@ import { api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import MissionActionPreview from '../components/workbench/MissionActionPreview.vue';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -26,6 +27,9 @@ const sessionInbox = ref<any>({});
 const timeline = ref<any>({});
 const realityFlow = ref<any>({});
 const actionResult = ref<any>(null);
+const schedulerState = ref<any>(null);
+const stewardHandoff = ref<any>(null);
+const recoveryReport = ref<any>(null);
 const controlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
 
 const mission = computed(() => controlProjection.value?.mission || missionProjection.value?.mission || {});
@@ -98,6 +102,33 @@ const sessionRows = computed(() => sessions.value.map((session: any) => ({
   teams: Array.isArray(session.active_team_ids) ? session.active_team_ids.length : 0,
   agents: Array.isArray(session.active_agent_ids) ? session.active_agent_ids.length : 0,
 })));
+const dispatchPreview = computed(() => ({
+  affected: sessionCommands.value.slice(0, 8).map((command: any) => command.target_session_id || activeSession.value || command.command_id),
+  expected: ['mission.command.claimed', 'session.inbox.updated', 'runtime.turn.optional'],
+  risk: sessionCommands.value.length > 5 ? 'medium' : 'low',
+  approval: pendingApprovals.value.length ? `${pendingApprovals.value.length} pending approval gate(s)` : 'no pending approval gate',
+}));
+const stewardPreview = computed(() => {
+  const stewardIds = stewardRows.value.map((steward: any) => steward.id || steward.steward_id || steward.name).filter(Boolean);
+  return {
+    affected: stewardIds.length ? stewardIds : sessions.value.slice(0, 6).map((session: any) => session.session_id || session.id),
+    expected: ['steward.scheduler.tick', 'team.execution.tick', 'handoff.snapshot'],
+    risk: stewardRows.value.length ? 'medium' : 'low',
+    approval: 'bounded by steward policy and runtime approvals',
+  };
+});
+const recoveryPreview = computed(() => {
+  const gaps = recoveryReport.value?.gaps || recoveryReport.value?.replay_gaps || recoveryReport.value?.report?.gaps || [];
+  const affected = Array.isArray(gaps)
+    ? gaps.slice(0, 8).map((gap: any) => gap.session_id || gap.stream_id || gap.id || gap.kind || 'gap')
+    : sessions.value.slice(0, 6).map((session: any) => session.session_id || session.id);
+  return {
+    affected,
+    expected: ['runtime.recovery.report', 'runtime.recovery.apply', 'eventstore.replay'],
+    risk: affected.length ? 'high' : 'medium',
+    approval: recoveryReport.value ? 'report reviewed in WebUI' : 'preview required before apply',
+  };
+});
 
 async function refresh() {
   loading.value = true;
@@ -189,13 +220,34 @@ async function dispatchSessions() {
   await refresh();
 }
 
+async function previewStewardship() {
+  const [scheduler, handoff] = await Promise.all([
+    api.stewardScheduler().catch((error) => ({ __offline: true, __error: String(error) })),
+    stewardRows.value[0]?.id || stewardRows.value[0]?.steward_id
+      ? api.stewardHandoff(stewardRows.value[0].id || stewardRows.value[0].steward_id).catch((error) => ({ __offline: true, __error: String(error) }))
+      : Promise.resolve({ steward: null, note: 'no steward selected from current projection' }),
+  ]);
+  schedulerState.value = scheduler;
+  stewardHandoff.value = handoff;
+}
+
 async function tickStewards() {
+  if (!schedulerState.value) await previewStewardship();
   actionResult.value = await api.tickStewardScheduler();
   await refresh();
 }
 
+async function previewRecovery() {
+  recoveryReport.value = await api.runtimeRecoveryReport();
+}
+
 async function applyRecovery() {
+  if (!recoveryReport.value) {
+    await previewRecovery();
+    return;
+  }
   actionResult.value = await api.applyRuntimeRecovery();
+  recoveryReport.value = await api.runtimeRecoveryReport().catch(() => recoveryReport.value);
   await refresh();
 }
 
@@ -217,9 +269,9 @@ onMounted(refresh);
         <button class="ghost-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="16" /> 刷新
         </button>
-        <button class="ghost-action" type="button" @click="dispatchSessions">调度</button>
-        <button class="ghost-action" type="button" @click="tickStewards">托管</button>
-        <button class="ghost-action" type="button" @click="applyRecovery">恢复</button>
+        <button class="ghost-action" type="button" @click="dispatchSessions">执行调度</button>
+        <button class="ghost-action" type="button" @click="previewStewardship">预览托管</button>
+        <button class="ghost-action" type="button" @click="previewRecovery">预览恢复</button>
       </div>
     </header>
 
@@ -261,6 +313,54 @@ onMounted(refresh);
     </div>
 
     <div class="mission-grid">
+      <section class="mission-panel governed-wide">
+        <header>
+          <h2>Governed actions</h2>
+          <span>preview before high-impact write</span>
+        </header>
+        <div class="mission-preview-grid">
+          <MissionActionPreview
+            title="Dispatch session inbox"
+            action="Claim or start pending session commands through Mission Runtime."
+            :target="activeSession || 'all sessions'"
+            :affected="dispatchPreview.affected"
+            :expected="dispatchPreview.expected"
+            :risk="dispatchPreview.risk"
+            :approval="dispatchPreview.approval"
+          />
+          <MissionActionPreview
+            title="Steward scheduler"
+            action="Tick delegated stewards and collect handoff state before execution."
+            :target="stewardRows[0]?.id || stewardRows[0]?.steward_id || 'scheduler'"
+            :affected="stewardPreview.affected"
+            :expected="stewardPreview.expected"
+            :risk="stewardPreview.risk"
+            :approval="stewardPreview.approval"
+            :source="schedulerState ? 'backend scheduler state' : 'frontend projection preview'"
+          />
+          <MissionActionPreview
+            title="Runtime recovery"
+            action="Replay and recover runtime gaps only after recovery report is visible."
+            :target="activeSession || 'runtime'"
+            :affected="recoveryPreview.affected"
+            :expected="recoveryPreview.expected"
+            :risk="recoveryPreview.risk"
+            :approval="recoveryPreview.approval"
+            :source="recoveryReport ? 'runtime recovery report' : 'report required'"
+          />
+        </div>
+        <div class="button-row">
+          <button class="ghost-action" type="button" @click="dispatchSessions">Run dispatch</button>
+          <button class="ghost-action" type="button" @click="previewStewardship">Load steward state</button>
+          <button class="primary-action" type="button" @click="tickStewards">Tick stewards</button>
+          <button class="ghost-action" type="button" @click="previewRecovery">Load recovery report</button>
+          <button class="danger-action" type="button" :disabled="!recoveryReport" @click="applyRecovery">Apply recovery</button>
+        </div>
+        <RequestReceipt v-if="schedulerState" :receipt="schedulerState" title="Steward scheduler state" />
+        <RawPayload v-if="stewardHandoff" title="Steward handoff summary" :data="stewardHandoff" />
+        <RequestReceipt v-if="recoveryReport" :receipt="recoveryReport" title="Runtime recovery report" />
+      </section>
+
       <section class="mission-panel">
         <header>
           <h2>Sessions</h2>
@@ -353,7 +453,7 @@ onMounted(refresh);
           <StatusPill :status="pendingApprovals.length ? 'blocked' : 'ready'" />
         </header>
         <article v-for="approval in pendingApprovals" :key="approval.approval_id || approval.id" class="approval-row">
-          <span>{{ approval.summary || approval.action || approval.command }}</span>
+          <span>{{ approval.summary || approval.action || approval.command }} · {{ approval.session_id || approval.agent_id || approval.tool || 'mission' }} · {{ approval.risk || 'policy' }}</span>
           <button class="ghost-action" type="button" @click="decideApproval(approval.approval_id || approval.id, true)">
             <CheckCircle2 :size="15" /> 批准
           </button>
@@ -380,6 +480,6 @@ onMounted(refresh);
     </section>
 
     <RequestReceipt v-if="actionResult" :receipt="actionResult" />
-    <RawPayload title="Mission projection" :payload="missionProjection" />
+    <RawPayload title="Mission projection" :data="missionProjection" />
   </section>
 </template>

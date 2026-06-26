@@ -389,7 +389,6 @@ export const api = {
   stewardHandoff: (stewardId: string) => read(`/api/mission/control/stewards/${encodeURIComponent(stewardId)}/handoff`, {}),
   runtimeRecoveryReport: () => read('/api/runtime/events/replay-report', {}),
   applyRuntimeRecovery: () => writeWithReceipt('/api/runtime/events/recover', { method: 'POST' }),
-  missionProjection: () => read('/api/mission/projection', { mission: { sessions: [], events: [], approval_projection: {}, relation_projection: {} } }),
   missionApprovals: () => read('/api/mission/approvals', { approvals: { requests: [], pending_count: 0 } }),
   missionRelations: () => read('/api/mission/relations', { relations: { relations: [], proxies: [] } }),
   missionSessionDetail: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}`, {}),
