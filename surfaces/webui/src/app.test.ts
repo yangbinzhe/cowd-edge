@@ -191,6 +191,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Create cross-plane grant');
     expect(wrapper.text()).toContain('Gateway evidence trace');
     expect(wrapper.text()).toContain('Gateway selected detail');
+    expect(wrapper.text()).toContain('Gateway remediation');
   });
 
   it('renders context workbench evidence and detail surfaces', async () => {
@@ -802,6 +803,7 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     expect(wrapper.text()).toContain('Surface Host');
     expect(wrapper.text()).toContain('Surface registry');
+    expect(wrapper.text()).toContain('Surface diagnostic playbook');
     expect(wrapper.text()).toContain('Surface lifecycle');
     expect(wrapper.text()).toContain('WebUI');
     expect(wrapper.text()).toContain('Routes');

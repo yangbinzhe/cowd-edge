@@ -9,6 +9,7 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import SurfaceDiagnosticPlaybook from '../components/workbench/SurfaceDiagnosticPlaybook.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
@@ -124,6 +125,48 @@ const surfaceEvidence = computed(() => [
     source: selectedSurface.value,
   }] : []),
 ].filter((item) => item.id || item.summary));
+const surfaceDiagnosticRows = computed(() => {
+  const failures = eventRows.value.filter((row: any) => ['error', 'failed', 'blocked', 'offline'].includes(String(row.status || '').toLowerCase()));
+  const reportedHealth = state.value.selectedHealth?.status || selected.value.status || '';
+  const healthStatus = state.value.selectedHealth?.ok === false ? 'blocked' : (reportedHealth || 'ready');
+  return [
+    {
+      lane: 'Ingress',
+      severity: routeRows.value.length ? 'ready' : 'degraded',
+      status: routeRows.value.length ? 'ready' : 'missing routes',
+      evidence: `${routeRows.value.length} routes for ${selectedSurface.value}`,
+      next_action: routeRows.value.length ? 'Verify route target and callback path.' : 'Register routes in the surface manifest or host config.',
+    },
+    {
+      lane: 'Delivery',
+      severity: actionResult.value?.ok === false ? 'blocked' : 'ready',
+      status: actionResult.value ? (actionResult.value.status || (actionResult.value.ok === false ? 'failed' : 'ready')) : 'not tested',
+      evidence: actionResult.value ? (actionResult.value.error || actionResult.value.request_id || actionName.value) : 'no dispatch receipt',
+      next_action: actionResult.value ? 'Inspect dispatch receipt and recent events.' : 'Send a health message or run an action test.',
+    },
+    {
+      lane: 'Static resources',
+      severity: resourceRows.value.length ? 'ready' : 'degraded',
+      status: resourceRows.value.length ? 'ready' : 'missing resources',
+      evidence: `${resourceRows.value.length} resources, spa=${resourceRows.value.some((row: any) => row.spa === 'true')}`,
+      next_action: resourceRows.value.length ? 'Confirm file path and SPA fallback.' : 'Publish static resources or disable static forwarding.',
+    },
+    {
+      lane: 'Callback',
+      severity: eventRows.value.length ? 'ready' : 'info',
+      status: eventRows.value.length ? 'events visible' : 'no events',
+      evidence: `${eventRows.value.length} recent events`,
+      next_action: eventRows.value.length ? 'Review failed event rows first.' : 'Trigger a callback/action to generate audit evidence.',
+    },
+    {
+      lane: 'Recent failures',
+      severity: failures.length ? 'blocked' : healthStatus,
+      status: failures.length ? `${failures.length} failure(s)` : healthStatus,
+      evidence: failures[0]?.message || state.value.selectedHealth?.error || 'no failure evidence',
+      next_action: failures.length ? 'Open selected event detail and retry after fixing route/resource.' : 'Keep monitoring health and dispatch receipts.',
+    },
+  ];
+});
 
 async function loadSurface(id = selectedSurface.value) {
   if (!id) return;
@@ -238,6 +281,7 @@ onMounted(refresh);
         </header>
         <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['id', 'name', 'kind', 'status', 'lifecycle', 'capabilities', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No surfaces" detail="Gateway SurfaceHost 未返回可用 surface。" />
+        <SurfaceDiagnosticPlaybook :rows="surfaceDiagnosticRows" />
         <label class="field-line">
           Selected surface
           <select v-model="selectedSurface" @change="loadSurface(selectedSurface)">

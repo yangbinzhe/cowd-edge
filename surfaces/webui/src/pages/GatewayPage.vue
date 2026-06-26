@@ -10,6 +10,7 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import GatewayRemediationList from '../components/workbench/GatewayRemediationList.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 
@@ -123,6 +124,48 @@ const gatewayAlignmentStatus = computed(() => {
   if (!surfaces.value.length || !accounts.value.length) return 'degraded';
   return 'ready';
 });
+const gatewayRemediationRows = computed(() => [
+  {
+    id: 'surface-host',
+    lane: 'Surface host',
+    severity: state.value.surfaceHealth?.__offline ? 'blocked' : surfaces.value.length ? 'ready' : 'degraded',
+    problem: surfaces.value.length ? 'Surface registry is visible.' : 'No surface registry data is available.',
+    evidence: `status=${surfaceHost.value.status || state.value.surfaceHealth?.status || 'unknown'}, surfaces=${surfaces.value.length}`,
+    next_action: surfaces.value.length ? 'Monitor route/resource events.' : 'Start Gateway, refresh SurfaceHost, then inspect /api/surfaces/health.',
+  },
+  {
+    id: 'connector-accounts',
+    lane: 'Connector accounts',
+    severity: accounts.value.length ? 'ready' : 'degraded',
+    problem: accounts.value.length ? 'Connector accounts are configured.' : 'Connector account registry is empty.',
+    evidence: `${accounts.value.length} accounts, ${capabilities.value.length} capabilities`,
+    next_action: accounts.value.length ? 'Review grants before commit mode.' : 'Configure connector accounts or keep external surfaces disabled.',
+  },
+  {
+    id: 'resources',
+    lane: 'Resources',
+    severity: resources.value.length ? 'ready' : 'degraded',
+    problem: resources.value.length ? 'Connector resources are indexed.' : 'No connector resources are available for promotion.',
+    evidence: `${resources.value.length} resources`,
+    next_action: resources.value.length ? 'Revalidate selected resource before memory promotion.' : 'Run connector ingestion or verify adapter resources.',
+  },
+  {
+    id: 'cross-plane-grants',
+    lane: 'Cross-plane grants',
+    severity: grants.value.length ? 'ready' : 'blocked',
+    problem: grants.value.length ? 'Grant registry can authorize governed dispatch.' : 'No grants exist for cross-plane execution.',
+    evidence: `${identities.value.length} identities, ${grants.value.length} grants`,
+    next_action: grants.value.length ? 'Simulate policy before execute.' : 'Create identity and grant before commit execution.',
+  },
+  {
+    id: 'executions',
+    lane: 'Executions',
+    severity: executions.value.length ? 'ready' : 'info',
+    problem: executions.value.length ? 'Execution audit is available.' : 'No recent cross-plane execution evidence.',
+    evidence: `${executions.value.length} executions`,
+    next_action: executions.value.length ? 'Review execution receipts and audit evidence.' : 'Run dry-run execution to verify policy path.',
+  },
+]);
 const mockDocsRows = computed(() => {
   const tools = state.value.mockDocs?.tools || state.value.mockDocs?.items || [];
   return Array.isArray(tools) ? tools.slice(0, 10).map((item: any) => ({
@@ -509,6 +552,7 @@ onMounted(refresh);
         </header>
         <p>后端只负责 Gateway 边界能力，WebUI 做完整管理面，TUI 做终端控制面，CLI 保持最小启动和状态入口。</p>
         <DataTable :rows="gatewayAlignmentRows" :columns="['lane', 'owner', 'backend', 'webui', 'tui', 'action']" @row-click="selectedDetail = $event" />
+        <GatewayRemediationList :rows="gatewayRemediationRows" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="surfaces">

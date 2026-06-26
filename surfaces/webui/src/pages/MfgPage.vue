@@ -821,7 +821,7 @@ async function bridgeExecution() {
   if (mfgLiveQuarantine) {
     result.value = quarantineReceipt('Cross-plane execution bridge', `/api/apps/mfg/executions/${executionId}/cross-plane/execute`, {
       mode: 'dry_run',
-      requested_capability: 'channel.feishu.send_text',
+      requested_capability: 'channel.chat.send_text',
     });
     return;
   }
@@ -829,7 +829,7 @@ async function bridgeExecution() {
     mode: 'dry_run',
     actor_principal: 'webui-operator',
     source_channel: 'channel://webui/mfg',
-    requested_capability: 'channel.feishu.send_text',
+    requested_capability: 'channel.chat.send_text',
   });
   await openIncidentRoom();
 }
@@ -847,7 +847,7 @@ async function generateReport() {
   const report = await api.mfgGenerateReport(cockpitProfileId.value, {
     report_id: cockpitReportId.value || undefined,
     cadence: 'daily',
-    delivery_ref: 'channel://feishu/user/webui-operator',
+    delivery_ref: 'channel://chat/user/webui-operator',
     note: 'generated from WebUI MFG workbench',
   });
   cockpitReportId.value = report?.report?.report_id || cockpitReportId.value;
