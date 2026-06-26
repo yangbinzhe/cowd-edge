@@ -82,8 +82,19 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .message-meta { max-width: min(760px, 88%); display: flex; gap: 6px; align-items: center; color: var(--text-faint); font-size: 11px; }
 .turn[data-role="user"] .message-meta { justify-content: flex-end; }
 .message-meta span { border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 2px 7px; }
+.message-meta button { min-height: 22px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-muted); padding: 0 8px; font-size: 11px; cursor: pointer; }
+.message-meta button:hover { color: var(--text); border-color: var(--border-2); }
 .turn[data-role="user"] .markdown-body { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; }
 .turn[data-role="system"] .markdown-body { background: color-mix(in srgb, var(--info) 8%, var(--surface)); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; color: var(--text-muted); }
+.turn-evidence-drawer { margin: 0 28px 16px auto; width: min(760px, calc(100% - 56px)); max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 14px; display: grid; gap: 12px; }
+.turn-evidence-drawer > header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.turn-evidence-drawer h2, .turn-evidence-drawer h3 { margin: 0; font-size: 13px; }
+.turn-evidence-drawer header p { margin: 4px 0 0; color: var(--text-faint); font-size: 12px; max-width: 68ch; }
+.turn-evidence-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.turn-evidence-summary article { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 8px; display: grid; gap: 4px; }
+.turn-evidence-summary span { color: var(--text-faint); font-size: 11px; }
+.turn-evidence-summary strong { color: var(--text); font-size: 18px; }
+.turn-evidence-section { display: grid; gap: 8px; }
 .markdown-body { line-height: 1.7; color: var(--text); text-wrap: pretty; }
 .markdown-body p { margin: 0 0 9px; }
 .markdown-body ul { padding-left: 20px; }

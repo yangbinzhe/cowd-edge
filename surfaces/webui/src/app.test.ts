@@ -117,6 +117,30 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.clean-counts').text()).toContain('记忆证据');
   });
 
+  it('opens a Chat turn evidence drawer from current session projections', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.turns = [{ id: 'turn-1', role: 'assistant', content: 'Done', status: 'complete', tool_name: 'workspace.read' }];
+    store.currentTimeline = {
+      events: [
+        { kind: 'tool.call', status: 'complete', detail: 'workspace.read docs/a.md' },
+        { kind: 'memory.recall', status: 'complete', detail: 'memory://m1' },
+        { kind: 'approval.policy', status: 'ready', detail: 'low risk' },
+      ],
+    };
+    store.currentRealityFlow = { stages: [{ kind: 'memory.promotion', status: 'accepted', summary: 'stable fact' }] };
+    store.attachments = [{ ref_id: 'att-1', kind: 'workspace_file', path: 'docs/a.md', label: 'A', size: 1, sha256: 'hash', added_at_ms: 1 }];
+    await settle();
+    await wrapper.get('.message-meta button').trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Turn evidence');
+    expect(wrapper.text()).toContain('Session/currentRun projection');
+    expect(wrapper.text()).toContain('workspace.read');
+    expect(wrapper.text()).toContain('docs/a.md');
+    expect(store.selectedTurnEvidence?.summary.map((item: any) => item.label)).toContain('Tools');
+  });
+
   it('renders Workspace rename controls and Inspector tab from real store state', async () => {
     const wrapper = await mountApp('/chat');
     await settleAsync();

@@ -32,6 +32,7 @@ export const useAppStore = defineStore('app', () => {
   const currentContextEnvelope = ref<any>(null);
   const currentRealityFlow = ref<any>({});
   const currentTimeline = ref<any>({});
+  const selectedTurnEvidence = ref<Record<string, any> | null>(null);
   const selectedActivity = ref<Record<string, unknown> | null>(null);
   const liveToolCount = ref(0);
   const liveMemoryRecallCount = ref(0);
@@ -143,6 +144,80 @@ export const useAppStore = defineStore('app', () => {
     });
     return Array.from(fileMap.values());
   });
+
+  function summarizeEvent(event: any) {
+    return {
+      kind: String(event.kind || event.event_type || event.type || event.source || 'event'),
+      status: String(event.status || event.phase || event.decision || 'observed'),
+      summary: String(event.detail || event.summary || event.message || event.title || event.ref || event.id || '').slice(0, 180),
+      raw: event,
+    };
+  }
+
+  function eventText(event: any) {
+    return `${event.kind || ''} ${event.event_type || ''} ${event.type || ''} ${event.source || ''} ${event.status || ''} ${event.detail || ''} ${event.summary || ''}`.toLowerCase();
+  }
+
+  function turnEvidenceFromProjection(turn: ChatTurn, runtimeTurn: any = null) {
+    const timelineEvents = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
+    const realityEvents = [
+      ...(Array.isArray(currentRealityFlow.value?.events) ? currentRealityFlow.value.events : []),
+      ...(Array.isArray(currentRealityFlow.value?.stages) ? currentRealityFlow.value.stages : []),
+      ...(Array.isArray(currentRealityFlow.value?.promotions) ? currentRealityFlow.value.promotions : []),
+    ];
+    const envelope = currentContextEnvelope.value?.envelope || currentContextEnvelope.value || {};
+    const contextItems = [
+      ...(Array.isArray(envelope.items) ? envelope.items : []),
+      ...(Array.isArray(envelope.context_items) ? envelope.context_items : []),
+      ...(Array.isArray(envelope.evidence) ? envelope.evidence : []),
+    ];
+    const activityRows = activity.value.map((item) => ({
+      kind: item.kind,
+      status: item.status || 'observed',
+      summary: `${item.title}${item.detail ? `: ${item.detail}` : ''}`,
+      raw: item,
+    }));
+    const toolEvents = [
+      ...timelineEvents.filter((event: any) => eventText(event).includes('tool')).map(summarizeEvent),
+      ...activityRows.filter((event) => event.kind === 'tool'),
+      ...(turn.tool_name ? [{ kind: 'message.tool', status: turn.status || 'complete', summary: turn.tool_name, raw: turn }] : []),
+    ];
+    const memoryEvents = [
+      ...timelineEvents.filter((event: any) => eventText(event).includes('memory') || eventText(event).includes('recall')).map(summarizeEvent),
+      ...realityEvents.filter((event: any) => eventText(event).includes('memory') || eventText(event).includes('fact') || eventText(event).includes('promotion')).map(summarizeEvent),
+      ...contextItems.filter((item: any) => eventText(item).includes('memory') || eventText(item).includes('recall')).map(summarizeEvent),
+    ];
+    const approvalEvents = [
+      ...timelineEvents.filter((event: any) => eventText(event).includes('approval') || eventText(event).includes('policy') || eventText(event).includes('risk')).map(summarizeEvent),
+      ...activityRows.filter((event) => event.kind === 'approval' || eventText(event).includes('policy')),
+    ];
+    const runtimeEvents = timelineEvents.slice(0, 24).map(summarizeEvent);
+    const files = currentRunFiles.value.slice(0, 24).map((file: any) => ({
+      path: file.path || file.ref || '-',
+      kind: file.kind || 'runtime-ref',
+      status: file.status || 'observed',
+      raw: file,
+    }));
+    return {
+      turn,
+      runtime_turn: runtimeTurn,
+      source_note: 'Session/currentRun projection. Historical turn precision depends on backend timeline and turn identifiers.',
+      summary: [
+        { label: 'Tools', value: toolEvents.length },
+        { label: 'Memory', value: memoryEvents.length },
+        { label: 'Files', value: files.length },
+        { label: 'Approvals', value: approvalEvents.length },
+        { label: 'Events', value: runtimeEvents.length },
+      ],
+      tools: toolEvents,
+      memory: memoryEvents,
+      files,
+      approvals: approvalEvents,
+      events: runtimeEvents,
+      context: envelope,
+      reality: currentRealityFlow.value,
+    };
+  }
 
   async function boot() {
     if (booted.value) return;
@@ -291,6 +366,32 @@ export const useAppStore = defineStore('app', () => {
     const data: any = await api.runtimeTimeline(activeSessionId.value);
     currentTimeline.value = data;
     activity.value = normalizeActivity(data.events || data.timeline || []);
+  }
+
+  async function loadTurnEvidence(turn: ChatTurn) {
+    if (chatDisplayMode.value === 'panorama' && activeSessionId.value) {
+      await refreshChatProjection(activeSessionId.value, turn.content || '').catch(() => undefined);
+    }
+    let runtimeTurn: any = null;
+    const canInspectTurn = turn.id
+      && !turn.id.startsWith('local-')
+      && !turn.id.startsWith('assistant-stream-')
+      && !turn.id.startsWith('system-')
+      && turn.id !== 'empty';
+    if (canInspectTurn) {
+      runtimeTurn = await api.runtimeTurn(turn.id).catch((error) => ({
+        ok: false,
+        endpoint: `/api/runtime/turns/${turn.id}`,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+    selectedTurnEvidence.value = turnEvidenceFromProjection(turn, runtimeTurn);
+    companionTab.value = 'evidence';
+    return selectedTurnEvidence.value;
+  }
+
+  function clearTurnEvidence() {
+    selectedTurnEvidence.value = null;
   }
 
   async function refreshChatProjection(sessionId = activeSessionId.value, query = '') {
@@ -813,6 +914,7 @@ export const useAppStore = defineStore('app', () => {
     currentContextEnvelope,
     currentRealityFlow,
     currentTimeline,
+    selectedTurnEvidence,
     selectedActivity,
     toolCallCount,
     memoryRecallCount,
@@ -858,6 +960,8 @@ export const useAppStore = defineStore('app', () => {
     compactSession,
     send,
     loadActivity,
+    loadTurnEvidence,
+    clearTurnEvidence,
     refreshChatProjection,
     loadWorkspace,
     openFile,

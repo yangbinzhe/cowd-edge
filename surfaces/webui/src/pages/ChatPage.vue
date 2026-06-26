@@ -4,6 +4,7 @@ import { Bot, Boxes, Brain, CircleDot, FileText, Folder, Paperclip, RotateCcw, S
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import TurnEvidenceDrawer from '../components/workbench/TurnEvidenceDrawer.vue';
 
 const store = useAppStore();
 const draft = ref('');
@@ -56,6 +57,10 @@ async function submit() {
 async function stop() {
   await store.stopCurrentTurn();
   sending.value = false;
+}
+
+async function inspectTurn(turn: any) {
+  await store.loadTurnEvidence(turn);
 }
 
 async function chooseCommand(command: any) {
@@ -135,14 +140,21 @@ async function chooseCommand(command: any) {
 
     <div class="transcript" aria-label="Chat transcript">
       <article v-for="turn in store.turns" :key="turn.id" class="turn" :data-role="turn.role">
-        <div v-if="isPanorama && (turn.sequence || turn.tool_name || turn.status === 'streaming')" class="message-meta">
+        <div v-if="isPanorama" class="message-meta">
           <span>{{ turn.status || 'complete' }}</span>
           <span v-if="turn.sequence">#{{ turn.sequence }}</span>
           <span v-if="turn.tool_name">{{ turn.tool_name }}</span>
+          <button type="button" @click="inspectTurn(turn)">Evidence</button>
         </div>
         <MarkdownBlock :content="turn.content" />
       </article>
     </div>
+
+    <TurnEvidenceDrawer
+      v-if="isPanorama && store.selectedTurnEvidence"
+      :evidence="store.selectedTurnEvidence"
+      @close="store.clearTurnEvidence()"
+    />
 
     <footer class="composer">
       <textarea v-model="draft" placeholder="Ask Cowd, reference files, or type / for commands" @keydown.enter.exact.prevent="submit" />
