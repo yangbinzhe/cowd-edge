@@ -640,10 +640,11 @@ export const api = {
   connectorCapabilities: () => read('/api/connectors/capabilities', {}),
   connectorResources: () => read('/api/connectors/resources', {}),
   connectorMcpServers: () => read('/api/connectors/mcp/servers', {}),
-  mockDocsTools: () => read('/api/connectors/services/mock.docs/tools', { tools: [] }),
-  mockDocsExecute: (tool: string, input: Record<string, unknown> = {}) => writeWithReceipt('/api/connectors/services/mock.docs/execute', {
+  connectorServices: () => read('/api/connectors/services', { services: [] }),
+  connectorServiceTools: (serviceId: string) => read(`/api/connectors/services/${encodeURIComponent(serviceId)}/tools`, { tools: [] }),
+  connectorServiceExecute: (serviceId: string, body: Record<string, unknown>) => writeWithReceipt(`/api/connectors/services/${encodeURIComponent(serviceId)}/execute`, {
     method: 'POST',
-    body: JSON.stringify({ tool, input }),
+    body: JSON.stringify(body),
   }),
   connectorRevalidateResource: (reference: string) => write('/api/connectors/resources/revalidate', {
     method: 'POST',

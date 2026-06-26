@@ -29,13 +29,15 @@ const idempotencyKey = ref('');
 const platformName = ref('wechat-ilink');
 const wechatBotType = ref('3');
 const wechatQrCode = ref('');
-const mockDocsTool = ref('search');
+const connectorServiceId = ref('');
+const connectorServiceToolId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 const accounts = computed(() => Array.isArray(state.value.accounts?.accounts) ? state.value.accounts.accounts : []);
 const capabilities = computed(() => Array.isArray(state.value.capabilities?.capabilities) ? state.value.capabilities.capabilities : []);
 const resources = computed(() => Array.isArray(state.value.resources?.resources) ? state.value.resources.resources : Array.isArray(state.value.resources?.items) ? state.value.resources.items : []);
 const mcpServers = computed(() => Array.isArray(state.value.mcp?.servers) ? state.value.mcp.servers : []);
+const connectorServices = computed(() => Array.isArray(state.value.connectorServices?.services) ? state.value.connectorServices.services : []);
 const surfaces = computed(() => Array.isArray(state.value.surfaces?.registry?.surfaces) ? state.value.surfaces.registry.surfaces : []);
 const surfaceHost = computed(() => state.value.surfaceHealth?.host || state.value.surfaceHealth || {});
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
@@ -166,12 +168,19 @@ const gatewayRemediationRows = computed(() => [
     next_action: executions.value.length ? 'Review execution receipts and audit evidence.' : 'Run dry-run execution to verify policy path.',
   },
 ]);
-const mockDocsRows = computed(() => {
-  const tools = state.value.mockDocs?.tools || state.value.mockDocs?.items || [];
+const connectorServiceRows = computed(() => connectorServices.value.slice(0, 10).map((item: any) => ({
+  id: item.id,
+  provider: item.provider || '-',
+  family: item.family || '-',
+  mode: item.read_only ? 'read-only' : 'service',
+})));
+const connectorServiceToolRows = computed(() => {
+  const tools = state.value.connectorServiceTools?.tools || state.value.connectorServiceTools?.items || [];
   return Array.isArray(tools) ? tools.slice(0, 10).map((item: any) => ({
-    name: item.name || item.id || item.tool || '-',
-    description: item.description || item.summary || '-',
+    id: item.capability_id || item.id || item.tool || '-',
+    family: item.family || '-',
     risk: item.risk || '-',
+    mode: item.supports_commit ? 'commit' : 'dry-run',
   })) : [];
 });
 const gatewayContext = computed(() => [
@@ -345,7 +354,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, mockDocs, surfacesData, surfaceHealth, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, surfacesData, surfaceHealth, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -353,7 +362,7 @@ async function refresh() {
       api.connectorCapabilities(),
       api.connectorResources(),
       api.connectorMcpServers(),
-      api.mockDocsTools(),
+      api.connectorServices(),
       api.surfaceRegistry(),
       api.surfaceHostHealth(),
       api.crossPlaneSummary(),
@@ -363,7 +372,13 @@ async function refresh() {
       api.crossPlaneAdapters(),
       api.crossPlaneExecutions(),
     ]);
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, mockDocs, surfaces: surfacesData, surfaceHealth, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
+    const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
+    const nextServiceId = connectorServiceId.value || services[0]?.id || '';
+    const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, surfaces: surfacesData, surfaceHealth, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
+    connectorServiceId.value = nextServiceId;
+    const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
+    connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
     if (!resourceRef.value) {
       resourceRef.value = resources.value[0]?.reference || resources.value[0]?.resource_ref || '';
     }
@@ -390,8 +405,28 @@ async function pollWechatQr() {
   actionResult.value = await api.wechatIlinkQrPoll(wechatQrCode.value, location.origin);
 }
 
-async function executeMockDocsTool() {
-  actionResult.value = await api.mockDocsExecute(mockDocsTool.value, { query: resourceRef.value || 'cowd gateway' });
+async function loadConnectorServiceTools() {
+  if (!connectorServiceId.value) return;
+  const serviceTools = await api.connectorServiceTools(connectorServiceId.value);
+  state.value = { ...(state.value || {}), connectorServiceTools: serviceTools };
+  const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
+  connectorServiceToolId.value = tools[0]?.capability_id || connectorServiceToolId.value;
+}
+
+async function executeConnectorServiceTool() {
+  if (!connectorServiceId.value || !connectorServiceToolId.value) return;
+  const resourceId = (resourceRef.value || 'webui-doc').split('/').filter(Boolean).pop() || 'webui-doc';
+  actionResult.value = await api.connectorServiceExecute(connectorServiceId.value, {
+    actor_principal: actor.value,
+    actor_identity_ref: identityRef.value || null,
+    source_channel: 'channel://webui/local',
+    session_id: 'webui-gateway',
+    tool_id: connectorServiceToolId.value,
+    resource_id: resourceId,
+    title: 'WebUI Connector Resource',
+    mode: executeMode.value,
+    idempotency_key: idempotencyKey.value || undefined,
+  });
 }
 
 async function revalidateResource() {
@@ -600,14 +635,20 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="startWechatQr">Start QR</button>
           <button class="ghost-action" type="button" :disabled="!wechatQrCode" @click="pollWechatQr">Poll QR</button>
         </div>
-        <DataTable v-if="mockDocsRows.length" :rows="mockDocsRows" :columns="['name', 'description', 'risk']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="connectorServiceRows.length" :rows="connectorServiceRows" :columns="['id', 'provider', 'family', 'mode']" @row-click="selectedDetail = $event" />
         <label class="field-line">
-          Mock docs tool
-          <input v-model="mockDocsTool" type="text" />
+          Connector service
+          <input v-model="connectorServiceId" type="text" />
         </label>
-        <button class="ghost-action" type="button" @click="executeMockDocsTool">Execute mock docs tool</button>
+        <button class="ghost-action" type="button" :disabled="!connectorServiceId" @click="loadConnectorServiceTools">Load service tools</button>
+        <DataTable v-if="connectorServiceToolRows.length" :rows="connectorServiceToolRows" :columns="['id', 'family', 'risk', 'mode']" @row-click="selectedDetail = $event" />
+        <label class="field-line">
+          Service tool
+          <input v-model="connectorServiceToolId" type="text" />
+        </label>
+        <button class="ghost-action" type="button" :disabled="!connectorServiceId || !connectorServiceToolId" @click="executeConnectorServiceTool">Execute connector service tool</button>
         <RequestReceipt :receipt="actionResult" title="Channel diagnostic receipt" />
-        <RawPayload title="Channel diagnostic detail" :data="{ platform: state.platformDetail, mockDocs: state.mockDocs }" />
+        <RawPayload title="Channel diagnostic detail" :data="{ platform: state.platformDetail, connectorServices: state.connectorServices, connectorServiceTools: state.connectorServiceTools }" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="connectors">
