@@ -16,7 +16,9 @@ const loading = ref(false);
 const error = ref('');
 const showFullTrace = ref(true);
 const selectedSessionId = ref('');
+const selectedTeamId = ref('');
 const teamObjective = ref('Analyze the current task, split roles, execute, and produce an evidence-backed summary');
+const teamHandoffNote = ref('请接管并审查团队综合结果与证据链');
 const routeTarget = ref('');
 const routeCommand = ref('Review current evidence and summarize blockers');
 const missionProjection = ref<any>({});
@@ -30,6 +32,7 @@ const actionResult = ref<any>(null);
 const schedulerState = ref<any>(null);
 const stewardHandoff = ref<any>(null);
 const recoveryReport = ref<any>(null);
+const teamRunDetail = ref<any>({});
 const controlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
 
 const mission = computed(() => controlProjection.value?.mission || missionProjection.value?.mission || {});
@@ -55,6 +58,12 @@ const sessionCommands = computed(() => {
 const commandSummary = computed(() => mission.value?.session_command_summary || sessionInbox.value?.summary || {});
 const teams = computed(() => Array.isArray(controlProjection.value?.teams) ? controlProjection.value.teams : (Array.isArray(mission.value?.team_projections) ? mission.value.team_projections : []));
 const agents = computed(() => Array.isArray(controlProjection.value?.agents) ? controlProjection.value.agents : (Array.isArray(mission.value?.agent_projections) ? mission.value.agent_projections : []));
+const collaborationRuns = computed(() => {
+  const teamProjection = mission.value?.team_projection || controlProjection.value?.team_projection || {};
+  const directRuns = teamProjection?.collaboration_runs?.runs || teamProjection?.runs || controlProjection.value?.collaboration_runs?.runs || [];
+  if (Array.isArray(directRuns) && directRuns.length) return directRuns;
+  return teams.value.map((team: any) => ({ team, agent_runs: team.agents || [] }));
+});
 const events = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
 const runtimeDigestEvents = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest) ? controlProjection.value.event_digest.latest : []);
 const stewardRows = computed(() => Array.isArray(controlProjection.value?.stewards) ? controlProjection.value.stewards : []);
@@ -102,6 +111,15 @@ const sessionRows = computed(() => sessions.value.map((session: any) => ({
   teams: Array.isArray(session.active_team_ids) ? session.active_team_ids.length : 0,
   agents: Array.isArray(session.active_agent_ids) ? session.active_agent_ids.length : 0,
 })));
+const teamRunRows = computed(() => collaborationRuns.value.slice(0, 8).map((run: any) => {
+  const team = run.team || run;
+  return {
+    id: team.team_id || team.id || '-',
+    status: team.status || '-',
+    agents: Array.isArray(run.agent_runs) ? run.agent_runs.length : Array.isArray(team.agents) ? team.agents.length : 0,
+    synthesis: run.execution_summary?.synthesis_status || team.execution_summary?.synthesis_status || '-',
+  };
+}));
 const dispatchPreview = computed(() => ({
   affected: sessionCommands.value.slice(0, 8).map((command: any) => command.target_session_id || activeSession.value || command.command_id),
   expected: ['mission.command.claimed', 'session.inbox.updated', 'runtime.turn.optional'],
@@ -143,7 +161,9 @@ async function refresh() {
     approvals.value = nextApprovals;
     relations.value = nextRelations;
     if (!selectedSessionId.value) selectedSessionId.value = store.activeSessionId || sessions.value[0]?.session_id || sessions.value[0]?.id || '';
+    if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
     await refreshSelectedSession();
+    if (selectedTeamId.value) await loadTeamRun();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -177,7 +197,45 @@ async function startTeam() {
   if (!activeSession.value || !teamObjective.value.trim()) return;
   actionResult.value = await api.startMissionTeamRuntime(activeSession.value, teamObjective.value.trim());
   const teamId = actionResult.value?.team?.team_id || actionResult.value?.receipt?.result?.team?.team_id;
-  if (teamId) actionResult.value = await api.tickTeamExecution(teamId);
+  if (teamId) {
+    selectedTeamId.value = teamId;
+    actionResult.value = await api.tickTeamExecution(teamId);
+  }
+  await refresh();
+}
+
+async function loadTeamRun(teamId = selectedTeamId.value) {
+  if (!teamId) return;
+  selectedTeamId.value = teamId;
+  teamRunDetail.value = await api.collaborationRun(teamId);
+}
+
+async function tickSelectedTeam() {
+  if (!selectedTeamId.value) return;
+  actionResult.value = await api.tickTeamExecution(selectedTeamId.value);
+  await refresh();
+}
+
+async function synthesizeSelectedTeam() {
+  if (!selectedTeamId.value) return;
+  actionResult.value = await api.synthesizeTeamRuntime(selectedTeamId.value);
+  teamRunDetail.value = actionResult.value;
+  await refresh();
+}
+
+async function handoffSelectedTeam() {
+  if (!selectedTeamId.value) return;
+  actionResult.value = await api.handoffTeamRuntime(selectedTeamId.value, {
+    target: 'human-agent',
+    note: teamHandoffNote.value,
+  });
+  teamRunDetail.value = actionResult.value;
+  await refresh();
+}
+
+async function cancelSelectedTeam() {
+  if (!selectedTeamId.value) return;
+  actionResult.value = await api.cancelTeamRuntime(selectedTeamId.value);
   await refresh();
 }
 
@@ -394,6 +452,38 @@ onMounted(refresh);
         <button class="primary-action" type="button" :disabled="!activeSession || !teamObjective.trim()" @click="startTeam">
           <Users :size="16" /> 启动团队
         </button>
+      </section>
+
+      <section class="mission-panel">
+        <header>
+          <h2>Team Runs</h2>
+          <StatusPill :status="selectedTeamId ? 'ready' : 'idle'" />
+        </header>
+        <div class="mission-session-list compact">
+          <button
+            v-for="team in teamRunRows"
+            :key="team.id"
+            class="section-row"
+            :class="{ active: team.id === selectedTeamId }"
+            type="button"
+            @click="loadTeamRun(team.id)"
+          >
+            <strong>{{ team.id }}</strong>
+            <span>{{ team.status }} · agents {{ team.agents }} · synthesis {{ team.synthesis }}</span>
+          </button>
+          <p v-if="!teamRunRows.length" class="empty-note">当前没有 runtime team run。</p>
+        </div>
+        <label class="field-line">
+          Handoff note
+          <textarea v-model="teamHandoffNote" rows="3" />
+        </label>
+        <div class="button-row">
+          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="tickSelectedTeam">Tick</button>
+          <button class="primary-action" type="button" :disabled="!selectedTeamId" @click="synthesizeSelectedTeam">Synthesis</button>
+          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="handoffSelectedTeam">Handoff</button>
+          <button class="danger-action" type="button" :disabled="!selectedTeamId" @click="cancelSelectedTeam">Cancel</button>
+        </div>
+        <RawPayload v-if="teamRunDetail?.run || teamRunDetail?.summary" title="Team run detail" :data="teamRunDetail" />
       </section>
 
       <section class="mission-panel">
