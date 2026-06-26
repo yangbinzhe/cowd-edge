@@ -208,6 +208,7 @@ describe('Cowd Vue WebUI shell', () => {
     await settle();
     expect(wrapper.text()).toContain('Audit and Governance');
     expect(wrapper.text()).toContain('Evidence flow');
+    expect(wrapper.text()).toContain('GlobalTimeline');
     expect(wrapper.text()).toContain('Audit evidence trace');
     expect(wrapper.text()).toContain('Audit selected evidence');
   });

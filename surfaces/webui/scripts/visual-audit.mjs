@@ -15,7 +15,10 @@ const reportPath = path.join(planRoot, 'reports', `${version}-visual-audit.md`);
 const routes = [
   { id: 'chat', path: '/#/chat' },
   { id: 'runtime', path: '/#/runtime' },
+  { id: 'mission', path: '/#/mission' },
+  { id: 'context', path: '/#/context' },
   { id: 'memory', path: '/#/memory' },
+  { id: 'reality', path: '/#/reality' },
   { id: 'skills', path: '/#/skills' },
   { id: 'agents', path: '/#/agents' },
   { id: 'surfaces', path: '/#/surfaces' },

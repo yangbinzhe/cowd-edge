@@ -2,12 +2,12 @@
 import { computed } from 'vue';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
-import { BarChart, GraphChart, HeatmapChart, LineChart, PieChart, RadarChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, RadarComponent, TooltipComponent, VisualMapComponent } from 'echarts/components';
+import { BarChart, RadarChart } from 'echarts/charts';
+import { GridComponent, LegendComponent, RadarComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { ChartPoint } from '../types';
 
-use([CanvasRenderer, LineChart, BarChart, PieChart, RadarChart, HeatmapChart, GraphChart, GridComponent, TooltipComponent, LegendComponent, RadarComponent, VisualMapComponent]);
+use([CanvasRenderer, BarChart, RadarChart, GridComponent, TooltipComponent, LegendComponent, RadarComponent]);
 
 const props = defineProps<{
   title: string;

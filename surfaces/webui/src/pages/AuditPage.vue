@@ -5,10 +5,11 @@ import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
-import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import type { EvidenceObject } from '../types/evidence';
 
 const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
 const loading = ref(false);
@@ -18,6 +19,11 @@ const source = ref('all');
 const limit = ref(50);
 const offset = ref(0);
 const releaseSurface = ref('webui');
+const timelineSource = ref('all');
+const timelineStatus = ref('all');
+const timelineSession = ref('');
+const timelineEvidence = ref('');
+const timelineSurface = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 function items(collection: any, key: string) {
@@ -53,6 +59,85 @@ const executionRows = computed(() => executions.value.slice(0, 12).map((executio
   dispatch: execution.dispatch_status,
   mode: execution.mode,
 })));
+const globalTimelineRows = computed(() => {
+  const rows = [
+    ...auditRecords.value.map((record: any) => ({
+      source: record.source || 'audit',
+      session: record.session_id || record.session || '-',
+      agent: record.agent_id || record.agent || '-',
+      tool: record.tool || record.command || '-',
+      evidence: record.evidence_ref || record.evidence || record.id || '-',
+      approval: record.approval_id || '-',
+      surface: record.surface_id || record.surface || '-',
+      status: record.status || record.result || 'recorded',
+      timestamp: record.timestamp || record.created_at || '-',
+      summary: record.summary || record.message || record.id || '-',
+      raw: record,
+    })),
+    ...approvalHistory.value.map((item: any) => ({
+      source: 'approval',
+      session: item.session_id || '-',
+      agent: item.agent_id || '-',
+      tool: item.tool || item.command || '-',
+      evidence: item.evidence_ref || item.id || '-',
+      approval: item.id || item.approval_id || '-',
+      surface: item.surface_id || '-',
+      status: item.decision || item.status || 'recorded',
+      timestamp: item.resolved_at || item.created_at || '-',
+      summary: item.summary || item.command || item.reason || '-',
+      raw: item,
+    })),
+    ...crossPlaneRecords.value.map((record: any) => ({
+      source: 'cross-plane',
+      session: record.session_id || '-',
+      agent: record.agent_id || '-',
+      tool: record.capability || record.requested_capability || '-',
+      evidence: record.evidence_ref || record.id || '-',
+      approval: record.approval_id || '-',
+      surface: record.source_channel || record.surface_id || '-',
+      status: record.result || record.status || 'recorded',
+      timestamp: record.timestamp || record.created_at || '-',
+      summary: record.summary || record.capability || record.requested_capability || '-',
+      raw: record,
+    })),
+    ...executions.value.map((execution: any) => ({
+      source: 'execution',
+      session: execution.session_id || '-',
+      agent: execution.agent_id || '-',
+      tool: execution.capability || execution.requested_capability || '-',
+      evidence: execution.execution_id || execution.id || '-',
+      approval: execution.approval_id || '-',
+      surface: execution.dispatch_target || execution.source_channel || '-',
+      status: execution.status || execution.dispatch_status || '-',
+      timestamp: execution.created_at || execution.timestamp || '-',
+      summary: execution.summary || execution.mode || '-',
+      raw: execution,
+    })),
+  ];
+  return rows
+    .filter((row) => timelineSource.value === 'all' || row.source === timelineSource.value)
+    .filter((row) => timelineStatus.value === 'all' || String(row.status).toLowerCase() === timelineStatus.value.toLowerCase())
+    .filter((row) => !timelineSession.value.trim() || String(row.session).includes(timelineSession.value.trim()))
+    .filter((row) => !timelineEvidence.value.trim() || String(row.evidence).includes(timelineEvidence.value.trim()))
+    .filter((row) => !timelineSurface.value.trim() || String(row.surface).includes(timelineSurface.value.trim()))
+    .slice(0, 120);
+});
+const selectedEvidence = computed<EvidenceObject | null>(() => {
+  const row: any = selectedDetail.value;
+  if (!row) return null;
+  return {
+    ref: String(row.evidence || row.id || row.execution_id || row.approval || row.source || 'audit'),
+    kind: row.source || row.kind || 'audit.record',
+    source: row.source || 'audit',
+    status: row.status || row.result || row.decision || 'recorded',
+    summary: row.summary || row.command || row.capability || row.id || '-',
+    session_id: row.session !== '-' ? row.session : row.session_id,
+    turn_id: row.turn_id,
+    audit_ref: row.approval !== '-' ? row.approval : row.approval_id,
+    route: '/audit',
+    raw: row.raw || row,
+  };
+});
 const releaseRows = computed(() => releaseChecks.value.slice(0, 12).map((check: any) => ({
   name: check.name || check.id || check.kind,
   status: check.status || (check.passed ? 'pass' : 'review'),
@@ -74,6 +159,7 @@ const auditContext = computed(() => [
   { label: 'Audit records', value: auditRecords.value.length },
   { label: 'Approvals', value: approvalHistory.value.length },
   { label: 'Cross-plane', value: crossPlaneRecords.value.length },
+  { label: 'Timeline', value: globalTimelineRows.value.length },
   { label: 'Release checks', value: releaseChecks.value.length, tone: releaseChecks.value.length ? 'warn' : 'default' },
 ]);
 const auditWorkflow = computed(() => [
@@ -82,6 +168,7 @@ const auditWorkflow = computed(() => [
   { id: 'release', label: 'Release', status: releaseRows.value.some((row) => row.status !== 'pass') ? 'blocked' : 'ready', count: releaseRows.value.length },
   { id: 'approvals', label: 'Approval', status: approvalRows.value.length ? 'ready' : 'idle', count: approvalRows.value.length },
   { id: 'cross-plane', label: 'Cross-plane', status: crossPlaneRows.value.length ? 'ready' : 'idle', count: crossPlaneRows.value.length },
+  { id: 'global-timeline', label: 'Timeline', status: globalTimelineRows.value.length ? 'ready' : 'idle', count: globalTimelineRows.value.length },
 ]);
 const auditEvidence = computed(() => [
   ...auditRows.value.slice(0, 3).map((row) => ({
@@ -169,6 +256,50 @@ onMounted(refresh);
     </section>
 
     <section class="gateway-grid">
+      <section class="management-panel gateway-panel wide" data-section="global-timeline">
+        <header>
+          <h2>GlobalTimeline</h2>
+          <span>{{ globalTimelineRows.length }} correlated records</span>
+        </header>
+        <div class="button-row">
+          <label class="field-line">
+            Source
+            <select v-model="timelineSource">
+              <option value="all">all</option>
+              <option value="audit">audit</option>
+              <option value="approval">approval</option>
+              <option value="cross-plane">cross-plane</option>
+              <option value="execution">execution</option>
+            </select>
+          </label>
+          <label class="field-line">
+            Status
+            <select v-model="timelineStatus">
+              <option value="all">all</option>
+              <option value="recorded">recorded</option>
+              <option value="approved">approved</option>
+              <option value="denied">denied</option>
+              <option value="ready">ready</option>
+              <option value="failed">failed</option>
+            </select>
+          </label>
+          <label class="field-line">
+            Session
+            <input v-model="timelineSession" type="search" placeholder="session id" />
+          </label>
+          <label class="field-line">
+            Evidence
+            <input v-model="timelineEvidence" type="search" placeholder="evidence ref" />
+          </label>
+          <label class="field-line">
+            Surface
+            <input v-model="timelineSurface" type="search" placeholder="surface/channel" />
+          </label>
+        </div>
+        <DataTable v-if="globalTimelineRows.length" :rows="globalTimelineRows" :columns="['source', 'session', 'agent', 'tool', 'evidence', 'approval', 'surface', 'status', 'timestamp', 'summary']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else title="No global timeline records" detail="当前过滤条件没有匹配记录，或 Gateway 尚未返回审计数据。" />
+      </section>
+
       <section class="management-panel gateway-panel wide" data-section="logs">
         <header>
           <h2>Audit export</h2>
@@ -192,7 +323,7 @@ onMounted(refresh);
             <input v-model.number="offset" type="number" min="0" @change="refresh" />
           </label>
         </div>
-        <DataTable v-if="auditRows.length" :rows="auditRows" :columns="['source', 'id', 'summary', 'timestamp']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="auditRows.length" :rows="auditRows" :columns="['source', 'id', 'summary', 'timestamp']" @row-click="selectedDetail = { ...$event, source: 'audit', evidence: $event.id }" />
         <EmptyState v-else title="No audit records" detail="审批或记忆审计产生后会在这里展示。" />
         <EvidenceTrace :items="auditEvidence" title="Audit evidence trace" />
       </section>
@@ -229,7 +360,7 @@ onMounted(refresh);
         </label>
         <ChartPanel v-if="releaseChart.length" title="Release gate coverage" kind="radar" :data="releaseChart" />
         <EmptyState v-else title="No release checks" detail="发布门禁返回检查项后再展示覆盖图。" />
-        <DataTable v-if="releaseRows.length" :rows="releaseRows" :columns="['name', 'status', 'detail']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="releaseRows.length" :rows="releaseRows" :columns="['name', 'status', 'detail']" @row-click="selectedDetail = { ...$event, source: 'release', evidence: $event.name, summary: $event.detail }" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="approvals">
@@ -237,7 +368,7 @@ onMounted(refresh);
           <h2>Approval history</h2>
           <span>{{ approvalRows.length }} shown</span>
         </header>
-        <DataTable v-if="approvalRows.length" :rows="approvalRows" :columns="['id', 'command', 'decision', 'resolved']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="approvalRows.length" :rows="approvalRows" :columns="['id', 'command', 'decision', 'resolved']" @row-click="selectedDetail = { ...$event, source: 'approval', evidence: $event.id, status: $event.decision, summary: $event.command }" />
         <EmptyState v-else title="No approvals" detail="审批记录为空或 approval gate 未启用。" />
       </section>
 
@@ -246,7 +377,7 @@ onMounted(refresh);
           <h2>Governance evidence</h2>
           <span>{{ crossPlaneRows.length }} records</span>
         </header>
-        <DataTable v-if="crossPlaneRows.length" :rows="crossPlaneRows" :columns="['id', 'result', 'capability', 'summary']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="crossPlaneRows.length" :rows="crossPlaneRows" :columns="['id', 'result', 'capability', 'summary']" @row-click="selectedDetail = { ...$event, source: 'cross-plane', evidence: $event.id, status: $event.result }" />
         <EmptyState v-else title="No cross-plane audit" detail="跨平面动作执行后会产生治理证据。" />
       </section>
 
@@ -255,8 +386,8 @@ onMounted(refresh);
           <h2>Execution receipts</h2>
           <span>{{ executionRows.length }} receipts</span>
         </header>
-        <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" @row-click="selectedDetail = $event" />
-        <DetailDrawer title="Audit selected evidence" :row="selectedDetail" @close="selectedDetail = null" />
+        <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" @row-click="selectedDetail = { ...$event, source: 'execution', evidence: $event.id }" />
+        <EvidenceObjectDetail title="Audit selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
         <RawPayload title="Governance payload" :data="{ capabilities: state.capabilities, projection: state.projection, surfaces: state.surfaces }" />
       </section>
     </section>
