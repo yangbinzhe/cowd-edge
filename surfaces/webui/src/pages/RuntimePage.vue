@@ -41,7 +41,8 @@ const selectedTurnId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const sessionId = computed(() => store.activeSessionId || 'api-context');
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
-const mission = computed(() => missionProjection.value?.mission || {});
+const missionControlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
+const mission = computed(() => missionControlProjection.value?.mission || {});
 const missionSessions = computed(() => Array.isArray(mission.value?.sessions) ? mission.value.sessions : []);
 const missionEvents = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
 const missionApprovalProjection = computed(() => mission.value?.approval_projection || missionApprovals.value?.approvals || {});
@@ -172,7 +173,7 @@ async function refresh() {
       api.runtimeSourceAudit(),
       api.runtimeSourceRepairPlan(),
       api.runtimeTurns(),
-      api.missionProjection(),
+      api.missionControl(),
       api.missionApprovals(),
       api.missionRelations(),
       api.effectiveConfig(),

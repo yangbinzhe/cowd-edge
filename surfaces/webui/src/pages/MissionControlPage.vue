@@ -26,14 +26,16 @@ const sessionInbox = ref<any>({});
 const timeline = ref<any>({});
 const realityFlow = ref<any>({});
 const actionResult = ref<any>(null);
+const controlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
 
-const mission = computed(() => missionProjection.value?.mission || {});
+const mission = computed(() => controlProjection.value?.mission || missionProjection.value?.mission || {});
 const sessions = computed(() => Array.isArray(mission.value?.sessions) ? mission.value.sessions : []);
 const activeSession = computed(() => selectedSessionId.value || store.activeSessionId || sessions.value[0]?.session_id || sessions.value[0]?.id || '');
 const selectedSession = computed(() => sessions.value.find((session: any) => (session.session_id || session.id) === activeSession.value) || {});
-const approvalProjection = computed(() => mission.value?.approval_projection || approvals.value?.approvals || approvals.value || {});
+const approvalProjection = computed(() => controlProjection.value?.approvals || mission.value?.approval_projection || approvals.value?.approvals || approvals.value || {});
 const approvalItems = computed(() => {
   const projection = approvalProjection.value;
+  if (Array.isArray(projection)) return projection;
   if (Array.isArray(projection?.requests)) return projection.requests;
   if (Array.isArray(approvals.value?.pending)) return approvals.value.pending;
   if (Array.isArray(approvals.value)) return approvals.value;
@@ -47,10 +49,12 @@ const sessionCommands = computed(() => {
   return [];
 });
 const commandSummary = computed(() => mission.value?.session_command_summary || sessionInbox.value?.summary || {});
-const teams = computed(() => Array.isArray(mission.value?.team_projections) ? mission.value.team_projections : []);
-const agents = computed(() => Array.isArray(mission.value?.agent_projections) ? mission.value.agent_projections : []);
+const teams = computed(() => Array.isArray(controlProjection.value?.teams) ? controlProjection.value.teams : (Array.isArray(mission.value?.team_projections) ? mission.value.team_projections : []));
+const agents = computed(() => Array.isArray(controlProjection.value?.agents) ? controlProjection.value.agents : (Array.isArray(mission.value?.agent_projections) ? mission.value.agent_projections : []));
 const events = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
-const relationCount = computed(() => relations.value?.relations?.relation_count || mission.value?.relation_projection?.relation_count || 0);
+const runtimeDigestEvents = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest) ? controlProjection.value.event_digest.latest : []);
+const stewardRows = computed(() => Array.isArray(controlProjection.value?.stewards) ? controlProjection.value.stewards : []);
+const relationCount = computed(() => controlProjection.value?.relations?.relation_count || relations.value?.relations?.relation_count || mission.value?.relation_projection?.relation_count || 0);
 const evidenceRows = computed(() => {
   if (!showFullTrace.value) return [];
   const runtimeEvents = Array.isArray(timeline.value?.events) ? timeline.value.events : [];
@@ -67,6 +71,12 @@ const evidenceRows = computed(() => {
       kind: event.kind || event.type || '-',
       status: event.status || event.phase || '-',
       summary: event.detail || event.summary || event.message || '-',
+    })),
+    ...runtimeDigestEvents.value.slice(0, 8).map((event: any) => ({
+      source: 'eventstore',
+      kind: event.kind || '-',
+      status: event.status || '-',
+      summary: event.stream_id || event.actor || '-',
     })),
     ...realityEvents.slice(0, 6).map((event: any) => ({
       source: 'reality',
@@ -94,9 +104,9 @@ async function refresh() {
   error.value = '';
   try {
     const [nextMission, nextApprovals, nextRelations] = await Promise.all([
-      api.missionProjection(),
-      api.missionApprovals(),
-      api.missionRelations(),
+      api.missionControl(),
+      api.missionApprovals().catch(() => ({})),
+      api.missionRelations().catch(() => ({})),
     ]);
     missionProjection.value = nextMission;
     approvals.value = nextApprovals;
@@ -135,15 +145,21 @@ async function selectSession(sessionId: string) {
 async function startTeam() {
   if (!activeSession.value || !teamObjective.value.trim()) return;
   actionResult.value = await api.startMissionTeamRuntime(activeSession.value, teamObjective.value.trim());
+  const teamId = actionResult.value?.team?.team_id || actionResult.value?.receipt?.result?.team?.team_id;
+  if (teamId) actionResult.value = await api.tickTeamExecution(teamId);
   await refresh();
 }
 
 async function routeToSession() {
   if (!activeSession.value || !routeTarget.value.trim() || !routeCommand.value.trim()) return;
-  actionResult.value = await api.routeMissionCommand({
-    from_session_id: activeSession.value,
-    target_ref: routeTarget.value.trim(),
-    command: routeCommand.value.trim(),
+  actionResult.value = await api.missionControlCommand({
+    target: { session: { session_id: activeSession.value } },
+    action: 'route_to_session',
+    actor: 'webui',
+    payload: {
+      target_session_id: routeTarget.value.trim().replace(/^@/, ''),
+      command: routeCommand.value.trim(),
+    },
   });
   await refresh();
 }
@@ -168,6 +184,21 @@ async function retryCommand(commandId: string) {
   await refresh();
 }
 
+async function dispatchSessions() {
+  actionResult.value = await api.dispatchMissionSessions();
+  await refresh();
+}
+
+async function tickStewards() {
+  actionResult.value = await api.tickStewardScheduler();
+  await refresh();
+}
+
+async function applyRecovery() {
+  actionResult.value = await api.applyRuntimeRecovery();
+  await refresh();
+}
+
 onMounted(refresh);
 </script>
 
@@ -186,6 +217,9 @@ onMounted(refresh);
         <button class="ghost-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="16" /> 刷新
         </button>
+        <button class="ghost-action" type="button" @click="dispatchSessions">调度</button>
+        <button class="ghost-action" type="button" @click="tickStewards">托管</button>
+        <button class="ghost-action" type="button" @click="applyRecovery">恢复</button>
       </div>
     </header>
 
@@ -201,6 +235,11 @@ onMounted(refresh);
         <span>Teams / Agents</span>
         <strong>{{ teams.length }} / {{ agents.length }}</strong>
         <small>runtime lifecycle projection</small>
+      </article>
+      <article class="metric-card">
+        <span>Stewards</span>
+        <strong>{{ stewardRows.length }}</strong>
+        <small>scheduler-ready supervision</small>
       </article>
       <article class="metric-card" :data-tone="pendingApprovals.length ? 'warn' : 'success'">
         <span>Approvals</span>

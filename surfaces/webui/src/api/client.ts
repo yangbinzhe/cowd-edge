@@ -194,7 +194,7 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
   const sid = encodeURIComponent(sessionId || 'api-context');
   const routes: Record<Exclude<NavId, 'chat' | 'settings'>, Array<[string, string]>> = {
     mission: [
-      ['Mission projection', '/api/mission/projection'],
+      ['Mission Control', '/api/mission/control'],
       ['Mission approvals', '/api/mission/approvals'],
       ['Mission relations', '/api/mission/relations'],
       ['Session detail', `/api/mission/sessions/${sid}`],
@@ -211,7 +211,7 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['Runtime turns', '/api/runtime/turns'],
       ['Effective config', '/api/runtime/config/effective'],
       ['Session leases', '/api/runtime/session-leases'],
-      ['Mission projection', '/api/mission/projection'],
+      ['Mission Control', '/api/mission/control'],
       ['Mission approvals', '/api/mission/approvals'],
       ['Mission relations', '/api/mission/relations'],
       ['Timeline', `/api/runtime/timeline?session_id=${sid}&limit=80`],
@@ -364,6 +364,31 @@ export const api = {
   }),
   runtimeTurn: (id: string) => read(`/api/runtime/turns/${encodeURIComponent(id)}`, {}),
   cancelRuntimeTurn: (id: string) => writeWithReceipt(`/api/runtime/turns/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  missionControl: () => read('/api/mission/control', { projection: { mission: { sessions: [], events: [] }, sessions: [], teams: [], agents: [], approvals: [], stewards: [], event_digest: { latest: [] } } }),
+  missionControlCommand: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/control/command', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  dispatchMissionSessions: (policy: Record<string, unknown> = { max_commands: 10, dispatch_mode: 'mark_claimed_only', allow_background: true }) => writeWithReceipt('/api/mission/control/sessions/dispatch', {
+    method: 'POST',
+    body: JSON.stringify(policy),
+  }),
+  bridgeMissionSession: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/control/sessions/bridge', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  teamExecutionPlan: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/execution`, {}),
+  tickTeamExecution: (teamId: string) => writeWithReceipt(`/api/mission/control/teams/${encodeURIComponent(teamId)}/execution`, { method: 'POST' }),
+  teamMissionEvidence: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/evidence`, { events: [], tasks: [], evidence: [] }),
+  agentMissionEvents: (agentId: string) => read(`/api/mission/control/agents/${encodeURIComponent(agentId)}/events`, { events: [], tasks: [] }),
+  stewardScheduler: () => read('/api/mission/control/stewards/scheduler', {}),
+  tickStewardScheduler: (config: Record<string, unknown> = { max_session_commands_per_tick: 10, max_team_ticks: 10, allow_background_sessions: true }) => writeWithReceipt('/api/mission/control/stewards/scheduler', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  }),
+  stewardHandoff: (stewardId: string) => read(`/api/mission/control/stewards/${encodeURIComponent(stewardId)}/handoff`, {}),
+  runtimeRecoveryReport: () => read('/api/runtime/events/replay-report', {}),
+  applyRuntimeRecovery: () => writeWithReceipt('/api/runtime/events/recover', { method: 'POST' }),
   missionProjection: () => read('/api/mission/projection', { mission: { sessions: [], events: [], approval_projection: {}, relation_projection: {} } }),
   missionApprovals: () => read('/api/mission/approvals', { approvals: { requests: [], pending_count: 0 } }),
   missionRelations: () => read('/api/mission/relations', { relations: { relations: [], proxies: [] } }),

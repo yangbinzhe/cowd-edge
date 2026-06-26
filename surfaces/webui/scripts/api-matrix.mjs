@@ -12,8 +12,7 @@ const backendRoot = process.env.COWD_BACKEND_REPO
     path.join(workspaceRoot, 'cowd'),
     path.join(workspaceRoot, 'dev-iacc'),
   ].find((candidate) => (
-    fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes.rs'))
-    || fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes.rs'))
+    fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/mod.rs'))
   ))
   || surfaceRoot;
 const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
@@ -33,9 +32,6 @@ const testDirs = [
 ];
 const routeDirs = [
   path.join(backendRoot, 'crates/gateway/src/api_routes'),
-  path.join(backendRoot, 'crates/gateway/src/api_routes.rs'),
-  path.join(backendRoot, 'crates/cowd-cli/src/api_routes'),
-  path.join(backendRoot, 'crates/cowd-cli/src/api_routes.rs'),
 ];
 
 const criticalMethods = {

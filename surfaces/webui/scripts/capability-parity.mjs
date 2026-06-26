@@ -12,8 +12,7 @@ const backendRoot = process.env.COWD_BACKEND_REPO
     path.join(workspaceRoot, 'cowd'),
     path.join(workspaceRoot, 'dev-iacc'),
   ].find((candidate) => (
-    fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes.rs'))
-    || fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes.rs'))
+    fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/mod.rs'))
   ))
   || surfaceRoot;
 const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
@@ -49,9 +48,6 @@ function walk(target) {
 function extractBackendRoutes() {
   const files = [
     ...walk(path.join(backendRoot, 'crates/gateway/src/api_routes')).filter((file) => file.endsWith('.rs')),
-    path.join(backendRoot, 'crates/gateway/src/api_routes.rs'),
-    ...walk(path.join(backendRoot, 'crates/cowd-cli/src/api_routes')).filter((file) => file.endsWith('.rs')),
-    path.join(backendRoot, 'crates/cowd-cli/src/api_routes.rs'),
   ];
   const routes = [];
   for (const file of files) {
@@ -104,7 +100,7 @@ const tuiSources = [
 const cliMain = read(path.join(backendRoot, 'crates/cli/src/main.rs')) || read(path.join(backendRoot, 'crates/cowd-cli/src/main.rs'));
 const cliMod = read(path.join(backendRoot, 'crates/cli/src/lib.rs')) || read(path.join(backendRoot, 'crates/cowd-cli/src/cli/mod.rs'));
 const cliText = `${cliMain}\n${cliMod}`;
-const runtimeCapability = read(path.join(backendRoot, 'crates/runtime/src/capability.rs'));
+const runtimeCapability = read(path.join(backendRoot, 'crates/runtime/src/infrastructure/capability.rs'));
 const apiClientText = read(path.join(webuiRoot, 'src/api/client.ts'));
 const matrixBoundaryTest = [
   read(path.join(backendRoot, 'crates/gateway/tests/gateway_runtimehost_architecture.rs')),

@@ -84,6 +84,45 @@ const surfaceRows = computed(() => surfaces.value.slice(0, 12).map((item: any) =
   routes: Array.isArray(item.routes) ? item.routes.length : Number(item.routes || 0),
   resources: Array.isArray(item.resources) ? item.resources.length : Number(item.resources || 0),
 })));
+const gatewayAlignmentRows = computed(() => [
+  {
+    lane: 'Surface host',
+    owner: 'Gateway',
+    backend: surfaceHost.value.status || state.value.surfaceHealth?.status || 'unknown',
+    webui: surfaces.value.length ? `${surfaces.value.length} surfaces` : 'no registry data',
+    tui: surfaces.value.some((item: any) => String(item.id || '').toLowerCase() === 'tui') ? 'registered' : 'projected by Gateway',
+    action: surfaces.value.length ? 'monitor events' : 'start gateway or refresh registry',
+  },
+  {
+    lane: 'Connectors',
+    owner: 'Gateway',
+    backend: state.value.summary?.status || 'registry',
+    webui: `${accounts.value.length} accounts / ${capabilities.value.length} capabilities`,
+    tui: 'status and receipts',
+    action: accounts.value.length ? 'manage grants' : 'configure connector accounts',
+  },
+  {
+    lane: 'Resources',
+    owner: 'Gateway -> Reality Core',
+    backend: resources.value.length ? 'indexed' : 'empty',
+    webui: `${resources.value.length} resources`,
+    tui: 'evidence projection',
+    action: resources.value.length ? 'revalidate or promote memory' : 'ingest connector resources',
+  },
+  {
+    lane: 'Cross-plane',
+    owner: 'Gateway policy gate',
+    backend: state.value.crossPlane?.status || 'preflight',
+    webui: `${identities.value.length} identities / ${grants.value.length} grants`,
+    tui: 'approval cockpit',
+    action: executions.value.length ? 'review execution evidence' : 'simulate policy before commit',
+  },
+]);
+const gatewayAlignmentStatus = computed(() => {
+  if (state.value.surfaceHealth?.__offline || state.value.summary?.__offline) return 'offline';
+  if (!surfaces.value.length || !accounts.value.length) return 'degraded';
+  return 'ready';
+});
 const mockDocsRows = computed(() => {
   const tools = state.value.mockDocs?.tools || state.value.mockDocs?.items || [];
   return Array.isArray(tools) ? tools.slice(0, 10).map((item: any) => ({
@@ -462,7 +501,16 @@ onMounted(refresh);
       </article>
     </section>
 
-      <section class="gateway-grid">
+    <section class="gateway-grid">
+      <section class="management-panel gateway-panel wide" data-section="alignment">
+        <header>
+          <h2>Gateway capability alignment</h2>
+          <StatusPill :status="gatewayAlignmentStatus" />
+        </header>
+        <p>后端只负责 Gateway 边界能力，WebUI 做完整管理面，TUI 做终端控制面，CLI 保持最小启动和状态入口。</p>
+        <DataTable :rows="gatewayAlignmentRows" :columns="['lane', 'owner', 'backend', 'webui', 'tui', 'action']" @row-click="selectedDetail = $event" />
+      </section>
+
       <section class="management-panel gateway-panel wide" data-section="surfaces">
         <header>
           <h2>Surface host</h2>

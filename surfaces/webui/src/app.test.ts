@@ -262,10 +262,10 @@ describe('Cowd Vue WebUI shell', () => {
       relations: { relation_count: 2, relations: [] },
     }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
-    await api.missionProjection();
+    await api.missionControl();
     await api.missionApprovals();
     await api.missionRelations();
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/projection', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/approvals', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/relations', expect.any(Object));
   });
@@ -512,13 +512,22 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/runtime/config/effective') return Promise.resolve(new Response(JSON.stringify({ source: 'test' })));
       if (url === '/api/runtime/session-leases') return Promise.resolve(new Response(JSON.stringify({ leases: [] })));
       if (url === '/api/approval/pending') return Promise.resolve(new Response(JSON.stringify({ pending: [] })));
-      if (url === '/api/mission/projection') return Promise.resolve(new Response(JSON.stringify({
-        mission: {
-          active_session_id: 'mission-a',
+      if (url === '/api/mission/control') return Promise.resolve(new Response(JSON.stringify({
+        projection: {
+          mission: {
+            active_session_id: 'mission-a',
+            sessions: [{ session_id: 'mission-a', title: 'Mission A', status: 'active', active_team_ids: ['team-a'], active_agent_ids: ['agent-a'] }],
+            events: [{ sequence: 1, event_type: 'mission.session.started', session_id: 'mission-a', message: 'started' }],
+            approval_projection: { pending_count: 0 },
+            relation_projection: { relation_count: 0 },
+          },
           sessions: [{ session_id: 'mission-a', title: 'Mission A', status: 'active', active_team_ids: ['team-a'], active_agent_ids: ['agent-a'] }],
-          events: [{ sequence: 1, event_type: 'mission.session.started', session_id: 'mission-a', message: 'started' }],
-          approval_projection: { pending_count: 0 },
-          relation_projection: { relation_count: 0 },
+          teams: [],
+          agents: [],
+          approvals: { pending_count: 0, requests: [] },
+          relations: { relation_count: 0, relations: [] },
+          stewards: [],
+          event_digest: { latest: [{ sequence: 1, kind: 'mission.session.started', status: 'complete', message: 'started' }] },
         },
       })));
       if (url === '/api/mission/approvals') return Promise.resolve(new Response(JSON.stringify({ approvals: { pending_count: 0, requests: [] } })));
@@ -544,7 +553,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('memory');
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/status', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/events', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/projection', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control', expect.any(Object));
   });
 
   it('calls real cross-plane identity grant and action endpoints', async () => {

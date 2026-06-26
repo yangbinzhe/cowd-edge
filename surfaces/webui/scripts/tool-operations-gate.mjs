@@ -43,12 +43,8 @@ const files = {
   tuiPanel: fs.existsSync(path.join(backendRoot, 'crates/tui/src/components/tool_ops_panel.rs'))
     ? path.join(backendRoot, 'crates/tui/src/components/tool_ops_panel.rs')
     : path.join(backendRoot, 'crates/cowd-cli/src/tui/components/tool_ops_panel.rs'),
-  tuiGatewayClient: fs.existsSync(path.join(backendRoot, 'crates/tui/src/gateway_client.rs'))
-    ? path.join(backendRoot, 'crates/tui/src/gateway_client.rs')
-    : path.join(backendRoot, 'crates/cowd-cli/src/tui/gateway_client.rs'),
-  tuiState: fs.existsSync(path.join(backendRoot, 'crates/tui/src/state.rs'))
-    ? path.join(backendRoot, 'crates/tui/src/state.rs')
-    : path.join(backendRoot, 'crates/cowd-cli/src/tui/state.rs'),
+  tuiGatewayClient: path.join(backendRoot, 'crates/tui/src/gateway/gateway_client.rs'),
+  tuiState: path.join(backendRoot, 'crates/tui/src/app_core/state.rs'),
 };
 
 const requiredBackendRoutes = [
