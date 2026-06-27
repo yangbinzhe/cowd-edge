@@ -1130,6 +1130,7 @@ impl PlatformAdapter for FeishuAdapter {
                     }
                 }
 
+                self.processing_queue.release(chat_id).await;
                 Ok(Some(msg))
             }
             Ok(None) => Ok(None),
