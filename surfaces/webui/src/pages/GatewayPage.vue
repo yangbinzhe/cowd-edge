@@ -40,6 +40,8 @@ const mcpServers = computed(() => Array.isArray(state.value.mcp?.servers) ? stat
 const connectorServices = computed(() => Array.isArray(state.value.connectorServices?.services) ? state.value.connectorServices.services : []);
 const surfaces = computed(() => Array.isArray(state.value.surfaces?.registry?.surfaces) ? state.value.surfaces.registry.surfaces : []);
 const surfaceHost = computed(() => state.value.surfaceHealth?.host || state.value.surfaceHealth || {});
+const surfaceRuntime = computed(() => Array.isArray(state.value.surfaceHealth?.runtime) ? state.value.surfaceHealth.runtime : []);
+const channels = computed(() => Array.isArray(state.value.channels?.channels) ? state.value.channels.channels : []);
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
 const identities = computed(() => Array.isArray(state.value.identities?.identities) ? state.value.identities.identities : []);
 const grants = computed(() => Array.isArray(state.value.grants?.grants) ? state.value.grants.grants : []);
@@ -80,12 +82,26 @@ const grantRows = computed(() => grants.value.slice(0, 12).map((item: any) => ({
   type: item.grant_type,
 })));
 const surfaceRows = computed(() => surfaces.value.slice(0, 12).map((item: any) => ({
+  runtime: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.status || item.status || '-',
   id: item.id,
   name: item.name || item.id || '-',
   kind: item.kind || '-',
   lifecycle: item.lifecycle || '-',
+  failures: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.consecutive_failures ?? 0,
+  restarts: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.restart_count ?? 0,
+  circuit: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.circuit_open ? 'open' : 'closed',
   routes: Array.isArray(item.routes) ? item.routes.length : Number(item.routes || 0),
   resources: Array.isArray(item.resources) ? item.resources.length : Number(item.resources || 0),
+})));
+const channelRows = computed(() => channels.value.slice(0, 12).map((item: any) => ({
+  channel: item.channel || item.name || '-',
+  config: item.configuration_status || '-',
+  runtime: item.runtime?.status || 'not-attached',
+  enabled: item.enabled === false ? 'no' : 'yes',
+  credential: item.credential_present ? 'present' : 'missing',
+  failures: item.runtime?.consecutive_failures ?? 0,
+  restarts: item.runtime?.restart_count ?? 0,
+  circuit: item.runtime?.circuit_open ? 'open' : 'closed',
 })));
 const gatewayAlignmentRows = computed(() => [
   {
@@ -354,7 +370,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, surfacesData, surfaceHealth, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -365,6 +381,7 @@ async function refresh() {
       api.connectorServices(),
       api.surfaceRegistry(),
       api.surfaceHostHealth(),
+      api.channels(),
       api.crossPlaneSummary(),
       api.crossPlaneIdentities(),
       api.crossPlaneGrants(),
@@ -375,7 +392,7 @@ async function refresh() {
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, surfaces: surfacesData, surfaceHealth, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -570,7 +587,7 @@ onMounted(refresh);
       <article class="metric-card" data-tone="info">
         <span>Surfaces</span>
         <strong>{{ surfaces.length }}</strong>
-        <small>{{ surfaceHost.status || state.surfaceHealth?.status || 'host' }}</small>
+        <small>{{ surfaceHost.status || state.surfaceHealth?.status || 'host' }} / {{ surfaceHost.circuit_open_count || 0 }} circuit</small>
       </article>
       <article class="metric-card" data-tone="info">
         <span>Identity/Grants</span>
@@ -596,7 +613,7 @@ onMounted(refresh);
           <StatusPill :status="state.surfaceHealth?.__offline ? 'offline' : (surfaceHost.status || state.surfaceHealth?.status || 'ready')" />
         </header>
         <p>Gateway owns external ingress, static forwarding, callback routing, and result delivery across WebUI, TUI, and external message surfaces.</p>
-        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['id', 'name', 'kind', 'lifecycle', 'routes', 'resources']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No surfaces" detail="SurfaceHost 未返回可用 surface，或 Gateway 尚未启动。" />
         <RawPayload title="Surface host health" :data="state.surfaceHealth || {}" />
       </section>
@@ -608,7 +625,9 @@ onMounted(refresh);
         </header>
         <DataTable v-if="accountRows.length" :rows="accountRows" :columns="['provider', 'account', 'status', 'scopes']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No connector accounts" detail="配置平台账号后会在这里展示。" />
+        <DataTable v-if="channelRows.length" :rows="channelRows" :columns="['channel', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
         <RawPayload title="Platforms" :data="state.platforms || {}" />
+        <RawPayload title="Channels" :data="state.channels || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">

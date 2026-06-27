@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { Activity, RefreshCw, Send, ShieldCheck } from 'lucide-vue-next';
+import { Activity, Play, RefreshCw, RotateCcw, Send, ShieldCheck, Square, Wrench } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
@@ -36,6 +36,11 @@ function valueCount(value: any) {
 
 const surfaces = computed(() => registrySurfaces(state.value.registry));
 const host = computed(() => state.value.health?.host || state.value.health || {});
+const runtimeSnapshots = computed(() => {
+  const items = state.value.health?.runtime || state.value.registry?.runtime || [];
+  return Array.isArray(items) ? items : [];
+});
+const selectedRuntime = computed(() => state.value.status?.runtime || runtimeSnapshots.value.find((item: any) => item.surface === selectedSurface.value) || {});
 const selected = computed(() => surfaces.value.find((surface: any) => surface.id === selectedSurface.value) || state.value.detail?.surface || {});
 const routeItems = computed(() => {
   const routes = state.value.routes?.routes || selected.value.routes || [];
@@ -49,19 +54,39 @@ const eventItems = computed(() => {
   const events = state.value.events?.events || [];
   return Array.isArray(events) ? events : [];
 });
+const supervisorEventItems = computed(() => {
+  const events = state.value.status?.events || state.value.events?.supervisor_events || [];
+  return Array.isArray(events) ? events : [];
+});
 const totalRoutes = computed(() => valueCount(host.value.route_count) || surfaces.value.reduce((count: number, surface: any) => count + valueCount(surface.routes), 0));
 const totalResources = computed(() => valueCount(host.value.resource_count) || surfaces.value.reduce((count: number, surface: any) => count + valueCount(surface.resources), 0));
 const externalSurfaces = computed(() => valueCount(host.value.external_surface_count) || surfaces.value.filter((surface: any) => surface.lifecycle !== 'builtin' && surface.kind !== 'builtin').length);
+const degradedSurfaces = computed(() => valueCount(host.value.degraded_count) + valueCount(host.value.failed_count) + valueCount(host.value.circuit_open_count));
 
 const surfaceRows = computed(() => surfaces.value.map((surface: any) => ({
+  runtime: runtimeSnapshots.value.find((item: any) => item.surface === surface.id)?.status || surface.status || '-',
   id: surface.id || '-',
   name: surface.name || surface.id || '-',
   kind: surface.kind || '-',
   status: surface.status || surface.health || surface.lifecycle || 'ready',
   lifecycle: surface.lifecycle || '-',
+  failures: runtimeSnapshots.value.find((item: any) => item.surface === surface.id)?.consecutive_failures ?? 0,
+  restarts: runtimeSnapshots.value.find((item: any) => item.surface === surface.id)?.restart_count ?? 0,
+  circuit: runtimeSnapshots.value.find((item: any) => item.surface === surface.id)?.circuit_open ? 'open' : 'closed',
   capabilities: Array.isArray(surface.capabilities) ? surface.capabilities.join(', ') : valueCount(surface.capabilities),
   routes: valueCount(surface.routes),
   resources: valueCount(surface.resources),
+})));
+const runtimeRows = computed(() => runtimeSnapshots.value.map((runtime: any) => ({
+  surface: runtime.surface || '-',
+  status: runtime.status || '-',
+  active: runtime.active ? 'yes' : 'no',
+  pid: runtime.pid || '-',
+  failures: runtime.consecutive_failures ?? 0,
+  restarts: runtime.restart_count ?? 0,
+  circuit: runtime.circuit_open ? 'open' : 'closed',
+  last_seen: runtime.last_seen_at || '-',
+  next_retry: runtime.next_retry_at || '-',
 })));
 const routeRows = computed(() => routeItems.value.map((route: any) => ({
   method: route.method || route.kind || 'GET',
@@ -81,15 +106,24 @@ const eventRows = computed(() => eventItems.value.slice(0, 14).map((event: any) 
   message: event.message || event.text || event.detail || '-',
   at: event.at || event.timestamp || event.created_at || '-',
 })));
+const supervisorRows = computed(() => supervisorEventItems.value.slice(0, 14).map((event: any) => ({
+  status: event.status || '-',
+  message: event.message || event.error?.message || '-',
+  kind: event.error?.kind || 'supervisor',
+  at: event.timestamp || '-',
+})));
 const surfaceContext = computed(() => [
   { label: 'Selected', value: selectedSurface.value },
   { label: 'Surfaces', value: surfaces.value.length, tone: surfaces.value.length ? 'success' : 'warn' },
+  { label: 'Ready', value: host.value.ready_count ?? '-', tone: degradedSurfaces.value ? 'warn' : 'success' },
+  { label: 'Degraded', value: degradedSurfaces.value, tone: degradedSurfaces.value ? 'warn' : 'success' },
   { label: 'Routes', value: totalRoutes.value },
   { label: 'Resources', value: totalResources.value },
 ]);
 const surfaceWorkflow = computed(() => [
   { id: 'registry', label: 'Registry', status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
-  { id: 'health', label: 'Health', status: state.value.selectedHealth?.status === 'error' ? 'blocked' : 'ready', description: selectedSurface.value },
+  { id: 'supervisor', label: 'Supervisor', status: selectedRuntime.value.status || 'idle', description: selectedSurface.value },
+  { id: 'health', label: 'Health', status: state.value.selectedHealth?.status === 'error' ? 'blocked' : (selectedRuntime.value.status || 'ready'), description: selectedSurface.value },
   { id: 'routes', label: 'Routes', status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
   { id: 'routes', label: 'Resources', status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
   { id: 'dispatch', label: 'Dispatch', status: actionResult.value ? 'active' : 'idle' },
@@ -117,6 +151,13 @@ const surfaceEvidence = computed(() => [
     summary: row.message || row.kind || 'surface event',
     source: selectedSurface.value,
   })),
+  ...supervisorRows.value.slice(0, 5).map((row: any) => ({
+    id: String(row.at || row.message || ''),
+    kind: `surface.${row.kind || 'supervisor'}`,
+    status: row.status || 'recorded',
+    summary: row.message || 'supervisor event',
+    source: selectedSurface.value,
+  })),
   ...(actionResult.value ? [{
     id: String(actionResult.value.request_id || actionResult.value.id || actionName.value),
     kind: 'surface.dispatch',
@@ -128,7 +169,8 @@ const surfaceEvidence = computed(() => [
 const surfaceDiagnosticRows = computed(() => {
   const failures = eventRows.value.filter((row: any) => ['error', 'failed', 'blocked', 'offline'].includes(String(row.status || '').toLowerCase()));
   const reportedHealth = state.value.selectedHealth?.status || selected.value.status || '';
-  const healthStatus = state.value.selectedHealth?.ok === false ? 'blocked' : (reportedHealth || 'ready');
+  const runtimeStatus = selectedRuntime.value.status || reportedHealth || '';
+  const healthStatus = state.value.selectedHealth?.ok === false ? 'blocked' : (runtimeStatus || 'ready');
   return [
     {
       lane: 'Ingress',
@@ -160,10 +202,10 @@ const surfaceDiagnosticRows = computed(() => {
     },
     {
       lane: 'Recent failures',
-      severity: failures.length ? 'blocked' : healthStatus,
-      status: failures.length ? `${failures.length} failure(s)` : healthStatus,
-      evidence: failures[0]?.message || state.value.selectedHealth?.error || 'no failure evidence',
-      next_action: failures.length ? 'Open selected event detail and retry after fixing route/resource.' : 'Keep monitoring health and dispatch receipts.',
+      severity: failures.length || selectedRuntime.value.circuit_open ? 'blocked' : healthStatus,
+      status: selectedRuntime.value.circuit_open ? 'circuit open' : failures.length ? `${failures.length} failure(s)` : healthStatus,
+      evidence: selectedRuntime.value.last_error?.message || failures[0]?.message || state.value.selectedHealth?.error || 'no failure evidence',
+      next_action: selectedRuntime.value.circuit_open ? 'Use Repair after fixing credentials or sidecar process.' : failures.length ? 'Open selected event detail and retry after fixing route/resource.' : 'Keep monitoring health and dispatch receipts.',
     },
   ];
 });
@@ -171,14 +213,15 @@ const surfaceDiagnosticRows = computed(() => {
 async function loadSurface(id = selectedSurface.value) {
   if (!id) return;
   selectedSurface.value = id;
-  const [detail, routes, resources, health, events] = await Promise.all([
+  const [detail, routes, resources, status, health, events] = await Promise.all([
     api.surfaceDetail(id),
     api.surfaceRoutes(id),
     api.surfaceResources(id),
+    api.surfaceStatus(id),
     api.surfaceHealth(id),
     api.surfaceEvents(id),
   ]);
-  state.value = { ...state.value, detail, routes, resources, selectedHealth: health, events };
+  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events };
 }
 
 async function refresh() {
@@ -202,9 +245,22 @@ async function refresh() {
 
 async function checkSurfaceHealth() {
   if (!selectedSurface.value) return;
-  actionResult.value = await api.surfaceHealth(selectedSurface.value);
+  actionResult.value = await api.surfaceHealthCheck(selectedSurface.value);
   selectedDetail.value = actionResult.value;
   await loadSurface(selectedSurface.value);
+}
+
+async function runSupervisorAction(action: 'start' | 'stop' | 'restart' | 'repair') {
+  if (!selectedSurface.value) return;
+  const calls = {
+    start: api.surfaceStart,
+    stop: api.surfaceStop,
+    restart: api.surfaceRestart,
+    repair: api.surfaceRepair,
+  };
+  actionResult.value = await calls[action](selectedSurface.value);
+  selectedDetail.value = actionResult.value;
+  await refresh();
 }
 
 async function sendMessage() {
@@ -271,6 +327,11 @@ onMounted(refresh);
         <strong>{{ host.status || state.health?.status || 'unknown' }}</strong>
         <small>surface service health</small>
       </article>
+      <article class="metric-card" :data-tone="degradedSurfaces ? 'warn' : 'success'">
+        <span>Runtime issues</span>
+        <strong>{{ degradedSurfaces }}</strong>
+        <small>{{ host.circuit_open_count || 0 }} circuit open</small>
+      </article>
     </section>
 
     <section class="gateway-grid">
@@ -279,7 +340,7 @@ onMounted(refresh);
           <h2>Surface registry</h2>
           <StatusPill :status="state.registry?.__offline ? 'offline' : 'ready'" />
         </header>
-        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['id', 'name', 'kind', 'status', 'lifecycle', 'capabilities', 'routes', 'resources']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else title="No surfaces" detail="Gateway SurfaceHost 未返回可用 surface。" />
         <SurfaceDiagnosticPlaybook :rows="surfaceDiagnosticRows" />
         <label class="field-line">
@@ -296,11 +357,31 @@ onMounted(refresh);
           <h2>Selected health</h2>
           <span>{{ selectedSurface }}</span>
         </header>
-        <button class="primary-action" type="button" @click="checkSurfaceHealth">
-          <ShieldCheck :size="15" />
-          Check health
-        </button>
+        <div class="button-row">
+          <button class="primary-action" type="button" @click="checkSurfaceHealth">
+            <ShieldCheck :size="15" />
+            Check health
+          </button>
+          <button class="ghost-action" type="button" @click="runSupervisorAction('start')">
+            <Play :size="15" />
+            Start
+          </button>
+          <button class="ghost-action" type="button" @click="runSupervisorAction('stop')">
+            <Square :size="15" />
+            Stop
+          </button>
+          <button class="ghost-action" type="button" @click="runSupervisorAction('restart')">
+            <RotateCcw :size="15" />
+            Restart
+          </button>
+          <button class="ghost-action" type="button" @click="runSupervisorAction('repair')">
+            <Wrench :size="15" />
+            Repair
+          </button>
+        </div>
+        <DataTable v-if="runtimeRows.length" :rows="runtimeRows" :columns="['surface', 'status', 'active', 'pid', 'failures', 'restarts', 'circuit', 'last_seen', 'next_retry']" @row-click="selectedDetail = $event" />
         <RawPayload title="Surface health detail" :data="state.selectedHealth || {}" />
+        <RawPayload title="Supervisor status" :data="state.status || selectedRuntime || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="routes">
@@ -359,10 +440,11 @@ onMounted(refresh);
       <section class="management-panel gateway-panel" data-section="events">
         <header>
           <h2>Events</h2>
-          <span>{{ eventRows.length }} recent</span>
+          <span>{{ eventRows.length + supervisorRows.length }} recent</span>
         </header>
         <DataTable v-if="eventRows.length" :rows="eventRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No events" detail="当前 surface 尚无投递或回调事件。" />
+        <DataTable v-if="supervisorRows.length" :rows="supervisorRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
+        <EmptyState v-if="!eventRows.length && !supervisorRows.length" title="No events" detail="当前 surface 尚无投递、回调或监督事件。" />
         <EvidenceTrace :items="surfaceEvidence" title="Surface evidence trace" />
       </section>
 

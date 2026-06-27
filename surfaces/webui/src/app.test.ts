@@ -745,10 +745,19 @@ describe('Cowd Vue WebUI shell', () => {
     await api.surfaceDetail('webui');
     await api.surfaceRoutes('webui');
     await api.surfaceResources('webui');
+    await api.surfaceStatus('webui');
     await api.surfaceHealth('webui');
+    await api.surfaceHealthCheck('webui');
     await api.surfaceEvents('webui');
+    await api.surfaceStart('webui');
+    await api.surfaceStop('webui');
+    await api.surfaceRestart('webui');
+    await api.surfaceRepair('webui');
     await api.surfaceSend('webui', 'operator', 'hello');
     await api.surfaceAction('webui', 'health', { source: 'test' });
+    await api.channels();
+    await api.channelStatus('webui');
+    await api.channelRepair('webui');
 
     expect(fetchMock).toHaveBeenCalledWith('/api/slash?surface=webui', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/slash/history', expect.any(Object));
@@ -759,10 +768,19 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/routes', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/resources', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/status', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/health', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/health-check', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/events', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/start', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/stop', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/restart', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/repair', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/send', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/action', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/channels', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/channels/webui/status', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/channels/webui/repair', expect.objectContaining({ method: 'POST' }));
   });
 
   it('renders SurfaceHost registry, health, routes, resources, events, and dispatch controls', async () => {
@@ -789,13 +807,15 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/surfaces/health') return Promise.resolve(new Response(JSON.stringify({
         kind: 'surface.health',
         status: 'ready',
-        host: { status: 'ready', surface_count: 1, external_surface_count: 0, route_count: 1, resource_count: 1 },
+        host: { status: 'ready', surface_count: 1, external_surface_count: 0, route_count: 1, resource_count: 1, ready_count: 1, degraded_count: 0, failed_count: 0, circuit_open_count: 0 },
+        runtime: [{ surface: 'webui', status: 'builtin', active: true, consecutive_failures: 0, restart_count: 0, circuit_open: false }],
       })));
       if (url === '/api/surfaces/webui') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.detail', surface: { id: 'webui', name: 'WebUI', kind: 'web' } })));
       if (url === '/api/surfaces/webui/routes') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.routes', routes: [{ method: 'GET', path: '/s/webui/*path', target: 'static' }] })));
       if (url === '/api/surfaces/webui/resources') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.resources', resources: [{ path: '/', file_path: 'dist/index.html', content_type: 'text/html', spa_fallback: true }] })));
+      if (url === '/api/surfaces/webui/status') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.status', runtime: { surface: 'webui', status: 'builtin', active: true }, events: [] })));
       if (url === '/api/surfaces/webui/health') return Promise.resolve(new Response(JSON.stringify({ ok: true, status: 'ready' })));
-      if (url === '/api/surfaces/webui/events') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.events', events: [{ kind: 'ready', status: 'ready', message: 'booted' }] })));
+      if (url === '/api/surfaces/webui/events') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.events', events: [{ kind: 'ready', status: 'ready', message: 'booted' }], supervisor_events: [{ status: 'ready', message: 'builtin surface healthy', timestamp: 'now' }] })));
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
