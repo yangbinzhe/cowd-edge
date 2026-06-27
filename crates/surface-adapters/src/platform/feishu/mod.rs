@@ -26,6 +26,18 @@ pub(crate) fn api_base_url() -> &'static str {
         .unwrap_or("https://open.feishu.cn/open-apis")
 }
 
+fn configured_base_url(settings: &serde_json::Value) -> Option<&'static str> {
+    if settings.get("base_url").and_then(|v| v.as_str()).is_some() {
+        return None;
+    }
+    settings
+        .get("platform_type")
+        .or_else(|| settings.get("platformType"))
+        .and_then(|v| v.as_str())
+        .filter(|value| value.eq_ignore_ascii_case("lark"))
+        .map(|_| "https://open.larksuite.com")
+}
+
 /// Check if a URL string belongs to an allowed Feishu/Lark domain (SSRF protection).
 pub(crate) fn is_feishu_domain(url_str: &str) -> bool {
     // Quick validation
@@ -155,6 +167,8 @@ pub fn create_feishu_adapter(settings: &serde_json::Value) -> PlatformResult<Fei
 
     if let Some(base_url) = settings.get("base_url").and_then(|v| v.as_str()) {
         config = config.with_base_url(base_url);
+    } else if let Some(base_url) = configured_base_url(settings) {
+        config = config.with_base_url(base_url);
     }
 
     // Set the global API base URL for messaging, media, reactions, and card presentation modules.
@@ -232,6 +246,21 @@ mod tests {
         let config = FeishuConfig::new("app_id_123", "app_secret_456");
         assert_eq!(config.app_id, "app_id_123");
         assert_eq!(config.app_secret, "app_secret_456");
+    }
+
+    #[test]
+    fn lark_platform_type_defaults_to_larksuite_domain() {
+        assert_eq!(
+            configured_base_url(&serde_json::json!({"platform_type": "lark"})),
+            Some("https://open.larksuite.com")
+        );
+        assert_eq!(
+            configured_base_url(&serde_json::json!({
+                "platform_type": "lark",
+                "base_url": "https://custom.example"
+            })),
+            None
+        );
     }
 
     #[tokio::test]

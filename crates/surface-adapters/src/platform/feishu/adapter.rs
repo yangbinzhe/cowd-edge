@@ -109,6 +109,47 @@ impl FeishuConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FeishuReceiveTarget {
+    receive_id: String,
+    receive_id_type: &'static str,
+}
+
+fn resolve_receive_target(value: &str) -> FeishuReceiveTarget {
+    let value = value.trim();
+    if let Some(user_id) = value
+        .strip_prefix("feishu_user_id:")
+        .or_else(|| value.strip_prefix("user_id:"))
+    {
+        return FeishuReceiveTarget {
+            receive_id: user_id.to_string(),
+            receive_id_type: "user_id",
+        };
+    }
+    if let Some(thread_id) = value.strip_prefix("thread:") {
+        return FeishuReceiveTarget {
+            receive_id: thread_id.to_string(),
+            receive_id_type: "thread_id",
+        };
+    }
+    if value.starts_with("ou_") {
+        return FeishuReceiveTarget {
+            receive_id: value.to_string(),
+            receive_id_type: "open_id",
+        };
+    }
+    if value.contains('@') && !value.starts_with("oc_") {
+        return FeishuReceiveTarget {
+            receive_id: value.to_string(),
+            receive_id_type: "email",
+        };
+    }
+    FeishuReceiveTarget {
+        receive_id: value.to_string(),
+        receive_id_type: "chat_id",
+    }
+}
+
 /// Feishu platform adapter.
 pub struct FeishuAdapter {
     config: FeishuConfig,
@@ -242,7 +283,7 @@ impl FeishuAdapter {
         let token = self.ensure_token().await?;
         let client = reqwest::Client::new();
 
-        let open_id = &session_key.user_id;
+        let target = resolve_receive_target(&session_key.user_id);
 
         #[derive(Serialize)]
         struct SendMessageRequest {
@@ -252,15 +293,16 @@ impl FeishuAdapter {
         }
 
         let request = SendMessageRequest {
-            receive_id: open_id.clone(),
+            receive_id: target.receive_id.clone(),
             msg_type: "text".to_string(),
             content: serde_json::json!({ "text": text }).to_string(),
         };
 
         let response = client
             .post(format!(
-                "{}/im/v1/messages?receive_id_type=open_id",
-                self.api_base_url()
+                "{}/im/v1/messages?receive_id_type={}",
+                self.api_base_url(),
+                target.receive_id_type
             ))
             .header("Authorization", format!("Bearer {}", token))
             .json(&request)
@@ -289,7 +331,11 @@ impl FeishuAdapter {
             return Err(PlatformError::SendFailed(resp.msg));
         }
 
-        tracing::debug!(to = %open_id, "feishu message sent successfully");
+        tracing::debug!(
+            to = %target.receive_id,
+            receive_id_type = %target.receive_id_type,
+            "feishu message sent successfully"
+        );
         Ok(SendResult::success(
             resp.data.and_then(|data| data.message_id),
         ))
@@ -557,16 +603,18 @@ impl FeishuAdapter {
             content: String,
         }
 
+        let target = resolve_receive_target(&session_key.user_id);
         let request = SendCardRequest {
-            receive_id: session_key.user_id.clone(),
+            receive_id: target.receive_id.clone(),
             msg_type: "interactive".to_string(),
             content: card.to_string(),
         };
 
         let response = client
             .post(format!(
-                "{}/im/v1/messages?receive_id_type=open_id",
-                self.api_base_url()
+                "{}/im/v1/messages?receive_id_type={}",
+                self.api_base_url(),
+                target.receive_id_type
             ))
             .header("Authorization", format!("Bearer {}", token))
             .json(&request)
@@ -638,7 +686,7 @@ impl FeishuAdapter {
     /// falls back to plain text via `strip_markdown`.
     async fn send_internal(
         &self,
-        receive_id: &str,
+        target: &FeishuReceiveTarget,
         text: &str,
         reply_to: Option<&str>,
     ) -> PlatformResult<SendResult> {
@@ -729,13 +777,14 @@ impl FeishuAdapter {
 
         // --- New-message path ---
         let send_url = format!(
-            "{}/im/v1/messages?receive_id_type=open_id",
-            self.api_base_url()
+            "{}/im/v1/messages?receive_id_type={}",
+            self.api_base_url(),
+            target.receive_id_type
         );
 
         // Try post first
         let post_req = SendMessageRequest {
-            receive_id: receive_id.to_string(),
+            receive_id: target.receive_id.clone(),
             msg_type: "post".to_string(),
             content: post_content.clone(),
         };
@@ -750,7 +799,11 @@ impl FeishuAdapter {
             decode_feishu_response(response, "send post message").await?;
 
         if post_resp.code == 0 {
-            tracing::debug!(to = %receive_id, "feishu post message sent");
+            tracing::debug!(
+                to = %target.receive_id,
+                receive_id_type = %target.receive_id_type,
+                "feishu post message sent"
+            );
             return Ok(SendResult::success(
                 post_resp.data.and_then(|data| data.message_id),
             ));
@@ -763,7 +816,7 @@ impl FeishuAdapter {
             );
             // Fall back to text
             let text_req = SendMessageRequest {
-                receive_id: receive_id.to_string(),
+                receive_id: target.receive_id.clone(),
                 msg_type: "text".to_string(),
                 content: build_text_payload(&fallback_text),
             };
@@ -780,7 +833,11 @@ impl FeishuAdapter {
             if text_resp.code != 0 {
                 return Err(PlatformError::SendFailed(text_resp.msg));
             }
-            tracing::debug!(to = %receive_id, "feishu text fallback message sent");
+            tracing::debug!(
+                to = %target.receive_id,
+                receive_id_type = %target.receive_id_type,
+                "feishu text fallback message sent"
+            );
             return Ok(SendResult::success(
                 text_resp.data.and_then(|data| data.message_id),
             ));
@@ -803,13 +860,15 @@ impl FeishuAdapter {
     ) -> PlatformResult<()> {
         let token = self.ensure_token().await?;
         let client = reqwest::Client::new();
+        let target = resolve_receive_target(receive_id);
         let url = format!(
-            "{}/im/v1/messages?receive_id_type=open_id",
-            self.api_base_url()
+            "{}/im/v1/messages?receive_id_type={}",
+            self.api_base_url(),
+            target.receive_id_type
         );
 
         let request = SendMessageRequest {
-            receive_id: receive_id.to_string(),
+            receive_id: target.receive_id,
             msg_type: msg_type.to_string(),
             content: content.to_string(),
         };
@@ -935,7 +994,8 @@ impl BatchSender for FeishuAdapter {
         self.feishu_send_with_retry(move || {
             let chat_id = chat_id.clone();
             let text = text.clone();
-            async move { self.send_internal(&chat_id, &text, None).await }
+            let target = resolve_receive_target(&chat_id);
+            async move { self.send_internal(&target, &text, None).await }
         })
         .await
         .map(|_result| ())
@@ -966,7 +1026,12 @@ impl PlatformAdapter for FeishuAdapter {
                 tracing::info!("feishu adapter: WebSocket event channel active");
             }
             Err(e) => {
+                *self.connected.write().await = false;
+                *self.ws_events.lock().await = None;
                 tracing::warn!("feishu adapter: WebSocket connect failed: {e}");
+                return Err(PlatformError::ConnectionFailed(format!(
+                    "feishu websocket connect failed: {e}"
+                )));
             }
         }
 
@@ -1088,9 +1153,14 @@ impl PlatformAdapter for FeishuAdapter {
             .thread_id
             .as_deref()
             .unwrap_or(&msg.session_key.user_id);
+        let target = resolve_receive_target(receive_id);
 
         self.feishu_send_with_retry(|| {
-            self.send_internal(receive_id, &msg.text, msg.reply_to.as_deref())
+            let target = target.clone();
+            async move {
+                self.send_internal(&target, &msg.text, msg.reply_to.as_deref())
+                    .await
+            }
         })
         .await
     }
@@ -1380,12 +1450,14 @@ impl PlatformAdapter for FeishuAdapter {
             .map_err(|e| PlatformError::SendFailed(format!("invalid card JSON: {e}")))?;
         let token = self.ensure_token().await?;
         let client = reqwest::Client::new();
+        let target = resolve_receive_target(chat_id);
         let url = format!(
-            "{}/im/v1/messages?receive_id_type=open_id",
-            self.api_base_url()
+            "{}/im/v1/messages?receive_id_type={}",
+            self.api_base_url(),
+            target.receive_id_type
         );
         let request = serde_json::json!({
-            "receive_id": chat_id,
+            "receive_id": target.receive_id,
             "msg_type": "interactive",
             "content": card_json
         });
@@ -1423,6 +1495,45 @@ mod tests {
         let config = FeishuConfig::new("app_id_123", "app_secret_456");
         assert_eq!(config.app_id, "app_id_123");
         assert_eq!(config.app_secret, "app_secret_456");
+    }
+
+    #[test]
+    fn receive_target_resolution_matches_feishu_id_types() {
+        assert_eq!(
+            resolve_receive_target("oc_chat"),
+            FeishuReceiveTarget {
+                receive_id: "oc_chat".to_string(),
+                receive_id_type: "chat_id"
+            }
+        );
+        assert_eq!(
+            resolve_receive_target("ou_user"),
+            FeishuReceiveTarget {
+                receive_id: "ou_user".to_string(),
+                receive_id_type: "open_id"
+            }
+        );
+        assert_eq!(
+            resolve_receive_target("feishu_user_id:user_1"),
+            FeishuReceiveTarget {
+                receive_id: "user_1".to_string(),
+                receive_id_type: "user_id"
+            }
+        );
+        assert_eq!(
+            resolve_receive_target("user_id:user_2"),
+            FeishuReceiveTarget {
+                receive_id: "user_2".to_string(),
+                receive_id_type: "user_id"
+            }
+        );
+        assert_eq!(
+            resolve_receive_target("thread:omt_topic"),
+            FeishuReceiveTarget {
+                receive_id: "omt_topic".to_string(),
+                receive_id_type: "thread_id"
+            }
+        );
     }
 
     // ------------------------------------------------------------------
@@ -1575,6 +1686,53 @@ mod tests {
         // 231003 = message has been recalled
         assert_ne!(230011, 0);
         assert_ne!(231003, 0);
+    }
+
+    #[tokio::test]
+    async fn test_send_to_chat_id_uses_chat_receive_id_type() {
+        let server = MockServer::start();
+        let token_mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/open-apis/auth/v3/tenant_access_token/internal");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "code": 0,
+                    "msg": "ok",
+                    "tenant_access_token": "tenant-token",
+                    "expire": 3600
+                }));
+        });
+        let send_mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/open-apis/im/v1/messages")
+                .query_param("receive_id_type", "chat_id");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "code": 0,
+                    "msg": "success",
+                    "data": {"message_id": "om_sent_chat"}
+                }));
+        });
+
+        let config = FeishuConfig::new("app_id", "app_secret").with_base_url(server.base_url());
+        let adapter = FeishuAdapter::new(config);
+        let outbound = OutboundMessage {
+            session_key: SessionKey::new("feishu", "oc_chat"),
+            text: "hello chat".to_string(),
+            reply_to: None,
+            metadata: serde_json::json!({}),
+        };
+
+        let result = adapter
+            .send(&outbound)
+            .await
+            .expect("chat id send should succeed");
+
+        assert_eq!(result.message_id.as_deref(), Some("om_sent_chat"));
+        token_mock.assert_hits(1);
+        send_mock.assert_hits(1);
     }
 
     #[tokio::test]

@@ -541,6 +541,7 @@ impl SurfaceOperationResult {
 #[must_use]
 pub fn normalize_surface_id(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
+        "lark" => "feishu".to_string(),
         "wechat" | "wechat_ilink" => "wechat-ilink".to_string(),
         other => other.replace('_', "-"),
     }

@@ -160,6 +160,25 @@ impl FeishuWsClient {
         let result = register_pin(&self.app_id, &self.app_secret, &self.base_url).await?;
         let ws_url = result.ws_url;
         let ping_interval_secs = result.ping_interval.map(|v| v.max(1) as u64).unwrap_or(90);
+        let probe_url = ws_url.clone();
+
+        let probe = tokio::time::timeout(
+            Duration::from_secs(15),
+            tokio_tungstenite::connect_async(&probe_url),
+        )
+        .await
+        .map_err(|_| {
+            PlatformError::ConnectionFailed(format!(
+                "feishu websocket probe timed out for {probe_url}"
+            ))
+        })?
+        .map_err(|e| {
+            PlatformError::ConnectionFailed(format!(
+                "feishu websocket probe failed for {probe_url}: {e}"
+            ))
+        })?;
+        drop(probe);
+        tracing::info!("Feishu WS: initial websocket probe succeeded");
 
         // Create event channel
         let (tx, rx) = mpsc::unbounded_channel();

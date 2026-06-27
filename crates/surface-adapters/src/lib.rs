@@ -23,5 +23,6 @@ pub mod config {
 
 pub mod cowd_dirs;
 
+pub mod feishu_sidecar;
 pub mod platform;
 pub mod sidecar;
