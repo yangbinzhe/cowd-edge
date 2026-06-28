@@ -54,6 +54,22 @@ const eventItems = computed(() => {
   const events = state.value.events?.events || [];
   return Array.isArray(events) ? events : [];
 });
+const inboxItems = computed(() => {
+  const inbox = state.value.inbox?.inbox || state.value.inbox?.snapshot?.inbox || [];
+  return Array.isArray(inbox) ? inbox : [];
+});
+const outboxItems = computed(() => {
+  const outbox = state.value.outbox?.outbox || state.value.inbox?.snapshot?.outbox || [];
+  return Array.isArray(outbox) ? outbox : [];
+});
+const deliveryItems = computed(() => {
+  const deliveries = state.value.deliveries?.deliveries || state.value.inbox?.snapshot?.deliveries || [];
+  return Array.isArray(deliveries) ? deliveries : [];
+});
+const deadLetterItems = computed(() => {
+  const letters = state.value.outbox?.dead_letters || state.value.inbox?.snapshot?.dead_letters || [];
+  return Array.isArray(letters) ? letters : [];
+});
 const supervisorEventItems = computed(() => {
   const events = state.value.status?.events || state.value.events?.supervisor_events || [];
   return Array.isArray(events) ? events : [];
@@ -112,6 +128,32 @@ const supervisorRows = computed(() => supervisorEventItems.value.slice(0, 14).ma
   kind: event.error?.kind || 'supervisor',
   at: event.timestamp || '-',
 })));
+const inboxRows = computed(() => inboxItems.value.slice(0, 16).map((item: any) => ({
+  message_id: item.message_id || item.id || '-',
+  status: item.status || '-',
+  thread: item.thread_id || '-',
+  sender: item.sender_id || '-',
+  session: item.runtime_session_id || '-',
+  turn: item.runtime_turn_id || '-',
+  error: item.last_error || '-',
+})));
+const outboxRows = computed(() => outboxItems.value.slice(0, 16).map((item: any) => ({
+  delivery_id: item.delivery_id || '-',
+  status: item.status || '-',
+  recipient: item.recipient || '-',
+  attempts: `${item.attempts ?? 0}/${item.max_attempts ?? 0}`,
+  next_retry: item.next_retry_at_ms || '-',
+  error: item.last_error || '-',
+})));
+const deliveryRows = computed(() => deliveryItems.value.slice(0, 16).map((item: any) => ({
+  kind: item.kind || '-',
+  status: item.status || '-',
+  delivery_id: item.delivery_id || '-',
+  message_id: item.message_id || '-',
+  at: item.created_at_ms || '-',
+})));
+const retryCandidate = computed(() => outboxItems.value.find((item: any) => ['failed', 'retry_scheduled', 'dead_letter'].includes(String(item.status || ''))));
+const replayCandidate = computed(() => inboxItems.value[0]);
 const surfaceContext = computed(() => [
   { label: 'Selected', value: selectedSurface.value },
   { label: 'Surfaces', value: surfaces.value.length, tone: surfaces.value.length ? 'success' : 'warn' },
@@ -127,6 +169,7 @@ const surfaceWorkflow = computed(() => [
   { id: 'routes', label: 'Routes', status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
   { id: 'routes', label: 'Resources', status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
   { id: 'dispatch', label: 'Dispatch', status: actionResult.value ? 'active' : 'idle' },
+  { id: 'delivery', label: 'Reliable delivery', status: deadLetterItems.value.length ? 'blocked' : outboxRows.value.length ? 'ready' : 'idle', count: outboxRows.value.length },
   { id: 'events', label: 'Events', status: eventRows.value.length ? 'ready' : 'idle', count: eventRows.value.length },
 ]);
 const surfaceEvidence = computed(() => [
@@ -156,6 +199,13 @@ const surfaceEvidence = computed(() => [
     kind: `surface.${row.kind || 'supervisor'}`,
     status: row.status || 'recorded',
     summary: row.message || 'supervisor event',
+    source: selectedSurface.value,
+  })),
+  ...deliveryRows.value.slice(0, 5).map((row: any) => ({
+    id: String(row.delivery_id || row.message_id || row.at),
+    kind: row.kind || 'surface.delivery',
+    status: row.status || 'recorded',
+    summary: row.delivery_id || row.message_id || 'delivery event',
     source: selectedSurface.value,
   })),
   ...(actionResult.value ? [{
@@ -213,15 +263,18 @@ const surfaceDiagnosticRows = computed(() => {
 async function loadSurface(id = selectedSurface.value) {
   if (!id) return;
   selectedSurface.value = id;
-  const [detail, routes, resources, status, health, events] = await Promise.all([
+  const [detail, routes, resources, status, health, events, inbox, outbox, deliveries] = await Promise.all([
     api.surfaceDetail(id),
     api.surfaceRoutes(id),
     api.surfaceResources(id),
     api.surfaceStatus(id),
     api.surfaceHealth(id),
     api.surfaceEvents(id),
+    api.surfaceInbox(id),
+    api.surfaceOutbox(id),
+    api.surfaceDeliveries(id),
   ]);
-  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events };
+  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events, inbox, outbox, deliveries };
 }
 
 async function refresh() {
@@ -286,6 +339,28 @@ async function runAction() {
   }
 }
 
+async function retryDelivery() {
+  if (!selectedSurface.value || !retryCandidate.value?.delivery_id) return;
+  actionResult.value = await api.surfaceRetryOutbox(selectedSurface.value, retryCandidate.value.delivery_id);
+  selectedDetail.value = actionResult.value;
+  await loadSurface(selectedSurface.value);
+}
+
+async function deadLetterDelivery() {
+  if (!selectedSurface.value || !retryCandidate.value?.delivery_id) return;
+  actionResult.value = await api.surfaceDeadLetterOutbox(selectedSurface.value, retryCandidate.value.delivery_id, 'operator moved delivery from WebUI');
+  selectedDetail.value = actionResult.value;
+  await loadSurface(selectedSurface.value);
+}
+
+async function replayInbound() {
+  const messageId = replayCandidate.value?.message_id || replayCandidate.value?.id;
+  if (!selectedSurface.value || !messageId) return;
+  actionResult.value = await api.surfaceReplayInbox(selectedSurface.value, messageId);
+  selectedDetail.value = actionResult.value;
+  await loadSurface(selectedSurface.value);
+}
+
 onMounted(refresh);
 </script>
 
@@ -331,6 +406,11 @@ onMounted(refresh);
         <span>Runtime issues</span>
         <strong>{{ degradedSurfaces }}</strong>
         <small>{{ host.circuit_open_count || 0 }} circuit open</small>
+      </article>
+      <article class="metric-card" :data-tone="deadLetterItems.length ? 'warn' : 'success'">
+        <span>Reliable delivery</span>
+        <strong>{{ outboxRows.length }}</strong>
+        <small>{{ deadLetterItems.length }} dead letters</small>
       </article>
     </section>
 
@@ -435,6 +515,31 @@ onMounted(refresh);
           Run action
         </button>
         <RequestReceipt :receipt="actionResult" title="Surface dispatch receipt" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="delivery">
+        <header>
+          <h2>Reliable delivery</h2>
+          <span>{{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ</span>
+        </header>
+        <div class="button-row">
+          <button class="ghost-action" type="button" :disabled="!retryCandidate" @click="retryDelivery">
+            <RotateCcw :size="15" />
+            Retry failed
+          </button>
+          <button class="ghost-action" type="button" :disabled="!retryCandidate" @click="deadLetterDelivery">
+            <Square :size="15" />
+            Move to DLQ
+          </button>
+          <button class="ghost-action" type="button" :disabled="!replayCandidate" @click="replayInbound">
+            <Play :size="15" />
+            Replay inbound
+          </button>
+        </div>
+        <DataTable v-if="inboxRows.length" :rows="inboxRows" :columns="['message_id', 'status', 'thread', 'sender', 'session', 'turn', 'error']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else title="No inbox records" detail="该 surface 暂无持久 inbound 消息。" />
+        <DataTable v-if="outboxRows.length" :rows="outboxRows" :columns="['delivery_id', 'status', 'recipient', 'attempts', 'next_retry', 'error']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="deliveryRows.length" :rows="deliveryRows" :columns="['kind', 'status', 'delivery_id', 'message_id', 'at']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="events">

@@ -773,6 +773,12 @@ describe('Cowd Vue WebUI shell', () => {
     await api.surfaceHealth('webui');
     await api.surfaceHealthCheck('webui');
     await api.surfaceEvents('webui');
+    await api.surfaceInbox('webui');
+    await api.surfaceOutbox('webui');
+    await api.surfaceDeliveries('webui');
+    await api.surfaceReplayInbox('webui', 'msg-1');
+    await api.surfaceRetryOutbox('webui', 'delivery-1');
+    await api.surfaceDeadLetterOutbox('webui', 'delivery-1', 'test dead letter');
     await api.surfaceStart('webui');
     await api.surfaceStop('webui');
     await api.surfaceRestart('webui');
@@ -796,6 +802,12 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/health', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/health-check', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/events', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/inbox', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/outbox', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/deliveries', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/inbox/msg-1/replay', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/outbox/delivery-1/retry', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/outbox/delivery-1/dead-letter', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/start', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/stop', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/restart', expect.objectContaining({ method: 'POST' }));
@@ -840,6 +852,9 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/surfaces/webui/status') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.status', runtime: { surface: 'webui', status: 'builtin', active: true }, events: [] })));
       if (url === '/api/surfaces/webui/health') return Promise.resolve(new Response(JSON.stringify({ ok: true, status: 'ready' })));
       if (url === '/api/surfaces/webui/events') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.events', events: [{ kind: 'ready', status: 'ready', message: 'booted' }], supervisor_events: [{ status: 'ready', message: 'builtin surface healthy', timestamp: 'now' }] })));
+      if (url === '/api/surfaces/webui/inbox') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.inbox', inbox: [{ message_id: 'msg-1', status: 'processed', thread_id: 'thread-1', sender_id: 'operator', runtime_session_id: 'surface:webui', runtime_turn_id: 'turn-1' }] })));
+      if (url === '/api/surfaces/webui/outbox') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.outbox', outbox: [{ delivery_id: 'delivery-1', status: 'retry_scheduled', recipient: 'operator', attempts: 1, max_attempts: 5, next_retry_at_ms: 1, last_error: 'timeout' }], dead_letters: [] })));
+      if (url === '/api/surfaces/webui/deliveries') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.deliveries', deliveries: [{ kind: 'outbox.retry_scheduled', status: 'retry_scheduled', delivery_id: 'delivery-1', message_id: 'msg-1', created_at_ms: 1 }] })));
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -854,9 +869,13 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Routes');
     expect(wrapper.text()).toContain('Resources');
     expect(wrapper.text()).toContain('Dispatch');
+    expect(wrapper.text()).toContain('Reliable delivery');
     expect(wrapper.text()).toContain('Events');
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/events', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/inbox', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/outbox', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/deliveries', expect.any(Object));
   });
 
   it('loads skill detail and files from real skill management endpoints', async () => {
