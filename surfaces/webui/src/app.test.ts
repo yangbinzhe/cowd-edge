@@ -209,8 +209,32 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Audit and Governance');
     expect(wrapper.text()).toContain('Evidence flow');
     expect(wrapper.text()).toContain('GlobalTimeline');
+    expect(wrapper.text()).toContain('Harness Eval');
     expect(wrapper.text()).toContain('Audit evidence trace');
     expect(wrapper.text()).toContain('Audit selected evidence');
+  });
+
+  it('calls harness eval report and smoke run endpoints', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, reports: [], runs: [], scenarios: [] }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.harnessEvalLatestReport();
+    await api.harnessEvalReports();
+    await api.harnessEvalReport('report-1');
+    await api.harnessEvalScenarios();
+    await api.harnessEvalRuns();
+    await api.harnessEvalRun('run-1');
+    await api.harnessEvalRunSmoke();
+    await api.harnessEvalCancelRun('run-1');
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/reports/latest', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/reports', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/reports/report-1', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/scenarios', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs/run-1', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs/run-1/cancel', expect.objectContaining({ method: 'POST' }));
   });
 
   it('calls real tool operation endpoints through the backend', async () => {

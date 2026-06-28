@@ -280,6 +280,9 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['Approval history', '/api/approval/history?limit=50'],
       ['Cross-plane audit', '/api/cross-plane/audit'],
       ['Action executions', '/api/cross-plane/action/executions'],
+      ['Harness Eval latest', '/api/harness-eval/reports/latest'],
+      ['Harness Eval reports', '/api/harness-eval/reports'],
+      ['Harness Eval runs', '/api/harness-eval/runs'],
     ],
   };
   return routes[page];
@@ -713,6 +716,23 @@ export const api = {
   cowdProjection: (surface = 'webui') => read(`/api/cowd/projection?surface=${encodeURIComponent(surface)}`, {}),
   cowdSurfaces: () => read('/api/cowd/surfaces', {}),
   cowdReleaseGate: () => read('/api/cowd/release-gate', {}),
+  harnessEvalLatestReport: () => read('/api/harness-eval/reports/latest', {}),
+  harnessEvalReports: () => read('/api/harness-eval/reports', { reports: [] }),
+  harnessEvalReport: (id: string) => read(`/api/harness-eval/reports/${encodeURIComponent(id)}`, {}),
+  harnessEvalScenarios: () => read('/api/harness-eval/scenarios', { scenarios: [] }),
+  harnessEvalRuns: () => read('/api/harness-eval/runs', { runs: [] }),
+  harnessEvalRun: (id: string) => read(`/api/harness-eval/runs/${encodeURIComponent(id)}`, {}),
+  harnessEvalRunSmoke: () => writeWithReceipt('/api/harness-eval/runs', {
+    method: 'POST',
+    body: JSON.stringify({
+      level: 'quick',
+      budget: 'low',
+      actor: 'webui.audit',
+      objective: 'operator requested harness eval smoke',
+      allow_real_model: false,
+    }),
+  }),
+  harnessEvalCancelRun: (id: string) => writeWithReceipt(`/api/harness-eval/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
   mfgApp: () => read('/api/apps/mfg/app', {}),
   mfgHealth: () => read('/api/apps/mfg/reality/health', {}),
   mfgProductionGovernance: () => read('/api/apps/mfg/production/governance', {}),

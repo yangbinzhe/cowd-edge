@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
+import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
@@ -25,6 +26,8 @@ const timelineSession = ref('');
 const timelineEvidence = ref('');
 const timelineSurface = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
+const evalReportDetail = ref<any>(null);
+const evalActionResult = ref<any>(null);
 
 function items(collection: any, key: string) {
   return Array.isArray(collection?.[key]) ? collection[key] : Array.isArray(collection) ? collection : [];
@@ -35,6 +38,9 @@ const approvalHistory = computed(() => items(state.value.approvalHistory, 'histo
 const crossPlaneRecords = computed(() => items(state.value.crossPlaneAudit, 'records'));
 const executions = computed(() => items(state.value.executions, 'executions'));
 const releaseChecks = computed(() => items(state.value.releaseGate, 'checks'));
+const harnessEvalReports = computed(() => items(state.value.harnessEvalReports, 'reports'));
+const harnessEvalRuns = computed(() => items(state.value.harnessEvalRuns, 'runs'));
+const harnessEvalScenarios = computed(() => items(state.value.harnessEvalScenarios, 'scenarios'));
 const auditRows = computed(() => auditRecords.value.slice(0, 18).map((record: any) => ({
   source: record.source || '-',
   id: record.id || '-',
@@ -143,6 +149,30 @@ const releaseRows = computed(() => releaseChecks.value.slice(0, 12).map((check: 
   status: check.status || (check.passed ? 'pass' : 'review'),
   detail: check.detail || check.summary || '-',
 })));
+const harnessEvalRows = computed(() => harnessEvalReports.value.slice(0, 12).map((report: any) => ({
+  id: report.id,
+  level: report.level,
+  status: report.status,
+  tokens: report.total_tokens || 0,
+  tools: report.tool_calls || 0,
+  scenarios: report.scenario_count || 0,
+  elapsed_ms: report.total_elapsed_ms || 0,
+})));
+const harnessEvalRunRows = computed(() => harnessEvalRuns.value.slice(0, 8).map((run: any) => ({
+  id: run.run_id,
+  level: run.level,
+  status: run.status,
+  tokens: run.total_tokens || 0,
+  tools: run.tool_calls || 0,
+  report: run.report_id || '-',
+})));
+const harnessEvalScenarioRows = computed(() => harnessEvalScenarios.value.slice(0, 8).map((scenario: any) => ({
+  id: scenario.id,
+  kind: scenario.kind,
+  fake: scenario.fake_provider_gate ? 'yes' : 'no',
+  real: scenario.real_provider_gate ? 'yes' : 'no',
+  evidence: Array.isArray(scenario.required_evidence) ? scenario.required_evidence.join(', ') : '-',
+})));
 const usageChart = computed(() => {
   const byPlatform = state.value.usage?.by_platform || {};
   const points = Object.entries(byPlatform).map(([name, value]: [string, any]) => ({
@@ -159,6 +189,7 @@ const auditContext = computed(() => [
   { label: 'Audit records', value: auditRecords.value.length },
   { label: 'Approvals', value: approvalHistory.value.length },
   { label: 'Cross-plane', value: crossPlaneRecords.value.length },
+  { label: 'Harness Eval', value: harnessEvalReports.value.length, tone: harnessEvalReports.value.length ? 'success' : 'default' },
   { label: 'Timeline', value: globalTimelineRows.value.length },
   { label: 'Release checks', value: releaseChecks.value.length, tone: releaseChecks.value.length ? 'warn' : 'default' },
 ]);
@@ -168,6 +199,7 @@ const auditWorkflow = computed(() => [
   { id: 'release', label: 'Release', status: releaseRows.value.some((row) => row.status !== 'pass') ? 'blocked' : 'ready', count: releaseRows.value.length },
   { id: 'approvals', label: 'Approval', status: approvalRows.value.length ? 'ready' : 'idle', count: approvalRows.value.length },
   { id: 'cross-plane', label: 'Cross-plane', status: crossPlaneRows.value.length ? 'ready' : 'idle', count: crossPlaneRows.value.length },
+  { id: 'harness-eval', label: 'Harness Eval', status: state.value.harnessEvalLatest?.report?.status || 'idle', count: harnessEvalReports.value.length },
   { id: 'global-timeline', label: 'Timeline', status: globalTimelineRows.value.length ? 'ready' : 'idle', count: globalTimelineRows.value.length },
 ]);
 const auditEvidence = computed(() => [
@@ -198,7 +230,21 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [audit, usage, capabilities, projection, surfaces, releaseGate, approvalHistoryData, crossPlaneAudit, executionsData] = await Promise.all([
+    const [
+      audit,
+      usage,
+      capabilities,
+      projection,
+      surfaces,
+      releaseGate,
+      approvalHistoryData,
+      crossPlaneAudit,
+      executionsData,
+      harnessEvalLatest,
+      harnessEvalReportsData,
+      harnessEvalRunsData,
+      harnessEvalScenariosData,
+    ] = await Promise.all([
       api.auditExport(source.value, limit.value, offset.value),
       api.usageSummary(),
       api.cowdCapabilities(),
@@ -208,13 +254,42 @@ async function refresh() {
       api.approvalHistory(),
       api.crossPlaneAudit(),
       api.crossPlaneExecutions(),
+      api.harnessEvalLatestReport(),
+      api.harnessEvalReports(),
+      api.harnessEvalRuns(),
+      api.harnessEvalScenarios(),
     ]);
-    state.value = { audit, usage, capabilities, projection, surfaces, releaseGate, approvalHistory: approvalHistoryData, crossPlaneAudit, executions: executionsData };
+    state.value = {
+      audit,
+      usage,
+      capabilities,
+      projection,
+      surfaces,
+      releaseGate,
+      approvalHistory: approvalHistoryData,
+      crossPlaneAudit,
+      executions: executionsData,
+      harnessEvalLatest,
+      harnessEvalReports: harnessEvalReportsData,
+      harnessEvalRuns: harnessEvalRunsData,
+      harnessEvalScenarios: harnessEvalScenariosData,
+    };
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     loading.value = false;
   }
+}
+
+async function runHarnessEvalSmoke() {
+  evalActionResult.value = await api.harnessEvalRunSmoke();
+  await refresh();
+}
+
+async function openHarnessEvalReport(row: Record<string, unknown>) {
+  const id = String(row.id || '');
+  if (!id) return;
+  evalReportDetail.value = await api.harnessEvalReport(id);
 }
 
 onMounted(refresh);
@@ -252,6 +327,11 @@ onMounted(refresh);
         <span>Release checks</span>
         <strong>{{ releaseChecks.length }}</strong>
         <small>{{ releaseSurface }}</small>
+      </article>
+      <article class="metric-card" data-tone="success">
+        <span>Harness Eval</span>
+        <strong>{{ state.harnessEvalLatest?.report?.status || 'empty' }}</strong>
+        <small>{{ harnessEvalReports.length }} reports</small>
       </article>
     </section>
 
@@ -361,6 +441,49 @@ onMounted(refresh);
         <ChartPanel v-if="releaseChart.length" title="Release gate coverage" kind="radar" :data="releaseChart" />
         <EmptyState v-else title="No release checks" detail="发布门禁返回检查项后再展示覆盖图。" />
         <DataTable v-if="releaseRows.length" :rows="releaseRows" :columns="['name', 'status', 'detail']" @row-click="selectedDetail = { ...$event, source: 'release', evidence: $event.name, summary: $event.detail }" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="harness-eval">
+        <header>
+          <h2>Harness Eval</h2>
+          <span>{{ state.harnessEvalLatest?.status || 'reports' }}</span>
+        </header>
+        <div class="button-row">
+          <button class="primary-action" type="button" @click="runHarnessEvalSmoke">Run smoke</button>
+          <button class="ghost-action" type="button" @click="refresh">Refresh reports</button>
+        </div>
+        <dl class="detail-list">
+          <dt>Latest</dt>
+          <dd>{{ state.harnessEvalLatest?.report?.id || 'none' }}</dd>
+          <dt>Status</dt>
+          <dd>{{ state.harnessEvalLatest?.report?.status || state.harnessEvalLatest?.status || 'empty' }}</dd>
+          <dt>Tokens</dt>
+          <dd>{{ state.harnessEvalLatest?.report?.total_tokens || 0 }}</dd>
+          <dt>Tool calls</dt>
+          <dd>{{ state.harnessEvalLatest?.report?.tool_calls || 0 }}</dd>
+        </dl>
+        <DataTable v-if="harnessEvalRows.length" :rows="harnessEvalRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'scenarios', 'elapsed_ms']" @row-click="openHarnessEvalReport" />
+        <EmptyState v-else title="No harness eval reports" detail="点击 Run smoke 生成一次轻量评测报告，不会调用真实模型。" />
+        <RequestReceipt v-if="evalActionResult" :receipt="evalActionResult" title="Harness eval run receipt" />
+        <RawPayload v-if="evalReportDetail" title="Harness eval report detail" :data="evalReportDetail" />
+      </section>
+
+      <section class="management-panel gateway-panel" data-section="harness-eval-runs">
+        <header>
+          <h2>Eval runs</h2>
+          <span>{{ harnessEvalRuns.length }} runs</span>
+        </header>
+        <DataTable v-if="harnessEvalRunRows.length" :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'report']" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
+        <EmptyState v-else title="No eval runs" detail="Gateway 触发的评测运行记录会在这里展示。" />
+      </section>
+
+      <section class="management-panel gateway-panel" data-section="harness-eval-scenarios">
+        <header>
+          <h2>Scenario matrix</h2>
+          <span>{{ harnessEvalScenarios.length }} scenarios</span>
+        </header>
+        <DataTable v-if="harnessEvalScenarioRows.length" :rows="harnessEvalScenarioRows" :columns="['id', 'kind', 'fake', 'real', 'evidence']" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, summary: $event.evidence }" />
+        <EmptyState v-else title="No scenario matrix" detail="Harness Eval scenario API 尚未返回矩阵。" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="approvals">
