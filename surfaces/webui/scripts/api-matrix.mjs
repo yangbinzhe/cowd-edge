@@ -15,10 +15,27 @@ const backendRoot = process.env.COWD_BACKEND_REPO
     fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/mod.rs'))
   ))
   || surfaceRoot;
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
-const reportDir = path.join(planRoot, 'reports');
-const version = process.env.COWD_VERSION || 'v0.9.241';
-const gate = process.argv.includes('--gate');
+const args = process.argv.slice(2);
+const gate = args.includes('--gate');
+
+function argValue(name, fallback) {
+  const index = args.indexOf(name);
+  if (index >= 0 && args[index + 1]) return args[index + 1];
+  return fallback;
+}
+
+function argValues(name) {
+  const values = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === name && args[index + 1]) values.push(args[index + 1]);
+  }
+  return values;
+}
+
+const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0628-框架核心与Surface能力闭环治理');
+const reportDir = path.resolve(argValue('--report-dir', process.env.COWD_REPORT_DIR || path.join(planRoot, 'reports')));
+const version = argValue('--version', process.env.COWD_VERSION || 'v0.9.410');
+const requiredRoutes = argValues('--require');
 
 const clientPath = path.join(webuiRoot, 'src/api/client.ts');
 const sourceDirs = [
@@ -64,12 +81,14 @@ function walk(target) {
   if (!fs.existsSync(target)) return [];
   const stat = fs.statSync(target);
   if (stat.isFile()) return [target];
+  const base = path.basename(target);
+  if (['node_modules', 'dist', 'test-results', 'coverage', '.vite'].includes(base)) return [];
   return fs.readdirSync(target).flatMap((entry) => walk(path.join(target, entry)));
 }
 
 function normalizeRoute(route) {
   return route
-    .replace(/\$\{[^`'"]+?\}/g, ':param')
+    .replace(/\$\{[^`'"]+?\}/g, (match, offset, input) => (input[offset - 1] === '/' ? ':param' : ''))
     .replace(/\?.*$/, '')
     .replace(/:id/g, ':param')
     .replace(/:name/g, ':param')
@@ -82,7 +101,7 @@ function normalizeRoute(route) {
 function inferMethod(body) {
   const method = body.match(/method:\s*['"`]([A-Z]+)['"`]/)?.[1];
   if (method) return method;
-  if (body.includes('write<') || body.includes('write(')) return 'POST';
+  if (body.includes('write<') || body.includes('write(') || body.includes('writeWithReceipt(')) return 'POST';
   return 'GET';
 }
 
@@ -95,7 +114,7 @@ function extractClientMethods() {
   let match;
   while ((match = methodRegex.exec(apiText))) {
     const [, name, body] = match;
-    const pathMatch = body.match(/(?:read|write|readText)\s*(?:<[^>]+>)?\(\s*([`'"])([\s\S]*?)\1/);
+    const pathMatch = body.match(/(?:read|write|writeWithReceipt|readText)\s*(?:<[^>]+>)?\(\s*([`'"])([\s\S]*?)\1/);
     if (!pathMatch) continue;
     const route = pathMatch[2].trim();
     entries.push({
@@ -156,11 +175,19 @@ function extractRoutes() {
   const routes = [];
   for (const file of routeDirs.flatMap(walk).filter((item) => item.endsWith('.rs'))) {
     const text = read(file);
-    const regex = /\.route\(\s*"([^"]+)"\s*,\s*([\s\S]*?)(?=\n\s*\.route\(|\n\s*\))/g;
-    let match;
-    while ((match = regex.exec(text))) {
-      const route = match[1];
-      const handlers = match[2];
+    let offset = 0;
+    while (offset < text.length) {
+      const routeIndex = text.indexOf('.route(', offset);
+      if (routeIndex < 0) break;
+      const afterRoute = text.slice(routeIndex + '.route('.length);
+      const pathMatch = afterRoute.match(/^\s*"([^"]+)"/);
+      offset = routeIndex + '.route('.length;
+      if (!pathMatch) continue;
+      const route = pathMatch[1];
+      const afterPath = afterRoute.slice(pathMatch[0].length);
+      const nextRoute = afterPath.indexOf('.route(');
+      const handlers = afterPath.slice(0, nextRoute >= 0 ? nextRoute : Math.min(afterPath.length, 512));
+      offset = routeIndex + '.route('.length + pathMatch[0].length + handlers.length;
       for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
         const methodRegex = new RegExp(`\\b${method}\\s*\\(`, 'i');
         if (methodRegex.test(handlers)) {
@@ -216,11 +243,27 @@ const entries = clientEntries.map((entry) => {
 });
 
 const blocking = [];
+for (const entry of entries.filter((item) => item.has_ui_call)) {
+  if (!entry.has_backend_route) blocking.push(`${entry.client_method}: missing backend route for ${entry.method} ${entry.path}`);
+}
 for (const entry of entries.filter((item) => item.criticality === 'p0' || item.criticality === 'p1')) {
   if (!entry.has_ui_call) blocking.push(`${entry.client_method}: missing UI call`);
-  if (!entry.has_backend_route) blocking.push(`${entry.client_method}: missing backend route for ${entry.method} ${entry.path}`);
   if (entry.operation === 'write' && !entry.has_frontend_test) blocking.push(`${entry.client_method}: missing frontend request test`);
   if (entry.quarantine_required && !entry.quarantine_ok) blocking.push(`${entry.client_method}: missing MFG temporary quarantine evidence`);
+}
+
+const requiredFindings = [];
+for (const route of requiredRoutes) {
+  const normalized = normalizeRoute(route);
+  const matched = routes.some((backendRoute) => {
+    const requiredEntry = { method: backendRoute.method, normalized_path: normalized };
+    return routeMatches(requiredEntry, backendRoute);
+  });
+  if (!matched) {
+    const finding = `required route missing: ${route}`;
+    requiredFindings.push(finding);
+    blocking.push(finding);
+  }
 }
 
 fs.mkdirSync(reportDir, { recursive: true });
@@ -232,8 +275,14 @@ fs.writeFileSync(matrixPath, JSON.stringify({
   totals: {
     client_methods: entries.length,
     backend_routes: routes.length,
+    required_routes: requiredRoutes.length,
     blocking: blocking.length,
   },
+  required_routes: requiredRoutes.map((route) => ({
+    path: route,
+    normalized_path: normalizeRoute(route),
+    present: !requiredFindings.includes(`required route missing: ${route}`),
+  })),
   entries,
 }, null, 2));
 fs.writeFileSync(gatePath, [
@@ -243,6 +292,7 @@ fs.writeFileSync(gatePath, [
   '',
   `Client methods: ${entries.length}`,
   `Backend routes: ${routes.length}`,
+  `Required routes: ${requiredRoutes.length}`,
   `Blocking findings: ${blocking.length}`,
   '',
   ...(blocking.length ? ['## Blocking', '', ...blocking.map((item) => `- ${item}`)] : ['## Blocking', '', 'None']),

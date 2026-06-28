@@ -319,10 +319,13 @@ export const api = {
     profile_id: '',
   }),
   workspaces: () => read('/api/workspaces', { workspaces: [] }),
-  files: (dir = '') => read<{ dir: string; files: WorkspaceFile[] }>(`/api/workspace/files${dir ? `?dir=${encodeURIComponent(dir)}` : ''}`, {
-    dir,
-    files: [],
-  }),
+  files: (dir = '') => {
+    const suffix = dir ? `?dir=${encodeURIComponent(dir)}` : '';
+    return read<{ dir: string; files: WorkspaceFile[] }>(`/api/workspace/files${suffix}`, {
+      dir,
+      files: [],
+    });
+  },
   rawFile: (path: string) => readText(`/api/file/raw?path=${encodeURIComponent(path)}`),
   saveFile: (path: string, content: string) => write('/api/workspace/files', {
     method: 'POST',
@@ -426,7 +429,8 @@ export const api = {
     if (sessionId) params.set('session_id', sessionId);
     params.set('limit', String(limit));
     const suffix = params.toString();
-    return read(`/api/reality/flow${suffix ? `?${suffix}` : ''}`, { stages: [], events: [], promotions: [] });
+    const query = suffix ? `?${suffix}` : '';
+    return read(`/api/reality/flow${query}`, { stages: [], events: [], promotions: [] });
   },
   realityPromotions: (filters: { sessionId?: string; target?: string; status?: string; limit?: number } = {}) => {
     const params = new URLSearchParams();

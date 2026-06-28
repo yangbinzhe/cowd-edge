@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Surface",
-  "version": "0.9.355",
+  "version": "0.9.410",
   "kind": "external-integration",
   "entry": "./cowd-surface-feishu",
   "transport": "stdio-jsonl",
