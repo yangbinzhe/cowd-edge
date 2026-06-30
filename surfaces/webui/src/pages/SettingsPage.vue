@@ -3,6 +3,7 @@ import { computed, ref } from 'vue';
 import { Moon, Plus, RefreshCw, Shield, Sun, Trash2 } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { api } from '../api/client';
+import { useI18n, type Locale } from '../i18n';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
@@ -10,6 +11,7 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 
 const store = useAppStore();
+const { locale, setLocale } = useI18n();
 const profileName = ref('');
 const defaultModel = ref('');
 const settingsError = ref('');
@@ -90,6 +92,11 @@ const theme = computed({
     document.documentElement.dataset.theme = value;
     localStorage.setItem('cowd-theme', value);
   },
+});
+
+const uiLocale = computed({
+  get: () => locale.value,
+  set: (value: Locale) => setLocale(value),
 });
 
 const approvalJson = computed({
@@ -250,6 +257,13 @@ async function verifyAuth() {
           <button :class="{ active: theme === 'light' }" type="button" @click="theme = 'light'"><Sun :size="15" /> Light</button>
           <button :class="{ active: theme === 'dark' }" type="button" @click="theme = 'dark'"><Moon :size="15" /> Dark</button>
         </div>
+        <label>
+          Language
+          <select v-model="uiLocale">
+            <option value="zh-CN">简体中文</option>
+            <option value="en-US">English</option>
+          </select>
+        </label>
       </section>
 
       <section class="settings-section" data-section="providers">

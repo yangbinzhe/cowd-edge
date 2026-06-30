@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { translateText } from '../../i18n';
 
 const props = withDefaults(defineProps<{
   rows: Record<string, unknown>[];
@@ -44,6 +45,11 @@ function toggleSort(column: string) {
 function keyFor(row: Record<string, unknown>, index: number) {
   return props.rowKey && row[props.rowKey] ? String(row[props.rowKey]) : index;
 }
+
+function columnLabel(column: string) {
+  const normalized = column.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  return translateText(normalized);
+}
 </script>
 
 <template>
@@ -60,7 +66,7 @@ function keyFor(row: Record<string, unknown>, index: number) {
         <tr>
           <th v-for="column in visibleColumns" :key="column">
             <button type="button" @click="toggleSort(column)">
-              {{ column }}
+              {{ columnLabel(column) }}
               <span v-if="sortColumn === column">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
             </button>
           </th>

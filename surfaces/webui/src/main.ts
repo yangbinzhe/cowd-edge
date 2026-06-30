@@ -4,6 +4,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import App from './App.vue';
 import ChatPage from './pages/ChatPage.vue';
 import { pluginRoutes } from './plugins/registry';
+import { installDomI18n } from './i18n';
 import './styles/tokens.css';
 import './styles/base.css';
 
@@ -31,4 +32,6 @@ const router = createRouter({
   routes,
 });
 
-createApp(App).use(createPinia()).use(router).mount('#app');
+const app = createApp(App);
+app.use(createPinia()).use(router).mount('#app');
+installDomI18n(app);

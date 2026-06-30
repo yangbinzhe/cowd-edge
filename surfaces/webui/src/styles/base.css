@@ -1,6 +1,7 @@
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
 body { overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); font-size: 14px; letter-spacing: 0; }
+html[data-locale="zh-CN"] body { line-height: 1.55; text-rendering: optimizeLegibility; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
@@ -564,4 +565,78 @@ button:disabled { cursor: not-allowed; opacity: .55; }
   .skills-console, .skills-detail { grid-template-columns: 1fr; }
   .metric-row { grid-template-columns: 1fr; }
   .turn { grid-template-columns: 1fr; gap: 6px; }
+}
+
+html[data-locale="zh-CN"] .page-header p,
+html[data-locale="zh-CN"] .capability-head span,
+html[data-locale="zh-CN"] .section-row span,
+html[data-locale="zh-CN"] .activity-item p,
+html[data-locale="zh-CN"] .evidence-item p,
+html[data-locale="zh-CN"] .mission-action-preview p,
+html[data-locale="zh-CN"] .workflow-step small,
+html[data-locale="zh-CN"] .workflow-step em,
+html[data-locale="zh-CN"] .empty-state p,
+html[data-locale="zh-CN"] .api-state-banner p,
+html[data-locale="zh-CN"] .empty-action-state p,
+html[data-locale="zh-CN"] .management-panel p,
+html[data-locale="zh-CN"] .reality-lane p,
+html[data-locale="zh-CN"] .agent-graph-lanes p,
+html[data-locale="zh-CN"] .runtime-approval-list p,
+html[data-locale="zh-CN"] .security-note,
+html[data-locale="zh-CN"] .modal-note {
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+html[data-locale="zh-CN"] .stage-pill span,
+html[data-locale="zh-CN"] .stage-row strong,
+html[data-locale="zh-CN"] .workflow-step-label,
+html[data-locale="zh-CN"] .mfg-lane span,
+html[data-locale="zh-CN"] .skill-row span,
+html[data-locale="zh-CN"] .skill-row small,
+html[data-locale="zh-CN"] .memory-entry-row span,
+html[data-locale="zh-CN"] .memory-entry-row small {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+html[data-locale="zh-CN"] .detail-list {
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+}
+
+html[data-locale="zh-CN"] .detail-list dd,
+html[data-locale="zh-CN"] .contract-list dd,
+html[data-locale="zh-CN"] .sidebar-inspector dd {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+html[data-locale="zh-CN"] .primary-action,
+html[data-locale="zh-CN"] .ghost-action,
+html[data-locale="zh-CN"] .danger-action,
+html[data-locale="zh-CN"] .mode-switch button,
+html[data-locale="zh-CN"] .segmented button,
+html[data-locale="zh-CN"] .companion-tabs button {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+html[data-locale="zh-CN"] .data-table th,
+html[data-locale="zh-CN"] .data-table td {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+html[data-locale="zh-CN"] .companion-tabs {
+  grid-template-columns: repeat(5, minmax(58px, 1fr));
+}
+
+html[data-locale="zh-CN"] .workflow-strip {
+  grid-template-columns: minmax(132px, auto) repeat(auto-fit, minmax(136px, 1fr));
+}
+
+@media (max-width: 1180px) {
+  html[data-locale="zh-CN"] .workflow-strip { grid-template-columns: 1fr; }
 }
