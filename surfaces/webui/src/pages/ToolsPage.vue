@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { GitBranch, Play, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -118,19 +119,19 @@ const ledgerRows = computed(() => toolLedger.value.slice(0, 16).map((event: any)
 })));
 const activeSessionId = computed(() => store.currentSessionId || 'api-context');
 const toolContext = computed(() => [
-  { label: 'Session', value: activeSessionId.value },
-  { label: 'Tools', value: tools.value.length, tone: tools.value.length ? 'success' : 'warn' },
-  { label: 'Checkpoints', value: checkpointRows.value.length },
-  { label: 'Ledger events', value: ledgerRows.value.length },
+  { label: t('script.pages.toolspage.label.f7f1997c6c'), value: activeSessionId.value },
+  { label: t('script.pages.toolspage.label.4fa8cc860c'), value: tools.value.length, tone: tools.value.length ? 'success' : 'warn' },
+  { label: t('script.pages.toolspage.label.a2b3a59adb'), value: checkpointRows.value.length },
+  { label: t('script.pages.toolspage.label.7d005f6934'), value: ledgerRows.value.length },
 ]);
 const toolsWorkflow = computed(() => [
-  { id: 'registry', label: 'Registry', status: tools.value.length ? 'ready' : 'idle', count: tools.value.length },
-  { id: 'operations', label: 'Plan', status: fanoutRows.value.length ? 'done' : 'idle', count: fanoutRows.value.length },
-  { id: 'operations', label: 'Execute', status: result.value ? 'active' : 'idle', description: selectedTool.value },
-  { id: 'mutations', label: 'Mutation', status: mutationPreviewRows.value.length ? 'blocked' : 'idle', count: mutationPreviewRows.value.length },
-  { id: 'checkpoints', label: 'Checkpoint', status: checkpointRows.value.length ? 'ready' : 'idle', count: checkpointRows.value.length },
-  { id: 'ledger', label: 'Ledger', status: ledgerRows.value.length ? 'ready' : 'idle', count: ledgerRows.value.length },
-  { id: 'risk', label: 'Risk', status: state.value.crossPlane?.status === 'blocked' ? 'blocked' : 'ready', description: selectedCapability.value },
+  { id: 'registry', label: t('script.pages.toolspage.label.1fd6a805da'), status: tools.value.length ? 'ready' : 'idle', count: tools.value.length },
+  { id: 'operations', label: t('script.pages.toolspage.label.ae2f98a099'), status: fanoutRows.value.length ? 'done' : 'idle', count: fanoutRows.value.length },
+  { id: 'operations', label: t('script.pages.toolspage.label.6ea36ce8d4'), status: result.value ? 'active' : 'idle', description: selectedTool.value },
+  { id: 'mutations', label: t('script.pages.toolspage.label.13bcc5c25b'), status: mutationPreviewRows.value.length ? 'blocked' : 'idle', count: mutationPreviewRows.value.length },
+  { id: 'checkpoints', label: t('script.pages.toolspage.label.5cb9afc059'), status: checkpointRows.value.length ? 'ready' : 'idle', count: checkpointRows.value.length },
+  { id: 'ledger', label: t('script.pages.toolspage.label.1aa2f31ee7'), status: ledgerRows.value.length ? 'ready' : 'idle', count: ledgerRows.value.length },
+  { id: 'risk', label: t('script.pages.toolspage.label.5a8f23f567'), status: state.value.crossPlane?.status === 'blocked' ? 'blocked' : 'ready', description: selectedCapability.value },
 ]);
 
 function parseJsonArray(text: string, label: string) {
@@ -300,53 +301,53 @@ onMounted(refresh);
   <section class="capability-page tools-page">
     <header class="page-header">
       <div>
-        <h1>Tools Registry</h1>
-        <p>工具目录、执行规划、只读批处理、事务变更、checkpoint、缓存与运行流水集中管理。</p>
+        <h1>{{ t('page.tools.page.text.8e747cbf1c') }}</h1>
+        <p>{{ t('page.tools.page.text.f798b2fb8d') }}</p>
       </div>
       <button class="primary-action" type="button" :disabled="loading" @click="refresh">
         <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh tools' }}
+        {{ loading ? t('page.tools.page.inline.09a1cbd2c1') : t('page.tools.page.inline.caa54dd49a') }}
       </button>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="toolContext" />
-    <WorkflowStrip :steps="toolsWorkflow" title="Tool operation flow" />
+    <WorkflowStrip :steps="toolsWorkflow" :title="t('page.tools.page.title.94f33c18ea')" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card" data-tone="success">
-        <span>Tools</span>
+        <span>{{ t('page.tools.page.text.e8caaa5188') }}</span>
         <strong>{{ tools.length }}</strong>
-        <small>{{ toolRows.filter((row) => row.readonly === 'yes').length }} readonly prepared</small>
+        <small>{{ toolRows.filter((row) => row.readonly === 'yes').length }} {{ t('page.tools.readonlyPrepared') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Checkpoints</span>
+        <span>{{ t('page.tools.page.text.111e726ea3') }}</span>
         <strong>{{ checkpoints.length }}</strong>
-        <small>workspace rollback points</small>
+        <small>{{ t('page.tools.page.text.de48a667de') }}</small>
       </article>
       <article class="metric-card" data-tone="warn">
-        <span>Cache</span>
+        <span>{{ t('page.tools.page.text.b85b1088be') }}</span>
         <strong>{{ cacheRows.length }}</strong>
-        <small>stats exposed by runtime</small>
+        <small>{{ t('page.tools.page.text.06c43804eb') }}</small>
       </article>
       <article class="metric-card" data-tone="neutral">
-        <span>Ledger</span>
+        <span>{{ t('page.tools.page.text.5590e877e1') }}</span>
         <strong>{{ toolLedger.length }}</strong>
-        <small>tool events in session</small>
+        <small>{{ t('page.tools.page.text.89c18bdbe1') }}</small>
       </article>
     </section>
 
     <section class="gateway-grid">
       <section class="management-panel gateway-panel wide" data-section="registry">
         <header>
-          <h2>Tool registry</h2>
-          <span>{{ tools.length }} tools</span>
+          <h2>{{ t('page.tools.page.text.a4819572ae') }}</h2>
+          <span>{{ formatCount('tools', tools.length) }}</span>
         </header>
         <DataTable v-if="toolRows.length" searchable :rows="toolRows" :columns="['name', 'enabled', 'safety', 'cache', 'readonly', 'concurrency', 'tags']" />
-        <EmptyState v-else title="No tools" detail="后端工具注册表为空或服务未启动。" />
+        <EmptyState v-else :title="t('page.tools.page.title.3b32f8db00')" :detail="t('page.tools.page.detail.23ef32f1f0')" />
         <div class="button-row">
           <label class="field-line compact-field">
-            Safe tool
+            {{ t('template.pages.toolspage.201fed4a91') }}
             <select v-model="selectedTool">
               <option v-for="tool in tools" :key="tool.name" :value="tool.name">{{ tool.name }}</option>
               <option value="tool_cache_stats">tool_cache_stats</option>
@@ -354,77 +355,77 @@ onMounted(refresh);
           </label>
           <button class="primary-action" type="button" @click="runSafeTool">
             <Play :size="15" />
-            Safe execute
+            {{ t('template.pages.toolspage.7fcfe24327') }}
           </button>
         </div>
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="operations">
         <header>
-          <h2>Execution planner</h2>
-          <span>intent, fanout, readonly batch</span>
+          <h2>{{ t('page.tools.page.text.86c5ed2cc8') }}</h2>
+          <span>{{ t('page.tools.page.text.6a1ed0bece') }}</span>
         </header>
         <label class="field-line">
-          Intent prompt
+          {{ t('template.pages.toolspage.f41a6f7d28') }}
           <textarea v-model="plannerPrompt" rows="3" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="planIntent">Plan intent</button>
+          <button class="ghost-action" type="button" @click="planIntent">{{ t('page.tools.page.text.2bf90d044e') }}</button>
           <button class="ghost-action" type="button" @click="planFanout">
             <GitBranch :size="15" />
-            Plan context fanout
+            {{ t('template.pages.toolspage.6a81f91ac3') }}
           </button>
         </div>
         <label class="field-line">
-          Fanout prompt
+          {{ t('template.pages.toolspage.d1dcd42299') }}
           <textarea v-model="fanoutPrompt" rows="3" />
         </label>
         <DataTable v-if="fanoutRows.length" :rows="fanoutRows" :columns="['tool', 'purpose', 'cache', 'risk']" />
         <label class="field-line">
-          Readonly batch calls
+          {{ t('template.pages.toolspage.92049fab60') }}
           <textarea v-model="batchCallsText" rows="6" />
         </label>
         <div class="button-row">
           <label class="field-line compact-field">
-            Concurrency
+            {{ t('template.pages.toolspage.2ec390bfae') }}
             <input v-model.number="batchConcurrency" min="1" max="12" type="number" />
           </label>
-          <button class="primary-action" type="button" @click="runBatchReadonly">Run readonly batch</button>
+          <button class="primary-action" type="button" @click="runBatchReadonly">{{ t('page.tools.page.text.99af3c0a4d') }}</button>
         </div>
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="mutations">
         <header>
-          <h2>Mutation transactions</h2>
-          <span>preview before apply</span>
+          <h2>{{ t('page.tools.page.text.e716d4ff02') }}</h2>
+          <span>{{ t('page.tools.page.text.c38a665303') }}</span>
         </header>
         <label class="field-line">
-          Workspace edits
+          {{ t('template.pages.toolspage.64f50f4fdb') }}
           <textarea v-model="mutationEditsText" rows="7" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="previewMutation">Preview mutation</button>
-          <button class="primary-action" type="button" @click="applyMutation">Apply transaction</button>
+          <button class="ghost-action" type="button" @click="previewMutation">{{ t('page.tools.page.text.cbecb3651a') }}</button>
+          <button class="primary-action" type="button" @click="applyMutation">{{ t('page.tools.page.text.fcb47752c9') }}</button>
         </div>
         <GovernedActionPanel
           :contract="{
             id: 'tool.mutation.apply',
             domain: 'tools',
-            title: 'Apply workspace mutation',
+            title: t('script.pages.toolspage.title.96baada078'),
             endpoint: '/api/tools/mutations/apply',
             method: 'POST',
-            summary: 'Apply is allowed only after preview records expected hashes. Review changed files before committing the transaction.',
-            current_return: 'RequestReceipt with changed refs',
-            validate: 'expected hashes are present',
+            summary: t('script.pages.toolspage.summary.8eafd27ea0'),
+            current_return: t('script.pages.toolspage.current_return.48db297b5f'),
+            validate: t('script.pages.toolspage.validate.5b8800f5b7'),
             plan: '/api/tools/mutations/preview',
             dry_run: '/api/tools/mutations/preview',
             live: true,
-            live_policy: 'requires preview and receipt',
+            live_policy: t('script.pages.toolspage.live_policy.7258170816'),
             receipt: true,
             audit_ref: true,
             changed_refs: true,
             approval_required: false,
-            kernel_boundary: 'Gateway Tools service'
+            kernel_boundary: t('script.pages.toolspage.kernel_boundary.83fb64e2c5')
           }"
           :payload="{ expected_hashes: expectedHashes, preview_rows: mutationPreviewRows.length }"
           :receipt="result"
@@ -433,51 +434,51 @@ onMounted(refresh);
           @live="applyMutation"
         />
         <DataTable v-if="mutationPreviewRows.length" :rows="mutationPreviewRows" :columns="['path', 'status', 'expected_hash', 'changed']" />
-        <RawPayload title="Expected hashes" :data="expectedHashes" />
+        <RawPayload :title="t('page.tools.page.title.141f116987')" :data="expectedHashes" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="checkpoints">
         <header>
-          <h2>Checkpoints</h2>
+          <h2>{{ t('page.tools.page.text.111e726ea3') }}</h2>
           <span>{{ checkpointRows.length }} available</span>
         </header>
         <label class="field-line">
-          Label
+          {{ t('template.pages.toolspage.74341e3c27') }}
           <input v-model="checkpointLabel" type="text" />
         </label>
-        <button class="primary-action" type="button" @click="createCheckpoint">Create checkpoint</button>
+        <button class="primary-action" type="button" @click="createCheckpoint">{{ t('page.tools.page.text.e871201662') }}</button>
         <label class="field-line">
-          Checkpoint
+          {{ t('template.pages.toolspage.5cb9afc059') }}
           <select v-model="selectedCheckpointId">
-            <option value="">Select checkpoint</option>
+            <option value="">{{ t('page.tools.page.text.1d8890ad2e') }}</option>
             <option v-for="checkpoint in checkpointRows" :key="checkpoint.id" :value="checkpoint.id">{{ checkpoint.label }} · {{ checkpoint.id }}</option>
           </select>
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="diffCheckpoint()">Diff checkpoint</button>
+          <button class="ghost-action" type="button" @click="diffCheckpoint()">{{ t('page.tools.page.text.0dcacdc522') }}</button>
           <button class="danger-action" type="button" @click="restoreCheckpoint()">
-            {{ restoreArmedId === selectedCheckpointId ? 'Confirm restore' : 'Restore checkpoint' }}
+            {{ restoreArmedId === selectedCheckpointId ? t('page.tools.page.inline.53cce63ca5') : t('page.tools.page.inline.1ac6ff6064') }}
           </button>
         </div>
         <GovernedActionPanel
           :contract="{
             id: 'tool.checkpoint.restore',
             domain: 'tools',
-            title: 'Restore checkpoint',
+            title: t('script.pages.toolspage.title.b450d9b11c'),
             endpoint: '/api/tools/checkpoints/:id/restore',
             method: 'POST',
-            summary: 'Restore can replace workspace files. Diff the checkpoint first, then confirm the same checkpoint id to execute.',
-            current_return: 'RequestReceipt with restored refs',
-            validate: 'checkpoint id is selected and armed',
+            summary: t('script.pages.toolspage.summary.a29f4acf62'),
+            current_return: t('script.pages.toolspage.current_return.af53a529da'),
+            validate: t('script.pages.toolspage.validate.305516ac6c'),
             plan: '/api/tools/checkpoints/:id/diff',
             dry_run: '/api/tools/checkpoints/:id/diff',
             live: true,
-            live_policy: 'requires explicit second click',
+            live_policy: t('script.pages.toolspage.live_policy.b9ec5c9a41'),
             receipt: true,
             audit_ref: true,
             changed_refs: true,
             approval_required: false,
-            kernel_boundary: 'Gateway Tools service'
+            kernel_boundary: t('script.pages.toolspage.kernel_boundary.83fb64e2c5')
           }"
           :payload="{ checkpoint_id: selectedCheckpointId, armed: restoreArmedId === selectedCheckpointId }"
           :receipt="result"
@@ -486,47 +487,47 @@ onMounted(refresh);
           @live="restoreCheckpoint()"
         />
         <DataTable v-if="checkpointRows.length" :rows="checkpointRows" :columns="['id', 'label', 'files', 'created']" />
-        <EmptyState v-else title="No checkpoints" detail="创建 checkpoint 后可进行 diff 与显式二次确认恢复。" />
+        <EmptyState v-else :title="t('page.tools.page.title.a19a3515e0')" :detail="t('page.tools.page.detail.f539f4ce24')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="cache">
         <header>
-          <h2>Tool cache</h2>
-          <span>{{ cacheRows.length }} metrics</span>
+          <h2>{{ t('page.tools.page.text.54a5a2e2a7') }}</h2>
+          <span>{{ formatCount('metrics', cacheRows.length) }}</span>
         </header>
         <DataTable v-if="cacheRows.length" :rows="cacheRows" :columns="['metric', 'value']" />
-        <EmptyState v-else title="No cache stats" detail="服务未启动或运行时尚未产生缓存统计。" />
+        <EmptyState v-else :title="t('page.tools.page.title.d30324b46e')" :detail="t('page.tools.page.detail.5ad74f74b7')" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="ledger">
         <header>
-          <h2>Tool ledger</h2>
+          <h2>{{ t('page.tools.page.text.237dfb0a3b') }}</h2>
           <span>{{ ledgerRows.length }} recent events</span>
         </header>
         <DataTable v-if="ledgerRows.length" searchable :rows="ledgerRows" :columns="['seq', 'kind', 'status', 'tool', 'at']" />
-        <EmptyState v-else title="No tool ledger events" detail="执行工具后，runtime timeline 中的工具事件会在这里聚合展示。" />
-        <RequestReceipt :receipt="result" title="Tool operation receipt" />
-        <RawPayload title="Tool operation payload" :data="result || state.cache || {}" />
+        <EmptyState v-else :title="t('page.tools.page.title.31c128d6c2')" :detail="t('page.tools.page.detail.ad2723c87a')" />
+        <RequestReceipt :receipt="result" :title="t('page.tools.page.title.184f1d349a')" />
+        <RawPayload :title="t('page.tools.page.title.d1d15f8e25')" :data="result || state.cache || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="risk">
         <header>
-          <h2>Risk preflight</h2>
+          <h2>{{ t('page.tools.page.text.6bd451cf41') }}</h2>
           <span>{{ selectedCapability }}</span>
         </header>
         <label class="field-line">
-          Actor
+          {{ t('page.tools.field.actor') }}
           <input v-model="actor" type="text" />
         </label>
         <label class="field-line">
-          Capability
+          {{ t('page.tools.field.capability') }}
           <input v-model="selectedCapability" type="text" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="simulatePolicy">Simulate policy</button>
+          <button class="ghost-action" type="button" @click="simulatePolicy">{{ t('page.tools.page.text.a57755021d') }}</button>
           <button class="primary-action" type="button" @click="runPreflight">
             <ShieldCheck :size="15" />
-            Run preflight
+            {{ t('page.tools.action.runPreflight') }}
           </button>
         </div>
         <DataTable v-if="commandRows.length" :rows="commandRows" :columns="['name', 'action', 'target', 'description']" />
@@ -534,11 +535,11 @@ onMounted(refresh);
 
       <section class="management-panel gateway-panel" data-section="risk">
         <header>
-          <h2>Command and risk history</h2>
-          <span>{{ historyRows.length }} shown</span>
+          <h2>{{ t('page.tools.page.text.8994b17557') }}</h2>
+          <span>{{ t('common.shownCount', { count: historyRows.length, unit: t('unit.records') }) }}</span>
         </header>
         <label class="field-line">
-          Command
+          {{ t('page.tools.field.command') }}
           <select v-model="selectedCommand">
             <option v-for="command in commands" :key="command.name" :value="command.name">{{ command.name }}</option>
             <option value="/status">/status</option>
@@ -546,10 +547,10 @@ onMounted(refresh);
         </label>
         <button class="ghost-action" type="button" @click="executeCommand">
           <Play :size="15" />
-          Execute command
+          {{ t('template.pages.toolspage.91f6f78d5d') }}
         </button>
         <DataTable v-if="historyRows.length" :rows="historyRows" :columns="['command', 'action', 'target', 'at']" />
-        <EmptyState v-else title="No command history" detail="命令执行后会记录在后端历史中。" />
+        <EmptyState v-else :title="t('page.tools.page.title.4390982ec3')" :detail="t('page.tools.page.detail.8ee3ea19f0')" />
       </section>
     </section>
   </section>

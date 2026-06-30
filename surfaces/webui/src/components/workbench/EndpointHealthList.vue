@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
 import type { EndpointSnapshot } from '../../api/client';
 import StatusPill from './StatusPill.vue';
 
@@ -10,7 +11,7 @@ defineProps<{
 <template>
   <section class="endpoint-health-list">
     <header>
-      <h2>Endpoint health</h2>
+      <h2>{{ t('component.workbench.endpoint.health.list.text.62a17fbf61') }}</h2>
       <span>{{ endpoints.length }}</span>
     </header>
     <article v-for="endpoint in endpoints" :key="endpoint.id">

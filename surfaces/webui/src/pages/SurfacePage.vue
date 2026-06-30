@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { Activity, Play, RefreshCw, RotateCcw, Send, ShieldCheck, Square, Wrench } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -173,22 +174,22 @@ const deliveryRows = computed(() => deliveryItems.value.slice(0, 16).map((item: 
 const retryCandidate = computed(() => outboxItems.value.find((item: any) => ['failed', 'retry_scheduled', 'dead_letter'].includes(String(item.status || ''))));
 const replayCandidate = computed(() => inboxItems.value[0]);
 const surfaceContext = computed(() => [
-  { label: 'Selected', value: selectedSurface.value },
-  { label: 'Surfaces', value: surfaces.value.length, tone: surfaces.value.length ? 'success' : 'warn' },
-  { label: 'Ready', value: host.value.ready_count ?? '-', tone: degradedSurfaces.value ? 'warn' : 'success' },
-  { label: 'Degraded', value: degradedSurfaces.value, tone: degradedSurfaces.value ? 'warn' : 'success' },
-  { label: 'Routes', value: totalRoutes.value },
-  { label: 'Resources', value: totalResources.value },
+  { label: t('script.pages.surfacepage.label.9a976fc228'), value: selectedSurface.value },
+  { label: t('script.pages.surfacepage.label.22b4b0c3c3'), value: surfaces.value.length, tone: surfaces.value.length ? 'success' : 'warn' },
+  { label: t('script.pages.surfacepage.label.20c7c5522f'), value: host.value.ready_count ?? '-', tone: degradedSurfaces.value ? 'warn' : 'success' },
+  { label: t('script.pages.surfacepage.label.13c27ff80a'), value: degradedSurfaces.value, tone: degradedSurfaces.value ? 'warn' : 'success' },
+  { label: t('script.pages.surfacepage.label.03730e5840'), value: totalRoutes.value },
+  { label: t('script.pages.surfacepage.label.87df60de33'), value: totalResources.value },
 ]);
 const surfaceWorkflow = computed(() => [
-  { id: 'registry', label: 'Registry', status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
-  { id: 'supervisor', label: 'Supervisor', status: selectedRuntime.value.status || 'idle', description: selectedSurface.value },
-  { id: 'health', label: 'Health', status: state.value.selectedHealth?.status === 'error' ? 'blocked' : (selectedRuntime.value.status || 'ready'), description: selectedSurface.value },
-  { id: 'routes', label: 'Routes', status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
-  { id: 'routes', label: 'Resources', status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
-  { id: 'dispatch', label: 'Dispatch', status: actionResult.value ? 'active' : 'idle' },
-  { id: 'delivery', label: 'Reliable delivery', status: deadLetterItems.value.length ? 'blocked' : (activeInboxItems.value.length || activeOutboxItems.value.length) ? 'active' : outboxRows.value.length ? 'ready' : 'idle', count: activeInboxItems.value.length + activeOutboxItems.value.length },
-  { id: 'events', label: 'Events', status: eventRows.value.length ? 'ready' : 'idle', count: eventRows.value.length },
+  { id: 'registry', label: t('script.pages.surfacepage.label.1fd6a805da'), status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
+  { id: 'supervisor', label: t('script.pages.surfacepage.label.2cd4fa195e'), status: selectedRuntime.value.status || 'idle', description: selectedSurface.value },
+  { id: 'health', label: t('script.pages.surfacepage.label.3703cd2168'), status: state.value.selectedHealth?.status === 'error' ? 'blocked' : (selectedRuntime.value.status || 'ready'), description: selectedSurface.value },
+  { id: 'routes', label: t('script.pages.surfacepage.label.03730e5840'), status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
+  { id: 'routes', label: t('script.pages.surfacepage.label.87df60de33'), status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
+  { id: 'dispatch', label: t('script.pages.surfacepage.label.840e1b364a'), status: actionResult.value ? 'active' : 'idle' },
+  { id: 'delivery', label: t('script.pages.surfacepage.label.1467a52d3b'), status: deadLetterItems.value.length ? 'blocked' : (activeInboxItems.value.length || activeOutboxItems.value.length) ? 'active' : outboxRows.value.length ? 'ready' : 'idle', count: activeInboxItems.value.length + activeOutboxItems.value.length },
+  { id: 'events', label: t('script.pages.surfacepage.label.c5497bca58'), status: eventRows.value.length ? 'ready' : 'idle', count: eventRows.value.length },
 ]);
 const surfaceEvidence = computed(() => [
   ...routeRows.value.slice(0, 4).map((row: any) => ({
@@ -386,63 +387,63 @@ onMounted(refresh);
   <section class="capability-page surface-page">
     <header class="page-header">
       <div>
-        <h1>Surface Host</h1>
-        <p>Gateway 统一发现、诊断和分发 WebUI、TUI、外部消息面与静态资源面。</p>
+        <h1>{{ t('page.surface.page.text.4518e0281f') }}</h1>
+        <p>{{ t('page.surface.page.text.d78467b9d5') }}</p>
       </div>
       <button class="primary-action" type="button" :disabled="loading" @click="refresh">
         <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh surfaces' }}
+        {{ loading ? t('page.surface.page.inline.aaeaebbce9') : t('page.surface.page.inline.284a5ec5f4') }}
       </button>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="surfaceContext" />
-    <WorkflowStrip :steps="surfaceWorkflow" title="Surface lifecycle" />
+    <WorkflowStrip :steps="surfaceWorkflow" :title="t('page.surface.page.title.30a83906c7')" />
 
     <section class="metric-row tools-metrics" data-section="health">
       <article class="metric-card" data-tone="success">
-        <span>Surfaces</span>
+        <span>{{ t('page.surface.page.text.89e795a427') }}</span>
         <strong>{{ surfaces.length }}</strong>
         <small>{{ externalSurfaces }} external</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Routes</span>
+        <span>{{ t('page.surface.page.text.e3d84f3df6') }}</span>
         <strong>{{ totalRoutes }}</strong>
-        <small>HTTP and callback entries</small>
+        <small>{{ t('page.surface.page.text.af128ab236') }}</small>
       </article>
       <article class="metric-card" data-tone="warn">
-        <span>Resources</span>
+        <span>{{ t('page.surface.page.text.df4e5009f8') }}</span>
         <strong>{{ totalResources }}</strong>
-        <small>static mounts</small>
+        <small>{{ t('page.surface.page.text.cb8966e990') }}</small>
       </article>
       <article class="metric-card">
-        <span>Host</span>
-        <strong>{{ host.status || state.health?.status || 'unknown' }}</strong>
-        <small>surface service health</small>
+        <span>{{ t('page.surface.page.text.713ff0b8f0') }}</span>
+        <strong>{{ host.status || state.health?.status || t('page.surface.page.inline.f2606fa5d7') }}</strong>
+        <small>{{ t('page.surface.page.text.e2665719ee') }}</small>
       </article>
       <article class="metric-card" :data-tone="degradedSurfaces ? 'warn' : 'success'">
-        <span>Runtime issues</span>
+        <span>{{ t('page.surface.page.text.b1a738a813') }}</span>
         <strong>{{ degradedSurfaces }}</strong>
-        <small>{{ host.circuit_open_count || 0 }} circuit open</small>
+        <small>{{ t('page.surface.summary.circuitOpen', { count: host.circuit_open_count || 0 }) }}</small>
       </article>
       <article class="metric-card" :data-tone="deadLetterItems.length ? 'warn' : 'success'">
-        <span>Reliable delivery</span>
+        <span>{{ t('page.surface.page.text.c215d81d09') }}</span>
         <strong>{{ activeInboxItems.length + activeOutboxItems.length }}</strong>
-        <small>{{ outboxRows.length }} total · {{ deadLetterItems.length }} DLQ</small>
+        <small>{{ t('page.surface.summary.deliveryQueue', { total: outboxRows.length, dlq: deadLetterItems.length }) }}</small>
       </article>
     </section>
 
     <section class="gateway-grid">
       <section class="management-panel gateway-panel wide" data-section="registry">
         <header>
-          <h2>Surface registry</h2>
+          <h2>{{ t('page.surface.page.text.d0eb56ac2a') }}</h2>
           <StatusPill :status="state.registry?.__offline ? 'offline' : 'ready'" />
         </header>
         <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No surfaces" detail="Gateway SurfaceHost 未返回可用 surface。" />
+        <EmptyState v-else :title="t('page.surface.page.title.9e87656d55')" :detail="t('page.surface.page.detail.7941de7927')" />
         <SurfaceDiagnosticPlaybook :rows="surfaceDiagnosticRows" />
         <label class="field-line">
-          Selected surface
+          {{ t('page.surface.field.selectedSurface') }}
           <select v-model="selectedSurface" @change="loadSurface(selectedSurface)">
             <option v-for="surface in surfaces" :key="surface.id" :value="surface.id">{{ surface.name || surface.id }}</option>
             <option value="webui">webui</option>
@@ -452,133 +453,133 @@ onMounted(refresh);
 
       <section class="management-panel gateway-panel" data-section="health">
         <header>
-          <h2>Selected health</h2>
+          <h2>{{ t('page.surface.page.text.0a8f2a8cc3') }}</h2>
           <span>{{ selectedSurface }}</span>
         </header>
         <div class="button-row">
           <button class="primary-action" type="button" @click="checkSurfaceHealth">
             <ShieldCheck :size="15" />
-            Check health
+            {{ t('page.surface.action.checkHealth') }}
           </button>
           <button class="ghost-action" type="button" @click="runSupervisorAction('start')">
             <Play :size="15" />
-            Start
+            {{ t('page.surface.action.start') }}
           </button>
           <button class="ghost-action" type="button" @click="runSupervisorAction('stop')">
             <Square :size="15" />
-            Stop
+            {{ t('page.surface.action.stop') }}
           </button>
           <button class="ghost-action" type="button" @click="runSupervisorAction('restart')">
             <RotateCcw :size="15" />
-            Restart
+            {{ t('page.surface.action.restart') }}
           </button>
           <button class="ghost-action" type="button" @click="runSupervisorAction('repair')">
             <Wrench :size="15" />
-            Repair
+            {{ t('page.surface.action.repair') }}
           </button>
         </div>
         <DataTable v-if="runtimeRows.length" :rows="runtimeRows" :columns="['surface', 'status', 'active', 'pid', 'failures', 'restarts', 'circuit', 'last_seen', 'next_retry']" @row-click="selectedDetail = $event" />
-        <RawPayload title="Surface health detail" :data="state.selectedHealth || {}" />
-        <RawPayload title="Supervisor status" :data="state.status || selectedRuntime || {}" />
+        <RawPayload :title="t('page.surface.page.title.8f45531e08')" :data="state.selectedHealth || {}" />
+        <RawPayload :title="t('page.surface.page.title.640ad216d7')" :data="state.status || selectedRuntime || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="routes">
         <header>
-          <h2>Routes</h2>
-          <span>{{ routeRows.length }} entries</span>
+          <h2>{{ t('page.surface.page.text.e3d84f3df6') }}</h2>
+          <span>{{ formatCount('entries', routeRows.length) }}</span>
         </header>
         <DataTable v-if="routeRows.length" :rows="routeRows" :columns="['method', 'path', 'target', 'status']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No routes" detail="该 surface 未声明 HTTP 路由。" />
+        <EmptyState v-else :title="t('page.surface.page.title.0926c31b98')" :detail="t('page.surface.page.detail.833cc1397b')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="routes">
         <header>
-          <h2>Resources</h2>
-          <span>{{ resourceRows.length }} entries</span>
+          <h2>{{ t('page.surface.page.text.df4e5009f8') }}</h2>
+          <span>{{ formatCount('entries', resourceRows.length) }}</span>
         </header>
         <DataTable v-if="resourceRows.length" :rows="resourceRows" :columns="['path', 'file', 'type', 'spa']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No resources" detail="该 surface 未声明静态资源挂载。" />
+        <EmptyState v-else :title="t('page.surface.page.title.bbd67aec43')" :detail="t('page.surface.page.detail.da70eaf510')" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="dispatch">
         <header>
-          <h2>Dispatch</h2>
-          <span>send and action</span>
+          <h2>{{ t('page.surface.page.text.0324d20822') }}</h2>
+          <span>{{ t('page.surface.page.text.44b8bcb54a') }}</span>
         </header>
         <label class="field-line">
-          Recipient
+          {{ t('page.surface.field.recipient') }}
           <input v-model="recipient" type="text" />
         </label>
         <label class="field-line">
-          Message
+          {{ t('page.surface.field.message') }}
           <textarea v-model="messageText" rows="3" />
         </label>
         <div class="button-row">
           <button class="primary-action" type="button" @click="sendMessage">
             <Send :size="15" />
-            Send message
+            {{ t('page.surface.action.sendMessage') }}
           </button>
         </div>
         <label class="field-line">
-          Action
+          {{ t('page.surface.field.action') }}
           <input v-model="actionName" type="text" />
         </label>
         <label class="field-line">
-          Action payload
+          {{ t('page.surface.field.actionPayload') }}
           <textarea v-model="actionPayloadText" rows="5" />
         </label>
         <p v-if="actionError" class="field-error">{{ actionError }}</p>
         <button class="ghost-action" type="button" @click="runAction">
           <Activity :size="15" />
-          Run action
+          {{ t('page.surface.action.runAction') }}
         </button>
-        <RequestReceipt :receipt="actionResult" title="Surface dispatch receipt" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.surface.page.title.a15a0f334d')" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="delivery">
         <header>
-          <h2>Reliable delivery</h2>
+          <h2>{{ t('page.surface.page.text.c215d81d09') }}</h2>
           <span>{{ activeInboxItems.length + activeOutboxItems.length }} active · {{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ</span>
         </header>
         <div class="button-row">
           <button class="ghost-action" type="button" :disabled="!retryCandidate" @click="retryDelivery">
             <RotateCcw :size="15" />
-            Retry failed
+            {{ t('template.pages.surfacepage.7b6ca4df85') }}
           </button>
           <button class="ghost-action" type="button" :disabled="!retryCandidate" @click="deadLetterDelivery">
             <Square :size="15" />
-            Move to DLQ
+            {{ t('template.pages.surfacepage.ffb9f9eb33') }}
           </button>
           <button class="ghost-action" type="button" :disabled="!replayCandidate" @click="replayInbound">
             <Play :size="15" />
-            Replay inbound
+            {{ t('template.pages.surfacepage.a89fd9f7cf') }}
           </button>
         </div>
         <DataTable v-if="inboxRows.length" :rows="inboxRows" :columns="['message_id', 'status', 'thread', 'sender', 'session', 'turn', 'error']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No inbox records" detail="该 surface 暂无持久 inbound 消息。" />
+        <EmptyState v-else :title="t('page.surface.page.title.6e2d0aef09')" :detail="t('page.surface.page.detail.d4f6163244')" />
         <DataTable v-if="outboxRows.length" :rows="outboxRows" :columns="['delivery_id', 'status', 'recipient', 'attempts', 'next_retry', 'error']" @row-click="selectedDetail = $event" />
         <DataTable v-if="deliveryRows.length" :rows="deliveryRows" :columns="['kind', 'status', 'delivery_id', 'message_id', 'at']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="events">
         <header>
-          <h2>Events</h2>
+          <h2>{{ t('page.surface.page.text.a14d7b470c') }}</h2>
           <span>{{ eventRows.length + supervisorRows.length }} recent</span>
         </header>
         <DataTable v-if="eventRows.length" :rows="eventRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
         <DataTable v-if="supervisorRows.length" :rows="supervisorRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
-        <EmptyState v-if="!eventRows.length && !supervisorRows.length" title="No events" detail="当前 surface 尚无投递、回调或监督事件。" />
-        <EvidenceTrace :items="surfaceEvidence" title="Surface evidence trace" />
+        <EmptyState v-if="!eventRows.length && !supervisorRows.length" :title="t('page.surface.page.title.4ed86fdc14')" :detail="t('page.surface.page.detail.5d2cac078e')" />
+        <EvidenceTrace :items="surfaceEvidence" :title="t('page.surface.page.title.a565340669')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="events">
         <header>
-          <h2>Raw payloads</h2>
+          <h2>{{ t('page.surface.page.text.b6890edcf9') }}</h2>
           <span>{{ selectedSurface }}</span>
         </header>
-        <RawPayload title="Selected surface" :data="selected || {}" />
-        <RawPayload title="Host payload" :data="state.health || {}" />
-        <DetailDrawer title="Surface selected detail" :row="selectedDetail || selected" @close="selectedDetail = null" />
+        <RawPayload :title="t('page.surface.page.title.db287fe009')" :data="selected || {}" />
+        <RawPayload :title="t('page.surface.page.title.5119090a59')" :data="state.health || {}" />
+        <DetailDrawer :title="t('page.surface.page.title.61e43d53c8')" :row="selectedDetail || selected" @close="selectedDetail = null" />
       </section>
     </section>
   </section>

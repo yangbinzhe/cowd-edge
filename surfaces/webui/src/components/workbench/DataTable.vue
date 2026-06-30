@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
 import { computed, ref } from 'vue';
-import { translateText } from '../../i18n';
+import { displayColumn } from '../../i18n/domain/columns';
 
 const props = withDefaults(defineProps<{
   rows: Record<string, unknown>[];
@@ -47,8 +48,7 @@ function keyFor(row: Record<string, unknown>, index: number) {
 }
 
 function columnLabel(column: string) {
-  const normalized = column.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-  return translateText(normalized);
+  return displayColumn(column);
 }
 </script>
 
@@ -56,8 +56,8 @@ function columnLabel(column: string) {
   <div class="data-table-shell" :data-compact="compact">
     <div v-if="searchable" class="data-table-toolbar">
       <label class="search-field">
-        <span>Search</span>
-        <input v-model="query" type="search" placeholder="Filter rows" />
+        <span>{{ t('component.workbench.data.table.text.d79b22c9c0') }}</span>
+        <input v-model="query" type="search" :placeholder="t('component.workbench.data.table.placeholder.cd98a7dd38')" />
       </label>
       <small>{{ filteredRows.length }} / {{ rows.length }}</small>
     </div>

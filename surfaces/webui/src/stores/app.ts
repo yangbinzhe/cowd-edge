@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { api, normalizeActivity, providerModels, type EndpointSnapshot } from '../api/client';
+import { t } from '../i18n';
 import type { ActivityEvent, ChatDisplayMode, ChatTurn, CompanionTab, NavId, RuntimeResourceUpload, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
 
 function blockText(block: any): string {
@@ -54,7 +55,7 @@ export const useAppStore = defineStore('app', () => {
   const selectedProfile = ref('default');
   const commandError = ref('');
   const contextUsagePercent = ref<number | null>(null);
-  const contextUsageSource = ref('not reported');
+  const contextUsageSource = ref(t('store.app.string.18eb606335'));
   const sessionQuery = ref('');
   const actionResults = ref<Record<string, any>>({});
   const capabilitySnapshots = ref<Record<string, EndpointSnapshot[]>>({});
@@ -201,13 +202,13 @@ export const useAppStore = defineStore('app', () => {
     return {
       turn,
       runtime_turn: runtimeTurn,
-      source_note: 'Session/currentRun projection. Historical turn precision depends on backend timeline and turn identifiers.',
+      source_note: t('store.app.string.718831f909'),
       summary: [
-        { label: 'Tools', value: toolEvents.length },
-        { label: 'Memory', value: memoryEvents.length },
-        { label: 'Files', value: files.length },
-        { label: 'Approvals', value: approvalEvents.length },
-        { label: 'Events', value: runtimeEvents.length },
+        { label: t('script.stores.app.label.4fa8cc860c'), value: toolEvents.length },
+        { label: t('script.stores.app.label.89c8a2851d'), value: memoryEvents.length },
+        { label: t('script.stores.app.label.6ce6c512ea'), value: files.length },
+        { label: t('script.stores.app.label.deb9d03cf0'), value: approvalEvents.length },
+        { label: t('script.stores.app.label.c5497bca58'), value: runtimeEvents.length },
       ],
       tools: toolEvents,
       memory: memoryEvents,
@@ -273,7 +274,7 @@ export const useAppStore = defineStore('app', () => {
       tool_name: row.tool_name,
       token_usage: row.token_usage,
     }));
-    if (!turns.value.length) turns.value = [{ id: 'empty', role: 'system', content: '当前 session 暂无消息。', status: 'complete' }];
+    if (!turns.value.length) turns.value = [{ id: 'empty', role: 'system', content: t('store.app.session.empty'), status: 'complete' }];
     connectSessionStream(sessionId);
     await refreshContextUsage(sessionId);
     await loadAttachments(sessionId);
@@ -283,7 +284,7 @@ export const useAppStore = defineStore('app', () => {
   async function refreshContextUsage(sessionId = activeSessionId.value) {
     if (!sessionId) {
       contextUsagePercent.value = null;
-      contextUsageSource.value = 'no active session';
+      contextUsageSource.value = t('store.app.string.44a6946f79');
       return;
     }
     const stats: any = await api.sessionStats(sessionId);
@@ -291,10 +292,10 @@ export const useAppStore = defineStore('app', () => {
     const limit = Number(stats.context_window || stats.max_context_tokens || stats.token_budget || stats.token_usage?.limit || 0);
     if (used > 0 && limit > 0) {
       contextUsagePercent.value = Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
-      contextUsageSource.value = 'session stats';
+      contextUsageSource.value = t('store.app.string.6e69362394');
     } else {
       contextUsagePercent.value = null;
-      contextUsageSource.value = 'not reported';
+      contextUsageSource.value = t('store.app.string.18eb606335');
     }
   }
 
@@ -310,7 +311,7 @@ export const useAppStore = defineStore('app', () => {
     sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)];
     activeSessionId.value = session.id;
     selectedModel.value = session.model || selectedModel.value;
-    turns.value = [{ id: `system-${Date.now()}`, role: 'system', content: '新会话已创建。', status: 'complete' }];
+    turns.value = [{ id: `system-${Date.now()}`, role: 'system', content: t('store.app.session.created'), status: 'complete' }];
     attachments.value = [];
     connectSessionStream(session.id);
   }
@@ -327,7 +328,7 @@ export const useAppStore = defineStore('app', () => {
 
   async function compactSession(sessionId: string) {
     const result = await api.compactSession(sessionId);
-    activity.value.unshift({ id: `compact-${Date.now()}`, kind: 'runtime', title: 'Session compacted', detail: JSON.stringify(result).slice(0, 220), status: 'complete' });
+    activity.value.unshift({ id: `compact-${Date.now()}`, kind: 'runtime', title: t('script.stores.app.title.2b43f89c03'), detail: JSON.stringify(result).slice(0, 220), status: 'complete' });
     await loadActivity();
   }
 
@@ -340,7 +341,7 @@ export const useAppStore = defineStore('app', () => {
     resetCurrentRun(content);
     ensureStreamingAssistantTurn();
     companionTab.value = 'activity';
-    activity.value.unshift({ id: `send-${Date.now()}`, kind: 'runtime', title: 'Message queued', detail: content.slice(0, 140), status: 'pending' });
+    activity.value.unshift({ id: `send-${Date.now()}`, kind: 'runtime', title: t('script.stores.app.title.001e413a9b'), detail: content.slice(0, 140), status: 'pending' });
     try {
       const contentWithAttachments = renderMessageWithAttachments(content);
       const resourceIds = attachments.value
@@ -358,10 +359,10 @@ export const useAppStore = defineStore('app', () => {
       turns.value.push({
         id: `error-${Date.now()}`,
         role: 'system',
-        content: `发送失败：${error instanceof Error ? error.message : String(error)}`,
+        content: t('store.app.send.failed', { error: error instanceof Error ? error.message : String(error) }),
         status: 'error',
       });
-      activity.value.unshift({ id: `send-error-${Date.now()}`, kind: 'error', title: 'Message failed', detail: error instanceof Error ? error.message : String(error), status: 'error' });
+      activity.value.unshift({ id: `send-error-${Date.now()}`, kind: 'error', title: t('script.stores.app.title.91172a3984'), detail: error instanceof Error ? error.message : String(error), status: 'error' });
     }
   }
 
@@ -445,8 +446,8 @@ export const useAppStore = defineStore('app', () => {
           activity.value.unshift({
             id: `stream-error-${Date.now()}`,
             kind: 'error',
-            title: 'Live stream disconnected',
-            detail: 'SSE connection closed. The page will still refresh completed messages through the API.',
+            title: t('script.stores.app.title.f16e471052'),
+            detail: t('script.stores.app.detail.58a8a8b820'),
             status: 'error',
           });
         }
@@ -455,7 +456,7 @@ export const useAppStore = defineStore('app', () => {
       activity.value.unshift({
         id: `stream-open-error-${Date.now()}`,
         kind: 'error',
-        title: 'Live stream unavailable',
+        title: t('script.stores.app.title.9b07b06010'),
         detail: error instanceof Error ? error.message : String(error),
         status: 'error',
       });
@@ -601,7 +602,7 @@ export const useAppStore = defineStore('app', () => {
     activity.value.unshift({
       id: `cancel-${Date.now()}`,
       kind: receipt.ok ? 'runtime' : 'error',
-      title: 'Turn cancel requested',
+      title: t('script.stores.app.title.d42269932f'),
       detail: receipt.error || receipt.payload_summary || activeSessionId.value,
       status: receipt.ok ? 'complete' : 'error',
     });
@@ -654,7 +655,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       const result: any = await api.addSessionAttachment(activeSessionId.value, path, path);
       attachments.value = [result.attachment, ...attachments.value.filter((item) => item.path !== path)];
-      activity.value.unshift({ id: `attachment-${Date.now()}`, kind: 'context', title: 'Attachment added', detail: path, status: 'complete' });
+      activity.value.unshift({ id: `attachment-${Date.now()}`, kind: 'context', title: t('script.stores.app.title.6c796f2b2a'), detail: path, status: 'complete' });
     } catch (error) {
       fileError.value = error instanceof Error ? error.message : String(error);
     }
@@ -677,7 +678,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       const result: any = await api.uploadFile(file, dir);
       await loadWorkspace(dir);
-      activity.value.unshift({ id: `upload-${Date.now()}`, kind: 'context', title: 'File uploaded', detail: `${result.path} (${result.size} bytes)`, status: 'complete' });
+      activity.value.unshift({ id: `upload-${Date.now()}`, kind: 'context', title: t('script.stores.app.title.71be2f4e38'), detail: `${result.path} (${result.size} bytes)`, status: 'complete' });
       return result;
     } catch (error) {
       fileError.value = error instanceof Error ? error.message : String(error);
@@ -709,7 +710,7 @@ export const useAppStore = defineStore('app', () => {
         added_at_ms: Date.now(),
       };
       attachments.value = [attachment, ...attachments.value.filter((item) => item.ref_id !== attachment.ref_id)];
-      activity.value.unshift({ id: `resource-${Date.now()}`, kind: 'context', title: 'Resource attached', detail: `${resource.original_name} (${resource.kind})`, status: 'complete' });
+      activity.value.unshift({ id: `resource-${Date.now()}`, kind: 'context', title: t('script.stores.app.title.5ccc1613c7'), detail: `${resource.original_name} (${resource.kind})`, status: 'complete' });
       return result;
     } catch (error) {
       fileError.value = error instanceof Error ? error.message : String(error);
@@ -815,7 +816,7 @@ export const useAppStore = defineStore('app', () => {
       sessions.value = sessions.value.map((session) => session.id === activeSessionId.value ? { ...session, model } : session);
       closeModal();
     } catch (error) {
-      commandError.value = `模型切换失败：${error instanceof Error ? error.message : String(error)}`;
+      commandError.value = t('store.app.model.switchFailed', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -828,7 +829,7 @@ export const useAppStore = defineStore('app', () => {
       profiles.value = data.profiles || [];
       closeModal();
     } catch (error) {
-      commandError.value = `Profile 切换失败：${error instanceof Error ? error.message : String(error)}`;
+      commandError.value = t('store.app.profile.switchFailed', { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -837,7 +838,7 @@ export const useAppStore = defineStore('app', () => {
     const [runtime, providerData] = await Promise.all([api.runtimeControlPlane(), api.providers()]);
     controlPlane.value = runtime;
     providers.value = providerData;
-    activity.value.unshift({ id: `providers-${Date.now()}`, kind: 'runtime', title: 'Providers reloaded', detail: JSON.stringify(result).slice(0, 240), status: 'complete' });
+    activity.value.unshift({ id: `providers-${Date.now()}`, kind: 'runtime', title: t('script.stores.app.title.8f89f14595'), detail: JSON.stringify(result).slice(0, 240), status: 'complete' });
     return result;
   }
 

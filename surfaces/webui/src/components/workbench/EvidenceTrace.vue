@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../../i18n';
 import StatusPill from './StatusPill.vue';
 
 defineProps<{
@@ -19,8 +20,8 @@ defineProps<{
 <template>
   <section class="evidence-trace">
     <header>
-      <h2>{{ title || 'Evidence trace' }}</h2>
-      <span>{{ items.length }} refs</span>
+      <h2>{{ title || t('component.workbench.evidence.trace.inline.85b6a1911d') }}</h2>
+      <span>{{ formatCount('refs', items.length) }}</span>
     </header>
     <article v-for="item in items" :key="item.id || item.ref || item.summary">
       <div>

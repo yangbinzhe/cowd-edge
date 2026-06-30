@@ -1,26 +1,28 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { setLocale, translateStatus, translateText } from './index';
+import { formatCount, setLocale, t } from './index';
+import { displayStatus } from './domain/status';
 
 describe('WebUI i18n', () => {
-  afterEach(() => setLocale('en-US'));
+  afterEach(() => setLocale('zh-CN'));
 
-  it('translates core navigation and operational labels to Chinese', () => {
+  it('uses explicit keys for Chinese interface text', () => {
     setLocale('zh-CN');
-    expect(translateText('Mission Control')).toBe('任务控制');
-    expect(translateText('Tools Registry')).toBe('工具注册表');
-    expect(translateText('Gateway access')).toBe('Gateway 访问');
+    expect(t('term.missionControl')).toBe('任务控制台');
+    expect(t('term.tool')).toBe('工具');
+    expect(t('requestReceipt.endpoint')).toBe('端点');
   });
 
-  it('keeps English source text available when locale is English', () => {
+  it('keeps English interface text separate', () => {
     setLocale('en-US');
-    expect(translateText('Mission Control')).toBe('Mission Control');
+    expect(t('term.missionControl')).toBe('Mission Control');
+    expect(t('term.tool')).toBe('Tool');
+    expect(t('requestReceipt.endpoint')).toBe('Endpoint');
   });
 
-  it('handles common dynamic counts and runtime statuses', () => {
+  it('formats common dynamic counts and runtime statuses', () => {
     setLocale('zh-CN');
-    expect(translateText('12 events')).toBe('12 事件');
-    expect(translateText('3 tools')).toBe('3 工具');
-    expect(translateText('Refresh runtime completed')).toBe('刷新运行时 已完成');
-    expect(translateStatus('running')).toBe('运行中');
+    expect(formatCount('events', 12)).toBe('12 事件');
+    expect(formatCount('tools', 3)).toBe('3 工具');
+    expect(displayStatus('running')).toBe('运行中');
   });
 });

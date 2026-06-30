@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { RefreshCw, RotateCcw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -101,19 +102,19 @@ const growthSources = computed(() => {
   return sources && typeof sources === 'object' ? Object.keys(sources).length : 0;
 });
 const runtimeContext = computed(() => [
-  { label: 'Session', value: sessionId.value },
-  { label: 'Model', value: controlPlane.value.configured_model || effectiveConfig.value?.model || 'unresolved' },
-  { label: 'Provider', value: controlPlane.value.provider_count ?? 0, tone: controlPlane.value.provider_count ? 'success' : 'warn' },
-  { label: 'Readiness', value: controlPlane.value.production_ready === true ? 'production ready' : 'attention', tone: controlPlane.value.production_ready === true ? 'success' : 'warn' },
+  { label: t('script.pages.runtimepage.label.f7f1997c6c'), value: sessionId.value },
+  { label: t('script.pages.runtimepage.label.68c2cc7f0c'), value: controlPlane.value.configured_model || effectiveConfig.value?.model || 'unresolved' },
+  { label: t('script.pages.runtimepage.label.7ceee3f361'), value: controlPlane.value.provider_count ?? 0, tone: controlPlane.value.provider_count ? 'success' : 'warn' },
+  { label: t('script.pages.runtimepage.label.6dc1222c37'), value: controlPlane.value.production_ready === true ? 'production ready' : 'attention', tone: controlPlane.value.production_ready === true ? 'success' : 'warn' },
 ]);
 const runtimeWorkflow = computed(() => [
-  { id: 'overview', label: 'Config', status: controlPlane.value.degraded ? 'degraded' : 'ready', count: controlPlane.value.provider_count ?? 0, description: 'providers' },
-  { id: 'runs', label: 'Lease', status: leases.value?.__offline ? 'blocked' : 'ready', count: Array.isArray(leases.value?.leases) ? leases.value.leases.length : 0 },
-  { id: 'runs', label: 'Turn', status: turnRows.value.length ? 'active' : 'idle', count: turnRows.value.length },
-  { id: 'mission', label: 'Mission', status: missionSessions.value.length ? 'ready' : 'idle', count: missionSessions.value.length },
-  { id: 'timeline', label: 'Timeline', status: timelineRows.value.length ? 'ready' : 'idle', count: timelineRows.value.length },
-  { id: 'policy', label: 'Approval', status: approvalItems.value.length ? 'blocked' : 'ready', count: approvalItems.value.length },
-  { id: 'growth', label: 'Growth', status: growthPromotionRows.value.length ? 'done' : 'idle', count: growthEventRows.value.length },
+  { id: 'overview', label: t('script.pages.runtimepage.label.8851142da5'), status: controlPlane.value.degraded ? 'degraded' : 'ready', count: controlPlane.value.provider_count ?? 0, description: 'providers' },
+  { id: 'runs', label: t('script.pages.runtimepage.label.b24ef8c7cc'), status: leases.value?.__offline ? 'blocked' : 'ready', count: Array.isArray(leases.value?.leases) ? leases.value.leases.length : 0 },
+  { id: 'runs', label: t('script.pages.runtimepage.label.368e8081b7'), status: turnRows.value.length ? 'active' : 'idle', count: turnRows.value.length },
+  { id: 'mission', label: t('script.pages.runtimepage.label.e4698d4cea'), status: missionSessions.value.length ? 'ready' : 'idle', count: missionSessions.value.length },
+  { id: 'timeline', label: t('script.pages.runtimepage.label.018514a3d5'), status: timelineRows.value.length ? 'ready' : 'idle', count: timelineRows.value.length },
+  { id: 'policy', label: t('script.pages.runtimepage.label.8cc047ac17'), status: approvalItems.value.length ? 'blocked' : 'ready', count: approvalItems.value.length },
+  { id: 'growth', label: t('script.pages.runtimepage.label.f3b21e049f'), status: growthPromotionRows.value.length ? 'done' : 'idle', count: growthEventRows.value.length },
 ]);
 const runtimeEvidence = computed(() => [
   ...timelineRows.value.slice(0, 5).map((row: any) => ({
@@ -275,224 +276,224 @@ onMounted(refresh);
   <section class="capability-page runtime-page">
     <header class="page-header">
       <div>
-        <h1>Runtime Control</h1>
-        <p>控制面、模型提供方、租约、审批、任务和运行时事件集中操作。</p>
+        <h1>{{ t('page.runtime.page.text.22f16af38e') }}</h1>
+        <p>{{ t('page.runtime.page.text.3152ab97db') }}</p>
       </div>
       <button class="primary-action" type="button" :disabled="loading" @click="refresh">
         <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh runtime' }}
+        {{ loading ? t('page.runtime.page.inline.ae316aff0b') : t('page.runtime.page.inline.d630960583') }}
       </button>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="runtimeContext" />
-    <WorkflowStrip :steps="runtimeWorkflow" title="Runtime flow" />
+    <WorkflowStrip :steps="runtimeWorkflow" :title="t('page.runtime.page.title.cd537a35f0')" />
 
     <section class="metric-row">
       <article class="metric-card">
-        <span>Control plane</span>
-        <strong>{{ controlPlane.degraded || runtimeStatus.degraded ? 'degraded' : 'ready' }}</strong>
-        <small>{{ controlPlane.configured_model || 'no configured model' }}</small>
+        <span>{{ t('page.runtime.page.text.895180bcc2') }}</span>
+        <strong>{{ controlPlane.degraded || runtimeStatus.degraded ? t('page.runtime.page.inline.394dec1c4e') : t('page.runtime.page.inline.a6b1ab29de') }}</strong>
+        <small>{{ controlPlane.configured_model || t('page.runtime.page.inline.b523fd5a1b') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Providers</span>
+        <span>{{ t('page.runtime.page.text.b803a28e02') }}</span>
         <strong>{{ controlPlane.provider_count ?? controlPlane.provider_names?.length ?? 0 }}</strong>
-        <small>{{ controlPlane.provider_model_count || 0 }} models</small>
+        <small>{{ formatCount('models', controlPlane.provider_model_count || 0) }}</small>
       </article>
       <article class="metric-card" data-tone="success">
-        <span>Pending approvals</span>
+        <span>{{ t('page.runtime.page.text.8ee2353a6b') }}</span>
         <strong>{{ approvalItems.length }}</strong>
         <small>{{ taskRows.length }} visible tasks</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Mission sessions</span>
+        <span>{{ t('page.runtime.page.text.6cf339578a') }}</span>
         <strong>{{ missionSessions.length }}</strong>
-        <small>{{ mission.active_session_id || 'no active mission' }}</small>
+        <small>{{ mission.active_session_id || t('page.runtime.page.inline.9e652504d9') }}</small>
       </article>
       <article class="metric-card" data-tone="warning">
-        <span>Growth events</span>
+        <span>{{ t('page.runtime.page.text.188d0073a9') }}</span>
         <strong>{{ growthStatus.event_count ?? growthEventRows.length }}</strong>
-        <small>{{ growthStatus.promotion_count ?? growthPromotionRows.length }} promotions</small>
+        <small>{{ formatCount('promotions', growthStatus.promotion_count ?? growthPromotionRows.length) }}</small>
       </article>
     </section>
 
     <section class="runtime-grid">
       <section class="management-panel runtime-panel" data-section="overview">
         <header>
-          <h2>Control plane</h2>
+          <h2>{{ t('page.runtime.page.text.895180bcc2') }}</h2>
           <button class="ghost-action" type="button" @click="reloadProviders">
             <RotateCcw :size="14" />
-            Reload providers
+            {{ t('template.pages.runtimepage.13cb300646') }}
           </button>
         </header>
         <dl class="detail-list">
-          <dt>Status</dt>
-          <dd>{{ controlPlane.degraded ? 'degraded' : 'ready' }}</dd>
-          <dt>Model</dt>
+          <dt>{{ t('page.runtime.page.text.1debc04086') }}</dt>
+          <dd>{{ controlPlane.degraded ? t('page.runtime.page.inline.394dec1c4e') : t('page.runtime.page.inline.a6b1ab29de') }}</dd>
+          <dt>{{ t('page.runtime.page.text.75cdd3e77e') }}</dt>
           <dd>{{ controlPlane.configured_model || '-' }}</dd>
-          <dt>Config source</dt>
+          <dt>{{ t('page.runtime.page.text.d54281d656') }}</dt>
           <dd>{{ controlPlane.config_source || effectiveConfig.source || '-' }}</dd>
-          <dt>Workspace</dt>
+          <dt>{{ t('page.runtime.page.text.1b6d171a3f') }}</dt>
           <dd>{{ controlPlane.workspace_root || '-' }}</dd>
         </dl>
-        <RawPayload title="Effective config" :data="effectiveConfig" />
-        <RawPayload title="Runtime status" :data="runtimeStatus" />
-        <RequestReceipt :receipt="actionResult" title="Runtime write receipt" />
-        <RawPayload title="Reload result" :data="reloadResult || {}" />
+        <RawPayload :title="t('page.runtime.page.title.bd73a88559')" :data="effectiveConfig" />
+        <RawPayload :title="t('page.runtime.page.title.c86b8b732a')" :data="runtimeStatus" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.d71a6eb85e')" />
+        <RawPayload :title="t('page.runtime.page.title.c320bdf9a0')" :data="reloadResult || {}" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="overview">
         <header>
-          <h2>Runtime source and snapshot</h2>
+          <h2>{{ t('page.runtime.page.text.73dcc03517') }}</h2>
           <StatusPill :status="sourceAudit.__offline || runtimeSnapshot.__offline ? 'offline' : (sourceAudit.report?.ok === false ? 'degraded' : 'ready')" />
         </header>
         <dl class="detail-list">
-          <dt>Snapshot</dt>
+          <dt>{{ t('page.runtime.page.text.2076b210ae') }}</dt>
           <dd>{{ runtimeSnapshot.status || runtimeSnapshot.kind || '-' }}</dd>
-          <dt>Source audit</dt>
-          <dd>{{ sourceAudit.report?.ok === false ? 'needs repair' : 'ok' }}</dd>
-          <dt>Repair items</dt>
+          <dt>{{ t('page.runtime.page.text.8023cbd84d') }}</dt>
+          <dd>{{ sourceAudit.report?.ok === false ? t('page.runtime.page.inline.023e5f7fa9') : 'ok' }}</dd>
+          <dt>{{ t('page.runtime.page.text.27a30f378f') }}</dt>
           <dd>{{ sourceRepairPlan.repair_plan?.length || 0 }}</dd>
         </dl>
-        <RawPayload title="Runtime snapshot detail" :data="runtimeSnapshot" />
-        <RawPayload title="Runtime source audit detail" :data="{ audit: sourceAudit, repair: sourceRepairPlan }" />
+        <RawPayload :title="t('page.runtime.page.title.1d53dbce6a')" :data="runtimeSnapshot" />
+        <RawPayload :title="t('page.runtime.page.title.79e8d02599')" :data="{ audit: sourceAudit, repair: sourceRepairPlan }" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="mission">
         <header>
-          <h2>Mission Control</h2>
+          <h2>{{ t('page.runtime.page.text.9ad26584ae') }}</h2>
           <StatusPill :status="missionProjection.__offline ? 'offline' : (missionSessions.length ? 'ready' : 'idle')" />
         </header>
         <dl class="detail-list">
-          <dt>Active session</dt>
+          <dt>{{ t('page.runtime.page.text.8c9939cab6') }}</dt>
           <dd>{{ mission.active_session_id || '-' }}</dd>
-          <dt>Sessions</dt>
+          <dt>{{ t('page.runtime.page.text.e7346c0efc') }}</dt>
           <dd>{{ missionSessions.length }}</dd>
-          <dt>Pending approvals</dt>
+          <dt>{{ t('page.runtime.page.text.8ee2353a6b') }}</dt>
           <dd>{{ missionApprovalProjection.pending_count ?? 0 }}</dd>
-          <dt>Relations</dt>
+          <dt>{{ t('page.runtime.page.text.74b4efa226') }}</dt>
           <dd>{{ missionRelationProjection.relation_count ?? 0 }}</dd>
         </dl>
         <DataTable v-if="missionSessionRows.length" :rows="missionSessionRows" :columns="['id', 'title', 'status', 'teams', 'agents']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No mission sessions" detail="Mission Runtime 尚未返回 session，或 Gateway 处于离线状态。" />
+        <EmptyState v-else :title="t('page.runtime.page.title.764ff57548')" :detail="t('page.runtime.page.detail.d92a88eb8c')" />
         <DataTable v-if="missionEventRows.length" :rows="missionEventRows" :columns="['sequence', 'type', 'session', 'message']" @row-click="selectedDetail = $event" />
-        <RawPayload title="Mission projection detail" :data="{ projection: missionProjection, approvals: missionApprovals, relations: missionRelations }" />
+        <RawPayload :title="t('page.runtime.page.title.c172d5cfe2')" :data="{ projection: missionProjection, approvals: missionApprovals, relations: missionRelations }" />
       </section>
 
       <section class="management-panel runtime-panel" data-section="runs">
         <header>
-          <h2>Session lease</h2>
-          <span>{{ leases.leases?.length || leases.count || 0 }} leases</span>
+          <h2>{{ t('page.runtime.page.text.f81fa83905') }}</h2>
+          <span>{{ formatCount('leases', leases.leases?.length || leases.count || 0) }}</span>
         </header>
         <label class="field-line">
-          Owner
+          {{ t('page.runtime.field.owner') }}
           <input v-model="leaseOwner" type="text" />
         </label>
         <label class="field-line">
-          Mode
+          {{ t('page.runtime.field.mode') }}
           <select v-model="leaseMode">
-            <option value="shared">shared</option>
-            <option value="exclusive">exclusive</option>
+            <option value="shared">{{ t('page.runtime.leaseMode.shared') }}</option>
+            <option value="exclusive">{{ t('page.runtime.leaseMode.exclusive') }}</option>
           </select>
         </label>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="acquireLease">Acquire</button>
-          <button class="ghost-action" type="button" @click="releaseLease">Release</button>
+          <button class="primary-action" type="button" @click="acquireLease">{{ t('page.runtime.page.text.c66fa93092') }}</button>
+          <button class="ghost-action" type="button" @click="releaseLease">{{ t('page.runtime.page.text.3e1c429858') }}</button>
         </div>
-        <RequestReceipt :receipt="actionResult" title="Lease receipt" />
-        <RawPayload title="Lease registry" :data="leases" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.e757994218')" />
+        <RawPayload :title="t('page.runtime.page.title.e86490ec1d')" :data="leases" />
       </section>
 
       <section class="management-panel runtime-panel" data-section="policy">
         <header>
-          <h2>Approvals</h2>
-          <span>{{ approvalItems.length }} pending</span>
+          <h2>{{ t('page.runtime.page.text.93f65d3d63') }}</h2>
+          <span>{{ formatCount('pending', approvalItems.length) }}</span>
         </header>
         <div class="runtime-approval-list">
           <article v-for="approval in approvalItems" :key="approval.id || approval.request_id">
             <div>
               <strong>{{ approval.summary || approval.reason || approval.id }}</strong>
-              <p>{{ approval.command || approval.tool || approval.kind || 'approval request' }}</p>
+              <p>{{ approval.command || approval.tool || approval.kind || t('page.runtime.page.inline.516d8685da') }}</p>
             </div>
-            <button class="ghost-action" type="button" @click="respondApproval(approval.id || approval.request_id, false)">Reject</button>
+            <button class="ghost-action" type="button" @click="respondApproval(approval.id || approval.request_id, false)">{{ t('page.runtime.page.text.ae4dd827f7') }}</button>
             <button class="primary-action" type="button" @click="respondApproval(approval.id || approval.request_id, true)">
               <ShieldCheck :size="14" />
-              Approve
+              {{ t('template.pages.runtimepage.7b2c7f146a') }}
             </button>
           </article>
         </div>
-        <EmptyState v-if="!approvalItems.length" title="No pending approvals" detail="需要人工确认的运行时动作会出现在这里。" />
-        <RequestReceipt :receipt="actionResult" title="Approval receipt" />
+        <EmptyState v-if="!approvalItems.length" :title="t('page.runtime.page.title.362da6a741')" :detail="t('page.runtime.page.detail.e69affe6a7')" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.a09bbcf3ae')" />
       </section>
 
       <section class="management-panel runtime-panel" data-section="timeline">
         <header>
-          <h2>Runtime timeline</h2>
+          <h2>{{ t('page.runtime.page.text.f3558aafc0') }}</h2>
           <StatusPill :status="timeline.__offline ? 'offline' : 'ready'" />
         </header>
         <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'detail']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No runtime events" detail="当前 session 没有可展示的运行时事件，或后端离线。" />
+        <EmptyState v-else :title="t('page.runtime.page.title.16b97cb353')" :detail="t('page.runtime.page.detail.059281d68e')" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="runs">
         <header>
-          <h2>Task registry</h2>
-          <span>{{ taskRows.length }} tasks</span>
+          <h2>{{ t('page.runtime.page.text.aa5f5e3bb0') }}</h2>
+          <span>{{ formatCount('tasks', taskRows.length) }}</span>
         </header>
         <DataTable v-if="taskRows.length" :rows="taskRows" :columns="['id', 'status', 'objective', 'current_phase', 'failures']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No tasks" detail="目标任务和阶段验收会通过 task kernel 记录。" />
-        <RawPayload title="Control payload" :data="controlPlane" />
+        <EmptyState v-else :title="t('page.runtime.page.title.c3b49b1801')" :detail="t('page.runtime.page.detail.bb56d607f9')" />
+        <RawPayload :title="t('page.runtime.page.title.09aeda5ef4')" :data="controlPlane" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="runs">
         <header>
-          <h2>Runtime turns</h2>
-          <span>{{ turnRows.length }} turns</span>
+          <h2>{{ t('page.runtime.page.text.7557813607') }}</h2>
+          <span>{{ formatCount('turns', turnRows.length) }}</span>
         </header>
         <label class="field-line">
-          Prompt
+          {{ t('template.pages.runtimepage.a817d7eb8e') }}
           <textarea v-model="turnPrompt" rows="3" />
         </label>
         <label class="field-line">
-          Turn id
+          {{ t('template.pages.runtimepage.98f6fbf3c0') }}
           <input v-model="selectedTurnId" type="text" />
         </label>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="submitTurn">Submit turn</button>
-          <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="inspectTurn">Inspect turn</button>
-          <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="cancelTurn">Cancel turn</button>
+          <button class="primary-action" type="button" @click="submitTurn">{{ t('page.runtime.page.text.9baa241112') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="inspectTurn">{{ t('page.runtime.page.text.fc0b5cfe07') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="cancelTurn">{{ t('page.runtime.page.text.65edf171ac') }}</button>
         </div>
         <DataTable v-if="turnRows.length" :rows="turnRows" :columns="['id', 'status', 'session', 'task', 'prompt']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No runtime turns" detail="通过 Runtime service 提交的 turn 会在这里展示。" />
-        <RequestReceipt :receipt="actionResult" title="Runtime turn receipt" />
-        <RawPayload title="Runtime turn registry" :data="runtimeTurns" />
+        <EmptyState v-else :title="t('page.runtime.page.title.3d05bab814')" :detail="t('page.runtime.page.detail.334c21b2ac')" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.42c676123b')" />
+        <RawPayload :title="t('page.runtime.page.title.0d53bacfd6')" :data="runtimeTurns" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="growth">
         <header>
-          <h2>Growth loop</h2>
+          <h2>{{ t('page.runtime.page.text.996c9d7071') }}</h2>
           <div class="button-row">
-            <RouterLink class="ghost-action" :to="`/reality?section=fact-flow&session_id=${encodeURIComponent(sessionId)}`">Open Fact Flow</RouterLink>
+            <RouterLink class="ghost-action" :to="`/reality?section=fact-flow&session_id=${encodeURIComponent(sessionId)}`">{{ t('page.runtime.page.text.f381fb2c63') }}</RouterLink>
             <StatusPill :status="growthStatus.__offline || growthEvents.__offline ? 'offline' : 'ready'" />
           </div>
         </header>
         <dl class="detail-list">
-          <dt>Events</dt>
+          <dt>{{ t('page.runtime.page.text.dbd7c33b41') }}</dt>
           <dd>{{ growthStatus.event_count ?? growthEventRows.length }}</dd>
-          <dt>Promotions</dt>
+          <dt>{{ t('page.runtime.page.text.6b0540b3f5') }}</dt>
           <dd>{{ growthStatus.promotion_count ?? growthPromotionRows.length }}</dd>
-          <dt>Sources</dt>
+          <dt>{{ t('page.runtime.page.text.c247c75434') }}</dt>
           <dd>{{ growthSources }}</dd>
-          <dt>Status</dt>
-          <dd>{{ growthStatus.status || (growthStatus.__offline ? 'offline' : 'ready') }}</dd>
+          <dt>{{ t('page.runtime.page.text.1debc04086') }}</dt>
+          <dd>{{ growthStatus.status || (growthStatus.__offline ? t('page.runtime.page.inline.461aa94b0c') : t('page.runtime.page.inline.a6b1ab29de')) }}</dd>
         </dl>
         <DataTable v-if="growthEventRows.length" :rows="growthEventRows" :columns="['id', 'source', 'mode', 'risk', 'at']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No growth events" detail="风险门禁后的成长事件会由后端记录并在这里展示。" />
+        <EmptyState v-else :title="t('page.runtime.page.title.78769f1c69')" :detail="t('page.runtime.page.detail.340bd22f56')" />
         <DataTable v-if="growthPromotionRows.length" :rows="growthPromotionRows" :columns="['target', 'status', 'target_id', 'summary']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No promotions" detail="进入事实、记忆或矩阵的提升结果会作为 promotion 回执展示。" />
-        <EvidenceTrace :items="runtimeEvidence" title="Runtime evidence trace" />
-        <EvidenceObjectDetail title="Runtime selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
-        <RawPayload title="Growth detail" :data="{ status: growthStatus, events: growthEvents }" />
+        <EmptyState v-else :title="t('page.runtime.page.title.f57369a2f0')" :detail="t('page.runtime.page.detail.9cf299404f')" />
+        <EvidenceTrace :items="runtimeEvidence" :title="t('page.runtime.page.title.ba93e308cd')" />
+        <EvidenceObjectDetail :title="t('page.runtime.page.title.03bcf82613')" :evidence="selectedEvidence" @close="selectedDetail = null" />
+        <RawPayload :title="t('page.runtime.page.title.0889c4b92a')" :data="{ status: growthStatus, events: growthEvents }" />
       </section>
     </section>
   </section>

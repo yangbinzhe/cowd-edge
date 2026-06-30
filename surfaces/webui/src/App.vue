@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from './i18n';
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -50,7 +51,7 @@ onMounted(() => {
 
 <template>
   <div class="app-shell" :data-chat-mode="shellMode">
-    <nav class="rail" aria-label="Cowd primary navigation">
+    <nav class="rail" :aria-label="t('app.aria-label.4afc7f101b')">
       <button
         v-for="item in nav"
         :key="item.id"

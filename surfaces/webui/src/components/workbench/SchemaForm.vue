@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
 type Field = {
   name: string;
   label?: string;
@@ -30,7 +31,7 @@ function updateField(name: string, value: string) {
         :value="String(modelValue?.[field.name] || '')"
         @change="updateField(field.name, ($event.target as HTMLSelectElement).value)"
       >
-        <option value="">Select</option>
+        <option value="">{{ t('component.workbench.schema.form.text.53490b5eb1') }}</option>
         <option v-for="option in field.options || []" :key="option" :value="option">{{ option }}</option>
       </select>
       <input
@@ -41,6 +42,6 @@ function updateField(name: string, value: string) {
         @input="updateField(field.name, ($event.target as HTMLInputElement).value)"
       />
     </label>
-    <p v-if="!(fields || []).length" class="panel-note">This endpoint is governed by JSON payload and backend contract checks.</p>
+    <p v-if="!(fields || []).length" class="panel-note">{{ t('component.workbench.schema.form.text.312dc6b9c4') }}</p>
   </div>
 </template>

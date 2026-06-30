@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -72,9 +73,23 @@ const recommendedActions = computed(() => analysis.value?.recommended_actions ||
 const skillRuns = computed(() => room.value?.skill_runs || room.value?.skills || []);
 const contractSummary = computed(() => ({
   count: (mfgWriteContracts as any[]).length,
-  domains: Array.from(new Set((mfgWriteContracts as any[]).map((contract) => contract.domain))).join(', '),
+  domains: Array.from(new Set((mfgWriteContracts as any[]).map((contract) => displayContractDomain(contract.domain)))).join('、'),
   quarantined: (mfgWriteContracts as any[]).filter((contract) => String(contract.live_policy || '').includes('quarantined')).length,
 }));
+
+const contractDomainKeys: Record<string, string> = {
+  'Data Plane': 'mfg.contract.domain.dataPlane',
+  Facts: 'mfg.contract.domain.facts',
+  Entities: 'mfg.contract.domain.entities',
+  Metrics: 'mfg.contract.domain.metrics',
+  Evidence: 'mfg.contract.domain.evidence',
+  Incidents: 'mfg.contract.domain.incidents',
+  Cockpit: 'mfg.contract.domain.cockpit',
+};
+
+function displayContractDomain(domain: string) {
+  return t(contractDomainKeys[domain] || 'mfg.contract.domain.unknown', { domain });
+}
 const decisionTraceRows = computed(() => {
   const traceRows = items(state.value?.decisionTrace, 'rows');
   if (traceRows.length) return traceRows;
@@ -151,50 +166,50 @@ const decisionTraceRows = computed(() => {
   ];
 });
 const mfgContext = computed(() => [
-  { label: 'Application', value: 'MFG', tone: 'success' },
-  { label: 'Boundary', value: 'mfg -> reality' },
-  { label: 'Source pack', value: sourcePackId.value },
-  { label: 'Incident', value: selectedIncidentId.value || incidents.value[0]?.incident_id || 'pending', tone: incidents.value.length ? 'warn' : 'default' },
+  { label: t('script.pages.mfgpage.label.b291beb879'), value: 'MFG', tone: 'success' },
+  { label: t('script.pages.mfgpage.label.0a5e7a0583'), value: 'mfg -> reality' },
+  { label: t('script.pages.mfgpage.label.e730d6f3dc'), value: sourcePackId.value },
+  { label: t('script.pages.mfgpage.label.08c257849b'), value: selectedIncidentId.value || incidents.value[0]?.incident_id || 'pending', tone: incidents.value.length ? 'warn' : 'default' },
 ]);
 const mfgWorkflow = computed(() => [
-  { id: 'data-plane', label: 'Source', status: sourcePackResult.value ? 'done' : 'idle', description: sourcePackId.value },
-  { id: 'data-plane', label: 'Fact', status: dataPlaneResult.value ? 'done' : 'idle', count: state.value?.health?.fact_count || 0 },
-  { id: 'entities', label: 'Entity', status: entities.value.length ? 'ready' : 'idle', count: entities.value.length },
-  { id: 'metrics', label: 'Metric', status: metrics.value.length ? 'ready' : 'idle', count: metrics.value.length },
-  { id: 'evidence', label: 'Evidence', status: evidenceResult.value ? 'active' : 'idle', description: evidenceId.value || 'pending' },
-  { id: 'incident-room', label: 'Incident', status: incidents.value.length ? 'blocked' : 'idle', count: incidents.value.length },
-  { id: 'actions', label: 'Action', status: result.value?.execution ? 'active' : 'idle', description: selectedActionId.value || 'dry-run' },
-  { id: 'reports', label: 'Report', status: cockpitReportId.value ? 'done' : 'idle', description: cockpitProfileId.value },
+  { id: 'data-plane', label: t('script.pages.mfgpage.label.6da13addb0'), status: sourcePackResult.value ? 'done' : 'idle', description: sourcePackId.value },
+  { id: 'data-plane', label: t('script.pages.mfgpage.label.e0930077f2'), status: dataPlaneResult.value ? 'done' : 'idle', count: state.value?.health?.fact_count || 0 },
+  { id: 'entities', label: t('script.pages.mfgpage.label.c7fb317725'), status: entities.value.length ? 'ready' : 'idle', count: entities.value.length },
+  { id: 'metrics', label: t('script.pages.mfgpage.label.b2bb7604c8'), status: metrics.value.length ? 'ready' : 'idle', count: metrics.value.length },
+  { id: 'evidence', label: t('script.pages.mfgpage.label.7ea014de7b'), status: evidenceResult.value ? 'active' : 'idle', description: evidenceId.value || 'pending' },
+  { id: 'incident-room', label: t('script.pages.mfgpage.label.08c257849b'), status: incidents.value.length ? 'blocked' : 'idle', count: incidents.value.length },
+  { id: 'actions', label: t('script.pages.mfgpage.label.97c89a4d66'), status: result.value?.execution ? 'active' : 'idle', description: selectedActionId.value || 'dry-run' },
+  { id: 'reports', label: t('script.pages.mfgpage.label.ee45c30326'), status: cockpitReportId.value ? 'done' : 'idle', description: cockpitProfileId.value },
 ]);
 const mfgLanes = computed(() => [
   {
     id: 'data-plane',
-    title: 'Reality input',
-    summary: 'Source packs, connector runs, fact ingest, and Reality Core projection.',
+    title: t('script.pages.mfgpage.title.a50dea1bc7'),
+    summary: t('script.pages.mfgpage.summary.ae62a02f5a'),
     health: sourcePackResult.value || dataPlaneResult.value ? 'active' : 'ready',
     count: state.value?.health?.fact_count || 0,
     target: '#data-plane',
   },
   {
     id: 'entities',
-    title: 'Operational graph',
-    summary: 'Entities, metrics, lineage, evidence packets, and quality gates.',
+    title: t('script.pages.mfgpage.title.678d030bc9'),
+    summary: t('script.pages.mfgpage.summary.e193f114b0'),
     health: entities.value.length || metrics.value.length ? 'ready' : 'idle',
     count: entities.value.length + metrics.value.length,
     target: '#entities',
   },
   {
     id: 'incident-room',
-    title: 'Incident response',
-    summary: 'Incident rooms, analysis, playbooks, MFG skills, and governed actions.',
+    title: t('script.pages.mfgpage.title.6e590d9512'),
+    summary: t('script.pages.mfgpage.summary.422a8cfef7'),
     health: incidents.value.length ? 'blocked' : 'idle',
     count: incidents.value.length + recommendedActions.value.length,
     target: '#incident-room',
   },
   {
     id: 'reports',
-    title: 'Cockpit output',
-    summary: 'Profiles, reports, delivery state, retry policy, and cross-plane handoff.',
+    title: t('script.pages.mfgpage.title.87ea32c933'),
+    summary: t('script.pages.mfgpage.summary.194357bd3f'),
     health: cockpitReportId.value ? 'done' : 'idle',
     count: cockpitReportId.value ? 1 : 0,
     target: '#reports',
@@ -258,7 +273,7 @@ function quarantineReceipt(action: string, endpoint: string, payload: Record<str
     endpoint,
     method: 'POST',
     status: 'quarantined',
-    error: `${action} is temporarily quarantined until the v0.9.243 governed action flow adds schema validation, impact preview, execution mode, and audit receipt.`,
+    error: t('page.mfg.quarantine.message', { action }),
     payload_summary: JSON.stringify(payload).slice(0, 280),
     retryable: false,
   };
@@ -353,7 +368,7 @@ async function planFactIngest() {
       ...factGovernedPayload(),
     });
   } catch (err) {
-    result.value = quarantineReceipt('Fact ingest plan', '/api/cowd/structured/ingest-plan', factGovernedPayload());
+    result.value = quarantineReceipt(t('page.mfg.quarantine.factIngestPlan'), '/api/cowd/structured/ingest-plan', factGovernedPayload());
     error.value = err instanceof Error ? err.message : String(err);
   }
 }
@@ -386,17 +401,17 @@ async function dryRunEvidenceGovernance() {
 
 async function planIncidentGovernance() {
   if (selectedIncidentId.value) await planSkills();
-  else result.value = quarantineReceipt('Incident plan', '/api/apps/mfg/incidents/:id/skills/plan', incidentGovernedPayload());
+  else result.value = quarantineReceipt(t('page.mfg.quarantine.incidentPlan'), '/api/apps/mfg/incidents/:id/skills/plan', incidentGovernedPayload());
 }
 
 async function dryRunIncidentGovernance() {
   if (selectedIncidentId.value) await recommendPlaybooks();
-  else result.value = quarantineReceipt('Incident dry run', '/api/apps/mfg/incidents/:id/playbooks/recommend', incidentGovernedPayload());
+  else result.value = quarantineReceipt(t('page.mfg.quarantine.incidentDryRun'), '/api/apps/mfg/incidents/:id/playbooks/recommend', incidentGovernedPayload());
 }
 
 async function planActionGovernance() {
   if (selectedIncidentId.value) await analyzeIncident();
-  else result.value = quarantineReceipt('Action plan', '/api/apps/mfg/analyses/:analysis_id/actions/:action_id/execute', incidentGovernedPayload());
+  else result.value = quarantineReceipt(t('page.mfg.quarantine.actionPlan'), '/api/apps/mfg/analyses/:analysis_id/actions/:action_id/execute', incidentGovernedPayload());
 }
 
 async function dryRunActionGovernance() {
@@ -408,7 +423,7 @@ async function planReportGovernance() {
 }
 
 async function dryRunReportGovernance() {
-  result.value = quarantineReceipt('Cockpit report dry run', '/api/apps/mfg/cockpit/profiles/:id/projection', reportGovernedPayload());
+  result.value = quarantineReceipt(t('page.mfg.quarantine.cockpitReportDryRun'), '/api/apps/mfg/cockpit/profiles/:id/projection', reportGovernedPayload());
 }
 
 async function refresh() {
@@ -507,7 +522,7 @@ function defaultSourcePack() {
 
 async function upsertSourcePack() {
   if (mfgLiveQuarantine) {
-    sourcePackResult.value = quarantineReceipt('Source pack upsert', '/api/apps/mfg/reality/source-packs/upsert', defaultSourcePack());
+    sourcePackResult.value = quarantineReceipt(t('page.mfg.quarantine.sourcePackUpsert'), '/api/apps/mfg/reality/source-packs/upsert', defaultSourcePack());
     return;
   }
   sourcePackResult.value = await api.mfgSourcePackUpsert(defaultSourcePack());
@@ -533,7 +548,7 @@ async function planConnectorRun() {
 
 async function executeConnectorRun() {
   if (mfgLiveQuarantine) {
-    sourcePackResult.value = quarantineReceipt('Connector run', `/api/apps/mfg/reality/source-packs/${sourcePackId.value}/connector-runs/run`, {
+    sourcePackResult.value = quarantineReceipt(t('page.mfg.quarantine.connectorRun'), `/api/apps/mfg/reality/source-packs/${sourcePackId.value}/connector-runs/run`, {
       source_pack_id: sourcePackId.value,
       mode: 'dry_run',
     });
@@ -554,7 +569,7 @@ async function getConnectorRun() {
 
 async function upsertEntity() {
   if (mfgLiveQuarantine) {
-    entityResult.value = quarantineReceipt('Entity upsert', '/api/apps/mfg/reality/entities/upsert', {
+    entityResult.value = quarantineReceipt(t('page.mfg.quarantine.entityUpsert'), '/api/apps/mfg/reality/entities/upsert', {
       entity_id: selectedEntityId.value || 'new',
       entity_type: 'manufacturing_line',
     });
@@ -590,7 +605,7 @@ async function resolveEntitySourceKey() {
 async function upsertRelation() {
   if (!selectedEntityId.value || !relationTargetId.value) return;
   if (mfgLiveQuarantine) {
-    entityResult.value = quarantineReceipt('Relation upsert', '/api/apps/mfg/reality/relations/upsert', {
+    entityResult.value = quarantineReceipt(t('page.mfg.quarantine.relationUpsert'), '/api/apps/mfg/reality/relations/upsert', {
       from_entity_id: selectedEntityId.value,
       to_entity_id: relationTargetId.value,
     });
@@ -643,7 +658,7 @@ async function planComputeJob() {
 async function runComputeJob() {
   if (!computeJobId.value) return;
   if (mfgLiveQuarantine) {
-    metricResult.value = quarantineReceipt('Compute job run', `/api/apps/mfg/reality/compute/jobs/${computeJobId.value}/run`, {
+    metricResult.value = quarantineReceipt(t('page.mfg.quarantine.computeJobRun'), `/api/apps/mfg/reality/compute/jobs/${computeJobId.value}/run`, {
       job_id: computeJobId.value,
     });
     return;
@@ -687,8 +702,8 @@ async function inspectQualityGate() {
 async function initializeManufacturingKernel() {
   if (mfgLiveQuarantine) {
     result.value = {
-      domain: quarantineReceipt('Domain seed', '/api/apps/mfg/domain/server-manufacturing/seed'),
-      ontology: quarantineReceipt('Ontology seed', '/api/apps/mfg/ontology/server-manufacturing/seed'),
+      domain: quarantineReceipt(t('page.mfg.quarantine.domainSeed'), '/api/apps/mfg/domain/server-manufacturing/seed'),
+      ontology: quarantineReceipt(t('page.mfg.quarantine.ontologySeed'), '/api/apps/mfg/ontology/server-manufacturing/seed'),
     };
     return;
   }
@@ -701,7 +716,7 @@ async function initializeManufacturingKernel() {
 
 async function ingestManufacturingFacts() {
   if (!factPayload.value.trim()) {
-    error.value = 'Fact payload is required. Paste a JSON object or array from a real source pack.';
+    error.value = t('page.mfg.error.factPayloadRequired');
     return;
   }
   let parsed: unknown;
@@ -714,11 +729,11 @@ async function ingestManufacturingFacts() {
   const facts = Array.isArray(parsed) ? parsed : [parsed];
   const invalid = facts.some((fact: any) => !fact?.source_ref || !fact?.fact_type);
   if (invalid) {
-    error.value = 'Each fact must include source_ref and fact_type.';
+    error.value = t('page.mfg.error.factPayloadFieldsRequired');
     return;
   }
   if (mfgLiveQuarantine) {
-    result.value = quarantineReceipt('Manufacturing fact ingest', '/api/apps/mfg/reality/facts/ingest', { facts });
+    result.value = quarantineReceipt(t('page.mfg.quarantine.manufacturingFactIngest'), '/api/apps/mfg/reality/facts/ingest', { facts });
     return;
   }
   result.value = await api.mfgIngestFact(facts as Record<string, unknown>[]);
@@ -778,7 +793,7 @@ async function inspectPlaybook() {
 async function upsertPlaybook() {
   result.value = await api.mfgPlaybookUpsert({
     playbook_id: selectedPlaybookId.value,
-    title: 'WebUI manufacturing triage',
+    title: t('script.pages.mfgpage.title.eccb702859'),
     domain: 'server_manufacturing',
     steps: ['confirm metric lineage', 'open incident room', 'plan governed action'],
     risk: 'medium',
@@ -819,7 +834,7 @@ async function bridgeExecution() {
   const executionId = result.value?.execution?.execution_id || room.value?.executions?.[0]?.execution_id;
   if (!executionId) return;
   if (mfgLiveQuarantine) {
-    result.value = quarantineReceipt('Cross-plane execution bridge', `/api/apps/mfg/executions/${executionId}/cross-plane/execute`, {
+    result.value = quarantineReceipt(t('page.mfg.quarantine.crossPlaneExecutionBridge'), `/api/apps/mfg/executions/${executionId}/cross-plane/execute`, {
       mode: 'dry_run',
       requested_capability: 'channel.chat.send_text',
     });
@@ -858,7 +873,7 @@ async function generateReport() {
 async function retryReportDelivery() {
   if (!cockpitReportId.value) return;
   if (mfgLiveQuarantine) {
-    result.value = quarantineReceipt('Report delivery retry', `/api/apps/mfg/cockpit/reports/${cockpitReportId.value}/delivery/retry`, {
+    result.value = quarantineReceipt(t('page.mfg.quarantine.reportDeliveryRetry'), `/api/apps/mfg/cockpit/reports/${cockpitReportId.value}/delivery/retry`, {
       mode: 'dry_run',
       report_id: cockpitReportId.value,
     });
@@ -879,13 +894,13 @@ onMounted(refresh);
   <section class="capability-page mfg-page">
     <header class="page-header">
       <div>
-        <h1>MFG Manufacturing Application</h1>
-        <p>MFG 是独立的制造应用，消费 Reality Core 与 Matrix Engine 的底层能力，但不承担底层引擎管理职责。</p>
+        <h1>{{ t('page.mfg.page.text.16727ae948') }}</h1>
+        <p>{{ t('page.mfg.page.text.4d4870537c') }}</p>
       </div>
       <div class="button-row">
         <button class="primary-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="15" />
-          {{ loading ? 'Loading' : 'Refresh MFG' }}
+          {{ loading ? t('page.mfg.page.inline.067a22a92c') : t('page.mfg.page.inline.f38b6f9334') }}
         </button>
       </div>
     </header>
@@ -894,14 +909,14 @@ onMounted(refresh);
     <ApiStateBanner
       v-if="mfgLiveQuarantine"
       status="degraded"
-      title="MFG live writes quarantined"
-      detail="High-risk manufacturing writes stay visible but are disabled, dry-run-only, or receipt-wrapped until governed action flows land in v0.9.243."
+      :title="t('page.mfg.page.title.c04f860563')"
+      :detail="t('page.mfg.page.detail.0ce99abd6b')"
       endpoint="/api/apps/mfg/*"
     />
     <PrimaryContextBar :items="mfgContext" />
-    <WorkflowStrip :steps="mfgWorkflow" title="MFG value flow" />
+    <WorkflowStrip :steps="mfgWorkflow" :title="t('page.mfg.page.title.19a9d42267')" />
 
-    <section class="mfg-lanes" aria-label="MFG workbench lanes">
+    <section class="mfg-lanes" :aria-label="t('page.mfg.page.aria-label.916bf99d57')">
       <a v-for="lane in mfgLanes" :key="lane.id" class="mfg-lane" :href="lane.target" :data-status="lane.health">
         <span>{{ lane.title }}</span>
         <strong>{{ lane.count }}</strong>
@@ -909,111 +924,111 @@ onMounted(refresh);
       </a>
     </section>
 
-    <section class="metric-row" aria-label="MFG metrics">
+    <section class="metric-row" :aria-label="t('page.mfg.page.aria-label.5cf0cb320e')">
       <article class="metric-card" data-tone="success">
-        <span>Facts</span>
+        <span>{{ t('page.mfg.page.text.e79dc9aac0') }}</span>
         <strong>{{ state?.health?.fact_count || 0 }}</strong>
-        <small>{{ state?.health?.schema_version || 'schema unknown' }}</small>
+        <small>{{ state?.health?.schema_version || t('page.mfg.page.inline.6f681c0a14') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Metrics</span>
+        <span>{{ t('page.mfg.page.text.1a2c57323f') }}</span>
         <strong>{{ metrics.length }}</strong>
-        <small>{{ entities.length }} entities</small>
+        <small>{{ formatCount('entities', entities.length) }}</small>
       </article>
       <article class="metric-card" data-tone="warn">
-        <span>Incidents</span>
+        <span>{{ t('page.mfg.page.text.ab81a58faf') }}</span>
         <strong>{{ incidents.length }}</strong>
         <small>{{ attention.length }} attention items</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Skills</span>
+        <span>{{ t('page.mfg.page.text.e7946cc912') }}</span>
         <strong>{{ skills.length }}</strong>
         <small>{{ room?.skill_runs?.length || 0 }} room runs</small>
       </article>
     </section>
 
     <section class="management-grid mfg-workbench">
-      <ChartPanel data-section="overview" title="MFG operating load" kind="bar" :data="metricChart" />
+      <ChartPanel data-section="overview" :title="t('page.mfg.page.title.12fb034e94')" kind="bar" :data="metricChart" />
 
       <article class="management-panel mfg-command-panel" data-section="overview">
         <header>
-          <h2>Manufacturing command center</h2>
-          <span>{{ state?.health?.status || 'unknown' }}</span>
+          <h2>{{ t('page.mfg.page.text.07a633c300') }}</h2>
+          <span>{{ state?.health?.status || t('page.mfg.page.inline.51a32dd32d') }}</span>
         </header>
         <dl class="detail-list">
-          <dt>Schema</dt>
-          <dd>{{ state?.health?.schema_version || 'unknown' }}</dd>
-          <dt>Capabilities</dt>
+          <dt>{{ t('page.mfg.page.text.f2580d8506') }}</dt>
+          <dd>{{ state?.health?.schema_version || t('page.mfg.page.inline.51a32dd32d') }}</dd>
+          <dt>{{ t('page.mfg.page.text.dc3f3b6a51') }}</dt>
           <dd>{{ state?.health?.capabilities?.length || 0 }}</dd>
-          <dt>Risk queue</dt>
+          <dt>{{ t('page.mfg.page.text.cc9914053f') }}</dt>
           <dd>{{ state?.commandCenter?.risk_queue?.length || 0 }}</dd>
-          <dt>Live actions</dt>
+          <dt>{{ t('page.mfg.page.text.a70612ba8a') }}</dt>
           <dd>{{ state?.live?.action_queue?.length || 0 }}</dd>
         </dl>
       </article>
 
       <article class="management-panel" data-section="overview">
         <header>
-          <h2>Reality Core projection</h2>
-          <span>{{ contractSummary.count }} contracts</span>
+          <h2>{{ t('page.mfg.page.text.a3a65020ae') }}</h2>
+          <span>{{ formatCount('contracts', contractSummary.count) }}</span>
         </header>
         <dl class="detail-list">
-          <dt>Projection API</dt>
+          <dt>{{ t('page.mfg.page.text.316dcc8a09') }}</dt>
           <dd>/api/apps/mfg/reality/*</dd>
-          <dt>Domains</dt>
+          <dt>{{ t('page.mfg.page.text.0dbeba2a7e') }}</dt>
           <dd>{{ contractSummary.domains }}</dd>
-          <dt>Quarantined live writes</dt>
+          <dt>{{ t('page.mfg.page.text.fc11dc83ab') }}</dt>
           <dd>{{ contractSummary.quarantined }}</dd>
-          <dt>Core boundary</dt>
-          <dd>Reality Core owns fact, memory, matrix, context, cross-plane policy, and audit. MFG owns manufacturing workflows, incidents, skills, actions, cockpit profiles, and reports.</dd>
+          <dt>{{ t('page.mfg.page.text.456ba8b299') }}</dt>
+          <dd>{{ t('page.mfg.page.text.c5ede2d774') }}</dd>
         </dl>
       </article>
 
       <article class="management-panel mfg-trace-panel wide" data-section="overview">
         <header>
-          <h2>Decision Trace</h2>
-          <span>source -> fact -> action</span>
+          <h2>{{ t('page.mfg.page.text.84988005b0') }}</h2>
+          <span>{{ t('page.mfg.decisionTrace.chainLabel') }}</span>
         </header>
-        <p class="panel-note">Matrix turns structured manufacturing signals into facts, metrics, attention, evidence and incidents; MFG consumes that kernel trace to plan actions and reports.</p>
-        <p class="panel-note">Trace source: {{ state?.decisionTrace?.kind || 'local fallback' }} / {{ state?.decisionTrace?.chain || 'source -> fact -> action' }}</p>
+        <p class="panel-note">{{ t('page.mfg.page.text.8d61d2ebc3') }}</p>
+        <p class="panel-note">{{ t('page.mfg.decisionTrace.source') }}: {{ state?.decisionTrace?.kind || t('page.mfg.page.inline.0f9fa91718') }} / {{ state?.decisionTrace?.chain || t('page.mfg.decisionTrace.chainLabel') }}</p>
         <DataTable :rows="decisionTraceRows" :columns="['stage', 'ref', 'domain', 'signal', 'next']" />
-        <EvidenceTrace :items="mfgEvidence" title="MFG application evidence trace" />
+        <EvidenceTrace :items="mfgEvidence" :title="t('page.mfg.page.title.3d3887d1d7')" />
       </article>
 
       <article id="data-plane" class="management-panel" data-section="data-plane">
         <header>
-          <h2>Data plane and source packs</h2>
-          <span>{{ state?.dataPlane?.status || 'unknown' }}</span>
+          <h2>{{ t('page.mfg.page.text.3f43ee8666') }}</h2>
+          <span>{{ state?.dataPlane?.status || t('page.mfg.page.inline.51a32dd32d') }}</span>
         </header>
         <dl class="detail-list">
-          <dt>Provider</dt>
-          <dd>{{ state?.dataPlane?.provider || 'unknown' }}</dd>
-          <dt>Mode</dt>
-          <dd>{{ state?.dataPlane?.mode || 'unknown' }}</dd>
-          <dt>Watermarks</dt>
+          <dt>{{ t('page.mfg.page.text.37ca559655') }}</dt>
+          <dd>{{ state?.dataPlane?.provider || t('page.mfg.page.inline.51a32dd32d') }}</dd>
+          <dt>{{ t('page.mfg.page.text.90b142e0a4') }}</dt>
+          <dd>{{ state?.dataPlane?.mode || t('page.mfg.page.inline.51a32dd32d') }}</dd>
+          <dt>{{ t('page.mfg.page.text.cde1dbdf25') }}</dt>
           <dd>{{ state?.dataPlane?.watermark_count || 0 }}</dd>
-          <dt>Governance</dt>
-          <dd>{{ state?.governance?.status || state?.governance?.kind || 'unknown' }}</dd>
+          <dt>{{ t('page.mfg.page.text.025af3e6bd') }}</dt>
+          <dd>{{ state?.governance?.status || state?.governance?.kind || t('page.mfg.page.inline.51a32dd32d') }}</dd>
         </dl>
         <label class="field-line">
-          Source pack id
+          {{ t('page.mfg.field.sourcePackId') }}
           <input v-model="sourcePackId" type="text" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="planDataPlaneIngest">Plan ingest</button>
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgSourcePackUpsert" type="button" @click="upsertSourcePack">Upsert source pack</button>
-          <button class="ghost-action" type="button" @click="validateSourcePack">Validate</button>
+          <button class="ghost-action" type="button" @click="planDataPlaneIngest">{{ t('page.mfg.page.text.dad35a136a') }}</button>
+          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgSourcePackUpsert" type="button" @click="upsertSourcePack">{{ t('page.mfg.page.text.db1dd806a8') }}</button>
+          <button class="ghost-action" type="button" @click="validateSourcePack">{{ t('page.mfg.page.text.ddbca47834') }}</button>
         </div>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="sourcePackDeltaPlan">Delta plan</button>
-          <button class="ghost-action" type="button" @click="planConnectorRun">Plan connector run</button>
-          <button class="ghost-action mfg-live-quarantined" type="button" @click="executeConnectorRun">Run connector</button>
+          <button class="ghost-action" type="button" @click="sourcePackDeltaPlan">{{ t('page.mfg.page.text.37ccf61a79') }}</button>
+          <button class="ghost-action" type="button" @click="planConnectorRun">{{ t('page.mfg.page.text.3679544938') }}</button>
+          <button class="ghost-action mfg-live-quarantined" type="button" @click="executeConnectorRun">{{ t('page.mfg.page.text.7af7a76287') }}</button>
         </div>
         <label class="field-line">
-          Connector run id
+          {{ t('template.pages.mfgpage.d5328ab27f') }}
           <input v-model="connectorRunId" type="text" @keydown.enter.prevent="getConnectorRun" />
         </label>
-        <RequestReceipt :receipt="sourcePackResult" title="Source pack receipt" />
+        <RequestReceipt :receipt="sourcePackResult" :title="t('page.mfg.page.title.1edecc488b')" />
         <GovernedActionPanel
           :contract="contract('source-pack-upsert')"
           :payload="sourcePackGovernedPayload()"
@@ -1030,20 +1045,20 @@ onMounted(refresh);
           @dry-run="planConnectorRun"
           @live="executeConnectorRun"
         />
-        <RawPayload title="Data plane result" :data="{ data_plane: dataPlaneResult, source_pack: sourcePackResult }" />
+        <RawPayload :title="t('page.mfg.page.title.dae0c08c0d')" :data="{ data_plane: dataPlaneResult, source_pack: sourcePackResult }" />
       </article>
 
       <article class="management-panel" data-section="source-pack">
         <header>
-          <h2>Manufacturing data ingestion</h2>
-          <span>{{ metrics.length }} metrics</span>
+          <h2>{{ t('page.mfg.page.text.c31a87bcc5') }}</h2>
+          <span>{{ formatCount('metrics', metrics.length) }}</span>
         </header>
-        <p class="panel-note">Only ingest facts copied from a real source pack or connector output. Demo fixtures are not prefilled here.</p>
+        <p class="panel-note">{{ t('page.mfg.page.text.2edd1bcb34') }}</p>
         <textarea v-model="factPayload" class="json-input" rows="8" placeholder='[{"fact_type":"...","source_ref":"source-pack://..."}]' />
         <div class="button-row">
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgSeedDomain" type="button" @click="initializeManufacturingKernel">Initialize domain model</button>
-          <span class="sr-only mfg-live-quarantined" data-mfg-risk="mfgSeedOntology">Ontology seed quarantined</span>
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgIngestFact" type="button" @click="ingestManufacturingFacts">Ingest facts</button>
+          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgSeedDomain" type="button" @click="initializeManufacturingKernel">{{ t('page.mfg.page.text.f584acc284') }}</button>
+          <span class="sr-only mfg-live-quarantined" data-mfg-risk="mfgSeedOntology">{{ t('page.mfg.page.text.9e762a9515') }}</span>
+          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgIngestFact" type="button" @click="ingestManufacturingFacts">{{ t('page.mfg.page.text.9131c47a17') }}</button>
         </div>
         <GovernedActionPanel
           :contract="contract('fact-ingest')"
@@ -1054,30 +1069,30 @@ onMounted(refresh);
           @live="ingestManufacturingFacts"
         />
         <DataTable v-if="metrics.length" :rows="metrics.slice(0, 8)" :columns="['metric_id', 'name', 'unit', 'status']" />
-        <RawPayload title="Manufacturing ingest result" :data="{ metrics: state?.metrics, attention: state?.attention, changes: state?.changes }" />
+        <RawPayload :title="t('page.mfg.page.title.cd2cc28173')" :data="{ metrics: state?.metrics, attention: state?.attention, changes: state?.changes }" />
       </article>
 
       <article id="entities" class="management-panel" data-section="entities">
         <header>
-          <h2>Entities and impact graph</h2>
-          <span>{{ entities.length }} entities</span>
+          <h2>{{ t('page.mfg.page.text.e7fdeee24b') }}</h2>
+          <span>{{ formatCount('entities', entities.length) }}</span>
         </header>
         <label class="field-line">
-          Entity id
+          {{ t('template.pages.mfgpage.acf9148cce') }}
           <input v-model="selectedEntityId" type="text" @keydown.enter.prevent="inspectEntity" />
         </label>
         <label class="field-line">
-          Relation target id
+          {{ t('template.pages.mfgpage.aea84c643c') }}
           <input v-model="relationTargetId" type="text" />
         </label>
         <div class="button-row">
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgEntityUpsert" type="button" @click="upsertEntity">Upsert line entity</button>
-          <button class="ghost-action" type="button" :disabled="!selectedEntityId" @click="inspectEntity">Inspect</button>
-          <button class="ghost-action" type="button" @click="resolveEntitySourceKey">Resolve source key</button>
+          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgEntityUpsert" type="button" @click="upsertEntity">{{ t('page.mfg.page.text.f0c04ec37f') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEntityId" @click="inspectEntity">{{ t('page.mfg.page.text.80543724ec') }}</button>
+          <button class="ghost-action" type="button" @click="resolveEntitySourceKey">{{ t('page.mfg.page.text.72e19f1838') }}</button>
         </div>
-        <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgRelationUpsert" type="button" :disabled="!selectedEntityId || !relationTargetId" @click="upsertRelation">Upsert relation</button>
+        <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgRelationUpsert" type="button" :disabled="!selectedEntityId || !relationTargetId" @click="upsertRelation">{{ t('page.mfg.page.text.e91fcaef8f') }}</button>
         <DataTable v-if="entities.length" :rows="entities.slice(0, 8)" :columns="['entity_id', 'entity_type', 'canonical_key', 'display_name']" />
-        <RequestReceipt :receipt="entityResult" title="Entity receipt" />
+        <RequestReceipt :receipt="entityResult" :title="t('page.mfg.page.title.d69adeadb8')" />
         <GovernedActionPanel
           :contract="contract('entity-upsert')"
           :payload="entityGovernedPayload()"
@@ -1094,33 +1109,33 @@ onMounted(refresh);
           @dry-run="inspectEntity"
           @live="upsertRelation"
         />
-        <RawPayload title="Entity action result" :data="entityResult || {}" />
+        <RawPayload :title="t('page.mfg.page.title.7634a13f8b')" :data="entityResult || {}" />
       </article>
 
       <article class="management-panel" data-section="metrics">
         <header>
-          <h2>Metrics and compute</h2>
-          <span>{{ metrics.length }} metrics</span>
+          <h2>{{ t('page.mfg.page.text.ca57911109') }}</h2>
+          <span>{{ formatCount('metrics', metrics.length) }}</span>
         </header>
         <label class="field-line">
-          Metric id
+          {{ t('template.pages.mfgpage.8060f09c45') }}
           <input v-model="selectedMetricId" type="text" @keydown.enter.prevent="inspectMetric" />
         </label>
         <label class="field-line">
-          Compute job id
+          {{ t('template.pages.mfgpage.c9119bf5a0') }}
           <input v-model="computeJobId" type="text" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="inspectMetric">Lineage</button>
-          <button class="ghost-action" type="button" @click="materializeMetricSnapshot">Materialize</button>
-          <button class="ghost-action" type="button" @click="planMetricAttention">Attention plan</button>
+          <button class="ghost-action" type="button" @click="inspectMetric">{{ t('page.mfg.page.text.057509672b') }}</button>
+          <button class="ghost-action" type="button" @click="materializeMetricSnapshot">{{ t('page.mfg.page.text.4573da14a4') }}</button>
+          <button class="ghost-action" type="button" @click="planMetricAttention">{{ t('page.mfg.page.text.5f72680451') }}</button>
         </div>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="planComputeJob">Plan compute job</button>
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgComputeJobRun" type="button" :disabled="!computeJobId" @click="runComputeJob">Run job</button>
-          <button class="ghost-action" type="button" @click="recomputeMetrics">Recompute all</button>
+          <button class="primary-action" type="button" @click="planComputeJob">{{ t('page.mfg.page.text.5d254efbc9') }}</button>
+          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgComputeJobRun" type="button" :disabled="!computeJobId" @click="runComputeJob">{{ t('page.mfg.page.text.d67e6249c5') }}</button>
+          <button class="ghost-action" type="button" @click="recomputeMetrics">{{ t('page.mfg.page.text.891d6b15bd') }}</button>
         </div>
-        <RequestReceipt :receipt="metricResult" title="Metric receipt" />
+        <RequestReceipt :receipt="metricResult" :title="t('page.mfg.page.title.0d0bf08469')" />
         <GovernedActionPanel
           :contract="contract('metric-compute-run')"
           :payload="metricGovernedPayload()"
@@ -1129,28 +1144,28 @@ onMounted(refresh);
           @dry-run="planMetricAttention"
           @live="runComputeJob"
         />
-        <RawPayload title="Metric action result" :data="metricResult || {}" />
+        <RawPayload :title="t('page.mfg.page.title.f5626928d6')" :data="metricResult || {}" />
       </article>
 
       <article class="management-panel" data-section="evidence">
         <header>
-          <h2>Evidence and quality</h2>
-          <span>{{ state?.health?.evidence_count || 0 }} packets</span>
+          <h2>{{ t('page.mfg.page.text.5491ff5eb7') }}</h2>
+          <span>{{ formatCount('packets', state?.health?.evidence_count || 0) }}</span>
         </header>
         <label class="field-line">
-          Evidence packet id
+          {{ t('page.mfg.field.evidencePacketId') }}
           <input v-model="evidenceId" type="text" @keydown.enter.prevent="inspectEvidence" />
         </label>
         <label class="field-line">
-          Quality gate id
+          {{ t('page.mfg.field.qualityGateId') }}
           <input v-model="qualityGateId" type="text" @keydown.enter.prevent="inspectQualityGate" />
         </label>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="buildEvidencePacket">Build packet</button>
-          <button class="ghost-action" type="button" :disabled="!evidenceId" @click="inspectEvidence">Inspect context</button>
-          <button class="ghost-action" type="button" :disabled="!evidenceId" @click="evaluateEvidenceQuality">Quality gate</button>
+          <button class="primary-action" type="button" @click="buildEvidencePacket">{{ t('page.mfg.page.text.ca872a4aa1') }}</button>
+          <button class="ghost-action" type="button" :disabled="!evidenceId" @click="inspectEvidence">{{ t('page.mfg.page.text.e0e207718b') }}</button>
+          <button class="ghost-action" type="button" :disabled="!evidenceId" @click="evaluateEvidenceQuality">{{ t('page.mfg.page.text.ae0d32cea5') }}</button>
         </div>
-        <button class="ghost-action" type="button" :disabled="!qualityGateId" @click="inspectQualityGate">Open quality gate</button>
+        <button class="ghost-action" type="button" :disabled="!qualityGateId" @click="inspectQualityGate">{{ t('page.mfg.page.text.c4ef3d5929') }}</button>
         <GovernedActionPanel
           :contract="contract('evidence-build')"
           :payload="evidenceGovernedPayload()"
@@ -1159,26 +1174,26 @@ onMounted(refresh);
           @dry-run="dryRunEvidenceGovernance"
           @live="buildEvidencePacket"
         />
-        <RawPayload title="Evidence action result" :data="evidenceResult || {}" />
+        <RawPayload :title="t('page.mfg.page.title.63c40635e0')" :data="evidenceResult || {}" />
       </article>
 
       <article id="incident-room" class="management-panel" data-section="incident-room">
         <header>
-          <h2>Incident room</h2>
+          <h2>{{ t('page.mfg.page.text.77fbd36078') }}</h2>
           <span>{{ incidents.length }} incidents</span>
         </header>
         <label class="field-line">
-          New incident
+          {{ t('template.pages.mfgpage.1d3f813051') }}
           <textarea v-model="incidentTitle" rows="3" />
         </label>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="createIncident">Create incident</button>
-          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="openIncidentRoom">Open room</button>
+          <button class="primary-action" type="button" @click="createIncident">{{ t('page.mfg.page.text.f9045b3b92') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="openIncidentRoom">{{ t('page.mfg.page.text.2b601a8397') }}</button>
         </div>
         <label class="field-line">
-          Current incident
+          {{ t('template.pages.mfgpage.77b32336ad') }}
           <select v-model="selectedIncidentId" @change="openIncidentRoom">
-            <option value="">Select incident</option>
+            <option value="">{{ t('page.mfg.page.text.8505a31972') }}</option>
             <option v-for="incident in incidents" :key="incident.incident_id" :value="incident.incident_id">
               {{ incident.title || incident.incident_id }}
             </option>
@@ -1193,47 +1208,47 @@ onMounted(refresh);
           @dry-run="dryRunIncidentGovernance"
           @live="createIncident"
         />
-        <RawPayload title="Incident room result" :data="{ room, entities: entities.slice(0, 8), attention: attention.slice(0, 8) }" />
+        <RawPayload :title="t('page.mfg.page.title.22adafc937')" :data="{ room, entities: entities.slice(0, 8), attention: attention.slice(0, 8) }" />
       </article>
 
       <article class="management-panel" data-section="actions">
         <header>
-          <h2>Analysis, playbook, actions</h2>
-          <span>{{ recommendedActions.length }} actions</span>
+          <h2>{{ t('page.mfg.page.text.73af29674f') }}</h2>
+          <span>{{ formatCount('actions', recommendedActions.length) }}</span>
         </header>
         <div class="button-row">
-          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="analyzeIncident">Analyze</button>
-          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="recommendPlaybooks">Recommend playbooks</button>
-          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="promoteCase">Promote case</button>
+          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="analyzeIncident">{{ t('page.mfg.page.text.b5a34e6218') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="recommendPlaybooks">{{ t('page.mfg.page.text.0c0da9aa5a') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="promoteCase">{{ t('page.mfg.page.text.293ea179f5') }}</button>
         </div>
         <div class="memory-form-row">
           <label class="field-line">
-            Case id
+            {{ t('template.pages.mfgpage.1517e2c735') }}
             <input v-model="selectedCaseId" type="text" />
           </label>
           <label class="field-line">
-            Playbook id
+            {{ t('template.pages.mfgpage.c423d049cc') }}
             <input v-model="selectedPlaybookId" type="text" />
           </label>
         </div>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="searchCases">Search cases</button>
-          <button class="ghost-action" type="button" :disabled="!selectedCaseId" @click="inspectCase">Inspect case</button>
-          <button class="ghost-action" type="button" :disabled="!selectedPlaybookId" @click="inspectPlaybook">Inspect playbook</button>
-          <button class="ghost-action" type="button" :disabled="!selectedPlaybookId" @click="upsertPlaybook">Upsert playbook</button>
+          <button class="ghost-action" type="button" @click="searchCases">{{ t('page.mfg.page.text.fd83a8d0a9') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedCaseId" @click="inspectCase">{{ t('page.mfg.page.text.f859139b7e') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedPlaybookId" @click="inspectPlaybook">{{ t('page.mfg.page.text.f025eb3ee9') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedPlaybookId" @click="upsertPlaybook">{{ t('page.mfg.page.text.4230284219') }}</button>
         </div>
         <label class="field-line">
-          Recommended action
+          {{ t('template.pages.mfgpage.28fbb69071') }}
           <select v-model="selectedActionId">
-            <option value="">Select action</option>
+            <option value="">{{ t('page.mfg.page.text.f1ed7f5d73') }}</option>
             <option v-for="action in recommendedActions" :key="action.action_id" :value="action.action_id">
               {{ action.title || action.action_id }}
             </option>
           </select>
         </label>
         <div class="button-row">
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgExecuteAction" type="button" :disabled="!selectedActionId" @click="executeAction">Execute dry run</button>
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgExecutionBridge" type="button" @click="bridgeExecution">Bridge cross-plane</button>
+          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgExecuteAction" type="button" :disabled="!selectedActionId" @click="executeAction">{{ t('page.mfg.page.text.f283d38d0f') }}</button>
+          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgExecutionBridge" type="button" @click="bridgeExecution">{{ t('page.mfg.page.text.87bb6b109d') }}</button>
         </div>
         <GovernedActionPanel
           :contract="contract('action-execute-bridge')"
@@ -1243,58 +1258,58 @@ onMounted(refresh);
           @dry-run="dryRunActionGovernance"
           @live="bridgeExecution"
         />
-        <RequestReceipt :receipt="result" title="Action receipt" />
-        <RawPayload title="Analysis action result" :data="{ analysis, executions: room?.executions, playbooks: room?.playbooks, case_id: selectedCaseId, playbook_id: selectedPlaybookId }" />
+        <RequestReceipt :receipt="result" :title="t('page.mfg.page.title.61ddf695b3')" />
+        <RawPayload :title="t('page.mfg.page.title.cfe2ae18f1')" :data="{ analysis, executions: room?.executions, playbooks: room?.playbooks, case_id: selectedCaseId, playbook_id: selectedPlaybookId }" />
       </article>
 
       <article class="management-panel" data-section="skills">
         <header>
-          <h2>Manufacturing skills</h2>
-          <span>{{ skills.length }} skills</span>
+          <h2>{{ t('page.mfg.page.text.a2460b2b6a') }}</h2>
+          <span>{{ formatCount('skills', skills.length) }}</span>
         </header>
         <label class="field-line">
-          Skill
+          {{ t('template.pages.mfgpage.ec9f630c86') }}
           <select v-model="selectedSkillId">
-            <option value="">Select skill</option>
+            <option value="">{{ t('page.mfg.page.text.b7791a2344') }}</option>
             <option v-for="skill in skills" :key="skill.skill_id" :value="skill.skill_id">
               {{ skill.name || skill.skill_id }}
             </option>
           </select>
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="planSkills">Plan skills</button>
-          <button class="primary-action" type="button" :disabled="!selectedIncidentId || !selectedSkillId" @click="runSkill">Run skill</button>
+          <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="planSkills">{{ t('page.mfg.page.text.d987757ec9') }}</button>
+          <button class="primary-action" type="button" :disabled="!selectedIncidentId || !selectedSkillId" @click="runSkill">{{ t('page.mfg.page.text.ff81a10442') }}</button>
         </div>
         <label class="field-line">
-          Skill run id
+          {{ t('template.pages.mfgpage.68044552a2') }}
           <input v-model="selectedSkillRunId" type="text" />
         </label>
-        <button class="ghost-action" type="button" :disabled="!selectedSkillRunId" @click="inspectSkillRun">Inspect skill run</button>
+        <button class="ghost-action" type="button" :disabled="!selectedSkillRunId" @click="inspectSkillRun">{{ t('page.mfg.page.text.5e038b547e') }}</button>
         <DataTable v-if="skills.length" :rows="skills.slice(0, 8)" :columns="['skill_id', 'name', 'risk', 'status']" />
         <DataTable v-if="skillRuns.length" :rows="skillRuns.slice(0, 8)" />
-        <RawPayload title="Manufacturing skill run detail" :data="{ skills: state?.skills, skill_runs: skillRuns, result }" />
+        <RawPayload :title="t('page.mfg.page.title.8b3d8aa5ff')" :data="{ skills: state?.skills, skill_runs: skillRuns, result }" />
       </article>
 
       <article id="reports" class="management-panel" data-section="reports">
         <header>
-          <h2>Cockpit reports</h2>
-          <span>delivery/retry</span>
+          <h2>{{ t('page.mfg.page.text.041093433a') }}</h2>
+          <span>{{ t('page.mfg.summary.deliveryRetry') }}</span>
         </header>
         <label class="field-line">
-          Profile id
+          {{ t('page.mfg.field.profileId') }}
           <input v-model="cockpitProfileId" type="text" />
         </label>
         <label class="field-line">
-          Owner ref
+          {{ t('page.mfg.field.ownerRef') }}
           <input v-model="cockpitOwnerRef" type="text" />
         </label>
         <label class="field-line">
-          Report id
-          <input v-model="cockpitReportId" type="text" placeholder="optional" />
+          {{ t('page.mfg.field.reportId') }}
+          <input v-model="cockpitReportId" type="text" :placeholder="t('page.mfg.page.placeholder.47e472c3f8')" />
         </label>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="generateReport">Generate report</button>
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgRetryReportDelivery" type="button" :disabled="!cockpitReportId" @click="retryReportDelivery">Retry delivery</button>
+          <button class="primary-action" type="button" @click="generateReport">{{ t('page.mfg.page.text.2170372da3') }}</button>
+          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgRetryReportDelivery" type="button" :disabled="!cockpitReportId" @click="retryReportDelivery">{{ t('page.mfg.page.text.acc563d64d') }}</button>
         </div>
         <GovernedActionPanel
           :contract="contract('cockpit-report-generate')"
@@ -1312,8 +1327,8 @@ onMounted(refresh);
           @dry-run="dryRunReportGovernance"
           @live="retryReportDelivery"
         />
-        <RequestReceipt :receipt="result" title="Report receipt" />
-        <RawPayload title="Report action result" :data="result || {}" />
+        <RequestReceipt :receipt="result" :title="t('page.mfg.page.title.1b6b271f1d')" />
+        <RawPayload :title="t('page.mfg.page.title.5535fc9315')" :data="result || {}" />
       </article>
     </section>
   </section>

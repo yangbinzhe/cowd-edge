@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { Database, GitBranch, Network, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -103,18 +104,18 @@ const candidateRows = computed(() => Array.isArray(maintenance.value?.candidates
 const linkCount = computed(() => Number(links.value?.total || links.value?.links?.length || 0));
 const healthLevel = computed(() => status.value?.kernel_health?.degraded ? 'degraded' : (status.value?.status || 'unknown'));
 const memoryContext = computed(() => [
-  { label: 'Engine', value: 'Reality Core / Memory' },
-  { label: 'Health', value: healthLevel.value, tone: healthLevel.value === 'ready' ? 'success' : 'warn' },
-  { label: 'Layer', value: selectedLayer.value },
-  { label: 'Links', value: linkCount.value },
+  { label: t('script.pages.memorypage.label.c1f65ddb75'), value: 'Reality Core / Memory' },
+  { label: t('script.pages.memorypage.label.3703cd2168'), value: healthLevel.value, tone: healthLevel.value === 'ready' ? 'success' : 'warn' },
+  { label: t('script.pages.memorypage.label.4343635cf2'), value: selectedLayer.value },
+  { label: t('script.pages.memorypage.label.014bcd654c'), value: linkCount.value },
 ]);
 const memoryWorkflow = computed(() => [
-  { id: 'memory-layers', label: 'Layer', status: entries.value.length ? 'ready' : 'idle', count: entries.value.length },
-  { id: 'memory-recall', label: 'Recall', status: recallRows.value.length ? 'active' : 'idle', count: recallRows.value.length },
-  { id: 'memory-recall', label: 'Packet', status: packet.value?.items?.length ? 'ready' : 'idle', description: query.value },
-  { id: 'memory-graph', label: 'Entity', status: entityRows.value.length ? 'ready' : 'idle', count: entityRows.value.length },
-  { id: 'memory-maintenance', label: 'Maintenance', status: candidateRows.value.length ? 'blocked' : 'ready', count: candidateRows.value.length },
-  { id: 'memory-structured', label: 'Promotion', status: structuredPlan.value ? 'active' : 'idle', description: factType.value },
+  { id: 'memory-layers', label: t('script.pages.memorypage.label.4343635cf2'), status: entries.value.length ? 'ready' : 'idle', count: entries.value.length },
+  { id: 'memory-recall', label: t('script.pages.memorypage.label.3f7e1fd914'), status: recallRows.value.length ? 'active' : 'idle', count: recallRows.value.length },
+  { id: 'memory-recall', label: t('script.pages.memorypage.label.83c6d723cb'), status: packet.value?.items?.length ? 'ready' : 'idle', description: query.value },
+  { id: 'memory-graph', label: t('script.pages.memorypage.label.c7fb317725'), status: entityRows.value.length ? 'ready' : 'idle', count: entityRows.value.length },
+  { id: 'memory-maintenance', label: t('script.pages.memorypage.label.94de303bbe'), status: candidateRows.value.length ? 'blocked' : 'ready', count: candidateRows.value.length },
+  { id: 'memory-structured', label: t('script.pages.memorypage.label.550ae25c2e'), status: structuredPlan.value ? 'active' : 'idle', description: factType.value },
 ]);
 const memoryEvidence = computed(() => [
   ...recallRows.value.slice(0, 4).map((row: any) => ({
@@ -305,54 +306,54 @@ onMounted(refresh);
   <section class="capability-page memory-page">
     <header class="page-header">
       <div>
-        <h1>Memory Graph</h1>
-        <p>长期记忆、召回解释、维护候选和结构化事实入口集中管理。</p>
+        <h1>{{ t('page.memory.page.text.7f069c1bfc') }}</h1>
+        <p>{{ t('page.memory.page.text.137bebc37b') }}</p>
       </div>
       <div class="button-row">
-        <RouterLink class="ghost-action" to="/reality">Open Reality Core</RouterLink>
+        <RouterLink class="ghost-action" to="/reality">{{ t('page.memory.page.text.070fef7b51') }}</RouterLink>
         <button class="primary-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="15" />
-          {{ loading ? 'Loading' : 'Refresh memory' }}
+          {{ loading ? t('page.memory.page.inline.9b1b07427e') : t('page.memory.page.inline.d4514909be') }}
         </button>
       </div>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="memoryContext" />
-    <WorkflowStrip :steps="memoryWorkflow" title="Memory engine flow" />
+    <WorkflowStrip :steps="memoryWorkflow" :title="t('page.memory.page.title.965180676a')" />
 
     <section class="metric-row memory-overview">
       <article class="metric-card">
-        <span>Kernel health</span>
+        <span>{{ t('page.memory.page.text.b18fa8ad53') }}</span>
         <strong>{{ healthLevel }}</strong>
-        <small>{{ status.enabled === false ? 'memory disabled' : `${stats.total_entries || 0} entries` }}</small>
+        <small>{{ status.enabled === false ? t('page.memory.page.inline.4838a2ce38') : `${stats.total_entries || 0} entries` }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Graph objects</span>
+        <span>{{ t('page.memory.page.text.967669c6b7') }}</span>
         <strong>{{ stats.entity_count || 0 }}/{{ stats.triple_count || 0 }}</strong>
-        <small>entities / triples</small>
+        <small>{{ t('page.memory.page.text.0d351f6cb3') }}</small>
       </article>
       <article class="metric-card" data-tone="success">
-        <span>Links</span>
+        <span>{{ t('page.memory.page.text.4dc077cd38') }}</span>
         <strong>{{ linkCount }}</strong>
-        <small>{{ stats.vector_count || 0 }} vectors indexed</small>
+        <small>{{ t('page.memory.summary.indexedVectors', { count: stats.vector_count || 0 }) }}</small>
       </article>
     </section>
 
     <section class="memory-workbench">
-      <nav class="memory-sections" aria-label="Memory workbench sections">
-        <a href="#memory-layers"><Database :size="15" /> Layers</a>
-        <a href="#memory-recall"><Search :size="15" /> Recall</a>
-        <a href="#memory-graph"><GitBranch :size="15" /> Graph</a>
-        <a href="#memory-maintenance"><ShieldCheck :size="15" /> Maintenance</a>
-        <a href="#structured-core"><Network :size="15" /> Structured data</a>
+      <nav class="memory-sections" :aria-label="t('page.memory.page.aria-label.6f075355c0')">
+        <a href="#memory-layers"><Database :size="15" />{{ t('page.memory.page.text.da827dc4ae') }}</a>
+        <a href="#memory-recall"><Search :size="15" />{{ t('page.memory.page.text.58e722778f') }}</a>
+        <a href="#memory-graph"><GitBranch :size="15" />{{ t('page.memory.page.text.c676fc9eca') }}</a>
+        <a href="#memory-maintenance"><ShieldCheck :size="15" />{{ t('page.memory.page.text.44500c4e90') }}</a>
+        <a href="#structured-core"><Network :size="15" />{{ t('page.memory.page.text.23d5f43eb0') }}</a>
       </nav>
 
       <main class="memory-main">
         <section id="memory-layers" class="management-panel memory-panel wide">
           <header>
-            <h2>Layer entries</h2>
-            <span>{{ entries.length }} entries</span>
+            <h2>{{ t('page.memory.page.text.59a9b03328') }}</h2>
+            <span>{{ formatCount('entries', entries.length) }}</span>
           </header>
           <div class="memory-split">
             <aside class="memory-list">
@@ -374,105 +375,105 @@ onMounted(refresh);
                 <span>{{ entry.content || entry.summary || entry.id }}</span>
                 <small>{{ entry.category || '-' }} · {{ entry.priority || '-' }}</small>
               </button>
-              <EmptyState v-if="!entries.length" title="No entries in this layer" detail="新增条目后会出现在对应 L0-L4 记忆层。" />
+              <EmptyState v-if="!entries.length" :title="t('page.memory.page.title.178f22a6d0')" :detail="t('page.memory.page.detail.085528ade1')" />
             </aside>
             <article class="memory-detail">
               <dl class="detail-list">
-                <dt>ID</dt>
+                <dt>{{ t('common.id') }}</dt>
                 <dd>{{ selectedEntry?.id || '-' }}</dd>
-                <dt>Layer</dt>
+                <dt>{{ t('page.memory.page.text.e5cc96a4d2') }}</dt>
                 <dd>{{ selectedEntry?.layer || selectedLayer }}</dd>
-                <dt>Scope</dt>
+                <dt>{{ t('page.memory.page.text.cc8c1c2057') }}</dt>
                 <dd>{{ selectedEntry?.scope || '-' }}</dd>
-                <dt>Tags</dt>
+                <dt>{{ t('page.memory.page.text.e811ec8276') }}</dt>
                 <dd>{{ (selectedEntry?.tags || []).join(', ') || '-' }}</dd>
               </dl>
               <label class="field-line">
-                Title
+                {{ t('page.memory.field.title') }}
                 <input v-model="entryTitle" type="text" />
               </label>
               <label class="field-line">
-                Content
+                {{ t('page.memory.field.content') }}
                 <textarea v-model="entryContent" rows="5" />
               </label>
               <div class="memory-form-row">
                 <label class="field-line">
-                  Priority
+                  {{ t('page.memory.field.priority') }}
                   <select v-model="entryPriority">
-                    <option>critical</option>
-                    <option>high</option>
-                    <option>normal</option>
-                    <option>low</option>
+                    <option value="critical">{{ t('priority.critical') }}</option>
+                    <option value="high">{{ t('priority.high') }}</option>
+                    <option value="normal">{{ t('priority.normal') }}</option>
+                    <option value="low">{{ t('priority.low') }}</option>
                   </select>
                 </label>
                 <label class="field-line">
-                  Tags
+                  {{ t('page.memory.field.tags') }}
                   <input v-model="entryTags" type="text" />
                 </label>
               </div>
               <div class="button-row">
-                <button class="primary-action" type="button" @click="createEntry">Register memory fact</button>
-                <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="updateEntry">Update selected</button>
-                <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="inspectLifecycle">Inspect lifecycle</button>
-                <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="deleteEntry">Archive selected</button>
+                <button class="primary-action" type="button" @click="createEntry">{{ t('page.memory.page.text.ca1c3fc9cf') }}</button>
+                <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="updateEntry">{{ t('page.memory.page.text.9644fbecf5') }}</button>
+                <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="inspectLifecycle">{{ t('page.memory.page.text.239620d0a8') }}</button>
+                <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="deleteEntry">{{ t('page.memory.page.text.a81ea49866') }}</button>
               </div>
-              <RequestReceipt :receipt="actionResult" title="Memory layer receipt" />
-              <RawPayload title="Memory lifecycle detail" :data="lifecycle" />
+              <RequestReceipt :receipt="actionResult" :title="t('page.memory.page.title.6f17a86ac0')" />
+              <RawPayload :title="t('page.memory.page.title.d8ff01b6d7')" :data="lifecycle" />
             </article>
           </div>
         </section>
 
         <section id="memory-recall" class="management-panel memory-panel">
           <header>
-            <h2>Search, recall, packet</h2>
-            <span>{{ recallExplain.total || 0 }} matches</span>
+            <h2>{{ t('page.memory.page.text.74f1596f5e') }}</h2>
+            <span>{{ formatCount('matches', recallExplain.total || 0) }}</span>
           </header>
           <label class="search-field">
             <Search :size="15" />
-            <input v-model="query" type="search" placeholder="Query memory" @keyup.enter="runRecall" />
+            <input v-model="query" type="search" :placeholder="t('page.memory.page.placeholder.ecaadc67df')" @keyup.enter="runRecall" />
           </label>
           <div class="button-row">
-            <button class="primary-action" type="button" @click="runRecall">Run recall</button>
+            <button class="primary-action" type="button" @click="runRecall">{{ t('page.memory.page.text.215fe6c40a') }}</button>
           </div>
           <DataTable v-if="recallRows.length" :rows="recallRows" :columns="['title', 'layer', 'priority', 'score', 'snippet']" @row-click="selectedDetail = $event" />
-          <EmptyState v-else title="No recall results" detail="当前查询没有匹配，或后端处于离线状态。" />
+          <EmptyState v-else :title="t('page.memory.page.title.7ba084d974')" :detail="t('page.memory.page.detail.31896020e4')" />
           <DataTable v-if="packetRows.length" :rows="packetRows" :columns="['id', 'kind', 'source', 'score', 'summary']" @row-click="selectedDetail = $event" />
-          <RawPayload title="Context packet" :data="packet" />
+          <RawPayload :title="t('page.memory.page.title.7ea35b5ba8')" :data="packet" />
         </section>
 
         <section id="memory-graph" class="management-panel memory-panel">
           <header>
-            <h2>Structured memory graph</h2>
-            <span>{{ entityRows.length }} entities shown</span>
+            <h2>{{ t('page.memory.page.text.8af20392f9') }}</h2>
+            <span>{{ t('common.shownCount', { count: entityRows.length, unit: t('unit.entities') }) }}</span>
           </header>
           <div class="memory-tabs">
             <article>
-              <h3>Entities</h3>
+              <h3>{{ t('page.memory.page.text.4629e42c4f') }}</h3>
               <DataTable v-if="entityRows.length" :rows="entityRows" @row-click="selectedDetail = $event" />
-              <EmptyState v-else title="No entities" detail="实体抽取结果会展示在这里。" />
+              <EmptyState v-else :title="t('page.memory.page.title.f0919ea2dd')" :detail="t('page.memory.page.detail.86d9c1fa2d')" />
             </article>
             <article>
-              <h3>Triples</h3>
+              <h3>{{ t('page.memory.page.text.bab3ecc1cb') }}</h3>
               <DataTable v-if="tripleRows.length" :rows="tripleRows" @row-click="selectedDetail = $event" />
-              <EmptyState v-else title="No triples" detail="事实三元组会展示在这里。" />
+              <EmptyState v-else :title="t('page.memory.page.title.88ac34d434')" :detail="t('page.memory.page.detail.ad98015f0b')" />
             </article>
           </div>
           <label class="field-line">
-            Symbol lookup
+            {{ t('template.pages.memorypage.55b9f253bb') }}
             <input v-model="symbolQuery" type="text" @keyup.enter="runRecall" />
           </label>
           <DataTable v-if="symbolRows.length" :rows="symbolRows" :columns="['symbol', 'target', 'kind', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
-          <RawPayload title="Symbol links" :data="symbolLinks" />
-          <RawPayload title="Clusters and runtime" :data="{ clusters, runtime, links }" />
+          <RawPayload :title="t('page.memory.page.title.4cf0ff71ef')" :data="symbolLinks" />
+          <RawPayload :title="t('page.memory.page.title.c2bbd9a5f2')" :data="{ clusters, runtime, links }" />
         </section>
 
         <section id="memory-maintenance" class="management-panel memory-panel">
           <header>
-            <h2>Maintenance</h2>
-            <span>{{ candidateRows.length }} candidates</span>
+            <h2>{{ t('page.memory.page.text.44500c4e90') }}</h2>
+            <span>{{ formatCount('candidates', candidateRows.length) }}</span>
           </header>
-          <button class="primary-action" type="button" @click="scanMaintenance">Scan candidates</button>
-          <RequestReceipt :receipt="maintenanceScan || actionResult" title="Maintenance receipt" />
+          <button class="primary-action" type="button" @click="scanMaintenance">{{ t('page.memory.page.text.9dffc03a7b') }}</button>
+          <RequestReceipt :receipt="maintenanceScan || actionResult" :title="t('page.memory.page.title.ba22f93cf4')" />
           <div class="maintenance-list">
             <article v-for="candidate in candidateRows.slice(0, 12)" :key="candidate.id || candidate.memory_id" role="button" tabindex="0" @click="selectedDetail = candidate" @keydown.enter.prevent="selectedDetail = candidate">
               <div>
@@ -480,48 +481,48 @@ onMounted(refresh);
                 <p>{{ candidate.summary || candidate.description || summarize(candidate) }}</p>
               </div>
               <div class="button-row" v-if="candidate.id">
-                <button class="ghost-action" type="button" @click="markCandidate(candidate.id, 'acknowledged')">Ack</button>
-                <button class="ghost-action" type="button" @click="markCandidate(candidate.id, 'dismissed')">Dismiss</button>
+                <button class="ghost-action" type="button" @click="markCandidate(candidate.id, 'acknowledged')">{{ t('page.memory.page.text.85c8084579') }}</button>
+                <button class="ghost-action" type="button" @click="markCandidate(candidate.id, 'dismissed')">{{ t('page.memory.page.text.13dc973ada') }}</button>
               </div>
             </article>
           </div>
-          <EmptyState v-if="!candidateRows.length" title="No maintenance candidates" detail="扫描后会列出陈旧、冲突、重复和权威提升候选。" />
-          <RequestReceipt :receipt="actionResult" title="Maintenance action receipt" />
-          <RawPayload title="Performance" :data="performance" />
+          <EmptyState v-if="!candidateRows.length" :title="t('page.memory.page.title.e6a5608e97')" :detail="t('page.memory.page.detail.44a5990796')" />
+          <RequestReceipt :receipt="actionResult" :title="t('page.memory.page.title.40ab8261c6')" />
+          <RawPayload :title="t('page.memory.page.title.695f0468d1')" :data="performance" />
         </section>
 
         <section id="structured-core" class="management-panel memory-panel wide">
           <header>
-            <h2>Structured data core</h2>
-            <span>cowd kernel data substrate</span>
+            <h2>{{ t('page.memory.page.text.e198d8cb55') }}</h2>
+            <span>{{ t('page.memory.page.text.00b20a67e4') }}</span>
           </header>
-          <p>结构化数据作为 cowd 底层数据处理能力沉淀，MFG 只作为制造领域应用在其上使用。</p>
+          <p>{{ t('page.memory.page.text.8dfef6e819') }}</p>
           <div class="memory-form-row">
             <label class="field-line">
-              Source ref
+              {{ t('template.pages.memorypage.5b079864d8') }}
               <input v-model="sourceRef" type="text" />
             </label>
             <label class="field-line">
-              Fact type
+              {{ t('template.pages.memorypage.60845e4205') }}
               <input v-model="factType" type="text" />
             </label>
           </div>
-          <button class="primary-action" type="button" @click="planStructuredIngest">Plan manufacturing ingest</button>
-          <RequestReceipt :receipt="structuredPlan" title="Structured ingest plan receipt" />
+          <button class="primary-action" type="button" @click="planStructuredIngest">{{ t('page.memory.page.text.2ca6e733a6') }}</button>
+          <RequestReceipt :receipt="structuredPlan" :title="t('page.memory.page.title.d8382cb203')" />
           <DataTable v-if="structuredRows.length" :rows="structuredRows" :columns="['id', 'kind', 'status', 'owner', 'summary']" @row-click="selectStructuredRow" />
-          <RawPayload title="Structured collections" :data="structured" />
-          <RawPayload title="Ingest plan" :data="structuredPlan || {}" />
+          <RawPayload :title="t('page.memory.page.title.e9ed3b1dc2')" :data="structured" />
+          <RawPayload :title="t('page.memory.page.title.5d5e81382a')" :data="structuredPlan || {}" />
         </section>
 
         <section class="management-panel memory-panel">
           <header>
-          <h2>Action evidence</h2>
-          <span>latest write response</span>
+          <h2>{{ t('page.memory.page.text.3a7f2092b2') }}</h2>
+          <span>{{ t('page.memory.page.text.e1d20ad6e9') }}</span>
         </header>
-          <EvidenceTrace :items="memoryEvidence" title="Memory evidence trace" />
-          <EvidenceObjectDetail title="Memory selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
-          <RequestReceipt :receipt="actionResult || structuredPlan" title="Memory action receipt" />
-          <RawPayload title="Action result" :data="actionResult || searchResult" />
+          <EvidenceTrace :items="memoryEvidence" :title="t('page.memory.page.title.24852d9c53')" />
+          <EvidenceObjectDetail :title="t('page.memory.page.title.33cead0976')" :evidence="selectedEvidence" @close="selectedDetail = null" />
+          <RequestReceipt :receipt="actionResult || structuredPlan" :title="t('page.memory.page.title.c115b0f74c')" />
+          <RawPayload :title="t('page.memory.page.title.ef470a2336')" :data="actionResult || searchResult" />
         </section>
       </main>
     </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
 import ApiStateBanner from '../workbench/ApiStateBanner.vue';
 import PrimaryContextBar from './PrimaryContextBar.vue';
 import WorkflowStrip from './WorkflowStrip.vue';
@@ -38,7 +39,7 @@ defineProps<{
       :detail="statusDetail"
     />
     <PrimaryContextBar v-if="context?.length" :items="context" />
-    <WorkflowStrip v-if="workflow?.length" :steps="workflow" title="Application flow" />
+    <WorkflowStrip v-if="workflow?.length" :steps="workflow" :title="t('component.layout.application.workbench.layout.title.6d1d75ca0d')" />
     <slot />
   </section>
 </template>

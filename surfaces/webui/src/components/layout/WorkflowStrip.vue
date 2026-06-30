@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
+import { formatCount } from '../../i18n';
 import StatusPill from '../workbench/StatusPill.vue';
 
 interface WorkflowStep {
@@ -13,7 +15,7 @@ const props = withDefaults(defineProps<{
   steps: WorkflowStep[];
   title?: string;
 }>(), {
-  title: 'Workflow',
+  title: t('script.components.layout.workflowstrip.title.d7a484140f'),
 });
 
 function go(step: WorkflowStep) {
@@ -26,7 +28,7 @@ function go(step: WorkflowStep) {
   <nav class="workflow-strip" :aria-label="title">
     <header>
       <strong>{{ title }}</strong>
-      <span>{{ steps.length }} stages</span>
+      <span>{{ formatCount('stages', steps.length) }}</span>
     </header>
     <button
       v-for="step in props.steps"

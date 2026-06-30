@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { translateStatus } from '../../i18n';
+import { displayStatus } from '../../i18n/domain/status';
 
 defineProps<{ status: string }>();
 </script>
 
 <template>
-  <span class="status-badge" :data-status="status">{{ translateStatus(status) }}</span>
+  <span class="status-badge" :data-status="status">{{ displayStatus(status) }}</span>
 </template>

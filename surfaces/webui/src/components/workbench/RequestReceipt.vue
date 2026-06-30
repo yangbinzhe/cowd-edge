@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
 import { computed } from 'vue';
 import type { ApiReceipt, ApiWriteError } from '../../api/client';
-import { translateText } from '../../i18n';
+import { displayBoolean } from '../../i18n/domain/status';
 import StatusPill from './StatusPill.vue';
 
 const props = withDefaults(defineProps<{
@@ -9,7 +10,7 @@ const props = withDefaults(defineProps<{
   title?: string;
 }>(), {
   receipt: null,
-  title: 'Request receipt',
+  title: t('script.components.workbench.requestreceipt.title.d7472533cf'),
 });
 
 const normalized = computed(() => {
@@ -28,21 +29,21 @@ function value(key: string) {
 <template>
   <section v-if="receipt" class="request-receipt" :data-ok="value('ok') !== false">
     <header>
-      <h2>{{ translateText(title) }}</h2>
+      <h2>{{ title || t('requestReceipt.title') }}</h2>
       <StatusPill :status="value('ok') === false ? 'error' : (value('mode') || value('status') || 'ready')" />
     </header>
     <dl class="detail-list">
-      <dt>{{ translateText('Endpoint') }}</dt>
+      <dt>{{ t('requestReceipt.endpoint') }}</dt>
       <dd>{{ value('endpoint') || value('path') || '-' }}</dd>
-      <dt>{{ translateText('Method') }}</dt>
+      <dt>{{ t('requestReceipt.method') }}</dt>
       <dd>{{ value('method') || '-' }}</dd>
-      <dt>{{ translateText('Status') }}</dt>
+      <dt>{{ t('requestReceipt.status') }}</dt>
       <dd>{{ value('status') || value('status_text') || '-' }}</dd>
-      <dt>{{ translateText('Retryable') }}</dt>
-      <dd>{{ value('retryable') === undefined ? '-' : String(value('retryable')) }}</dd>
-      <dt>{{ translateText('Error') }}</dt>
+      <dt>{{ t('requestReceipt.retryable') }}</dt>
+      <dd>{{ value('retryable') === undefined ? '-' : displayBoolean(value('retryable')) }}</dd>
+      <dt>{{ t('requestReceipt.error') }}</dt>
       <dd>{{ value('error') || value('message') || '-' }}</dd>
-      <dt>{{ translateText('Payload') }}</dt>
+      <dt>{{ t('requestReceipt.payload') }}</dt>
       <dd>{{ value('payload_summary') || '-' }}</dd>
     </dl>
   </section>

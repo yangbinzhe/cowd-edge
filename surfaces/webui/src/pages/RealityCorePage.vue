@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
@@ -27,7 +28,7 @@ const selectedDetail = ref<Record<string, unknown> | null>(null);
 const fallbackManagement = [
   {
     id: 'overview',
-    label: 'Reality overview',
+    label: t('script.pages.realitycorepage.label.76a2e57120'),
     mode: 'read',
     owner: 'gateway.reality',
     route: '/reality?section=overview',
@@ -36,7 +37,7 @@ const fallbackManagement = [
   },
   {
     id: 'memory',
-    label: 'Memory Engine',
+    label: t('script.pages.realitycorepage.label.b6981f17cb'),
     mode: 'read-write',
     owner: 'gateway.memory',
     route: '/memory',
@@ -45,7 +46,7 @@ const fallbackManagement = [
   },
   {
     id: 'matrix',
-    label: 'Matrix Engine',
+    label: t('script.pages.realitycorepage.label.478106eb6e'),
     mode: 'read-write',
     owner: 'gateway.matrix',
     route: '/reality?section=matrix',
@@ -54,7 +55,7 @@ const fallbackManagement = [
   },
   {
     id: 'growth',
-    label: 'Growth Channel',
+    label: t('script.pages.realitycorepage.label.4017442548'),
     mode: 'read',
     owner: 'gateway.growth',
     route: '/reality?section=fact-flow',
@@ -63,7 +64,7 @@ const fallbackManagement = [
   },
   {
     id: 'context',
-    label: 'Context Bridge',
+    label: t('script.pages.realitycorepage.label.429a27ab05'),
     mode: 'read-write',
     owner: 'gateway.context',
     route: '/context',
@@ -72,7 +73,7 @@ const fallbackManagement = [
   },
   {
     id: 'audit',
-    label: 'Audit Trace',
+    label: t('script.pages.realitycorepage.label.79b847480b'),
     mode: 'read',
     owner: 'gateway.audit',
     route: '/audit',
@@ -81,7 +82,7 @@ const fallbackManagement = [
   },
   {
     id: 'gateway',
-    label: 'Gateway Control',
+    label: t('script.pages.realitycorepage.label.16175710a6'),
     mode: 'read-write',
     owner: 'gateway.system',
     route: '/gateway',
@@ -93,26 +94,26 @@ const fallbackManagement = [
 const activeSessionId = computed(() => sessionFilter.value.trim() || store.activeSessionId || '');
 const activeSection = computed(() => String(route.query.section || 'overview'));
 const sectionTabs = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'memory', label: 'Memory' },
-  { id: 'matrix', label: 'Matrix' },
-  { id: 'fact-flow', label: 'Fact Flow' },
-  { id: 'evidence', label: 'Evidence' },
-  { id: 'audit', label: 'Audit' },
+  { id: 'overview', label: t('script.pages.realitycorepage.label.0efc2e6be4') },
+  { id: 'memory', label: t('script.pages.realitycorepage.label.89c8a2851d') },
+  { id: 'matrix', label: t('script.pages.realitycorepage.label.58947ebc8f') },
+  { id: 'fact-flow', label: t('script.pages.realitycorepage.label.33f62e7cc6') },
+  { id: 'evidence', label: t('script.pages.realitycorepage.label.7ea014de7b') },
+  { id: 'audit', label: t('script.pages.realitycorepage.label.fa1703dd78') },
 ];
 const realityContext = computed(() => [
-  { label: 'Session', value: activeSessionId.value || 'global' },
-  { label: 'Engines', value: engineRows.value.length, tone: engineRows.value.length ? 'success' : 'warn' },
-  { label: 'Fact stages', value: factFlowRows.value.length },
-  { label: 'Promotions', value: promotionRows.value.length },
+  { label: t('script.pages.realitycorepage.label.f7f1997c6c'), value: activeSessionId.value || 'global' },
+  { label: t('script.pages.realitycorepage.label.7f5d63aa39'), value: engineRows.value.length, tone: engineRows.value.length ? 'success' : 'warn' },
+  { label: t('script.pages.realitycorepage.label.afd4fd7ec0'), value: factFlowRows.value.length },
+  { label: t('script.pages.realitycorepage.label.086e09b4b6'), value: promotionRows.value.length },
 ]);
 const realityWorkflow = computed(() => [
-  { id: 'overview', label: 'Engines', status: engineRows.value.length ? 'ready' : 'idle', count: engineRows.value.length },
-  { id: 'core-map', label: 'Core map', status: coreRows.value.length ? 'ready' : 'idle', count: coreRows.value.length },
-  { id: 'fact-flow', label: 'Fact Flow', status: factFlowRows.value.length ? 'active' : 'idle', count: factFlowRows.value.length },
-  { id: 'evidence', label: 'Evidence', status: evidenceRows.value.length ? 'ready' : 'idle', count: evidenceRows.value.length },
-  { id: 'promotions', label: 'Promotion', status: promotionRows.value.length ? 'done' : 'idle', count: promotionRows.value.length },
-  { id: 'boundaries', label: 'Boundary', status: boundaryRows.value.length ? 'ready' : 'idle', count: boundaryRows.value.length },
+  { id: 'overview', label: t('script.pages.realitycorepage.label.7f5d63aa39'), status: engineRows.value.length ? 'ready' : 'idle', count: engineRows.value.length },
+  { id: 'core-map', label: t('script.pages.realitycorepage.label.e6cb603ee1'), status: coreRows.value.length ? 'ready' : 'idle', count: coreRows.value.length },
+  { id: 'fact-flow', label: t('script.pages.realitycorepage.label.33f62e7cc6'), status: factFlowRows.value.length ? 'active' : 'idle', count: factFlowRows.value.length },
+  { id: 'evidence', label: t('script.pages.realitycorepage.label.7ea014de7b'), status: evidenceRows.value.length ? 'ready' : 'idle', count: evidenceRows.value.length },
+  { id: 'promotions', label: t('script.pages.realitycorepage.label.550ae25c2e'), status: promotionRows.value.length ? 'done' : 'idle', count: promotionRows.value.length },
+  { id: 'boundaries', label: t('script.pages.realitycorepage.label.0a5e7a0583'), status: boundaryRows.value.length ? 'ready' : 'idle', count: boundaryRows.value.length },
 ]);
 const engineRows = computed(() => {
   const engines = status.value?.engines || {};
@@ -243,44 +244,44 @@ onMounted(() => {
   <section class="capability-page reality-page">
     <header class="page-header">
       <div>
-        <h1>Reality Core</h1>
-        <p>事实语义、证据、晋升、Memory、Matrix、Context 和 Audit 的只读总览。</p>
+        <h1>{{ t('page.reality.core.page.text.7014b73d37') }}</h1>
+        <p>{{ t('page.reality.core.page.text.37d6ce2100') }}</p>
       </div>
       <button class="primary-action" type="button" :disabled="loading" @click="refresh">
         <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh Reality Core' }}
+        {{ loading ? t('page.reality.core.page.inline.186bff2dac') : t('page.reality.core.page.inline.4d0d2fe5c8') }}
       </button>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="realityContext" />
-    <WorkflowStrip :steps="realityWorkflow" title="Reality evidence flow" />
+    <WorkflowStrip :steps="realityWorkflow" :title="t('page.reality.core.page.title.a62035dbcf')" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card">
-        <span>Reality Core</span>
-        <strong>{{ status.reality_core?.status || 'unknown' }}</strong>
-        <small>{{ status.reality_core?.degraded ? 'degraded' : 'projection ready' }}</small>
+        <span>{{ t('page.reality.core.page.text.7014b73d37') }}</span>
+        <strong>{{ status.reality_core?.status || t('page.reality.core.page.inline.0fbea42253') }}</strong>
+        <small>{{ status.reality_core?.degraded ? t('page.reality.core.page.inline.a4c5a4d346') : t('page.reality.core.page.inline.363d2a9470') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Fact Flow stages</span>
+        <span>{{ t('page.reality.core.page.text.73f7e04f25') }}</span>
         <strong>{{ flow.stage_count ?? factFlowRows.length }}</strong>
-        <small>{{ activeSessionId || 'all sessions' }}</small>
+        <small>{{ activeSessionId || t('page.reality.core.page.inline.22ddb1b03c') }}</small>
       </article>
       <article class="metric-card" data-tone="success">
-        <span>Promotions</span>
+        <span>{{ t('page.reality.core.page.text.4ac54a90f5') }}</span>
         <strong>{{ promotions.total ?? promotionRows.length }}</strong>
-        <small>growth receipts</small>
+        <small>{{ t('page.reality.core.page.text.3c1743ffc3') }}</small>
       </article>
       <article class="metric-card" data-tone="warn">
-        <span>Boundaries</span>
+        <span>{{ t('page.reality.core.page.text.0f3007656f') }}</span>
         <strong>{{ boundaryRows.length }}</strong>
-        <small>observed / inferred / held</small>
+        <small>{{ t('page.reality.core.page.text.671008b6fc') }}</small>
       </article>
     </section>
 
     <section class="reality-toolbar">
-      <nav class="reality-tabs" aria-label="Reality Core secondary navigation">
+      <nav class="reality-tabs" :aria-label="t('page.reality.core.page.aria-label.7dfb806b21')">
         <RouterLink
           v-for="tab in sectionTabs"
           :key="tab.id"
@@ -292,12 +293,12 @@ onMounted(() => {
         </RouterLink>
       </nav>
       <label class="field-line">
-        Session filter
-        <input v-model="sessionFilter" type="text" placeholder="current session or all sessions" @keyup.enter="refresh" />
+        {{ t('page.reality.core.field.sessionFilter') }}
+        <input v-model="sessionFilter" type="text" :placeholder="t('page.reality.core.page.placeholder.0f3b345aac')" @keyup.enter="refresh" />
       </label>
       <button class="ghost-action" type="button" @click="refresh">
         <Search :size="15" />
-        Load Fact Flow
+        {{ t('page.reality.core.action.loadFactFlow') }}
       </button>
       <StatusPill :status="status.reality_core?.status || (status.__offline ? 'offline' : 'ready')" />
     </section>
@@ -305,7 +306,7 @@ onMounted(() => {
     <section class="reality-grid">
       <section class="management-panel reality-panel wide" data-section="management">
         <header>
-          <h2>Reality Core management</h2>
+          <h2>{{ t('page.reality.core.page.text.dac90c69e6') }}</h2>
           <span>{{ managementRows.length }} control lanes</span>
         </header>
         <div v-if="managementRows.length" class="reality-management-lanes">
@@ -316,75 +317,75 @@ onMounted(() => {
               <small>{{ lane.owner }} · {{ lane.mode }}</small>
             </div>
             <RouterLink class="ghost-action" :to="lane.route">
-              Open
+              {{ t('template.pages.realitycorepage.cf9b77061f') }}
               <ExternalLink :size="14" />
             </RouterLink>
           </article>
         </div>
-        <EmptyState v-else title="No management contract" detail="Reality Core 静态投影尚未返回二级管理入口。" />
+        <EmptyState v-else :title="t('page.reality.core.page.title.9ff8fab91b')" :detail="t('page.reality.core.page.detail.127f3dd76a')" />
       </section>
 
       <section class="management-panel reality-panel wide" data-section="core-map">
         <header>
-          <h2>Core map</h2>
-          <span>read-only service boundary</span>
+          <h2>{{ t('page.reality.core.page.text.0f6a4d9cbb') }}</h2>
+          <span>{{ t('page.reality.core.page.text.d2b98161a7') }}</span>
         </header>
         <DataTable v-if="coreRows.length" :rows="coreRows" :columns="['engine', 'status', 'writes', 'api', 'role']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No core map" detail="Reality Core 静态投影暂不可用。" />
+        <EmptyState v-else :title="t('page.reality.core.page.title.c2bff56680')" :detail="t('page.reality.core.page.detail.af5a795207')" />
       </section>
 
       <section class="management-panel reality-panel" data-section="overview">
         <header>
-          <h2>Engine status</h2>
-          <span>{{ status.generated_at || 'not loaded' }}</span>
+          <h2>{{ t('page.reality.core.page.text.cb151a9a1c') }}</h2>
+          <span>{{ status.generated_at || t('page.reality.core.page.inline.e049bd1422') }}</span>
         </header>
         <DataTable v-if="engineRows.length" :rows="engineRows" :columns="['engine', 'status', 'service', 'operation', 'detail']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No engine status" detail="Gateway 离线或 RealityService 尚未返回数据。" />
+        <EmptyState v-else :title="t('page.reality.core.page.title.552e99583f')" :detail="t('page.reality.core.page.detail.e82982ba71')" />
       </section>
 
       <section class="management-panel reality-panel wide" data-section="fact-flow">
         <header>
-          <h2>Fact Flow</h2>
+          <h2>{{ t('page.reality.core.page.text.608ba31424') }}</h2>
           <span>{{ flow.source || 'growth.promotions' }}</span>
         </header>
         <DataTable v-if="factFlowRows.length" :rows="factFlowRows" :columns="['kind', 'status', 'decision', 'target', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No Fact Flow stages" detail="当前 session 还没有可展示的 growth/promotion 轨迹。" />
+        <EmptyState v-else :title="t('page.reality.core.page.title.615c073377')" :detail="t('page.reality.core.page.detail.2d3cb4ec7e')" />
       </section>
 
       <section class="management-panel reality-panel wide" data-section="evidence">
         <header>
-          <h2>Evidence</h2>
-          <span>{{ evidenceRows.length }} refs</span>
+          <h2>{{ t('page.reality.core.page.text.826db23211') }}</h2>
+          <span>{{ formatCount('refs', evidenceRows.length) }}</span>
         </header>
         <DataTable v-if="evidenceRows.length" :rows="evidenceRows" :columns="['event', 'reference', 'kind', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No evidence refs" detail="当前 Fact Flow 没有返回证据引用，或 Gateway 处于离线降级状态。" />
+        <EmptyState v-else :title="t('page.reality.core.page.title.df8254f898')" :detail="t('page.reality.core.page.detail.050f3da73d')" />
       </section>
 
       <section class="management-panel reality-panel" data-section="promotions">
         <header>
-          <h2>Promotion trace</h2>
-          <span>{{ promotionRows.length }} receipts</span>
+          <h2>{{ t('page.reality.core.page.text.e788169274') }}</h2>
+          <span>{{ formatCount('receipts', promotionRows.length) }}</span>
         </header>
         <DataTable v-if="promotionRows.length" :rows="promotionRows" :columns="['target', 'status', 'target_id', 'summary']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No promotions" detail="Growth Channel 还没有持久化晋升回执。" />
+        <EmptyState v-else :title="t('page.reality.core.page.title.af22a6d0ae')" :detail="t('page.reality.core.page.detail.b421d2b906')" />
       </section>
 
       <section class="management-panel reality-panel" data-section="boundaries">
         <header>
-          <h2>Reality boundaries</h2>
-          <span>Fact state</span>
+          <h2>{{ t('page.reality.core.page.text.64c93e07da') }}</h2>
+          <span>{{ t('page.reality.core.page.text.23dc486a98') }}</span>
         </header>
         <DataTable v-if="boundaryRows.length" :rows="boundaryRows" :columns="['boundary', 'count', 'meaning']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No boundary projection" detail="边界统计暂不可用。" />
+        <EmptyState v-else :title="t('page.reality.core.page.title.dfb99d9f9d')" :detail="t('page.reality.core.page.detail.e7a1423ec3')" />
       </section>
 
       <section class="management-panel reality-panel">
         <header>
-          <h2>Evidence object detail</h2>
-          <span>semantic first</span>
+          <h2>{{ t('page.reality.core.page.text.c5f7cc32f7') }}</h2>
+          <span>{{ t('page.reality.core.page.text.388c716ffc') }}</span>
         </header>
-        <EvidenceObjectDetail title="Reality selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
-        <RawPayload title="Reality status" :data="status" />
+        <EvidenceObjectDetail :title="t('page.reality.core.page.title.a231752f0c')" :evidence="selectedEvidence" @close="selectedDetail = null" />
+        <RawPayload :title="t('page.reality.core.page.title.b0bbf3767e')" :data="status" />
       </section>
     </section>
   </section>

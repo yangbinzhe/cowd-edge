@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import {
   CheckCircle2, GitBranch, Inbox, Play, RefreshCw, Route, ShieldCheck, Square,
@@ -18,7 +19,7 @@ const showFullTrace = ref(true);
 const selectedSessionId = ref('');
 const selectedTeamId = ref('');
 const teamObjective = ref('Analyze the current task, split roles, execute, and produce an evidence-backed summary');
-const teamHandoffNote = ref('请接管并审查团队综合结果与证据链');
+const teamHandoffNote = ref(t('page.mission.teamHandoff.default'));
 const routeTarget = ref('');
 const routeCommand = ref('Review current evidence and summarize blockers');
 const missionProjection = ref<any>({});
@@ -316,20 +317,19 @@ onMounted(refresh);
   <section class="capability-page mission-control-page">
     <header class="page-header">
       <div>
-        <h1>Mission Control</h1>
-        <p>全局掌控 sessions、teams、agents、approvals、routes、inbox 与 evidence，所有状态来自 Gateway。</p>
+        <h1>{{ t('page.mission.control.page.text.5ac12b00e1') }}</h1>
+        <p>{{ t('page.mission.control.page.text.f7b12477b7') }}</p>
       </div>
       <div class="chat-top-actions">
-        <label class="mode-switch" title="关闭后只保留正文级计数和关键状态，减少额外投影请求">
-          <button type="button" :class="{ active: showFullTrace }" @click="showFullTrace = true; refreshSelectedSession()">全量线索</button>
-          <button type="button" :class="{ active: !showFullTrace }" @click="showFullTrace = false; refreshSelectedSession()">纯净</button>
+        <label class="mode-switch" :title="t('page.mission.control.page.title.1d58605a7b')">
+          <button type="button" :class="{ active: showFullTrace }" @click="showFullTrace = true; refreshSelectedSession()">{{ t('page.mission.control.page.text.3c1abbcbcf') }}</button>
+          <button type="button" :class="{ active: !showFullTrace }" @click="showFullTrace = false; refreshSelectedSession()">{{ t('page.mission.control.page.text.f0c3c77173') }}</button>
         </label>
         <button class="ghost-action" type="button" :disabled="loading" @click="refresh">
-          <RefreshCw :size="16" /> 刷新
-        </button>
-        <button class="ghost-action" type="button" @click="dispatchSessions">执行调度</button>
-        <button class="ghost-action" type="button" @click="previewStewardship">预览托管</button>
-        <button class="ghost-action" type="button" @click="previewRecovery">预览恢复</button>
+          <RefreshCw :size="16" />{{ t('page.mission.control.page.text.8364cc9fa6') }}</button>
+        <button class="ghost-action" type="button" @click="dispatchSessions">{{ t('page.mission.control.page.text.6b851c1b61') }}</button>
+        <button class="ghost-action" type="button" @click="previewStewardship">{{ t('page.mission.control.page.text.a14649984f') }}</button>
+        <button class="ghost-action" type="button" @click="previewRecovery">{{ t('page.mission.control.page.text.ac15490f40') }}</button>
       </div>
     </header>
 
@@ -337,48 +337,48 @@ onMounted(refresh);
 
     <div class="metric-row tools-metrics">
       <article class="metric-card">
-        <span>Sessions</span>
+        <span>{{ t('page.mission.control.page.text.3ca3f069de') }}</span>
         <strong>{{ sessions.length }}</strong>
-        <small>{{ mission.active_session_id || activeSession || 'no active session' }}</small>
+        <small>{{ mission.active_session_id || activeSession || t('page.mission.control.page.inline.e68413410a') }}</small>
       </article>
       <article class="metric-card">
-        <span>Teams / Agents</span>
+        <span>{{ t('page.mission.control.page.text.e9a0adf323') }}</span>
         <strong>{{ teams.length }} / {{ agents.length }}</strong>
-        <small>runtime lifecycle projection</small>
+        <small>{{ t('page.mission.control.page.text.281dd561ad') }}</small>
       </article>
       <article class="metric-card">
-        <span>Stewards</span>
+        <span>{{ t('page.mission.control.page.text.79a658d351') }}</span>
         <strong>{{ stewardRows.length }}</strong>
-        <small>scheduler-ready supervision</small>
+        <small>{{ t('page.mission.control.page.text.81e193588a') }}</small>
       </article>
       <article class="metric-card" :data-tone="pendingApprovals.length ? 'warn' : 'success'">
-        <span>Approvals</span>
+        <span>{{ t('page.mission.control.page.text.ba7c90b793') }}</span>
         <strong>{{ pendingApprovals.length }}</strong>
-        <small>GlobalApprovalQueue</small>
+        <small>{{ t('page.mission.control.page.text.3d3e8b0be9') }}</small>
       </article>
       <article class="metric-card">
-        <span>Inbox</span>
+        <span>{{ t('page.mission.control.page.text.98e1681877') }}</span>
         <strong>{{ commandSummary.total || sessionCommands.length }}</strong>
-        <small>pending {{ commandSummary.pending || 0 }}, running {{ commandSummary.running || 0 }}</small>
+        <small>{{ t('page.mission.control.summary.commandStates', { pending: commandSummary.pending || 0, running: commandSummary.running || 0 }) }}</small>
       </article>
     </div>
 
     <div class="clean-counts">
-      <span><strong>{{ cleanCounters.tools }}</strong> tool calls</span>
-      <span><strong>{{ cleanCounters.memory }}</strong> memory recalls</span>
-      <span><strong>{{ relationCount }}</strong> relations</span>
-      <span><strong>{{ cleanCounters.commands }}</strong> commands</span>
+      <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
+      <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
+      <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
+      <span><strong>{{ cleanCounters.commands }}</strong>{{ t('unit.commands') }}</span>
     </div>
 
     <div class="mission-grid">
       <section class="mission-panel governed-wide">
         <header>
-          <h2>Governed actions</h2>
-          <span>preview before high-impact write</span>
+          <h2>{{ t('page.mission.control.page.text.658886936e') }}</h2>
+          <span>{{ t('page.mission.control.page.text.5e7c8e4b54') }}</span>
         </header>
         <div class="mission-preview-grid">
           <MissionActionPreview
-            title="Dispatch session inbox"
+            :title="t('page.mission.control.page.title.f3a4686d1d')"
             action="Claim or start pending session commands through Mission Runtime."
             :target="activeSession || 'all sessions'"
             :affected="dispatchPreview.affected"
@@ -387,7 +387,7 @@ onMounted(refresh);
             :approval="dispatchPreview.approval"
           />
           <MissionActionPreview
-            title="Steward scheduler"
+            :title="t('page.mission.control.page.title.94a752af20')"
             action="Tick delegated stewards and collect handoff state before execution."
             :target="stewardRows[0]?.id || stewardRows[0]?.steward_id || 'scheduler'"
             :affected="stewardPreview.affected"
@@ -397,7 +397,7 @@ onMounted(refresh);
             :source="schedulerState ? 'backend scheduler state' : 'frontend projection preview'"
           />
           <MissionActionPreview
-            title="Runtime recovery"
+            :title="t('page.mission.control.page.title.96c5455ed4')"
             action="Replay and recover runtime gaps only after recovery report is visible."
             :target="activeSession || 'runtime'"
             :affected="recoveryPreview.affected"
@@ -408,21 +408,21 @@ onMounted(refresh);
           />
         </div>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="dispatchSessions">Run dispatch</button>
-          <button class="ghost-action" type="button" @click="previewStewardship">Load steward state</button>
-          <button class="primary-action" type="button" @click="tickStewards">Tick stewards</button>
-          <button class="ghost-action" type="button" @click="previewRecovery">Load recovery report</button>
-          <button class="danger-action" type="button" :disabled="!recoveryReport" @click="applyRecovery">Apply recovery</button>
+          <button class="ghost-action" type="button" @click="dispatchSessions">{{ t('page.mission.control.page.text.526c2cd14f') }}</button>
+          <button class="ghost-action" type="button" @click="previewStewardship">{{ t('page.mission.control.page.text.673c612f9e') }}</button>
+          <button class="primary-action" type="button" @click="tickStewards">{{ t('page.mission.control.page.text.f9b5c5c5ae') }}</button>
+          <button class="ghost-action" type="button" @click="previewRecovery">{{ t('page.mission.control.page.text.281d341bb5') }}</button>
+          <button class="danger-action" type="button" :disabled="!recoveryReport" @click="applyRecovery">{{ t('page.mission.control.page.text.56ca46aeea') }}</button>
         </div>
-        <RequestReceipt v-if="schedulerState" :receipt="schedulerState" title="Steward scheduler state" />
-        <RawPayload v-if="stewardHandoff" title="Steward handoff summary" :data="stewardHandoff" />
-        <RequestReceipt v-if="recoveryReport" :receipt="recoveryReport" title="Runtime recovery report" />
+        <RequestReceipt v-if="schedulerState" :receipt="schedulerState" :title="t('page.mission.control.page.title.7b05b80c41')" />
+        <RawPayload v-if="stewardHandoff" :title="t('page.mission.control.page.title.59f468683e')" :data="stewardHandoff" />
+        <RequestReceipt v-if="recoveryReport" :receipt="recoveryReport" :title="t('page.mission.control.page.title.7590b53f8e')" />
       </section>
 
       <section class="mission-panel">
         <header>
-          <h2>Sessions</h2>
-          <span>{{ activeSession || 'none selected' }}</span>
+          <h2>{{ t('page.mission.control.page.text.3ca3f069de') }}</h2>
+          <span>{{ activeSession || t('page.mission.control.page.inline.54b8982e68') }}</span>
         </header>
         <div class="mission-session-list">
           <button
@@ -436,27 +436,26 @@ onMounted(refresh);
             <strong>{{ session.title }}</strong>
             <span>{{ session.id }} · {{ session.status }} · teams {{ session.teams }} · agents {{ session.agents }}</span>
           </button>
-          <p v-if="!sessionRows.length" class="empty-note">Gateway 当前没有返回 mission sessions。</p>
+          <p v-if="!sessionRows.length" class="empty-note">{{ t('page.mission.control.page.text.9c6452b08a') }}</p>
         </div>
       </section>
 
       <section class="mission-panel">
         <header>
-          <h2>Launch Team</h2>
+          <h2>{{ t('page.mission.control.page.text.5901596e99') }}</h2>
           <StatusPill :status="activeSession ? 'ready' : 'idle'" />
         </header>
         <label class="field-line">
-          Objective
+          {{ t('template.pages.missioncontrolpage.50c8920b8d') }}
           <textarea v-model="teamObjective" rows="4" />
         </label>
         <button class="primary-action" type="button" :disabled="!activeSession || !teamObjective.trim()" @click="startTeam">
-          <Users :size="16" /> 启动团队
-        </button>
+          <Users :size="16" />{{ t('page.mission.control.page.text.978a4ee277') }}</button>
       </section>
 
       <section class="mission-panel">
         <header>
-          <h2>Team Runs</h2>
+          <h2>{{ t('page.mission.control.page.text.ed040118e2') }}</h2>
           <StatusPill :status="selectedTeamId ? 'ready' : 'idle'" />
         </header>
         <div class="mission-session-list compact">
@@ -471,105 +470,102 @@ onMounted(refresh);
             <strong>{{ team.id }}</strong>
             <span>{{ team.status }} · agents {{ team.agents }} · synthesis {{ team.synthesis }}</span>
           </button>
-          <p v-if="!teamRunRows.length" class="empty-note">当前没有 runtime team run。</p>
+          <p v-if="!teamRunRows.length" class="empty-note">{{ t('page.mission.control.page.text.f0c708899b') }}</p>
         </div>
         <label class="field-line">
-          Handoff note
+          {{ t('template.pages.missioncontrolpage.da796fa714') }}
           <textarea v-model="teamHandoffNote" rows="3" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="tickSelectedTeam">Tick</button>
-          <button class="primary-action" type="button" :disabled="!selectedTeamId" @click="synthesizeSelectedTeam">Synthesis</button>
-          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="handoffSelectedTeam">Handoff</button>
-          <button class="danger-action" type="button" :disabled="!selectedTeamId" @click="cancelSelectedTeam">Cancel</button>
+          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="tickSelectedTeam">{{ t('page.mission.control.page.text.d1e9e2d114') }}</button>
+          <button class="primary-action" type="button" :disabled="!selectedTeamId" @click="synthesizeSelectedTeam">{{ t('page.mission.control.page.text.359d792ff9') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="handoffSelectedTeam">{{ t('page.mission.control.page.text.347108bf3d') }}</button>
+          <button class="danger-action" type="button" :disabled="!selectedTeamId" @click="cancelSelectedTeam">{{ t('page.mission.control.page.text.ed848a3a21') }}</button>
         </div>
-        <RawPayload v-if="teamRunDetail?.run || teamRunDetail?.summary" title="Team run detail" :data="teamRunDetail" />
+        <RawPayload v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
       </section>
 
       <section class="mission-panel">
         <header>
-          <h2>Route Session</h2>
+          <h2>{{ t('page.mission.control.page.text.eb5e456863') }}</h2>
           <StatusPill :status="routeTarget ? 'ready' : 'idle'" />
         </header>
         <label class="field-line">
-          Target session or alias
-          <input v-model="routeTarget" placeholder="session id or alias" />
+          {{ t('template.pages.missioncontrolpage.6c723ce0e4') }}
+          <input v-model="routeTarget" :placeholder="t('page.mission.control.page.placeholder.e8b21a9b4a')" />
         </label>
         <label class="field-line">
-          Command
+          {{ t('template.pages.missioncontrolpage.8901895fb1') }}
           <textarea v-model="routeCommand" rows="3" />
         </label>
         <button class="ghost-action" type="button" :disabled="!routeTarget.trim() || !routeCommand.trim()" @click="routeToSession">
-          <Route :size="16" /> 投递命令
-        </button>
+          <Route :size="16" />{{ t('page.mission.control.page.text.7dd0114f4f') }}</button>
       </section>
     </div>
 
     <div class="mission-grid lower">
       <section class="mission-panel wide">
         <header>
-          <h2>Command Inbox</h2>
+          <h2>{{ t('page.mission.control.page.text.38c0d91903') }}</h2>
           <span>{{ selectedSession.title || selectedSessionId || activeSession }}</span>
         </header>
         <div class="mission-command-list">
           <article v-for="command in sessionCommands" :key="command.command_id" class="activity-item">
             <div>
-              <strong>{{ command.kind || 'command' }} · {{ command.status }}</strong>
+              <strong>{{ command.kind || t('page.mission.control.fallback.command') }} · {{ command.status }}</strong>
               <p>{{ command.command }}</p>
-              <small>{{ command.command_id }} · from {{ command.from_session_id || '-' }}</small>
+              <small>{{ command.command_id }} · {{ t('page.mission.control.command.from', { source: command.from_session_id || '-' }) }}</small>
             </div>
             <div class="button-row">
-              <button class="icon-action" title="claim" type="button" @click="consumeCommand(command.command_id)">
+              <button class="icon-action" :title="t('page.mission.control.action.claim')" type="button" @click="consumeCommand(command.command_id)">
                 <Inbox :size="15" />
               </button>
-              <button class="icon-action" title="start turn" type="button" @click="consumeCommand(command.command_id, 'start_turn')">
+              <button class="icon-action" :title="t('page.mission.control.page.title.f9e851ae97')" type="button" @click="consumeCommand(command.command_id, 'start_turn')">
                 <Play :size="15" />
               </button>
-              <button class="icon-action" title="retry" type="button" @click="retryCommand(command.command_id)">
+              <button class="icon-action" :title="t('page.mission.control.action.retry')" type="button" @click="retryCommand(command.command_id)">
                 <GitBranch :size="15" />
               </button>
-              <button class="danger-action" title="cancel" type="button" @click="cancelCommand(command.command_id)">
+              <button class="danger-action" :title="t('page.mission.control.action.cancel')" type="button" @click="cancelCommand(command.command_id)">
                 <Square :size="15" />
               </button>
             </div>
           </article>
-          <p v-if="!sessionCommands.length" class="empty-note">当前 session 没有待处理命令。</p>
+          <p v-if="!sessionCommands.length" class="empty-note">{{ t('page.mission.control.page.text.85c2cc0a2c') }}</p>
         </div>
       </section>
 
       <section class="mission-panel">
         <header>
-          <h2>Approvals</h2>
+          <h2>{{ t('page.mission.control.page.text.ba7c90b793') }}</h2>
           <StatusPill :status="pendingApprovals.length ? 'blocked' : 'ready'" />
         </header>
         <article v-for="approval in pendingApprovals" :key="approval.approval_id || approval.id" class="approval-row">
           <span>{{ approval.summary || approval.action || approval.command }} · {{ approval.session_id || approval.agent_id || approval.tool || 'mission' }} · {{ approval.risk || 'policy' }}</span>
           <button class="ghost-action" type="button" @click="decideApproval(approval.approval_id || approval.id, true)">
-            <CheckCircle2 :size="15" /> 批准
-          </button>
+            <CheckCircle2 :size="15" />{{ t('page.mission.control.page.text.d282699e33') }}</button>
           <button class="danger-action" type="button" @click="decideApproval(approval.approval_id || approval.id, false)">
-            <ShieldCheck :size="15" /> 拒绝
-          </button>
+            <ShieldCheck :size="15" />{{ t('page.mission.control.page.text.3784408abf') }}</button>
         </article>
-        <p v-if="!pendingApprovals.length" class="empty-note">没有待审批事项。</p>
+        <p v-if="!pendingApprovals.length" class="empty-note">{{ t('page.mission.control.page.text.77f4b7d8e5') }}</p>
       </section>
     </div>
 
     <section v-if="showFullTrace" class="mission-panel trace-panel">
       <header>
-        <h2>Evidence Trace</h2>
-        <span>{{ evidenceRows.length }} records</span>
+        <h2>{{ t('page.mission.control.page.text.c54e2b4723') }}</h2>
+        <span>{{ formatCount('records', evidenceRows.length) }}</span>
       </header>
       <div class="evidence-list">
         <article v-for="item in evidenceRows" :key="`${item.source}-${item.kind}-${item.summary}`" class="evidence-item">
           <strong>{{ item.source }} · {{ item.kind }} · {{ item.status }}</strong>
           <p>{{ item.summary }}</p>
         </article>
-        <p v-if="!evidenceRows.length" class="empty-note">暂无可展示线索。</p>
+        <p v-if="!evidenceRows.length" class="empty-note">{{ t('page.mission.control.page.text.4c14c2f5a7') }}</p>
       </div>
     </section>
 
     <RequestReceipt v-if="actionResult" :receipt="actionResult" />
-    <RawPayload title="Mission projection" :data="missionProjection" />
+    <RawPayload :title="t('page.mission.control.page.title.7ac6ef49a7')" :data="missionProjection" />
   </section>
 </template>

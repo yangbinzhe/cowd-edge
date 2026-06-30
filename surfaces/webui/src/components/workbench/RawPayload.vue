@@ -1,13 +1,13 @@
 <script setup lang="ts">
+import { formatCount, t } from '../../i18n';
 import { computed, ref } from 'vue';
-import { translateText } from '../../i18n';
 
 const props = withDefaults(defineProps<{
   data: unknown;
   title?: string;
   maxChars?: number;
 }>(), {
-  title: 'Raw payload',
+  title: t('script.components.workbench.rawpayload.title.1c51272120'),
   maxChars: 2400,
 });
 
@@ -24,7 +24,7 @@ const json = computed(() => {
 
 const clipped = computed(() => json.value.length > props.maxChars);
 const visibleJson = computed(() => expanded.value ? json.value : json.value.slice(0, props.maxChars));
-const summary = computed(() => clipped.value ? `${json.value.length} ${translateText('chars')}` : translateText('debug view'));
+const summary = computed(() => clipped.value ? formatCount('chars', json.value.length) : t('rawPayload.debugView'));
 
 async function copyPayload() {
   await navigator.clipboard?.writeText(json.value);
@@ -36,15 +36,15 @@ async function copyPayload() {
 <template>
   <details class="raw-payload">
     <summary>
-      <span>{{ translateText(title) }}</span>
+      <span>{{ title || t('rawPayload.title') }}</span>
       <small>{{ summary }}</small>
     </summary>
     <div class="raw-payload-toolbar">
       <button class="ghost-action" type="button" @click="expanded = !expanded">
-        {{ expanded ? translateText('Collapse') : translateText('Show full') }}
+        {{ expanded ? t('common.collapse') : t('rawPayload.showFull') }}
       </button>
       <button class="ghost-action" type="button" @click="copyPayload">
-        {{ copied ? translateText('Copied') : translateText('Copy JSON') }}
+        {{ copied ? t('common.copied') : t('rawPayload.copyJson') }}
       </button>
     </div>
     <pre class="raw-payload-body">{{ visibleJson }}{{ clipped && !expanded ? '\n...' : '' }}</pre>

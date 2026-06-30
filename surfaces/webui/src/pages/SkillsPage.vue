@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref, watch } from 'vue';
 import { FileText, RefreshCw, Search } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
@@ -53,40 +54,40 @@ const fileItems = computed(() => Array.isArray(files.value?.files) ? files.value
 const runItems = computed(() => Array.isArray(runs.value?.items) ? runs.value.items : []);
 const markdownHtml = computed(() => markdown.render(rawFile.value?.content || ''));
 const skillContext = computed(() => [
-  { label: 'Skills', value: filteredItems.value.length, tone: filteredItems.value.length ? 'success' : 'warn' },
-  { label: 'Selected', value: selectedSkillId.value || 'none' },
-  { label: 'Files', value: fileItems.value.length },
-  { label: 'Runs', value: runItems.value.length },
+  { label: t('page.skills.context.skills'), value: filteredItems.value.length, tone: filteredItems.value.length ? 'success' : 'warn' },
+  { label: t('page.skills.context.selected'), value: selectedSkillId.value || t('status.none') },
+  { label: t('page.skills.context.files'), value: fileItems.value.length },
+  { label: t('page.skills.context.runs'), value: runItems.value.length },
 ]);
 const skillWorkflow = computed(() => [
-  { id: 'catalog', label: 'Discover', status: filteredItems.value.length ? 'ready' : 'idle', count: filteredItems.value.length },
-  { id: 'projection', label: 'Validate', status: detail.value?.skill ? 'ready' : 'idle', description: selectedSkillId.value || 'none' },
-  { id: 'projection', label: 'Plan', status: actionResult.value ? 'active' : 'idle' },
-  { id: 'runs', label: 'Run', status: runItems.value.length ? 'ready' : 'idle', count: runItems.value.length },
-  { id: 'governance', label: 'Audit', status: runDetail.value?.id ? 'ready' : 'idle' },
+  { id: 'catalog', label: t('page.skills.workflow.discover'), status: filteredItems.value.length ? 'ready' : 'idle', count: filteredItems.value.length },
+  { id: 'projection', label: t('page.skills.workflow.validate'), status: detail.value?.skill ? 'ready' : 'idle', description: selectedSkillId.value || t('status.none') },
+  { id: 'projection', label: t('page.skills.workflow.plan'), status: actionResult.value ? 'active' : 'idle' },
+  { id: 'runs', label: t('page.skills.workflow.run'), status: runItems.value.length ? 'ready' : 'idle', count: runItems.value.length },
+  { id: 'governance', label: t('page.skills.workflow.audit'), status: runDetail.value?.id ? 'ready' : 'idle' },
 ]);
 const skillActionContract = computed(() => ({
   id: 'skills.action.run',
   domain: 'skills',
-  title: 'Run skill action',
+  title: t('page.skills.contract.runTitle'),
   endpoint: selectedSkillId.value ? `/api/skills/${encodeURIComponent(selectedSkillId.value)}/action` : '/api/skills/:id/action',
   method: 'POST',
-  summary: 'Validate and plan before running skill instructions. Live run is governed because it may invoke tools and affect runtime work.',
-  current_return: 'Skill action receipt and optional run record',
-  validate: 'validate action',
-  plan: 'plan action',
-  dry_run: 'plan action',
+  summary: t('page.skills.contract.summary'),
+  current_return: t('page.skills.contract.return'),
+  validate: t('page.skills.contract.validate'),
+  plan: t('page.skills.contract.plan'),
+  dry_run: t('page.skills.contract.plan'),
   live: true,
-  live_policy: 'requires selected skill, action receipt, and run trace',
+  live_policy: t('page.skills.contract.livePolicy'),
   receipt: true,
   audit_ref: true,
   changed_refs: false,
   approval_required: String(skill.value?.risk || '').toLowerCase().includes('high'),
-  kernel_boundary: 'Gateway skill service',
+  kernel_boundary: t('page.skills.contract.boundary'),
   affected_refs: [selectedSkillId.value, skill.value?.path, skill.value?.source].filter(Boolean),
   fields: [
-    { name: 'session_id', label: 'Session id', required: true, type: 'text' },
-    { name: 'skill_id', label: 'Skill id', required: true, type: 'text' },
+    { name: 'session_id', label: t('page.skills.field.sessionId'), required: true, type: 'text' },
+    { name: 'skill_id', label: t('page.skills.field.skillId'), required: true, type: 'text' },
   ],
 }));
 const skillEvidence = computed(() => [
@@ -169,49 +170,49 @@ onMounted(refresh);
   <section class="capability-page skills-page">
     <header class="page-header">
       <div>
-        <h1>Skills Console</h1>
-        <p>技能全集、分类、文件、运行记录和治理状态集中管理。</p>
+        <h1>{{ t('page.skills.page.text.a7401cf98e') }}</h1>
+        <p>{{ t('page.skills.page.text.06edbf7515') }}</p>
       </div>
       <button class="primary-action" type="button" :disabled="loading" @click="refresh">
         <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh skills' }}
+        {{ loading ? t('page.skills.page.inline.14ddbdb750') : t('page.skills.page.inline.c9ba107238') }}
       </button>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="skillContext" />
-    <WorkflowStrip :steps="skillWorkflow" title="Skill lifecycle" />
+    <WorkflowStrip :steps="skillWorkflow" :title="t('page.skills.page.title.f6cccf3371')" />
 
     <section class="skills-console" data-section="catalog">
       <aside class="skills-catalog">
         <header class="skills-toolbar">
           <label class="search-field">
             <Search :size="15" />
-            <input v-model="query" type="search" placeholder="Search skills" />
+            <input v-model="query" type="search" :placeholder="t('page.skills.page.placeholder.1cb5c73cbd')" />
           </label>
           <div class="filter-row">
             <select v-model="scope">
-              <option value="all">all scopes</option>
+              <option value="all">{{ t('page.skills.page.text.36f7b52cfe') }}</option>
               <option v-for="item in facets.scopes || []" :key="item" :value="item">{{ item }}</option>
             </select>
             <select v-model="source">
-              <option value="all">all sources</option>
+              <option value="all">{{ t('page.skills.page.text.4191d3d258') }}</option>
               <option v-for="item in sourceFacet" :key="item" :value="item">{{ item }}</option>
             </select>
             <select v-model="domain">
-              <option value="all">all domains</option>
+              <option value="all">{{ t('page.skills.page.text.f104bdb5fa') }}</option>
               <option v-for="item in facets.domains || []" :key="item" :value="item">{{ item }}</option>
             </select>
             <select v-model="tag">
-              <option value="all">all tags</option>
+              <option value="all">{{ t('page.skills.page.text.c131e2ab10') }}</option>
               <option v-for="item in facets.tags || []" :key="item" :value="item">{{ item }}</option>
             </select>
             <select v-model="status">
-              <option value="all">all statuses</option>
+              <option value="all">{{ t('page.skills.page.text.371c169ca3') }}</option>
               <option v-for="item in facets.statuses || []" :key="item" :value="item">{{ item }}</option>
             </select>
             <select v-model="risk">
-              <option value="all">all risks</option>
+              <option value="all">{{ t('page.skills.page.text.943ec87bc7') }}</option>
               <option v-for="item in facets.risks || []" :key="item" :value="item">{{ item }}</option>
             </select>
           </div>
@@ -234,21 +235,21 @@ onMounted(refresh);
       <main class="skills-detail">
         <section class="management-panel" data-section="projection">
           <header>
-            <h2>Detail</h2>
-            <span>{{ skill.scope || 'unknown' }}</span>
+            <h2>{{ t('page.skills.page.text.e8ec22f1d0') }}</h2>
+            <span>{{ skill.scope || t('page.skills.page.inline.12c70558ba') }}</span>
           </header>
           <dl class="detail-list">
-            <dt>Name</dt>
+            <dt>{{ t('page.skills.page.text.6ec338f842') }}</dt>
             <dd>{{ skill.name || '-' }}</dd>
-            <dt>Source</dt>
+            <dt>{{ t('page.skills.page.text.179e35f2fe') }}</dt>
             <dd>{{ skill.source || '-' }}</dd>
-            <dt>Path</dt>
+            <dt>{{ t('page.skills.page.text.a7caf808cc') }}</dt>
             <dd>{{ skill.path || 'virtual' }}</dd>
-            <dt>Domain</dt>
+            <dt>{{ t('page.skills.page.text.0b401db7fc') }}</dt>
             <dd>{{ skill.domain || '-' }}</dd>
-            <dt>Tags</dt>
+            <dt>{{ t('page.skills.page.text.a88ae0bc11') }}</dt>
             <dd>{{ (skill.tags || []).join(', ') || '-' }}</dd>
-            <dt>Tools</dt>
+            <dt>{{ t('page.skills.page.text.64714a76ce') }}</dt>
             <dd>{{ (skill.tools || []).join(', ') || '-' }}</dd>
           </dl>
           <GovernedActionPanel
@@ -259,13 +260,13 @@ onMounted(refresh);
             @dry-run="runAction('plan')"
             @live="runAction('run')"
           />
-          <RequestReceipt :receipt="actionResult" title="Skill action receipt" />
+          <RequestReceipt :receipt="actionResult" :title="t('page.skills.page.title.09895e511f')" />
         </section>
 
         <section class="management-panel" data-section="files">
           <header>
-            <h2>Files</h2>
-            <span>{{ fileItems.length }} entries</span>
+            <h2>{{ t('page.skills.page.text.44a674dcd4') }}</h2>
+            <span>{{ formatCount('entries', fileItems.length) }}</span>
           </header>
           <div class="skill-files">
             <button
@@ -277,7 +278,7 @@ onMounted(refresh);
               @click="loadRawFile(file.path)"
             >
               <span><FileText :size="14" /> {{ file.path }}</span>
-              <small>{{ file.kind }}{{ file.primary ? ' · primary' : '' }}</small>
+              <small>{{ file.kind }}{{ file.primary ? t('page.skills.page.inline.fbb83de3b7') : '' }}</small>
             </button>
           </div>
           <article class="skill-markdown">
@@ -291,10 +292,10 @@ onMounted(refresh);
 
         <section class="management-panel">
           <header>
-            <h2>Runs and governance</h2>
-            <span>{{ runItems.length }} runs</span>
+            <h2>{{ t('page.skills.page.text.2ddf474cdf') }}</h2>
+            <span>{{ formatCount('runs', runItems.length) }}</span>
           </header>
-          <EvidenceTrace :items="skillEvidence" title="Skill evidence trace" />
+          <EvidenceTrace :items="skillEvidence" :title="t('page.skills.page.title.9c2c16a5fe')" />
           <div class="run-list" data-section="runs">
             <article
               v-for="run in runItems.slice(0, 20)"
@@ -306,13 +307,13 @@ onMounted(refresh);
               @keydown.enter.prevent="loadRunDetail(run)"
             >
               <strong>{{ run.skill_id || run.skill_name || run.id }}</strong>
-              <span>{{ run.status || run.outcome || 'recorded' }}</span>
+              <span>{{ run.status || run.outcome || t('page.skills.page.inline.34f5cf4d66') }}</span>
             </article>
           </div>
-          <DetailDrawer title="Skill selected detail" :row="selectedDetail || skill" @close="selectedDetail = null" />
-          <RawPayload title="Run detail" :data="runDetail || {}" />
-          <RequestReceipt :receipt="actionResult || runDetail" title="Skill run receipt" />
-          <RawPayload title="Action result" :data="actionResult || { projection, runs }" />
+          <DetailDrawer :title="t('page.skills.page.title.14b2c03b91')" :row="selectedDetail || skill" @close="selectedDetail = null" />
+          <RawPayload :title="t('page.skills.page.title.e903040881')" :data="runDetail || {}" />
+          <RequestReceipt :receipt="actionResult || runDetail" :title="t('page.skills.page.title.dbff7b9cc4')" />
+          <RawPayload :title="t('page.skills.page.title.cd28167d21')" :data="actionResult || { projection, runs }" />
         </section>
       </main>
     </section>

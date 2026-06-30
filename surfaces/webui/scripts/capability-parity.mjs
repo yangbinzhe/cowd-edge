@@ -38,6 +38,41 @@ function read(file) {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
 }
 
+function parseMessageCatalog(file) {
+  const text = read(file);
+  const messages = new Map();
+  const regex = /\s*"([^"]+)":\s*"((?:\\.|[^"])*)",?/g;
+  let match;
+  while ((match = regex.exec(text))) {
+    try {
+      messages.set(match[1], JSON.parse(`"${match[2]}"`));
+    } catch {
+      messages.set(match[1], match[2]);
+    }
+  }
+  return messages;
+}
+
+const messageCatalogs = [
+  parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/en-US.ts')),
+  parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/zh-CN.ts')),
+];
+
+function renderablePageEvidence(pageText) {
+  const keys = new Set();
+  const regex = /\bt[c]?\(\s*['"`]([^'"`]+)['"`]/g;
+  let match;
+  while ((match = regex.exec(pageText))) keys.add(match[1]);
+  const values = [];
+  for (const key of keys) {
+    for (const catalog of messageCatalogs) {
+      const value = catalog.get(key);
+      if (value) values.push(value);
+    }
+  }
+  return `${pageText}\n${values.join('\n')}`;
+}
+
 function walk(target) {
   if (!fs.existsSync(target)) return [];
   const stat = fs.statSync(target);
@@ -116,6 +151,7 @@ const mfgContracts = read(path.join(webuiRoot, 'src/data/mfgWriteContracts.json'
 const moduleReports = modules.map((module) => {
   const pagePath = path.join(webuiRoot, 'src/pages', module.page);
   const pageText = read(pagePath);
+  const pageEvidenceText = renderablePageEvidence(pageText);
   const backend = module.routes.flatMap((prefix) => backendRoutes.filter((route) => route.path.startsWith(prefix)));
   const client = module.routes.flatMap((prefix) => clientEndpoints.filter((endpoint) => endpoint.startsWith(prefix)));
   const capability = module.routes.flatMap((prefix) => capabilityEndpoints.filter((endpoint) => endpoint.startsWith(prefix)));
@@ -128,7 +164,7 @@ const moduleReports = modules.map((module) => {
   if (!capability.length) findings.push('missing capability projection endpoint');
   if (!tui.length) findings.push('missing TUI projection evidence');
   if (!cli.length) findings.push('missing CLI core access evidence');
-  if (module.id === 'mfg' && !(pageText.includes('独立的制造应用') && pageText.includes('不承担底层引擎管理职责'))) {
+  if (module.id === 'mfg' && !(pageEvidenceText.includes('独立的制造应用') && pageEvidenceText.includes('不承担底层引擎管理职责'))) {
     findings.push('MFG independent application boundary text is missing from WebUI');
   }
   if (module.id === 'mfg') {
@@ -156,20 +192,20 @@ const moduleReports = modules.map((module) => {
     if (/mfg[A-Za-z0-9_]*:\s*\([^)]*\)\s*=>\s*(?:read|write)\(['"`]\/api\/matrix\//.test(apiClientText)) {
       findings.push('MFG WebUI client must not call /api/matrix/* directly');
     }
-    if (pageText.includes('Open Reality Core')) {
+    if (pageEvidenceText.includes('Open Reality Core')) {
       findings.push('MFG page must not present Reality Core as its management entry');
     }
-    if (pageText.includes('endpoint="/api/apps/mfg/* + /api/matrix/*"')) {
+    if (pageEvidenceText.includes('endpoint="/api/apps/mfg/* + /api/matrix/*"')) {
       findings.push('MFG degraded banner must not merge app and Matrix API ownership');
     }
-    if (!pageText.includes('Reality Core projection')) {
+    if (!pageEvidenceText.includes('Reality Core projection')) {
       findings.push('MFG page must label Matrix-derived data as a Reality Core projection');
     }
     if (mfgContracts.includes('/api/iacc/') || mfgContracts.includes('IACC')) {
       findings.push('MFG write contracts still contain legacy IACC runtime endpoints');
     }
   }
-  if (module.id === 'memory' && !referencesAny(pageText, ['Structured Data Core', 'structured'])) {
+  if (module.id === 'memory' && !referencesAny(pageEvidenceText, ['Structured Data Core', 'structured', '结构化数据核心'])) {
     findings.push('structured data core is not visible in Memory page');
   }
   if (module.id === 'memory' && !referencesAny(tuiSources, ['structured_sources', 'structured_facts', 'structured_evidence', 'structured_watermarks'])) {
@@ -184,14 +220,14 @@ const moduleReports = modules.map((module) => {
       'realityBoundaries',
     ];
     for (const term of requiredRealityTerms) {
-      if (!pageText.includes(term) && !read(path.join(webuiRoot, 'src/api/client.ts')).includes(term)) {
+      if (!pageEvidenceText.includes(term) && !read(path.join(webuiRoot, 'src/api/client.ts')).includes(term)) {
         findings.push(`Reality Core WebUI evidence missing ${term}`);
       }
     }
     for (const term of ['reality_status', 'reality_flow', 'reality_boundaries', 'gateway_reality_core', 'gateway_fact_flow']) {
       if (!tuiSources.includes(term)) findings.push(`TUI Reality Core projection is missing ${term}`);
     }
-    if (!pageText.includes('Matrix') || !pageText.includes('/api/matrix')) {
+    if (!pageEvidenceText.includes('Matrix') || !pageEvidenceText.includes('/api/matrix')) {
       findings.push('Reality Core must expose Matrix Engine as a core management lane');
     }
   }

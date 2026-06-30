@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { Check, RefreshCw, Search } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -59,16 +60,16 @@ const recommendationRows = computed(() => {
 const envelopeId = computed(() => envelope.value?.envelope_id || envelope.value?.envelope?.id || historyRows.value[0]?.envelope || '');
 const contextStatus = computed(() => envelope.value?.__offline ? 'blocked' : itemRows.value.length ? 'ready' : 'idle');
 const contextBar = computed(() => [
-  { label: 'Session', value: sessionId.value },
-  { label: 'Profile', value: profile.value },
-  { label: 'Items', value: itemRows.value.length, tone: itemRows.value.length ? 'success' : 'warn' },
-  { label: 'Envelope', value: envelopeId.value || 'pending' },
+  { label: t('script.pages.contextpage.label.f7f1997c6c'), value: sessionId.value },
+  { label: t('script.pages.contextpage.label.ff4fc0276e'), value: profile.value },
+  { label: t('script.pages.contextpage.label.44d25b5d1b'), value: itemRows.value.length, tone: itemRows.value.length ? 'success' : 'warn' },
+  { label: t('script.pages.contextpage.label.7f4a2c89d8'), value: envelopeId.value || 'pending' },
 ]);
 const contextWorkflow = computed(() => [
-  { id: 'packet', label: 'Packet', status: contextStatus.value, count: itemRows.value.length },
-  { id: 'budget', label: 'Budget', status: envelope.value?.budget ? 'ready' : 'idle', description: envelope.value?.budget?.total || 'not reported' },
-  { id: 'evidence', label: 'Evidence', status: evidence.value?.__offline ? 'blocked' : evidence.value?.kind ? 'ready' : 'idle', description: evidenceRef.value },
-  { id: 'history', label: 'History', status: historyRows.value.length ? 'ready' : 'idle', count: historyRows.value.length },
+  { id: 'packet', label: t('script.pages.contextpage.label.83c6d723cb'), status: contextStatus.value, count: itemRows.value.length },
+  { id: 'budget', label: t('script.pages.contextpage.label.7aeba4cd15'), status: envelope.value?.budget ? 'ready' : 'idle', description: envelope.value?.budget?.total || t('store.app.string.18eb606335') },
+  { id: 'evidence', label: t('script.pages.contextpage.label.7ea014de7b'), status: evidence.value?.__offline ? 'blocked' : evidence.value?.kind ? 'ready' : 'idle', description: evidenceRef.value },
+  { id: 'history', label: t('script.pages.contextpage.label.90ccd64974'), status: historyRows.value.length ? 'ready' : 'idle', count: historyRows.value.length },
 ]);
 const contextEvidence = computed(() => [
   ...itemRows.value.slice(0, 4).map((row) => ({
@@ -123,35 +124,35 @@ onMounted(refresh);
   <section class="capability-page context-page">
     <header class="page-header">
       <div>
-        <h1>Context Builder</h1>
-        <p>上下文包构建、历史包络、推荐动作和证据解析集中管理。</p>
+        <h1>{{ t('page.context.page.text.6ce2dbc303') }}</h1>
+        <p>{{ t('page.context.page.text.6441b42fdb') }}</p>
       </div>
       <div class="button-row">
-        <RouterLink class="ghost-action" :to="`/reality?section=fact-flow&session_id=${encodeURIComponent(sessionId)}`">Open Fact Flow</RouterLink>
+        <RouterLink class="ghost-action" :to="`/reality?section=fact-flow&session_id=${encodeURIComponent(sessionId)}`">{{ t('page.context.page.text.3c3d442579') }}</RouterLink>
         <button class="primary-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="15" />
-          {{ loading ? 'Loading' : 'Build context' }}
+          {{ loading ? t('page.context.page.inline.a63207a5aa') : t('page.context.page.inline.a7ad534cc2') }}
         </button>
       </div>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="contextBar" />
-    <WorkflowStrip :steps="contextWorkflow" title="Context assembly flow" />
+    <WorkflowStrip :steps="contextWorkflow" :title="t('page.context.page.title.eaa4662226')" />
 
     <section class="metric-row">
       <article class="metric-card">
-        <span>Context items</span>
+        <span>{{ t('page.context.page.text.2109fa7d46') }}</span>
         <strong>{{ itemRows.length }}</strong>
-        <small>{{ envelope.source || envelope.mode || 'current envelope' }}</small>
+        <small>{{ envelope.source || envelope.mode || t('page.context.page.inline.a7b40b78ae') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>History</span>
+        <span>{{ t('page.context.page.text.13b7b37aae') }}</span>
         <strong>{{ historyRows.length }}</strong>
-        <small>stored envelopes</small>
+        <small>{{ t('page.context.page.text.d124adbe4d') }}</small>
       </article>
       <article class="metric-card" data-tone="success">
-        <span>Recommendations</span>
+        <span>{{ t('page.context.page.text.122092ecb1') }}</span>
         <strong>{{ recommendationRows.length }}</strong>
         <small>{{ sessionId }}</small>
       </article>
@@ -160,16 +161,16 @@ onMounted(refresh);
     <section class="context-grid">
       <section class="management-panel context-panel wide">
         <header>
-          <h2>Context builder</h2>
+          <h2>{{ t('page.context.page.text.00bcbce604') }}</h2>
           <StatusPill :status="envelope.__offline ? 'offline' : 'ready'" />
         </header>
         <div class="context-builder-row">
           <label class="field-line">
-            Query
+            {{ t('template.pages.contextpage.a618b4be8d') }}
             <input v-model="query" type="text" @keyup.enter="refresh" />
           </label>
           <label class="field-line">
-            Profile
+            {{ t('template.pages.contextpage.ff4fc0276e') }}
             <select v-model="profile">
               <option value="main_turn">main_turn</option>
               <option value="yolo_goal">yolo_goal</option>
@@ -179,55 +180,55 @@ onMounted(refresh);
         </div>
         <button class="primary-action" type="button" @click="refresh">
           <Search :size="15" />
-          Build packet
+          {{ t('template.pages.contextpage.2e16e8d2e9') }}
         </button>
         <DataTable v-if="itemRows.length" :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No context items" detail="当前查询没有可展示的上下文项，或后端离线。" />
-        <EvidenceTrace :items="contextEvidence" title="Context evidence trace" />
+        <EmptyState v-else :title="t('page.context.page.title.3e00f7b727')" :detail="t('page.context.page.detail.0f6e3d1ebe')" />
+        <EvidenceTrace :items="contextEvidence" :title="t('page.context.page.title.97f9320e36')" />
       </section>
 
       <section class="management-panel context-panel">
         <header>
-          <h2>Evidence resolve</h2>
-          <span>reference lookup</span>
+          <h2>{{ t('page.context.page.text.a8dd41fa22') }}</h2>
+          <span>{{ t('page.context.page.text.08cb9c66d5') }}</span>
         </header>
         <label class="field-line">
-          Evidence ref
+          {{ t('page.context.field.evidenceRef') }}
           <input v-model="evidenceRef" type="text" @keyup.enter="resolveEvidence" />
         </label>
-        <button class="ghost-action" type="button" @click="resolveEvidence">Resolve evidence</button>
-        <RequestReceipt :receipt="evidence" title="Lookup receipt" />
-        <RawPayload title="Resolved evidence" :data="evidence" />
+        <button class="ghost-action" type="button" @click="resolveEvidence">{{ t('page.context.page.text.7dc8932461') }}</button>
+        <RequestReceipt :receipt="evidence" :title="t('page.context.page.title.e3b3e3081c')" />
+        <RawPayload :title="t('page.context.page.title.5f71074cfb')" :data="evidence" />
       </section>
 
       <section class="management-panel context-panel">
         <header>
-          <h2>Recommendation actions</h2>
-          <span>{{ envelopeId || 'no envelope' }}</span>
+          <h2>{{ t('page.context.page.text.92f813f7b1') }}</h2>
+          <span>{{ envelopeId || t('page.context.page.inline.46721d3741') }}</span>
         </header>
         <label class="field-line">
-          Recommendation note
+          {{ t('template.pages.contextpage.35d0a081f5') }}
           <textarea v-model="recommendationText" rows="3" />
         </label>
         <button class="primary-action" type="button" :disabled="!envelopeId" @click="acknowledgeRecommendation">
           <Check :size="15" />
-          Acknowledge
+          {{ t('template.pages.contextpage.9beb96dac8') }}
         </button>
-        <RequestReceipt :receipt="actionResult" title="Recommendation receipt" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.context.page.title.ea2c090ac6')" />
         <DataTable v-if="recommendationRows.length" :rows="recommendationRows" :columns="['id', 'action', 'count', 'status']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No recommendation stats" detail="推荐动作统计会在后端有历史数据时展示。" />
+        <EmptyState v-else :title="t('page.context.page.title.e62d3fb566')" :detail="t('page.context.page.detail.dcd7576e63')" />
       </section>
 
       <section class="management-panel context-panel wide">
         <header>
-          <h2>History and raw envelope</h2>
+          <h2>{{ t('page.context.page.text.397af08f0b') }}</h2>
           <span>{{ historyRows.length }} history rows</span>
         </header>
         <DataTable v-if="historyRows.length" :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No context history" detail="持久化 session store 没有返回上下文历史。" />
-        <DetailDrawer title="Context selected detail" :row="selectedDetail" @close="selectedDetail = null" />
-        <RawPayload title="Current envelope" :data="envelope" />
-        <RawPayload title="Action result" :data="actionResult || recommendations" />
+        <EmptyState v-else :title="t('page.context.page.title.fae4d2126c')" :detail="t('page.context.page.detail.56aba34430')" />
+        <DetailDrawer :title="t('page.context.page.title.66cb55e17d')" :row="selectedDetail" @close="selectedDetail = null" />
+        <RawPayload :title="t('page.context.page.title.b8176568a4')" :data="envelope" />
+        <RawPayload :title="t('page.context.page.title.49b5f508d1')" :data="actionResult || recommendations" />
       </section>
     </section>
   </section>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -186,21 +187,21 @@ const releaseChart = computed(() => releaseRows.value.length
   ? releaseRows.value.map((check) => ({ name: check.name || 'check', value: check.status === 'pass' ? 100 : 25 }))
   : []);
 const auditContext = computed(() => [
-  { label: 'Audit records', value: auditRecords.value.length },
-  { label: 'Approvals', value: approvalHistory.value.length },
-  { label: 'Cross-plane', value: crossPlaneRecords.value.length },
-  { label: 'Harness Eval', value: harnessEvalReports.value.length, tone: harnessEvalReports.value.length ? 'success' : 'default' },
-  { label: 'Timeline', value: globalTimelineRows.value.length },
-  { label: 'Release checks', value: releaseChecks.value.length, tone: releaseChecks.value.length ? 'warn' : 'default' },
+  { label: t('script.pages.auditpage.label.e11faea4e5'), value: auditRecords.value.length },
+  { label: t('script.pages.auditpage.label.deb9d03cf0'), value: approvalHistory.value.length },
+  { label: t('script.pages.auditpage.label.392e6000a4'), value: crossPlaneRecords.value.length },
+  { label: t('script.pages.auditpage.label.1a211031f5'), value: harnessEvalReports.value.length, tone: harnessEvalReports.value.length ? 'success' : 'default' },
+  { label: t('script.pages.auditpage.label.018514a3d5'), value: globalTimelineRows.value.length },
+  { label: t('script.pages.auditpage.label.db65a642a7'), value: releaseChecks.value.length, tone: releaseChecks.value.length ? 'warn' : 'default' },
 ]);
 const auditWorkflow = computed(() => [
-  { id: 'logs', label: 'Export', status: auditRows.value.length ? 'ready' : 'idle', count: auditRows.value.length },
-  { id: 'usage', label: 'Usage', status: usageChart.value.length ? 'ready' : 'idle', count: usageChart.value.length },
-  { id: 'release', label: 'Release', status: releaseRows.value.some((row) => row.status !== 'pass') ? 'blocked' : 'ready', count: releaseRows.value.length },
-  { id: 'approvals', label: 'Approval', status: approvalRows.value.length ? 'ready' : 'idle', count: approvalRows.value.length },
-  { id: 'cross-plane', label: 'Cross-plane', status: crossPlaneRows.value.length ? 'ready' : 'idle', count: crossPlaneRows.value.length },
-  { id: 'harness-eval', label: 'Harness Eval', status: state.value.harnessEvalLatest?.report?.status || 'idle', count: harnessEvalReports.value.length },
-  { id: 'global-timeline', label: 'Timeline', status: globalTimelineRows.value.length ? 'ready' : 'idle', count: globalTimelineRows.value.length },
+  { id: 'logs', label: t('script.pages.auditpage.label.f3e4fadb9e'), status: auditRows.value.length ? 'ready' : 'idle', count: auditRows.value.length },
+  { id: 'usage', label: t('script.pages.auditpage.label.0bb18642b7'), status: usageChart.value.length ? 'ready' : 'idle', count: usageChart.value.length },
+  { id: 'release', label: t('script.pages.auditpage.label.d41f56cea1'), status: releaseRows.value.some((row) => row.status !== 'pass') ? 'blocked' : 'ready', count: releaseRows.value.length },
+  { id: 'approvals', label: t('script.pages.auditpage.label.8cc047ac17'), status: approvalRows.value.length ? 'ready' : 'idle', count: approvalRows.value.length },
+  { id: 'cross-plane', label: t('script.pages.auditpage.label.392e6000a4'), status: crossPlaneRows.value.length ? 'ready' : 'idle', count: crossPlaneRows.value.length },
+  { id: 'harness-eval', label: t('script.pages.auditpage.label.1a211031f5'), status: state.value.harnessEvalLatest?.report?.status || 'idle', count: harnessEvalReports.value.length },
+  { id: 'global-timeline', label: t('script.pages.auditpage.label.018514a3d5'), status: globalTimelineRows.value.length ? 'ready' : 'idle', count: globalTimelineRows.value.length },
 ]);
 const auditEvidence = computed(() => [
   ...auditRows.value.slice(0, 3).map((row) => ({
@@ -299,219 +300,219 @@ onMounted(refresh);
   <section class="capability-page audit-page">
     <header class="page-header">
       <div>
-        <h1>Audit and Governance</h1>
-        <p>审计导出、使用统计、发布门禁、审批历史和跨平面回执集中核查。</p>
+        <h1>{{ t('page.audit.page.text.e991f8e72d') }}</h1>
+        <p>{{ t('page.audit.page.text.8a31977702') }}</p>
       </div>
       <button class="primary-action" type="button" :disabled="loading" @click="refresh">
         <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh audit' }}
+        {{ loading ? t('page.audit.page.inline.4433376a54') : t('page.audit.page.inline.9b2111e9a9') }}
       </button>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="auditContext" />
-    <WorkflowStrip :steps="auditWorkflow" title="Evidence flow" />
+    <WorkflowStrip :steps="auditWorkflow" :title="t('page.audit.page.title.79a1baef6a')" />
 
     <section class="metric-row">
       <article class="metric-card" data-tone="info">
-        <span>Audit records</span>
+        <span>{{ t('page.audit.page.text.a4105efeb4') }}</span>
         <strong>{{ auditRecords.length }}</strong>
         <small>{{ state.audit?.source || source }}</small>
       </article>
       <article class="metric-card" data-tone="success">
-        <span>Usage tokens</span>
+        <span>{{ t('page.audit.page.text.f5e060a458') }}</span>
         <strong>{{ state.usage?.tokens?.total || 0 }}</strong>
         <small>{{ state.usage?.message_count || 0 }} messages</small>
       </article>
       <article class="metric-card" data-tone="warn">
-        <span>Release checks</span>
+        <span>{{ t('page.audit.page.text.d4317d5cbf') }}</span>
         <strong>{{ releaseChecks.length }}</strong>
         <small>{{ releaseSurface }}</small>
       </article>
       <article class="metric-card" data-tone="success">
-        <span>Harness Eval</span>
+        <span>{{ t('page.audit.page.text.c2a8e12d35') }}</span>
         <strong>{{ state.harnessEvalLatest?.report?.status || 'empty' }}</strong>
-        <small>{{ harnessEvalReports.length }} reports</small>
+        <small>{{ formatCount('reports', harnessEvalReports.length) }}</small>
       </article>
     </section>
 
     <section class="gateway-grid">
       <section class="management-panel gateway-panel wide" data-section="global-timeline">
         <header>
-          <h2>GlobalTimeline</h2>
-          <span>{{ globalTimelineRows.length }} correlated records</span>
+          <h2>{{ t('page.audit.page.text.1604763dcd') }}</h2>
+          <span>{{ t('page.audit.summary.correlatedRecords', { count: globalTimelineRows.length }) }}</span>
         </header>
         <div class="button-row">
           <label class="field-line">
-            Source
+            {{ t('page.audit.filter.source') }}
             <select v-model="timelineSource">
-              <option value="all">all</option>
-              <option value="audit">audit</option>
-              <option value="approval">approval</option>
-              <option value="cross-plane">cross-plane</option>
-              <option value="execution">execution</option>
+              <option value="all">{{ t('page.audit.page.text.3990bceb49') }}</option>
+              <option value="audit">{{ t('page.audit.page.text.eaa321f5e5') }}</option>
+              <option value="approval">{{ t('page.audit.page.text.b42bf53c1f') }}</option>
+              <option value="cross-plane">{{ t('page.audit.source.crossPlane') }}</option>
+              <option value="execution">{{ t('page.audit.source.execution') }}</option>
             </select>
           </label>
           <label class="field-line">
-            Status
+            {{ t('page.audit.filter.status') }}
             <select v-model="timelineStatus">
-              <option value="all">all</option>
-              <option value="recorded">recorded</option>
-              <option value="approved">approved</option>
-              <option value="denied">denied</option>
-              <option value="ready">ready</option>
-              <option value="failed">failed</option>
+              <option value="all">{{ t('page.audit.page.text.3990bceb49') }}</option>
+              <option value="recorded">{{ t('page.audit.page.text.75a6ecb297') }}</option>
+              <option value="approved">{{ t('page.audit.page.text.a70836e34a') }}</option>
+              <option value="denied">{{ t('page.audit.page.text.c1546fc5fc') }}</option>
+              <option value="ready">{{ t('page.audit.page.text.e407ec7655') }}</option>
+              <option value="failed">{{ t('page.audit.page.text.ac323c75d3') }}</option>
             </select>
           </label>
           <label class="field-line">
-            Session
-            <input v-model="timelineSession" type="search" placeholder="session id" />
+            {{ t('page.audit.filter.session') }}
+            <input v-model="timelineSession" type="search" :placeholder="t('page.audit.page.placeholder.1f51e2acee')" />
           </label>
           <label class="field-line">
-            Evidence
-            <input v-model="timelineEvidence" type="search" placeholder="evidence ref" />
+            {{ t('page.audit.filter.evidence') }}
+            <input v-model="timelineEvidence" type="search" :placeholder="t('page.audit.page.placeholder.d6e0c1b499')" />
           </label>
           <label class="field-line">
-            Surface
-            <input v-model="timelineSurface" type="search" placeholder="surface/channel" />
+            {{ t('page.audit.filter.surface') }}
+            <input v-model="timelineSurface" type="search" :placeholder="t('page.audit.placeholder.surfaceChannel')" />
           </label>
         </div>
         <DataTable v-if="globalTimelineRows.length" :rows="globalTimelineRows" :columns="['source', 'session', 'agent', 'tool', 'evidence', 'approval', 'surface', 'status', 'timestamp', 'summary']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No global timeline records" detail="当前过滤条件没有匹配记录，或 Gateway 尚未返回审计数据。" />
+        <EmptyState v-else :title="t('page.audit.page.title.c8ee651d5f')" :detail="t('page.audit.page.detail.79d5d32b7b')" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="logs">
         <header>
-          <h2>Audit export</h2>
-          <span>{{ state.audit?.total || 0 }} total</span>
+          <h2>{{ t('page.audit.page.text.5ea6f2de3b') }}</h2>
+          <span>{{ t('common.totalCount', { count: state.audit?.total || 0 }) }}</span>
         </header>
         <div class="button-row">
           <label class="field-line">
-            Source
+            {{ t('template.pages.auditpage.6da13addb0') }}
             <select v-model="source" @change="refresh">
-              <option value="all">all</option>
-              <option value="approval">approval</option>
-              <option value="memory">memory</option>
+              <option value="all">{{ t('page.audit.page.text.3990bceb49') }}</option>
+              <option value="approval">{{ t('page.audit.page.text.b42bf53c1f') }}</option>
+              <option value="memory">{{ t('page.audit.page.text.8d6c20ac46') }}</option>
             </select>
           </label>
           <label class="field-line">
-            Limit
+            {{ t('template.pages.auditpage.24d948e4bd') }}
             <input v-model.number="limit" type="number" min="1" max="500" @change="refresh" />
           </label>
           <label class="field-line">
-            Offset
+            {{ t('template.pages.auditpage.ce66771654') }}
             <input v-model.number="offset" type="number" min="0" @change="refresh" />
           </label>
         </div>
         <DataTable v-if="auditRows.length" :rows="auditRows" :columns="['source', 'id', 'summary', 'timestamp']" @row-click="selectedDetail = { ...$event, source: 'audit', evidence: $event.id }" />
-        <EmptyState v-else title="No audit records" detail="审批或记忆审计产生后会在这里展示。" />
-        <EvidenceTrace :items="auditEvidence" title="Audit evidence trace" />
+        <EmptyState v-else :title="t('page.audit.page.title.534295d677')" :detail="t('page.audit.page.detail.6b368c2a44')" />
+        <EvidenceTrace :items="auditEvidence" :title="t('page.audit.page.title.69b367b2b4')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="usage">
         <header>
-          <h2>Usage summary</h2>
+          <h2>{{ t('page.audit.page.text.c3d8bf1440') }}</h2>
           <span>{{ state.usage?.status || 'usage' }}</span>
         </header>
-        <ChartPanel v-if="usageChart.length" title="Usage by platform" kind="bar" :data="usageChart" />
-        <EmptyState v-else title="No usage data" detail="后端返回使用统计后再展示平台分布图。" />
+        <ChartPanel v-if="usageChart.length" :title="t('page.audit.page.title.cc6c932771')" kind="bar" :data="usageChart" />
+        <EmptyState v-else :title="t('page.audit.page.title.0b5fa8afd6')" :detail="t('page.audit.page.detail.f250d3c233')" />
         <dl class="detail-list">
-          <dt>Messages</dt>
+          <dt>{{ t('page.audit.page.text.3ed4b0e016') }}</dt>
           <dd>{{ state.usage?.message_count || 0 }}</dd>
-          <dt>Tokens</dt>
+          <dt>{{ t('page.audit.page.text.e60fd065c9') }}</dt>
           <dd>{{ state.usage?.tokens?.total || 0 }}</dd>
-          <dt>Cost</dt>
+          <dt>{{ t('page.audit.page.text.50bf6ad542') }}</dt>
           <dd>{{ Number(state.usage?.estimated_cost_usd || 0).toFixed(6) }}</dd>
         </dl>
       </section>
 
       <section class="management-panel gateway-panel" data-section="release">
         <header>
-          <h2>Release gate</h2>
+          <h2>{{ t('page.audit.page.text.052c0ae46a') }}</h2>
           <span>{{ releaseSurface }}</span>
         </header>
         <label class="field-line">
-          Surface
+          {{ t('page.audit.filter.surface') }}
           <select v-model="releaseSurface" @change="refresh">
             <option value="webui">webui</option>
             <option value="tui">tui</option>
             <option value="cli">cli</option>
           </select>
         </label>
-        <ChartPanel v-if="releaseChart.length" title="Release gate coverage" kind="radar" :data="releaseChart" />
-        <EmptyState v-else title="No release checks" detail="发布门禁返回检查项后再展示覆盖图。" />
+        <ChartPanel v-if="releaseChart.length" :title="t('page.audit.page.title.e79ee7c0be')" kind="radar" :data="releaseChart" />
+        <EmptyState v-else :title="t('page.audit.page.title.b7e0b61c96')" :detail="t('page.audit.page.detail.27b53763a7')" />
         <DataTable v-if="releaseRows.length" :rows="releaseRows" :columns="['name', 'status', 'detail']" @row-click="selectedDetail = { ...$event, source: 'release', evidence: $event.name, summary: $event.detail }" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="harness-eval">
         <header>
-          <h2>Harness Eval</h2>
+          <h2>{{ t('page.audit.page.text.c2a8e12d35') }}</h2>
           <span>{{ state.harnessEvalLatest?.status || 'reports' }}</span>
         </header>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="runHarnessEvalSmoke">Run smoke</button>
-          <button class="ghost-action" type="button" @click="refresh">Refresh reports</button>
+          <button class="primary-action" type="button" @click="runHarnessEvalSmoke">{{ t('page.audit.page.text.96e9252cbf') }}</button>
+          <button class="ghost-action" type="button" @click="refresh">{{ t('page.audit.page.text.95dd535531') }}</button>
         </div>
         <dl class="detail-list">
-          <dt>Latest</dt>
+          <dt>{{ t('page.audit.page.text.f1b114ace3') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.id || 'none' }}</dd>
-          <dt>Status</dt>
+          <dt>{{ t('page.audit.page.text.9e51188c8e') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.status || state.harnessEvalLatest?.status || 'empty' }}</dd>
-          <dt>Tokens</dt>
+          <dt>{{ t('page.audit.page.text.e60fd065c9') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.total_tokens || 0 }}</dd>
-          <dt>Tool calls</dt>
+          <dt>{{ t('page.audit.page.text.a61ad14bd4') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.tool_calls || 0 }}</dd>
         </dl>
         <DataTable v-if="harnessEvalRows.length" :rows="harnessEvalRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'scenarios', 'elapsed_ms']" @row-click="openHarnessEvalReport" />
-        <EmptyState v-else title="No harness eval reports" detail="点击 Run smoke 生成一次轻量评测报告，不会调用真实模型。" />
-        <RequestReceipt v-if="evalActionResult" :receipt="evalActionResult" title="Harness eval run receipt" />
-        <RawPayload v-if="evalReportDetail" title="Harness eval report detail" :data="evalReportDetail" />
+        <EmptyState v-else :title="t('page.audit.page.title.6d80665780')" :detail="t('page.audit.page.detail.64a90473e7')" />
+        <RequestReceipt v-if="evalActionResult" :receipt="evalActionResult" :title="t('page.audit.page.title.7e07abe625')" />
+        <RawPayload v-if="evalReportDetail" :title="t('page.audit.page.title.052bb3b0c7')" :data="evalReportDetail" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="harness-eval-runs">
         <header>
-          <h2>Eval runs</h2>
-          <span>{{ harnessEvalRuns.length }} runs</span>
+          <h2>{{ t('page.audit.page.text.4444545e37') }}</h2>
+          <span>{{ formatCount('runs', harnessEvalRuns.length) }}</span>
         </header>
         <DataTable v-if="harnessEvalRunRows.length" :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'report']" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
-        <EmptyState v-else title="No eval runs" detail="Gateway 触发的评测运行记录会在这里展示。" />
+        <EmptyState v-else :title="t('page.audit.page.title.2029dfea2e')" :detail="t('page.audit.page.detail.d6935f4575')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="harness-eval-scenarios">
         <header>
-          <h2>Scenario matrix</h2>
-          <span>{{ harnessEvalScenarios.length }} scenarios</span>
+          <h2>{{ t('page.audit.page.text.171edf1adf') }}</h2>
+          <span>{{ formatCount('scenarios', harnessEvalScenarios.length) }}</span>
         </header>
         <DataTable v-if="harnessEvalScenarioRows.length" :rows="harnessEvalScenarioRows" :columns="['id', 'kind', 'fake', 'real', 'evidence']" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, summary: $event.evidence }" />
-        <EmptyState v-else title="No scenario matrix" detail="Harness Eval scenario API 尚未返回矩阵。" />
+        <EmptyState v-else :title="t('page.audit.page.title.1d4e669193')" :detail="t('page.audit.page.detail.4976a6366c')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="approvals">
         <header>
-          <h2>Approval history</h2>
-          <span>{{ approvalRows.length }} shown</span>
+          <h2>{{ t('page.audit.page.text.c9312c41ba') }}</h2>
+          <span>{{ t('common.shownCount', { count: approvalRows.length, unit: t('unit.records') }) }}</span>
         </header>
         <DataTable v-if="approvalRows.length" :rows="approvalRows" :columns="['id', 'command', 'decision', 'resolved']" @row-click="selectedDetail = { ...$event, source: 'approval', evidence: $event.id, status: $event.decision, summary: $event.command }" />
-        <EmptyState v-else title="No approvals" detail="审批记录为空或 approval gate 未启用。" />
+        <EmptyState v-else :title="t('page.audit.page.title.292a2d77e6')" :detail="t('page.audit.page.detail.abb458c609')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="cross-plane">
         <header>
-          <h2>Governance evidence</h2>
-          <span>{{ crossPlaneRows.length }} records</span>
+          <h2>{{ t('page.audit.page.text.02318ae2d0') }}</h2>
+          <span>{{ formatCount('records', crossPlaneRows.length) }}</span>
         </header>
         <DataTable v-if="crossPlaneRows.length" :rows="crossPlaneRows" :columns="['id', 'result', 'capability', 'summary']" @row-click="selectedDetail = { ...$event, source: 'cross-plane', evidence: $event.id, status: $event.result }" />
-        <EmptyState v-else title="No cross-plane audit" detail="跨平面动作执行后会产生治理证据。" />
+        <EmptyState v-else :title="t('page.audit.page.title.8f881836e9')" :detail="t('page.audit.page.detail.bc95f49231')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="cross-plane">
         <header>
-          <h2>Execution receipts</h2>
-          <span>{{ executionRows.length }} receipts</span>
+          <h2>{{ t('page.audit.page.text.4e1a860d2d') }}</h2>
+          <span>{{ formatCount('receipts', executionRows.length) }}</span>
         </header>
         <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" @row-click="selectedDetail = { ...$event, source: 'execution', evidence: $event.id }" />
-        <EvidenceObjectDetail title="Audit selected evidence" :evidence="selectedEvidence" @close="selectedDetail = null" />
-        <RawPayload title="Governance payload" :data="{ capabilities: state.capabilities, projection: state.projection, surfaces: state.surfaces }" />
+        <EvidenceObjectDetail :title="t('page.audit.page.title.f699e4008c')" :evidence="selectedEvidence" @close="selectedDetail = null" />
+        <RawPayload :title="t('page.audit.page.title.ad0dea9223')" :data="{ capabilities: state.capabilities, projection: state.projection, surfaces: state.surfaces }" />
       </section>
     </section>
   </section>

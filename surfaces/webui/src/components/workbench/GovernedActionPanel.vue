@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import { t } from '../../i18n';
 import ExecutionModeSwitch from './ExecutionModeSwitch.vue';
 import ImpactPreview from './ImpactPreview.vue';
 import PayloadEditor from './PayloadEditor.vue';
@@ -48,14 +49,28 @@ watch(() => props.payload, (value) => {
 }, { deep: true });
 
 const capabilityRows = computed(() => [
-  ['validate', props.contract.validate || 'not declared'],
-  ['plan', props.contract.plan || 'not declared'],
-  ['dry-run', props.contract.dry_run || 'not declared'],
-  ['live', props.contract.live ? props.contract.live_policy || 'allowed' : 'unsupported'],
-  ['receipt', props.contract.receipt ? 'required' : 'missing'],
-  ['audit', props.contract.audit_ref ? 'required' : 'missing'],
-  ['changed refs', props.contract.changed_refs ? 'required' : 'missing'],
+  [t('component.workbench.governed.action.panel.field.validate'), props.contract.validate || t('status.notDeclared')],
+  [t('component.workbench.governed.action.panel.field.plan'), props.contract.plan || t('status.notDeclared')],
+  [t('component.workbench.governed.action.panel.field.dryRun'), props.contract.dry_run || t('status.notDeclared')],
+  [t('component.workbench.governed.action.panel.field.live'), props.contract.live ? props.contract.live_policy || t('status.allowed') : t('status.unsupported')],
+  [t('component.workbench.governed.action.panel.field.receipt'), props.contract.receipt ? t('status.required') : t('status.missing')],
+  [t('component.workbench.governed.action.panel.field.audit'), props.contract.audit_ref ? t('status.required') : t('status.missing')],
+  [t('component.workbench.governed.action.panel.field.changedRefs'), props.contract.changed_refs ? t('status.required') : t('status.missing')],
 ]);
+
+const contractDomainKeys: Record<string, string> = {
+  'Data Plane': 'mfg.contract.domain.dataPlane',
+  Facts: 'mfg.contract.domain.facts',
+  Entities: 'mfg.contract.domain.entities',
+  Metrics: 'mfg.contract.domain.metrics',
+  Evidence: 'mfg.contract.domain.evidence',
+  Incidents: 'mfg.contract.domain.incidents',
+  Cockpit: 'mfg.contract.domain.cockpit',
+};
+
+function displayContractDomain(domain: string) {
+  return t(contractDomainKeys[domain] || 'mfg.contract.domain.unknown', { domain });
+}
 
 function run() {
   if (mode.value === 'dry_run') emit('dryRun', payloadDraft.value);
@@ -68,7 +83,7 @@ function run() {
   <section class="governed-action-panel" :data-contract-id="contract.id" :data-domain="contract.domain">
     <header>
       <div>
-        <span>{{ contract.domain }}</span>
+        <span>{{ displayContractDomain(contract.domain) }}</span>
         <h3>{{ contract.title }}</h3>
       </div>
       <code>{{ contract.method }} {{ contract.endpoint }}</code>
@@ -87,12 +102,12 @@ function run() {
         <dt>{{ row[0] }}</dt>
         <dd>{{ row[1] }}</dd>
       </template>
-      <dt>return</dt>
+      <dt>{{ t('component.workbench.governed.action.panel.field.return') }}</dt>
       <dd>{{ contract.current_return }}</dd>
     </dl>
     <div class="button-row">
-      <button class="primary-action" type="button" @click="run">Run {{ mode }}</button>
+      <button class="primary-action" type="button" @click="run">{{ t('component.workbench.governed.action.panel.action.run', { mode }) }}</button>
     </div>
-    <RequestReceipt :receipt="receipt" :title="`${contract.title} receipt`" />
+    <RequestReceipt :receipt="receipt" :title="t('component.workbench.governed.action.panel.title.receipt', { title: contract.title })" />
   </section>
 </template>

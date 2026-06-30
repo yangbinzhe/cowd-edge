@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
 import { computed, ref, watch } from 'vue';
 
 const props = defineProps<{
@@ -35,13 +36,13 @@ function applyJson() {
 <template>
   <div class="payload-editor" :data-valid="valid">
     <label>
-      Payload JSON
+      {{ t('template.components.workbench.payloadeditor.5616b61bb7') }}
       <textarea v-model="text" rows="8" spellcheck="false" @blur="applyJson" />
     </label>
     <div class="button-row">
-      <button class="ghost-action" type="button" @click="applyJson">Validate JSON</button>
+      <button class="ghost-action" type="button" @click="applyJson">{{ t('component.workbench.payload.editor.text.d033a65889') }}</button>
       <span v-if="error" class="field-error">{{ error }}</span>
-      <span v-else class="field-ok">Valid JSON object</span>
+      <span v-else class="field-ok">{{ t('component.workbench.payload.editor.text.c25195659b') }}</span>
     </div>
   </div>
 </template>

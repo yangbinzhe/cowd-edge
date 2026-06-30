@@ -31,6 +31,18 @@ const allowTitleTerms = [
   'result',
   'run',
   'summary',
+  '证据',
+  '调试',
+  '详情',
+  '载荷',
+  '结果',
+  '审计',
+  '运行',
+  '配置',
+  '策略',
+  '摘要',
+  '状态',
+  '报告',
 ];
 
 function walk(target) {
@@ -44,8 +56,44 @@ function lineOf(text, index) {
   return text.slice(0, index).split('\n').length;
 }
 
+function parseMessageCatalog(file) {
+  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const messages = new Map();
+  const regex = /\s*"([^"]+)":\s*"((?:\\.|[^"])*)",?/g;
+  let match;
+  while ((match = regex.exec(text))) {
+    try {
+      messages.set(match[1], JSON.parse(`"${match[2]}"`));
+    } catch {
+      messages.set(match[1], match[2]);
+    }
+  }
+  return messages;
+}
+
+const messageCatalogs = [
+  parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/en-US.ts')),
+  parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/zh-CN.ts')),
+];
+
+function resolveMessage(key) {
+  return messageCatalogs.map((catalog) => catalog.get(key)).filter(Boolean).join('\n');
+}
+
+function renderablePageEvidence(text) {
+  const keys = new Set();
+  const regex = /\bt[c]?\(\s*['"`]([^'"`]+)['"`]/g;
+  let match;
+  while ((match = regex.exec(text))) keys.add(match[1]);
+  return `${text}\n${Array.from(keys).map(resolveMessage).join('\n')}`;
+}
+
 function titleOf(tag) {
-  return tag.match(/title=(?:"([^"]+)"|'([^']+)'|{`([^`]+)`})/)?.slice(1).find(Boolean) || '';
+  const dynamicKey = tag.match(/\B:title=["']t\(\s*['"`]([^'"`]+)['"`]/)?.[1];
+  if (dynamicKey) return resolveMessage(dynamicKey);
+  const literal = tag.match(/\btitle=(?:"([^"]+)"|'([^']+)'|{`([^`]+)`})/)?.slice(1).find(Boolean);
+  if (literal) return literal;
+  return '';
 }
 
 const files = walk(path.join(webuiRoot, 'src')).filter((file) => /\.(vue|ts)$/.test(file));
@@ -80,6 +128,7 @@ const pageRequirements = [
 
 for (const file of files) {
   const text = fs.readFileSync(file, 'utf8');
+  const pageEvidence = renderablePageEvidence(text);
   const regex = /<RawPayload\b[^>]*\/?>/g;
   let match;
   while ((match = regex.exec(text))) {
@@ -87,10 +136,11 @@ for (const file of files) {
     const line = lineOf(text, match.index);
     const title = titleOf(tag);
     const before = text.slice(Math.max(0, match.index - 800), match.index);
+    const beforeEvidence = renderablePageEvidence(before);
     const nearestSection = before.match(/<h[23][^>]*>([^<]+)<\/h[23]>/g)?.pop()?.replace(/<[^>]+>/g, '') || '';
     const normalizedTitle = title.toLowerCase();
     const allowedByTitle = title && allowTitleTerms.some((term) => normalizedTitle.includes(term));
-    const hasManagementCompanion = /DataTable|DetailPanel|RequestReceipt|GovernedActionPanel|EndpointHealthList|TimelineList/.test(before);
+    const hasManagementCompanion = /DataTable|DetailPanel|RequestReceipt|GovernedActionPanel|EndpointHealthList|TimelineList/.test(beforeEvidence);
     const entry = {
       file: path.relative(webuiRoot, file),
       line,
@@ -110,12 +160,13 @@ for (const file of files) {
 for (const requirement of pageRequirements) {
   const file = path.join(webuiRoot, requirement.file);
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+  const pageEvidence = renderablePageEvidence(text);
   if (!text) {
     failures.push(`${requirement.file}: missing page for structured primary view audit`);
     continue;
   }
   for (const term of requirement.terms) {
-    if (!text.includes(term)) failures.push(`${requirement.file}: missing structured primary view term ${term}`);
+    if (!pageEvidence.includes(term)) failures.push(`${requirement.file}: missing structured primary view term ${term}`);
   }
 }
 

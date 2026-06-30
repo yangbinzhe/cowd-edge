@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { Network, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -200,18 +201,18 @@ const connectorServiceToolRows = computed(() => {
   })) : [];
 });
 const gatewayContext = computed(() => [
-  { label: 'Surface host', value: `${surfaces.value.length} surfaces`, tone: surfaces.value.length ? 'success' : 'warn' },
-  { label: 'Connectors', value: accounts.value.length, tone: accounts.value.length ? 'success' : 'warn' },
-  { label: 'Identities', value: identities.value.length },
-  { label: 'Executions', value: executions.value.length },
+  { label: t('script.pages.gatewaypage.label.f243224b11'), value: `${surfaces.value.length} surfaces`, tone: surfaces.value.length ? 'success' : 'warn' },
+  { label: t('script.pages.gatewaypage.label.4b1e9501b9'), value: accounts.value.length, tone: accounts.value.length ? 'success' : 'warn' },
+  { label: t('script.pages.gatewaypage.label.42c248d3eb'), value: identities.value.length },
+  { label: t('script.pages.gatewaypage.label.8999e5848a'), value: executions.value.length },
 ]);
 const gatewayWorkflow = computed(() => [
-  { id: 'surfaces', label: 'Surface summary', status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
-  { id: 'connectors', label: 'Connectors', status: accounts.value.length ? 'ready' : 'degraded', count: accounts.value.length },
-  { id: 'resources', label: 'Resources', status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
-  { id: 'identities', label: 'Identity', status: identityRows.value.length ? 'ready' : 'blocked', count: identityRows.value.length },
-  { id: 'identities', label: 'Grant', status: grantRows.value.length ? 'ready' : 'blocked', count: grantRows.value.length },
-  { id: 'executions', label: 'Execute', status: actionResult.value ? 'active' : 'idle', description: executeMode.value },
+  { id: 'surfaces', label: t('script.pages.gatewaypage.label.f086bb51e1'), status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
+  { id: 'connectors', label: t('script.pages.gatewaypage.label.4b1e9501b9'), status: accounts.value.length ? 'ready' : 'degraded', count: accounts.value.length },
+  { id: 'resources', label: t('script.pages.gatewaypage.label.87df60de33'), status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
+  { id: 'identities', label: t('script.pages.gatewaypage.label.7e5a975b6a'), status: identityRows.value.length ? 'ready' : 'blocked', count: identityRows.value.length },
+  { id: 'identities', label: t('script.pages.gatewaypage.label.c02329c48f'), status: grantRows.value.length ? 'ready' : 'blocked', count: grantRows.value.length },
+  { id: 'executions', label: t('script.pages.gatewaypage.label.6ea36ce8d4'), status: actionResult.value ? 'active' : 'idle', description: executeMode.value },
 ]);
 const gatewayEvidence = computed(() => [
   ...executionRows.value.slice(0, 3).map((row) => ({
@@ -232,121 +233,121 @@ const gatewayEvidence = computed(() => [
 const resourceGovernanceContract = computed(() => ({
   id: 'gateway.resource.memory-promotion',
   domain: 'gateway',
-  title: 'Promote connector resource to memory',
+  title: t('script.pages.gatewaypage.title.7985293dee'),
   endpoint: '/api/connectors/resources/promote-memory',
   method: 'POST',
-  summary: 'Validate connector resource metadata before promoting it into memory. Promotion records a receipt and preserves source refs.',
-  current_return: 'RequestReceipt with memory promotion metadata',
+  summary: t('script.pages.gatewaypage.summary.6a293743f8'),
+  current_return: t('script.pages.gatewaypage.current_return.63f3f441d2'),
   validate: '/api/connectors/resources/revalidate',
   plan: '/api/connectors/resources/revalidate',
   dry_run: '/api/connectors/resources/revalidate',
   live: true,
-  live_policy: 'requires resource_ref and connector metadata',
+  live_policy: t('script.pages.gatewaypage.live_policy.0be653fa14'),
   receipt: true,
   audit_ref: true,
   changed_refs: true,
   approval_required: false,
-  kernel_boundary: 'Gateway connector service -> Memory engine',
+  kernel_boundary: t('script.pages.gatewaypage.kernel_boundary.ec0b646fc5'),
   affected_refs: resourceRef.value ? [resourceRef.value] : [],
 }));
 const crossPlaneExecuteContract = computed(() => ({
   id: 'gateway.cross-plane.execute',
   domain: 'gateway',
-  title: 'Execute cross-plane action',
+  title: t('script.pages.gatewaypage.title.55633ae2ab'),
   endpoint: '/api/cross-plane/action/execute',
   method: 'POST',
-  summary: 'Run policy simulation and preflight before executing cross-plane actions. Commit mode can dispatch to external surfaces.',
-  current_return: 'Execution receipt with dispatch target and policy decision',
+  summary: t('script.pages.gatewaypage.summary.43fcdcb696'),
+  current_return: t('script.pages.gatewaypage.current_return.86a5e061e1'),
   validate: '/api/cross-plane/policy/simulate',
   plan: '/api/cross-plane/action/preflight',
   dry_run: '/api/cross-plane/policy/simulate',
   live: true,
-  live_policy: 'commit requires grant, identity, idempotency, and adapter readiness',
+  live_policy: t('script.pages.gatewaypage.live_policy.0c3dd8430c'),
   receipt: true,
   audit_ref: true,
   changed_refs: false,
   approval_required: true,
-  kernel_boundary: 'Gateway cross-plane service',
+  kernel_boundary: t('script.pages.gatewaypage.kernel_boundary.10cc5d2b8b'),
   affected_refs: [resourceRef.value, capability.value, identityRef.value].filter(Boolean),
 }));
 const identityGovernanceContract = computed(() => ({
   id: 'gateway.cross-plane.identity',
   domain: 'gateway',
-  title: 'Manage cross-plane identity',
+  title: t('script.pages.gatewaypage.title.c1aeadb2b5'),
   endpoint: '/api/cross-plane/identities',
   method: 'POST',
-  summary: 'Resolve identity before creating a trusted binding. Revocation stays explicit in the identity list.',
-  current_return: 'Identity binding receipt',
+  summary: t('script.pages.gatewaypage.summary.90da051361'),
+  current_return: t('script.pages.gatewaypage.current_return.939ff3a655'),
   validate: '/api/cross-plane/identity/resolve',
   plan: '/api/cross-plane/identity/resolve',
   dry_run: '/api/cross-plane/identity/resolve',
   live: true,
-  live_policy: 'creates a verified identity binding for the actor',
+  live_policy: t('script.pages.gatewaypage.live_policy.54bdfdd748'),
   receipt: true,
   audit_ref: true,
   changed_refs: true,
   approval_required: false,
-  kernel_boundary: 'Gateway cross-plane identity registry',
+  kernel_boundary: t('script.pages.gatewaypage.kernel_boundary.05108df5a6'),
   affected_refs: [identityRef.value, actor.value].filter(Boolean),
 }));
 const grantGovernanceContract = computed(() => ({
   id: 'gateway.cross-plane.grant',
   domain: 'gateway',
-  title: 'Create cross-plane grant',
+  title: t('script.pages.gatewaypage.title.e54a6bb605'),
   endpoint: '/api/cross-plane/grants',
   method: 'POST',
-  summary: 'Preflight policy before creating a grant that enables governed cross-plane actions.',
-  current_return: 'Grant receipt with capability and scope',
+  summary: t('script.pages.gatewaypage.summary.623089ae79'),
+  current_return: t('script.pages.gatewaypage.current_return.b04f8219e1'),
   validate: '/api/cross-plane/action/preflight',
   plan: '/api/cross-plane/action/preflight',
   dry_run: '/api/cross-plane/policy/simulate',
   live: true,
-  live_policy: 'creates a persistent grant for the selected actor and capability',
+  live_policy: t('script.pages.gatewaypage.live_policy.c48167a782'),
   receipt: true,
   audit_ref: true,
   changed_refs: true,
   approval_required: false,
-  kernel_boundary: 'Gateway cross-plane grant registry',
+  kernel_boundary: t('script.pages.gatewaypage.kernel_boundary.723b7125e8'),
   affected_refs: [capability.value, resourceRef.value, actor.value].filter(Boolean),
 }));
 const identityRevokeContract = computed(() => ({
   id: 'gateway.cross-plane.identity.revoke',
   domain: 'gateway',
-  title: 'Revoke cross-plane identity',
+  title: t('script.pages.gatewaypage.title.d45e9af88b'),
   endpoint: '/api/cross-plane/identities/:id',
   method: 'DELETE',
-  summary: 'Revoke an identity binding after resolving the selected identity ref. Revocation changes cross-plane authorization behavior.',
-  current_return: 'Identity revocation receipt',
+  summary: t('script.pages.gatewaypage.summary.df056b14ee'),
+  current_return: t('script.pages.gatewaypage.current_return.c9321abf5f'),
   validate: '/api/cross-plane/identity/resolve',
   plan: '/api/cross-plane/identity/resolve',
   dry_run: '/api/cross-plane/identity/resolve',
   live: true,
-  live_policy: 'requires selected identity binding id',
+  live_policy: t('script.pages.gatewaypage.live_policy.a0ecbacdb6'),
   receipt: true,
   audit_ref: true,
   changed_refs: true,
   approval_required: false,
-  kernel_boundary: 'Gateway cross-plane identity registry',
+  kernel_boundary: t('script.pages.gatewaypage.kernel_boundary.05108df5a6'),
   affected_refs: [identityId.value, identityRef.value].filter(Boolean),
 }));
 const grantRevokeContract = computed(() => ({
   id: 'gateway.cross-plane.grant.revoke',
   domain: 'gateway',
-  title: 'Revoke cross-plane grant',
+  title: t('script.pages.gatewaypage.title.2e8f565125'),
   endpoint: '/api/cross-plane/grants/:id',
   method: 'DELETE',
-  summary: 'Revoke an active grant and force later cross-plane actions back through policy and approval gates.',
-  current_return: 'Grant revocation receipt',
+  summary: t('script.pages.gatewaypage.summary.339201a1f8'),
+  current_return: t('script.pages.gatewaypage.current_return.0f7925b4c6'),
   validate: '/api/cross-plane/action/preflight',
   plan: '/api/cross-plane/action/preflight',
   dry_run: '/api/cross-plane/policy/simulate',
   live: true,
-  live_policy: 'requires selected grant id',
+  live_policy: t('script.pages.gatewaypage.live_policy.a855eba479'),
   receipt: true,
   audit_ref: true,
   changed_refs: true,
   approval_required: false,
-  kernel_boundary: 'Gateway cross-plane grant registry',
+  kernel_boundary: t('script.pages.gatewaypage.kernel_boundary.723b7125e8'),
   affected_refs: [grantId.value, capability.value].filter(Boolean),
 }));
 
@@ -440,7 +441,7 @@ async function executeConnectorServiceTool() {
     session_id: 'webui-gateway',
     tool_id: connectorServiceToolId.value,
     resource_id: resourceId,
-    title: 'WebUI Connector Resource',
+    title: t('script.pages.gatewaypage.title.d8117c19e6'),
     mode: executeMode.value,
     idempotency_key: idempotencyKey.value || undefined,
   });
@@ -555,145 +556,145 @@ onMounted(refresh);
   <section class="capability-page gateway-page">
     <header class="page-header">
       <div>
-        <h1>Gateway and Cross-plane</h1>
-        <p>连接器账号、服务能力、资源治理、MCP 状态和跨平面执行门禁集中管理。</p>
+        <h1>{{ t('page.gateway.page.text.3545d93ed9') }}</h1>
+        <p>{{ t('page.gateway.page.text.0c015c80ce') }}</p>
       </div>
       <button class="primary-action" type="button" :disabled="loading" @click="refresh">
         <RefreshCw :size="15" />
-        {{ loading ? 'Loading' : 'Refresh gateway' }}
+        {{ loading ? t('page.gateway.page.inline.eac49d64ff') : t('page.gateway.page.inline.e8f3da1a82') }}
       </button>
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
     <PrimaryContextBar :items="gatewayContext" />
-    <WorkflowStrip :steps="gatewayWorkflow" title="Gateway access flow" />
+    <WorkflowStrip :steps="gatewayWorkflow" :title="t('page.gateway.page.title.15380a6a3f')" />
 
     <section class="metric-row">
       <article class="metric-card">
-        <span>Accounts</span>
+        <span>{{ t('page.gateway.page.text.614b9c3c15') }}</span>
         <strong>{{ accounts.length }}</strong>
-        <small>{{ state.summary?.status || 'connector registry' }}</small>
+        <small>{{ state.summary?.status || t('page.gateway.page.inline.67a83904ea') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Capabilities</span>
+        <span>{{ t('page.gateway.page.text.93f1af14ce') }}</span>
         <strong>{{ capabilities.length }}</strong>
-        <small>{{ resources.length }} resources</small>
+        <small>{{ formatCount('resources', resources.length) }}</small>
       </article>
       <article class="metric-card" data-tone="success">
-        <span>Cross-plane</span>
+        <span>{{ t('page.gateway.page.text.e437a47858') }}</span>
         <strong>{{ executions.length }}</strong>
-        <small>executions recorded</small>
+        <small>{{ t('page.gateway.page.text.7fe818b5cc') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Surfaces</span>
+        <span>{{ t('page.gateway.page.text.d5cf00c093') }}</span>
         <strong>{{ surfaces.length }}</strong>
         <small>{{ surfaceHost.status || state.surfaceHealth?.status || 'host' }} / {{ surfaceHost.circuit_open_count || 0 }} circuit</small>
       </article>
       <article class="metric-card" data-tone="info">
-        <span>Identity/Grants</span>
+        <span>{{ t('page.gateway.page.text.9fcdea7846') }}</span>
         <strong>{{ identities.length }}/{{ grants.length }}</strong>
-        <small>control-plane bindings</small>
+        <small>{{ t('page.gateway.page.text.caec320908') }}</small>
       </article>
     </section>
 
     <section class="gateway-grid">
       <section class="management-panel gateway-panel wide" data-section="alignment">
         <header>
-          <h2>Gateway capability alignment</h2>
+          <h2>{{ t('page.gateway.page.text.3aaa20c63d') }}</h2>
           <StatusPill :status="gatewayAlignmentStatus" />
         </header>
-        <p>后端只负责 Gateway 边界能力，WebUI 做完整管理面，TUI 做终端控制面，CLI 保持最小启动和状态入口。</p>
+        <p>{{ t('page.gateway.page.text.5a99daa9a9') }}</p>
         <DataTable :rows="gatewayAlignmentRows" :columns="['lane', 'owner', 'backend', 'webui', 'tui', 'action']" @row-click="selectedDetail = $event" />
         <GatewayRemediationList :rows="gatewayRemediationRows" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="surfaces">
         <header>
-          <h2>Surface host</h2>
+          <h2>{{ t('page.gateway.page.text.f13f7c3a12') }}</h2>
           <StatusPill :status="state.surfaceHealth?.__offline ? 'offline' : (surfaceHost.status || state.surfaceHealth?.status || 'ready')" />
         </header>
-        <p>Gateway owns external ingress, static forwarding, callback routing, and result delivery across WebUI, TUI, and external message surfaces.</p>
+        <p>{{ t('page.gateway.page.text.7fa2efe0a9') }}</p>
         <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No surfaces" detail="SurfaceHost 未返回可用 surface，或 Gateway 尚未启动。" />
-        <RawPayload title="Surface host health" :data="state.surfaceHealth || {}" />
+        <EmptyState v-else :title="t('page.gateway.page.title.ae647d6b79')" :detail="t('page.gateway.page.detail.767891561a')" />
+        <RawPayload :title="t('page.gateway.page.title.ed73c8169c')" :data="state.surfaceHealth || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">
         <header>
-          <h2>Platforms and connectors</h2>
+          <h2>{{ t('page.gateway.page.text.df4bfe6273') }}</h2>
           <StatusPill :status="state.summary?.__offline ? 'offline' : 'ready'" />
         </header>
         <DataTable v-if="accountRows.length" :rows="accountRows" :columns="['provider', 'account', 'status', 'scopes']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No connector accounts" detail="配置平台账号后会在这里展示。" />
+        <EmptyState v-else :title="t('page.gateway.page.title.bed97233b0')" :detail="t('page.gateway.page.detail.51394d64f1')" />
         <DataTable v-if="channelRows.length" :rows="channelRows" :columns="['channel', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
-        <RawPayload title="Platforms" :data="state.platforms || {}" />
-        <RawPayload title="Channels" :data="state.channels || {}" />
+        <RawPayload :title="t('page.gateway.page.title.a0df395cfc')" :data="state.platforms || {}" />
+        <RawPayload :title="t('page.gateway.page.title.513df4116b')" :data="state.channels || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">
         <header>
-          <h2>Channel and connector diagnostics</h2>
+          <h2>{{ t('page.gateway.page.text.715580f4cf') }}</h2>
           <span>{{ platformName }}</span>
         </header>
         <div class="memory-form-row">
           <label class="field-line">
-            Platform
+            {{ t('template.pages.gatewaypage.123a7f2fcc') }}
             <input v-model="platformName" type="text" />
           </label>
           <label class="field-line">
-            WeChat bot type
+            {{ t('template.pages.gatewaypage.88fbc4477f') }}
             <input v-model="wechatBotType" type="text" />
           </label>
         </div>
         <label class="field-line">
-          WeChat QR code
+          {{ t('template.pages.gatewaypage.88c0393033') }}
           <input v-model="wechatQrCode" type="text" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="loadPlatform">Load platform</button>
-          <button class="ghost-action" type="button" @click="startWechatQr">Start QR</button>
-          <button class="ghost-action" type="button" :disabled="!wechatQrCode" @click="pollWechatQr">Poll QR</button>
+          <button class="ghost-action" type="button" @click="loadPlatform">{{ t('page.gateway.page.text.997144189c') }}</button>
+          <button class="ghost-action" type="button" @click="startWechatQr">{{ t('page.gateway.page.text.5b05d63e12') }}</button>
+          <button class="ghost-action" type="button" :disabled="!wechatQrCode" @click="pollWechatQr">{{ t('page.gateway.page.text.45ad9b8b7f') }}</button>
         </div>
         <DataTable v-if="connectorServiceRows.length" :rows="connectorServiceRows" :columns="['id', 'provider', 'family', 'mode']" @row-click="selectedDetail = $event" />
         <label class="field-line">
-          Connector service
+          {{ t('page.gateway.field.connectorService') }}
           <input v-model="connectorServiceId" type="text" />
         </label>
-        <button class="ghost-action" type="button" :disabled="!connectorServiceId" @click="loadConnectorServiceTools">Load service tools</button>
+        <button class="ghost-action" type="button" :disabled="!connectorServiceId" @click="loadConnectorServiceTools">{{ t('page.gateway.page.text.63dce7d3eb') }}</button>
         <DataTable v-if="connectorServiceToolRows.length" :rows="connectorServiceToolRows" :columns="['id', 'family', 'risk', 'mode']" @row-click="selectedDetail = $event" />
         <label class="field-line">
-          Service tool
+          {{ t('page.gateway.field.serviceTool') }}
           <input v-model="connectorServiceToolId" type="text" />
         </label>
-        <button class="ghost-action" type="button" :disabled="!connectorServiceId || !connectorServiceToolId" @click="executeConnectorServiceTool">Execute connector service tool</button>
-        <RequestReceipt :receipt="actionResult" title="Channel diagnostic receipt" />
-        <RawPayload title="Channel diagnostic detail" :data="{ platform: state.platformDetail, connectorServices: state.connectorServices, connectorServiceTools: state.connectorServiceTools }" />
+        <button class="ghost-action" type="button" :disabled="!connectorServiceId || !connectorServiceToolId" @click="executeConnectorServiceTool">{{ t('page.gateway.page.text.c0e6cf81d6') }}</button>
+        <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.83dadbfefc')" />
+        <RawPayload :title="t('page.gateway.page.title.f8bba99b1e')" :data="{ platform: state.platformDetail, connectorServices: state.connectorServices, connectorServiceTools: state.connectorServiceTools }" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="connectors">
         <header>
-          <h2>Connector capabilities</h2>
-          <span>{{ capabilityRows.length }} shown</span>
+          <h2>{{ t('page.gateway.page.text.b4e80b5466') }}</h2>
+          <span>{{ t('common.shownCount', { count: capabilityRows.length, unit: t('unit.capabilities') }) }}</span>
         </header>
         <DataTable v-if="capabilityRows.length" :rows="capabilityRows" :columns="['id', 'provider', 'risk', 'mode']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No connector capabilities" detail="连接器能力清单为空或后端离线。" />
+        <EmptyState v-else :title="t('page.gateway.page.title.e6acca3a2d')" :detail="t('page.gateway.page.detail.662c9ed56d')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="connectors">
         <header>
-          <h2>MCP servers</h2>
-          <span>{{ mcpServers.length }} servers</span>
+          <h2>{{ t('page.gateway.page.text.cd60e278cf') }}</h2>
+          <span>{{ formatCount('servers', mcpServers.length) }}</span>
         </header>
-        <RawPayload title="MCP server registry" :data="state.mcp || {}" />
+        <RawPayload :title="t('page.gateway.page.title.c593f2c735')" :data="state.mcp || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="resources">
         <header>
-          <h2>Resources and memory promotion</h2>
-          <span>{{ resources.length }} resources</span>
+          <h2>{{ t('page.gateway.page.text.d3bc27eaea') }}</h2>
+          <span>{{ formatCount('resources', resources.length) }}</span>
         </header>
         <label class="field-line">
-          Resource ref
+          {{ t('page.gateway.field.resourceRef') }}
           <input v-model="resourceRef" type="text" />
         </label>
         <GovernedActionPanel
@@ -704,26 +705,26 @@ onMounted(refresh);
           @dry-run="revalidateResource"
           @live="promoteResourceMemory"
         />
-        <RequestReceipt :receipt="actionResult" title="Resource receipt" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.1355cb4c75')" />
         <DataTable v-if="resourceRows.length" :rows="resourceRows" :columns="['reference', 'title', 'kind', 'status']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No connector resources" detail="资源桥接和记忆提升需要连接器返回资源。" />
+        <EmptyState v-else :title="t('page.gateway.page.title.e0f40327a7')" :detail="t('page.gateway.page.detail.fe442047a7')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="executions">
         <header>
-          <h2>Cross-plane governance</h2>
+          <h2>{{ t('page.gateway.page.text.edae12bca9') }}</h2>
           <span>{{ state.crossPlane?.status || 'preflight' }}</span>
         </header>
         <label class="field-line">
-          Actor
+          {{ t('page.tools.field.actor') }}
           <input v-model="actor" type="text" />
         </label>
         <label class="field-line">
-          Capability
+          {{ t('page.tools.field.capability') }}
           <input v-model="capability" type="text" />
         </label>
         <label class="field-line">
-          Identity ref
+          {{ t('page.gateway.field.identityRef') }}
           <input v-model="identityRef" type="text" />
         </label>
         <GovernedActionPanel
@@ -734,21 +735,21 @@ onMounted(refresh);
           @dry-run="simulatePolicy"
           @live="executeCrossPlaneAction"
         />
-        <RequestReceipt :receipt="actionResult" title="Cross-plane readiness receipt" />
-        <RawPayload title="Cross-plane summary" :data="state.crossPlane || {}" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.280dcfc888')" />
+        <RawPayload :title="t('page.gateway.page.title.023d50a0fe')" :data="state.crossPlane || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="identities">
         <header>
-          <h2>Identities and grants</h2>
-          <span>{{ identities.length }} identities</span>
+          <h2>{{ t('page.gateway.page.text.1a7b03d75e') }}</h2>
+          <span>{{ formatCount('identities', identities.length) }}</span>
         </header>
         <label class="field-line">
-          Identity binding id
+          {{ t('page.gateway.field.identityBindingId') }}
           <input v-model="identityId" type="text" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="resolveIdentity">Resolve identity</button>
+          <button class="ghost-action" type="button" @click="resolveIdentity">{{ t('page.gateway.page.text.3a3008153e') }}</button>
         </div>
         <GovernedActionPanel
           :contract="identityGovernanceContract"
@@ -766,11 +767,11 @@ onMounted(refresh);
           @dry-run="resolveIdentity"
           @live="revokeIdentity"
         />
-        <RequestReceipt :receipt="actionResult" title="Identity receipt" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.5951c14fea')" />
         <DataTable v-if="identityRows.length" :rows="identityRows" :columns="['id', 'principal', 'identity', 'trust']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No identities" detail="创建身份绑定后，跨平面动作会使用可信主体判定。" />
+        <EmptyState v-else :title="t('page.gateway.page.title.ade00e463b')" :detail="t('page.gateway.page.detail.deb867b228')" />
         <label class="field-line">
-          Grant id
+          {{ t('page.gateway.field.grantId') }}
           <input v-model="grantId" type="text" />
         </label>
         <GovernedActionPanel
@@ -789,42 +790,42 @@ onMounted(refresh);
           @dry-run="simulatePolicy"
           @live="revokeGrant"
         />
-        <RequestReceipt :receipt="actionResult" title="Grant receipt" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.008a7b6909')" />
         <DataTable v-if="grantRows.length" :rows="grantRows" :columns="['id', 'principal', 'capability', 'type']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No grants" detail="授权为空时，高风险动作会被策略门禁拦截或要求审批。" />
+        <EmptyState v-else :title="t('page.gateway.page.title.aca4aa4ff7')" :detail="t('page.gateway.page.detail.f58a29a773')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="executions">
         <header>
-          <h2>Action execution</h2>
+          <h2>{{ t('page.gateway.page.text.92c5112468') }}</h2>
           <span>{{ executeMode }}</span>
         </header>
         <label class="field-line">
-          Mode
+          {{ t('page.gateway.field.mode') }}
           <select v-model="executeMode">
-            <option value="dry_run">dry_run</option>
-            <option value="commit">commit</option>
+            <option value="dry_run">{{ t('executionMode.dryRun') }}</option>
+            <option value="commit">{{ t('executionMode.commit') }}</option>
           </select>
         </label>
         <label class="field-line">
-          Idempotency key
-          <input v-model="idempotencyKey" type="text" placeholder="optional" />
+          {{ t('page.gateway.field.idempotencyKey') }}
+          <input v-model="idempotencyKey" type="text" :placeholder="t('page.gateway.page.placeholder.7915771597')" />
         </label>
-        <RequestReceipt :receipt="actionResult" title="Execution receipt" />
-        <RawPayload title="Action readiness or receipt" :data="actionResult || {}" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.1a70dec206')" />
+        <RawPayload :title="t('page.gateway.page.title.178eed6c71')" :data="actionResult || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="executions">
         <header>
-          <h2>Audit and executions</h2>
-          <span>{{ executionRows.length }} executions</span>
+          <h2>{{ t('page.gateway.page.text.0cef581c98') }}</h2>
+          <span>{{ formatCount('executions', executionRows.length) }}</span>
         </header>
         <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'capability', 'provider']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else title="No executions" detail="跨平面动作执行后会在这里展示。" />
-        <EvidenceTrace :items="gatewayEvidence" title="Gateway evidence trace" />
-        <DetailDrawer title="Gateway selected detail" :row="selectedDetail" @close="selectedDetail = null" />
-        <RequestReceipt :receipt="actionResult" title="Gateway action receipt" />
-        <RawPayload title="Gateway action result" :data="actionResult || state.audit || {}" />
+        <EmptyState v-else :title="t('page.gateway.page.title.746b965ff4')" :detail="t('page.gateway.page.detail.10a566c783')" />
+        <EvidenceTrace :items="gatewayEvidence" :title="t('page.gateway.page.title.abd0756c8f')" />
+        <DetailDrawer :title="t('page.gateway.page.title.402c21482a')" :row="selectedDetail" @close="selectedDetail = null" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.21964d7bc6')" />
+        <RawPayload :title="t('page.gateway.page.title.18f4a5d2d9')" :data="actionResult || state.audit || {}" />
       </section>
     </section>
   </section>

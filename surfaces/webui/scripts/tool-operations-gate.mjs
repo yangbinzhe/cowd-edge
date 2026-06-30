@@ -25,6 +25,41 @@ function read(file) {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
 }
 
+function parseMessageCatalog(file) {
+  const text = read(file);
+  const messages = new Map();
+  const regex = /\s*"([^"]+)":\s*"((?:\\.|[^"])*)",?/g;
+  let match;
+  while ((match = regex.exec(text))) {
+    try {
+      messages.set(match[1], JSON.parse(`"${match[2]}"`));
+    } catch {
+      messages.set(match[1], match[2]);
+    }
+  }
+  return messages;
+}
+
+const messageCatalogs = [
+  parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/en-US.ts')),
+  parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/zh-CN.ts')),
+];
+
+function renderablePageEvidence(text) {
+  const keys = new Set();
+  const regex = /\bt[c]?\(\s*['"`]([^'"`]+)['"`]/g;
+  let match;
+  while ((match = regex.exec(text))) keys.add(match[1]);
+  const values = [];
+  for (const key of keys) {
+    for (const catalog of messageCatalogs) {
+      const value = catalog.get(key);
+      if (value) values.push(value);
+    }
+  }
+  return `${text}\n${values.join('\n')}`;
+}
+
 function hasAll(text, items) {
   return items.filter((item) => !text.includes(item));
 }
@@ -97,6 +132,7 @@ const requiredHeadings = [
 const backendText = `${read(files.backend)}\n${read(files.backendService)}`;
 const clientText = read(files.client);
 const pageText = read(files.page);
+const pageEvidenceText = renderablePageEvidence(pageText);
 const capabilitiesText = read(files.capabilities);
 const stylesText = read(files.styles);
 const tuiPanelText = read(files.tuiPanel);
@@ -115,7 +151,7 @@ for (const section of requiredSections) {
   if (!pageText.includes(`data-section="${section}"`)) failures.push(`ToolsPage missing data-section ${section}`);
   if (!stylesText.includes(`data-active-section="${section}"`)) failures.push(`section filter missing ${section}`);
 }
-for (const heading of hasAll(pageText, requiredHeadings)) failures.push(`ToolsPage missing heading ${heading}`);
+for (const heading of hasAll(pageEvidenceText, requiredHeadings)) failures.push(`ToolsPage missing heading ${heading}`);
 
 const pageMustUse = [
   'api.toolRegistry()',
@@ -129,7 +165,7 @@ const pageMustUse = [
   'Apply transaction',
   'Run readonly batch',
 ];
-for (const item of hasAll(pageText, pageMustUse)) failures.push(`ToolsPage missing implementation evidence ${item}`);
+for (const item of hasAll(pageEvidenceText, pageMustUse)) failures.push(`ToolsPage missing implementation evidence ${item}`);
 
 const rawOnlyPattern = /data-section="(?:operations|mutations|checkpoints|cache|ledger)"[\s\S]{0,1200}<RawPayload[\s\S]{0,300}<\/section>/g;
 const rawOnlyMatches = Array.from(pageText.matchAll(rawOnlyPattern)).filter((match) => !/DataTable|RequestReceipt|EmptyState/.test(match[0]));

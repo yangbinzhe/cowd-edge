@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { t } from '../i18n';
 import { computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { capabilitySpecs } from '../data/capabilities';
+import { buildCapabilitySpecs } from '../data/capabilities';
 import { useAppStore } from '../stores/app';
 import type { NavId } from '../types';
 import EndpointHealthList from './workbench/EndpointHealthList.vue';
@@ -11,7 +12,7 @@ const router = useRouter();
 const store = useAppStore();
 
 const pageId = computed(() => route.path.replace('/', '') as Exclude<NavId, 'chat' | 'settings'>);
-const spec = computed(() => capabilitySpecs[pageId.value]);
+const spec = computed(() => buildCapabilitySpecs()[pageId.value]);
 const snapshots = computed(() => store.capabilitySnapshots[pageId.value] || []);
 type CapabilitySection = NonNullable<(typeof spec.value)>['sections'][number];
 
@@ -59,12 +60,12 @@ onMounted(() => {
 <template>
   <aside class="capability-sidebar">
     <header class="sidebar-head capability-head">
-      <strong>{{ spec?.title || 'Control Center' }}</strong>
-      <span>{{ spec?.subtitle || 'System settings and policy.' }}</span>
+      <strong>{{ spec?.title || t('component.capability.sidebar.inline.9e94b86e99') }}</strong>
+      <span>{{ spec?.subtitle || t('component.capability.sidebar.inline.417a632c70') }}</span>
     </header>
 
-    <nav v-if="spec?.sections?.length" class="secondary-sections" :aria-label="`${spec.title} sections`">
-      <h2>Sections</h2>
+    <nav v-if="spec?.sections?.length" class="secondary-sections" :aria-label="t('component.capability.sidebar.aria.sections', { title: spec.title })">
+      <h2>{{ t('component.capability.sidebar.text.f576aad3f1') }}</h2>
       <button
         v-for="section in spec.sections"
         :key="section.id"
@@ -83,7 +84,7 @@ onMounted(() => {
     </section>
 
     <section v-if="spec" class="sidebar-inspector">
-      <h2>Contract</h2>
+      <h2>{{ t('component.capability.sidebar.text.10e5b6dbd3') }}</h2>
       <dl>
         <template v-for="item in spec.inspector" :key="item.label">
           <dt>{{ item.label }}</dt>
