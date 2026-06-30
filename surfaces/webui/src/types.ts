@@ -61,6 +61,31 @@ export interface SessionAttachment {
   size: number;
   sha256: string;
   added_at_ms: number;
+  resource_id?: string;
+  uri?: string;
+  detected_mime?: string;
+  status?: string;
+}
+
+export interface RuntimeResourceEnvelope {
+  id: string;
+  uri: string;
+  source: string;
+  source_message_id?: string;
+  session_id?: string;
+  original_name: string;
+  declared_mime?: string;
+  detected_mime?: string;
+  kind: string;
+  size_bytes: number;
+  sha256: string;
+  storage_path: string;
+  created_at: string;
+}
+
+export interface RuntimeResourceUpload {
+  resource: RuntimeResourceEnvelope;
+  hint?: Record<string, unknown>;
 }
 
 export interface Metric {

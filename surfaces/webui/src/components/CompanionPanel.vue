@@ -58,7 +58,7 @@ async function createFolder() {
 async function uploadFiles(files: FileList | null) {
   if (!files?.length) return;
   for (const file of Array.from(files)) {
-    await store.uploadWorkspaceFile(file);
+    await store.uploadResource(file);
   }
   if (fileInput.value) fileInput.value.value = '';
 }
@@ -150,7 +150,7 @@ async function commitRename() {
       <div class="workspace-root" :title="store.workspaceRoot">{{ store.workspaceRoot || 'gateway workspace' }}</div>
       <div class="upload-drop" @dragover.prevent @drop="dropUpload">
         <Upload :size="16" />
-        <span>{{ store.uploadBusy ? 'Uploading...' : 'Drop files here' }}</span>
+        <span>{{ store.uploadBusy ? 'Attaching...' : 'Drop chat resources here' }}</span>
         <button type="button" @click="fileInput?.click()">Choose files</button>
         <input ref="fileInput" type="file" multiple @change="uploadFiles(($event.target as HTMLInputElement).files)" />
       </div>
@@ -169,6 +169,7 @@ async function commitRename() {
         <article v-for="attachment in store.attachments" :key="attachment.ref_id" class="attachment-row">
           <Link2 :size="14" />
           <span>{{ attachment.label || attachment.path }}</span>
+          <small>{{ attachment.kind }} · {{ attachment.detected_mime || attachment.status || 'ready' }}</small>
           <button class="icon-action" type="button" @click="store.removeAttachment(attachment.ref_id)"><X :size="13" /></button>
         </article>
       </div>

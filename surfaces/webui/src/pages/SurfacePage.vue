@@ -34,6 +34,14 @@ function valueCount(value: any) {
   return Array.isArray(value) ? value.length : Number(value || 0);
 }
 
+function isActiveInboxStatus(status: unknown) {
+  return ['received', 'processing', 'replying', 'reply_retry_scheduled'].includes(String(status || '').toLowerCase());
+}
+
+function isActiveOutboxStatus(status: unknown) {
+  return ['queued', 'sending', 'retry_scheduled'].includes(String(status || '').toLowerCase());
+}
+
 const surfaces = computed(() => registrySurfaces(state.value.registry));
 const host = computed(() => state.value.health?.host || state.value.health || {});
 const runtimeSnapshots = computed(() => {
@@ -58,9 +66,19 @@ const inboxItems = computed(() => {
   const inbox = state.value.inbox?.inbox || state.value.inbox?.snapshot?.inbox || [];
   return Array.isArray(inbox) ? inbox : [];
 });
+const activeInboxItems = computed(() => {
+  const active = state.value.inbox?.snapshot?.active_inbox;
+  if (Array.isArray(active)) return active;
+  return inboxItems.value.filter((item: any) => isActiveInboxStatus(item.status));
+});
 const outboxItems = computed(() => {
   const outbox = state.value.outbox?.outbox || state.value.inbox?.snapshot?.outbox || [];
   return Array.isArray(outbox) ? outbox : [];
+});
+const activeOutboxItems = computed(() => {
+  const active = state.value.inbox?.snapshot?.active_outbox;
+  if (Array.isArray(active)) return active;
+  return outboxItems.value.filter((item: any) => isActiveOutboxStatus(item.status));
 });
 const deliveryItems = computed(() => {
   const deliveries = state.value.deliveries?.deliveries || state.value.inbox?.snapshot?.deliveries || [];
@@ -169,7 +187,7 @@ const surfaceWorkflow = computed(() => [
   { id: 'routes', label: 'Routes', status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
   { id: 'routes', label: 'Resources', status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
   { id: 'dispatch', label: 'Dispatch', status: actionResult.value ? 'active' : 'idle' },
-  { id: 'delivery', label: 'Reliable delivery', status: deadLetterItems.value.length ? 'blocked' : outboxRows.value.length ? 'ready' : 'idle', count: outboxRows.value.length },
+  { id: 'delivery', label: 'Reliable delivery', status: deadLetterItems.value.length ? 'blocked' : (activeInboxItems.value.length || activeOutboxItems.value.length) ? 'active' : outboxRows.value.length ? 'ready' : 'idle', count: activeInboxItems.value.length + activeOutboxItems.value.length },
   { id: 'events', label: 'Events', status: eventRows.value.length ? 'ready' : 'idle', count: eventRows.value.length },
 ]);
 const surfaceEvidence = computed(() => [
@@ -409,8 +427,8 @@ onMounted(refresh);
       </article>
       <article class="metric-card" :data-tone="deadLetterItems.length ? 'warn' : 'success'">
         <span>Reliable delivery</span>
-        <strong>{{ outboxRows.length }}</strong>
-        <small>{{ deadLetterItems.length }} dead letters</small>
+        <strong>{{ activeInboxItems.length + activeOutboxItems.length }}</strong>
+        <small>{{ outboxRows.length }} total · {{ deadLetterItems.length }} DLQ</small>
       </article>
     </section>
 
@@ -520,7 +538,7 @@ onMounted(refresh);
       <section class="management-panel gateway-panel wide" data-section="delivery">
         <header>
           <h2>Reliable delivery</h2>
-          <span>{{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ</span>
+          <span>{{ activeInboxItems.length + activeOutboxItems.length }} active · {{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ</span>
         </header>
         <div class="button-row">
           <button class="ghost-action" type="button" :disabled="!retryCandidate" @click="retryDelivery">

@@ -312,9 +312,9 @@ export const api = {
     body: JSON.stringify(patch),
   }),
   messages: (sessionId: string) => read<{ messages: any[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=50`, { messages: [] }),
-  sendMessage: (sessionId: string, content: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
+  sendMessage: (sessionId: string, content: string, resourceIds: string[] = []) => write(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, resource_ids: resourceIds }),
   }),
   workspace: () => read('/api/workspace', {
     workspace_root: '',
@@ -340,6 +340,14 @@ export const api = {
     body.set('dir', dir);
     body.set('overwrite', overwrite ? 'true' : 'false');
     return write('/api/upload', { method: 'POST', body });
+  },
+  uploadResource: (file: File, sessionId = '') => {
+    const body = new FormData();
+    body.set('file', file);
+    body.set('source', 'webui');
+    if (sessionId) body.set('session_id', sessionId);
+    if (file.type) body.set('declared_mime', file.type);
+    return write('/api/resources', { method: 'POST', body });
   },
   createDir: (path: string) => write('/api/workspace/dirs', {
     method: 'POST',

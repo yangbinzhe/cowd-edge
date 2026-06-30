@@ -15,6 +15,7 @@ use crate::platform::feishu::types::{
 };
 use crate::platform::types::{MessageType, Platform, SessionKey};
 use chrono::Utc;
+use serde::Deserialize;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -121,6 +122,9 @@ impl ProcessingReactions {
         // Best-effort delete — don't fail if not found
         if let Some(id) = reaction_id {
             self.delete_reaction(token, message_id, &id).await?;
+        } else {
+            self.delete_reactions_by_type(token, message_id, REACTION_TYPING)
+                .await?;
         }
 
         Ok(())
@@ -146,6 +150,10 @@ impl ProcessingReactions {
         // Delete the Typing reaction (best-effort, don't fail on missing)
         if let Some(id) = &reaction_id {
             let _ = self.delete_reaction(token, message_id, id).await;
+        } else {
+            let _ = self
+                .delete_reactions_by_type(token, message_id, REACTION_TYPING)
+                .await;
         }
 
         // Set the CrossMark reaction
@@ -336,6 +344,93 @@ impl ProcessingReactions {
         Ok(())
     }
 
+    /// Delete all matching reactions when the in-memory reaction id was lost
+    /// after a sidecar restart. Feishu stores the reaction on the message, so
+    /// listing by type is the only robust cleanup path for old Typing markers.
+    async fn delete_reactions_by_type(
+        &self,
+        token: &str,
+        message_id: &str,
+        emoji_type: &str,
+    ) -> PlatformResult<usize> {
+        let mut deleted = 0usize;
+        let mut page_token: Option<String> = None;
+        loop {
+            let page = self
+                .list_reactions_by_type(token, message_id, emoji_type, page_token.as_deref())
+                .await?;
+            for item in page.items {
+                let Some(reaction_id) = item.reaction_id else {
+                    continue;
+                };
+                self.delete_reaction(token, message_id, &reaction_id)
+                    .await?;
+                deleted += 1;
+            }
+            if !page.has_more {
+                return Ok(deleted);
+            }
+            page_token = page.page_token;
+            if page_token.as_deref().unwrap_or_default().is_empty() {
+                return Ok(deleted);
+            }
+        }
+    }
+
+    async fn list_reactions_by_type(
+        &self,
+        token: &str,
+        message_id: &str,
+        emoji_type: &str,
+        page_token: Option<&str>,
+    ) -> PlatformResult<ListReactionPage> {
+        let client = reqwest::Client::new();
+        let url = format!(
+            "{}/im/v1/messages/{}/reactions",
+            super::api_base_url(),
+            message_id
+        );
+        let mut request = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", token))
+            .query(&[("reaction_type", emoji_type)]);
+        if let Some(page_token) = page_token.filter(|value| !value.trim().is_empty()) {
+            request = request.query(&[("page_token", page_token)]);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| PlatformError::SendFailed(format!("list reactions: {}", e)))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(PlatformError::SendFailed(format!(
+                "list reactions returned HTTP {status}"
+            )));
+        }
+        let result: ListReactionResponse =
+            decode_feishu_response(response, "list reactions").await?;
+        if result.code != 0 {
+            return Err(PlatformError::SendFailed(format!(
+                "list reactions API error (code {}): {}",
+                result.code, result.msg
+            )));
+        }
+        let Some(data) = result.data else {
+            return Ok(ListReactionPage::default());
+        };
+        let mut items = data.items;
+        items.extend(data.reactions);
+        let items = items
+            .into_iter()
+            .filter(|item| item.matches_emoji(emoji_type))
+            .collect();
+        Ok(ListReactionPage {
+            items,
+            has_more: data.has_more.unwrap_or(false),
+            page_token: data.page_token.or(data.next_page_token),
+        })
+    }
+
     /// Evict oldest entries when the pending map exceeds max_cache.
     async fn evict_excess(&self) {
         loop {
@@ -362,6 +457,49 @@ impl ProcessingReactions {
     }
 }
 
+#[derive(Debug, Default)]
+struct ListReactionPage {
+    items: Vec<ListReactionItem>,
+    has_more: bool,
+    page_token: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case", default)]
+struct ListReactionResponse {
+    code: i32,
+    msg: String,
+    data: Option<ListReactionData>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case", default)]
+struct ListReactionData {
+    items: Vec<ListReactionItem>,
+    reactions: Vec<ListReactionItem>,
+    has_more: Option<bool>,
+    page_token: Option<String>,
+    next_page_token: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case", default)]
+struct ListReactionItem {
+    reaction_id: Option<String>,
+    reaction_type: Option<ReactionType>,
+    emoji_type: Option<String>,
+}
+
+impl ListReactionItem {
+    fn matches_emoji(&self, emoji_type: &str) -> bool {
+        self.reaction_type
+            .as_ref()
+            .map(|reaction| reaction.emoji_type.as_str())
+            .or(self.emoji_type.as_deref())
+            .is_some_and(|value| value == emoji_type)
+    }
+}
+
 impl Default for ProcessingReactions {
     fn default() -> Self {
         Self::new()
@@ -384,6 +522,36 @@ mod tests {
     fn test_reaction_constants() {
         assert_eq!(REACTION_TYPING, "Typing");
         assert_eq!(REACTION_CROSS_MARK, "CrossMark");
+    }
+
+    #[test]
+    fn test_list_reaction_response_accepts_feishu_items_shape() {
+        let raw = serde_json::json!({
+            "code": 0,
+            "msg": "success",
+            "data": {
+                "items": [
+                    {
+                        "reaction_id": "reaction_typing",
+                        "reaction_type": { "emoji_type": "Typing" }
+                    },
+                    {
+                        "reaction_id": "reaction_other",
+                        "reaction_type": { "emoji_type": "OK" }
+                    }
+                ],
+                "has_more": false
+            }
+        });
+        let response: ListReactionResponse = serde_json::from_value(raw).unwrap();
+        let data = response.data.unwrap();
+        let typing = data
+            .items
+            .into_iter()
+            .filter(|item| item.matches_emoji(REACTION_TYPING))
+            .collect::<Vec<_>>();
+        assert_eq!(typing.len(), 1);
+        assert_eq!(typing[0].reaction_id.as_deref(), Some("reaction_typing"));
     }
 
     // -----------------------------------------------------------------------

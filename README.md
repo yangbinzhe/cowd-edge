@@ -1,6 +1,6 @@
 # Cowd Surface
 
-`cowd-surface` 是 Cowd 的独立 surface 仓库。当前版本：`0.9.414`。
+`cowd-surface` 是 Cowd 的独立 surface 仓库。当前版本：`0.9.415`。
 
 本仓库承载除 TUI 之外的所有 UI surface 和外部渠道 sidecar。core 仓库只保留 `surface` 协议、Gateway 装载/调度能力和可选 TUI；WebUI、飞书、邮件、企微、微信 iLink 以及后续更多 surface 都在本仓库按需独立构建、独立演进。
 
@@ -25,6 +25,7 @@
 - WebUI 也是 surface，和外部渠道一样通过 manifest 被 Gateway 识别。
 - 渠道文档操作、平台高级操作不内置到 surface，后续通过 skill/tool 安装。
 - sidecar 可以用 Rust 实现，也可以由其他语言按同一 JSONL 协议实现。
+- 外部渠道只负责连接、接收、发送、callback、health 和本平台消息状态清理，不持有 Cowd Runtime、Memory、Matrix 或 provider。
 
 ## 2. 目录结构
 
@@ -78,6 +79,8 @@ gateway:
   webui_dir: "/path/to/cowd-surface/surfaces/webui/dist"
 ```
 
+构建结果必须包含 `dist/index.html`。Gateway 根路由和 `/s/webui/*` 的 SPA fallback 都依赖这个入口；`index.dev.html` 是开发入口，不作为唯一发布入口。
+
 ### 3.2 外部渠道 sidecar
 
 外部渠道 surface 是独立进程，通过 stdio JSONL 与 Gateway 通信。
@@ -107,7 +110,7 @@ target/release/cowd-surface-wechat-ilink
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Surface",
-  "version": "0.9.414",
+  "version": "0.9.415",
   "kind": "external-integration",
   "entry": "./cowd-surface-feishu",
   "transport": "stdio-jsonl",
@@ -173,6 +176,15 @@ Gateway 与 sidecar 每行传输一个 JSON frame。
 
 Gateway 对 managed sidecar 复用进程，并按 request id 匹配响应；event frame 会进入 surface event buffer。
 
+处理状态清理 action：
+
+```json
+{"type":"action","id":"req-3","surface":"feishu","action":"message.processing_complete","payload":{"message_id":"om_xxx"}}
+{"type":"action","id":"req-4","surface":"feishu","action":"message.processing_failed","payload":{"message_id":"om_xxx","error":"runtime failed"}}
+```
+
+Feishu sidecar 收到用户消息后会在原消息上设置 `Typing` reaction。Gateway 完成 runtime turn、回复成功、空回复或失败时会发送上述 action；Feishu reply 发送路径也会用 `reply_to` 做兜底清理，保证已经回复的消息不再残留“处理中”标记。
+
 ## 6. Gateway 对接
 
 Gateway 根据 manifest 提供统一入口：
@@ -184,6 +196,12 @@ Gateway 根据 manifest 提供统一入口：
 | `GET /api/surfaces/:id/events` | sidecar event buffer |
 | `GET /api/surfaces/:id/routes` | route 摘要 |
 | `GET /api/surfaces/:id/resources` | resource 摘要 |
+| `GET /api/surfaces/:id/inbox` | 持久 inbound 消息账本，含 active/terminal snapshot |
+| `GET /api/surfaces/:id/outbox` | 持久 outbound 投递账本 |
+| `GET /api/surfaces/:id/deliveries` | delivery event 账本 |
+| `POST /api/surfaces/:id/inbox/:message_id/replay` | 重放 inbound 消息 |
+| `POST /api/surfaces/:id/outbox/:delivery_id/retry` | 重试 outbound delivery |
+| `POST /api/surfaces/:id/outbox/:delivery_id/dead-letter` | 移入 DLQ |
 | `GET /s/:surface/*path` | 静态资源转发 |
 | `GET|POST /surface-callback/:surface/*path` | callback/webhook 转发 |
 
@@ -193,13 +211,13 @@ Gateway 保持后端服务职责：发现、转发、调度、观测。具体 UI
 
 | surface | 类型 | 状态 | 说明 |
 |---|---|---|---|
-| `webui` | static web surface | active | Vue/Vite 浏览器管理面。 |
-| `feishu` | managed sidecar | scaffolded | 飞书消息、callback、health。 |
+| `webui` | static web surface | active | Vue/Vite 浏览器管理面，构建产物由 Gateway 托管。 |
+| `feishu` | managed sidecar | active | 飞书 WebSocket 收消息、文本回复、callback、health、Typing reaction 生命周期清理。 |
 | `email` | managed sidecar | scaffolded | SMTP/IMAP、health。 |
 | `wecom` | managed sidecar | scaffolded | 企微消息、callback crypto、health。 |
 | `wechat-ilink` | managed sidecar | scaffolded | QR login、long-poll、message egress。 |
 
-`scaffolded` 表示 surface 包、manifest 和 sidecar 入口已经存在；真实平台凭据、长期运行策略和深度场景验证需要按具体渠道继续推进。
+`active` 表示该 surface 已接入当前 Gateway surface 协议并具备真实可用路径；`scaffolded` 表示 surface 包、manifest 和 sidecar 入口已经存在，但真实平台凭据、长期运行策略和深度场景验证仍需按具体渠道继续推进。
 
 ## 8. 验证
 

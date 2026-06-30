@@ -30,8 +30,8 @@ use super::types::{
     SendMessageResponse, UpdateMessageRequest, UpdateMessageResponse,
 };
 use crate::platform::adapter::{
-    ChatInfo, InboundMessage, MessageType, OutboundMessage, Platform, PlatformAdapter,
-    PlatformError, PlatformEvent, PlatformResult,
+    ChatInfo, InboundMessage, OutboundMessage, Platform, PlatformAdapter, PlatformError,
+    PlatformEvent, PlatformResult,
 };
 use crate::platform::types::{SendResult, SessionKey};
 use async_trait::async_trait;
@@ -113,6 +113,13 @@ impl FeishuConfig {
 struct FeishuReceiveTarget {
     receive_id: String,
     receive_id_type: &'static str,
+}
+
+#[derive(Debug, Clone)]
+struct ParsedFeishuInbound {
+    message: InboundMessage,
+    image_keys: Vec<String>,
+    media_refs: Vec<super::markdown::MediaRef>,
 }
 
 fn resolve_receive_target(value: &str) -> FeishuReceiveTarget {
@@ -343,6 +350,23 @@ impl FeishuAdapter {
 
     /// Process a webhook event payload.
     pub fn process_webhook_event(&self, payload: &[u8]) -> PlatformResult<Option<InboundMessage>> {
+        Ok(self
+            .parse_webhook_event(payload)?
+            .map(|parsed| parsed.message))
+    }
+
+    /// Process a webhook event payload and hydrate platform media to local files.
+    pub async fn process_webhook_event_with_media(
+        &self,
+        payload: &[u8],
+    ) -> PlatformResult<Option<InboundMessage>> {
+        let Some(parsed) = self.parse_webhook_event(payload)? else {
+            return Ok(None);
+        };
+        self.hydrate_inbound_media(parsed).await.map(Some)
+    }
+
+    fn parse_webhook_event(&self, payload: &[u8]) -> PlatformResult<Option<ParsedFeishuInbound>> {
         #[derive(Deserialize)]
         #[allow(dead_code)]
         struct WebhookEvent {
@@ -378,9 +402,12 @@ impl FeishuAdapter {
             create_time: Option<String>,
             chat_id: String,
             chat_type: Option<String>,
+            #[serde(alias = "message_type")]
+            msg_type: Option<String>,
             sender: Option<SenderInfo>,
             body: Option<MessageBody>,
             content: Option<String>,
+            mentions: Option<Vec<serde_json::Value>>,
         }
 
         #[derive(Deserialize, Default)]
@@ -452,20 +479,12 @@ impl FeishuAdapter {
                         PlatformError::Unknown(format!("failed to parse message: {}", e))
                     })?;
 
-                // Parse the message body (it's a JSON string)
                 let raw_content = msg_content
                     .body
                     .as_ref()
                     .map(|body| body.content.as_str())
                     .or(msg_content.content.as_deref())
                     .unwrap_or("");
-                let text = serde_json::from_str::<serde_json::Value>(raw_content)
-                    .ok()
-                    .and_then(|v| {
-                        v.get("text")
-                            .and_then(|t| t.as_str().map(|s| s.to_string()))
-                    })
-                    .unwrap_or_else(|| raw_content.to_string());
 
                 let event_sender = event
                     .event_data
@@ -511,25 +530,76 @@ impl FeishuAdapter {
                             .and_then(|value| value.as_str())
                     });
 
+                let msg_type = msg_content
+                    .msg_type
+                    .as_deref()
+                    .or_else(|| content.get("message_type").and_then(|value| value.as_str()))
+                    .or_else(|| content.get("msg_type").and_then(|value| value.as_str()))
+                    .unwrap_or("text");
+                let mentions = msg_content
+                    .mentions
+                    .clone()
+                    .or_else(|| {
+                        content
+                            .get("mentions")
+                            .and_then(|value| value.as_array())
+                            .cloned()
+                    })
+                    .unwrap_or_default();
+                let normalize_input = serde_json::json!({
+                    "msg_type": msg_type,
+                    "content": raw_content,
+                    "mentions": mentions,
+                    "message_id": msg_content.message_id,
+                    "chat_id": msg_content.chat_id,
+                    "chat_type": msg_content.chat_type,
+                    "sender": content.get("sender").cloned(),
+                    "raw": content,
+                });
+                let normalized = super::normalize::normalize_feishu_message(
+                    &normalize_input,
+                    &self.config.bot_open_id,
+                );
                 let session_key = SessionKey::with_thread("feishu", open_id, &msg_content.chat_id);
+                let message_id = msg_content.message_id.clone();
+                let chat_id = msg_content.chat_id.clone();
+                let chat_type = msg_content.chat_type.clone();
+                let reply_to_message_id = msg_content
+                    .parent_id
+                    .clone()
+                    .or_else(|| msg_content.root_id.clone());
+                let image_keys = normalized.image_keys.clone();
+                let media_refs = normalized.media_refs.clone();
 
-                return Ok(Some(InboundMessage {
-                    platform: Platform::Feishu,
-                    session_key,
-                    text,
-                    sender_name: None,
-                    timestamp: Utc::now(),
-                    metadata: serde_json::json!({
-                        "message_id": msg_content.message_id,
-                        "chat_id": msg_content.chat_id,
-                        "chat_type": msg_content.chat_type,
-                        "sender_type": sender_type,
-                    }),
-                    message_type: MessageType::Text,
-                    message_id: Some(msg_content.message_id),
-                    reply_to_message_id: None,
-                    media_urls: vec![],
-                    media_types: vec![],
+                return Ok(Some(ParsedFeishuInbound {
+                    image_keys,
+                    media_refs,
+                    message: InboundMessage {
+                        platform: Platform::Feishu,
+                        session_key,
+                        text: normalized.text,
+                        sender_name: None,
+                        timestamp: Utc::now(),
+                        metadata: serde_json::json!({
+                            "message_id": message_id,
+                            "chat_id": chat_id,
+                            "chat_type": chat_type,
+                            "sender_type": sender_type,
+                            "feishu_message_type": msg_type,
+                            "image_keys": normalized.image_keys,
+                            "media_refs": normalized.media_refs.iter().map(|item| serde_json::json!({
+                                "file_key": item.file_key,
+                                "file_name": item.file_name,
+                                "resource_type": item.resource_type,
+                            })).collect::<Vec<_>>(),
+                            "raw_content": raw_content,
+                        }),
+                        message_type: normalized.message_type,
+                        message_id: Some(message_id),
+                        reply_to_message_id,
+                        media_urls: vec![],
+                        media_types: vec![],
+                    },
                 }));
             }
             "card.action.trigger" => {
@@ -556,7 +626,12 @@ impl FeishuAdapter {
                     message_id,
                     chat_id,
                     operator_open_id,
-                ));
+                )
+                .map(|message| ParsedFeishuInbound {
+                    message,
+                    image_keys: vec![],
+                    media_refs: vec![],
+                }));
             }
             _ => {
                 tracing::debug!(event_type = %event_type, "unhandled feishu event type");
@@ -564,6 +639,99 @@ impl FeishuAdapter {
         }
 
         Ok(None)
+    }
+
+    async fn hydrate_inbound_media(
+        &self,
+        parsed: ParsedFeishuInbound,
+    ) -> PlatformResult<InboundMessage> {
+        if parsed.image_keys.is_empty() && parsed.media_refs.is_empty() {
+            return Ok(parsed.message);
+        }
+
+        let token = self.ensure_token().await?;
+        let message_id = parsed.message.message_id.clone().ok_or_else(|| {
+            PlatformError::Unknown("missing message id for media download".into())
+        })?;
+        let mut message = parsed.message;
+        let mut download_errors = Vec::new();
+
+        for image_key in parsed.image_keys {
+            match super::media::download_message_resource_with_base(
+                self.api_base_url(),
+                &token,
+                &message_id,
+                &image_key,
+                "image",
+            )
+            .await
+            {
+                Ok(bytes) => match cache_inbound_image(&bytes) {
+                    Ok((path, mime)) => {
+                        message.media_urls.push(path);
+                        message.media_types.push(mime.to_string());
+                    }
+                    Err(error) => download_errors.push(serde_json::json!({
+                        "kind": "image",
+                        "key": image_key,
+                        "error": error.to_string(),
+                    })),
+                },
+                Err(error) => download_errors.push(serde_json::json!({
+                    "kind": "image",
+                    "key": image_key,
+                    "error": error.to_string(),
+                })),
+            }
+        }
+
+        for media_ref in parsed.media_refs {
+            match super::media::download_message_resource_with_base(
+                self.api_base_url(),
+                &token,
+                &message_id,
+                &media_ref.file_key,
+                "file",
+            )
+            .await
+            {
+                Ok(bytes) => match cache_inbound_file(&bytes, &media_ref) {
+                    Ok((path, mime)) => {
+                        message.media_urls.push(path);
+                        message.media_types.push(mime.to_string());
+                    }
+                    Err(error) => download_errors.push(serde_json::json!({
+                        "kind": media_ref.resource_type,
+                        "key": media_ref.file_key,
+                        "file_name": media_ref.file_name,
+                        "error": error.to_string(),
+                    })),
+                },
+                Err(error) => download_errors.push(serde_json::json!({
+                    "kind": media_ref.resource_type,
+                    "key": media_ref.file_key,
+                    "file_name": media_ref.file_name,
+                    "error": error.to_string(),
+                })),
+            }
+        }
+
+        if !download_errors.is_empty() {
+            merge_metadata_field(
+                &mut message.metadata,
+                "media_download_errors",
+                serde_json::Value::Array(download_errors),
+            );
+        }
+        if !message.media_urls.is_empty() {
+            merge_metadata_field(
+                &mut message.metadata,
+                "local_media_urls",
+                serde_json::json!(message.media_urls),
+            );
+        }
+
+        Ok(message)
     }
 
     /// Send a card (interactive) message via Feishu API.
@@ -1066,7 +1234,7 @@ impl PlatformAdapter for FeishuAdapter {
                     .map_err(|e| PlatformError::Unknown(format!("serialize event: {e}")))?;
 
                 // 1. Parse event
-                let msg = match self.process_webhook_event(&payload)? {
+                let msg = match self.process_webhook_event_with_media(&payload).await? {
                     Some(m) => m,
                     None => return Ok(None),
                 };
@@ -1156,14 +1324,28 @@ impl PlatformAdapter for FeishuAdapter {
             .unwrap_or(&msg.session_key.user_id);
         let target = resolve_receive_target(receive_id);
 
-        self.feishu_send_with_retry(|| {
-            let target = target.clone();
-            async move {
-                self.send_internal(&target, &msg.text, msg.reply_to.as_deref())
-                    .await
+        let result = self
+            .feishu_send_with_retry(|| {
+                let target = target.clone();
+                async move {
+                    self.send_internal(&target, &msg.text, msg.reply_to.as_deref())
+                        .await
+                }
+            })
+            .await;
+        if let Some(reply_to) = msg.reply_to.as_deref() {
+            if let Ok(token) = self.ensure_token().await {
+                match &result {
+                    Ok(send_result) if send_result.success => {
+                        let _ = self.reactions.mark_success(&token, reply_to).await;
+                    }
+                    _ => {
+                        let _ = self.reactions.mark_failure(&token, reply_to).await;
+                    }
+                }
             }
-        })
-        .await
+        }
+        result
     }
 
     async fn send_typing(&self, _chat_id: &str) -> Result<(), PlatformError> {
@@ -1484,12 +1666,81 @@ impl PlatformAdapter for FeishuAdapter {
     }
 }
 
+fn cache_inbound_image(data: &[u8]) -> PlatformResult<(String, &'static str)> {
+    let (ext, mime) = image_extension_and_mime(data).ok_or_else(|| {
+        PlatformError::Unknown("inbound image has unsupported or invalid magic bytes".into())
+    })?;
+    let path = super::media::cache_image(data, ext)?;
+    Ok((path, mime))
+}
+
+fn cache_inbound_file(
+    data: &[u8],
+    media_ref: &super::markdown::MediaRef,
+) -> PlatformResult<(String, &'static str)> {
+    match media_ref.resource_type.as_str() {
+        "image" => cache_inbound_image(data),
+        "audio" => {
+            let ext = file_extension_or(&media_ref.file_name, "opus");
+            let path = super::media::cache_audio(data, ext)?;
+            Ok((path, "audio/ogg"))
+        }
+        "video" => {
+            let ext = file_extension_or(&media_ref.file_name, "mp4");
+            let path = super::media::cache_video(data, ext)?;
+            Ok((path, "video/mp4"))
+        }
+        _ => {
+            let path = super::media::cache_document(data, &media_ref.file_name)?;
+            Ok((path, "application/octet-stream"))
+        }
+    }
+}
+
+fn image_extension_and_mime(data: &[u8]) -> Option<(&'static str, &'static str)> {
+    const PNG_SIG: &[u8] = b"\x89PNG\r\n\x1a\n";
+    if data.len() >= 8 && &data[..8] == PNG_SIG {
+        return Some(("png", "image/png"));
+    }
+    if data.len() >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+        return Some(("jpg", "image/jpeg"));
+    }
+    if data.len() >= 6 && (&data[..6] == b"GIF87a" || &data[..6] == b"GIF89a") {
+        return Some(("gif", "image/gif"));
+    }
+    if data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        return Some(("webp", "image/webp"));
+    }
+    if data.len() >= 2 && &data[..2] == b"BM" {
+        return Some(("bmp", "image/bmp"));
+    }
+    None
+}
+
+fn file_extension_or<'a>(file_name: &'a str, fallback: &'a str) -> &'a str {
+    std::path::Path::new(file_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(fallback)
+}
+
+fn merge_metadata_field(metadata: &mut serde_json::Value, key: &str, value: serde_json::Value) {
+    if !metadata.is_object() {
+        *metadata = serde_json::json!({});
+    }
+    if let Some(map) = metadata.as_object_mut() {
+        map.insert(key.to_string(), value);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform::adapter::MessageType;
     use crate::platform::feishu::card_handler::CardActionHandler;
     use crate::platform::feishu::processing::ProcessingDecision;
-    use httpmock::prelude::{MockServer, POST};
+    use httpmock::prelude::{MockServer, GET, POST};
 
     #[test]
     fn test_feishu_config() {
@@ -1966,6 +2217,105 @@ mod tests {
         assert_eq!(msg.text, "hello data");
         assert_eq!(msg.session_key.user_id, "ou_data_sender");
         assert_eq!(msg.session_key.thread_id.as_deref(), Some("oc_data_chat"));
+    }
+
+    #[test]
+    fn test_process_webhook_event_normalizes_image_message() {
+        let config = FeishuConfig::new("app_id", "app_secret");
+        let adapter = FeishuAdapter::new(config);
+        let payload = serde_json::json!({
+            "schema": "2.0",
+            "header": {
+                "event_id": "evt_image",
+                "event_type": "im.message.receive_v1"
+            },
+            "event": {
+                "sender": {
+                    "sender_id": {"open_id": "ou_sender"},
+                    "sender_type": "user"
+                },
+                "message": {
+                    "message_id": "om_img",
+                    "chat_id": "oc_chat",
+                    "chat_type": "p2p",
+                    "message_type": "image",
+                    "body": {"content": "{\"image_key\":\"img_abc123\"}"}
+                }
+            }
+        });
+
+        let msg = adapter
+            .process_webhook_event(payload.to_string().as_bytes())
+            .expect("event parses")
+            .expect("message produced");
+
+        assert_eq!(msg.message_type, MessageType::Photo);
+        assert_eq!(msg.text, "[Image]");
+        assert!(msg.media_urls.is_empty());
+        assert_eq!(msg.metadata["image_keys"][0], "img_abc123");
+    }
+
+    #[tokio::test]
+    async fn test_process_webhook_event_with_media_downloads_image() {
+        let server = MockServer::start();
+        let token_mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/open-apis/auth/v3/tenant_access_token/internal");
+            then.status(200)
+                .header("content-type", "application/json")
+                .json_body(serde_json::json!({
+                    "code": 0,
+                    "msg": "ok",
+                    "tenant_access_token": "tenant-token",
+                    "expire": 3600
+                }));
+        });
+        let png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR".to_vec();
+        let image_mock = server.mock(|when, then| {
+            when.method(GET)
+                .path("/open-apis/im/v1/messages/om_img/resources/img_abc123")
+                .query_param("type", "image");
+            then.status(200)
+                .header("content-type", "image/png")
+                .body(png.clone());
+        });
+
+        let config = FeishuConfig::new("app_id", "app_secret").with_base_url(server.base_url());
+        let adapter = FeishuAdapter::new(config);
+        let payload = serde_json::json!({
+            "schema": "2.0",
+            "header": {
+                "event_id": "evt_image",
+                "event_type": "im.message.receive_v1"
+            },
+            "event": {
+                "sender": {
+                    "sender_id": {"open_id": "ou_sender"},
+                    "sender_type": "user"
+                },
+                "message": {
+                    "message_id": "om_img",
+                    "chat_id": "oc_chat",
+                    "chat_type": "p2p",
+                    "message_type": "image",
+                    "body": {"content": "{\"image_key\":\"img_abc123\"}"}
+                }
+            }
+        });
+
+        let msg = adapter
+            .process_webhook_event_with_media(payload.to_string().as_bytes())
+            .await
+            .expect("event parses")
+            .expect("message produced");
+
+        assert_eq!(msg.message_type, MessageType::Photo);
+        assert_eq!(msg.media_types, vec!["image/png".to_string()]);
+        assert_eq!(msg.media_urls.len(), 1);
+        assert!(std::path::Path::new(&msg.media_urls[0]).is_file());
+        assert_eq!(msg.metadata["local_media_urls"][0], msg.media_urls[0]);
+        token_mock.assert_hits(1);
+        image_mock.assert_hits(1);
     }
 
     #[tokio::test]

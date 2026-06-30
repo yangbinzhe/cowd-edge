@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { api, normalizeActivity, providerModels, type EndpointSnapshot } from '../api/client';
-import type { ActivityEvent, ChatDisplayMode, ChatTurn, CompanionTab, NavId, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
+import type { ActivityEvent, ChatDisplayMode, ChatTurn, CompanionTab, NavId, RuntimeResourceUpload, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
 
 function blockText(block: any): string {
   if (!block) return '';
@@ -136,9 +136,9 @@ export const useAppStore = defineStore('app', () => {
     const events = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
     events.forEach((event: any) => {
       const text = JSON.stringify(event);
-      const matches = text.match(/(?:workspace:\/\/file\/|path["': ]+)([A-Za-z0-9_./@-]+\.[A-Za-z0-9]+)/g) || [];
+      const matches = text.match(/(?:resource:\/\/|path["': ]+)([A-Za-z0-9_./@-]+\.[A-Za-z0-9]+)/g) || [];
       matches.forEach((match) => {
-        const path = match.replace(/^workspace:\/\/file\//, '').replace(/^path["': ]+/, '');
+        const path = match.replace(/^resource:\/\//, '').replace(/^path["': ]+/, '');
         if (!fileMap.has(path)) fileMap.set(path, { path, kind: 'runtime-ref', status: event.status || 'observed', ref: event.kind || event.type });
       });
     });
@@ -343,7 +343,14 @@ export const useAppStore = defineStore('app', () => {
     activity.value.unshift({ id: `send-${Date.now()}`, kind: 'runtime', title: 'Message queued', detail: content.slice(0, 140), status: 'pending' });
     try {
       const contentWithAttachments = renderMessageWithAttachments(content);
-      await api.sendMessage(activeSessionId.value, contentWithAttachments);
+      const resourceIds = attachments.value
+        .filter((item) => item.resource_id || item.uri?.startsWith('resource://'))
+        .map((item) => item.resource_id || item.uri || item.ref_id)
+        .filter((value): value is string => Boolean(value));
+      await api.sendMessage(activeSessionId.value, contentWithAttachments, resourceIds);
+      if (resourceIds.length) {
+        attachments.value = attachments.value.filter((item) => !resourceIds.includes(item.resource_id || item.uri || item.ref_id));
+      }
       await loadMessages(activeSessionId.value);
       await loadActivity();
       if (chatDisplayMode.value === 'panorama') await refreshChatProjection(activeSessionId.value, content);
@@ -654,6 +661,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function removeAttachment(refId: string) {
+    const pendingResource = attachments.value.find((item) => item.ref_id === refId && (item.resource_id || item.uri?.startsWith('resource://')));
+    if (pendingResource) {
+      attachments.value = attachments.value.filter((item) => item.ref_id !== refId);
+      return;
+    }
     if (!activeSessionId.value) return;
     await api.deleteSessionAttachment(activeSessionId.value, refId);
     attachments.value = attachments.value.filter((item) => item.ref_id !== refId);
@@ -666,6 +678,38 @@ export const useAppStore = defineStore('app', () => {
       const result: any = await api.uploadFile(file, dir);
       await loadWorkspace(dir);
       activity.value.unshift({ id: `upload-${Date.now()}`, kind: 'context', title: 'File uploaded', detail: `${result.path} (${result.size} bytes)`, status: 'complete' });
+      return result;
+    } catch (error) {
+      fileError.value = error instanceof Error ? error.message : String(error);
+      companionTab.value = 'inspector';
+      throw error;
+    } finally {
+      uploadBusy.value = false;
+    }
+  }
+
+  async function uploadResource(file: File) {
+    uploadBusy.value = true;
+    fileError.value = '';
+    try {
+      if (!activeSessionId.value) await createSession();
+      const result = await api.uploadResource(file, activeSessionId.value) as RuntimeResourceUpload;
+      const resource = result.resource;
+      const attachment: SessionAttachment = {
+        ref_id: resource.id,
+        resource_id: resource.id,
+        uri: resource.uri,
+        kind: resource.kind,
+        path: resource.uri,
+        label: resource.original_name,
+        size: resource.size_bytes,
+        sha256: resource.sha256,
+        detected_mime: resource.detected_mime,
+        status: 'stored',
+        added_at_ms: Date.now(),
+      };
+      attachments.value = [attachment, ...attachments.value.filter((item) => item.ref_id !== attachment.ref_id)];
+      activity.value.unshift({ id: `resource-${Date.now()}`, kind: 'context', title: 'Resource attached', detail: `${resource.original_name} (${resource.kind})`, status: 'complete' });
       return result;
     } catch (error) {
       fileError.value = error instanceof Error ? error.message : String(error);
@@ -723,8 +767,10 @@ export const useAppStore = defineStore('app', () => {
   function renderMessageWithAttachments(content: string) {
     if (!attachments.value.length) return content;
     const refs = attachments.value
-      .map((item) => `- workspace://file/${item.path} (${item.label || item.path}, ${item.sha256})`)
+      .filter((item) => !item.resource_id && !item.uri?.startsWith('resource://'))
+      .map((item) => `- ${item.path} (${item.label || item.path}, ${item.sha256})`)
       .join('\n');
+    if (!refs) return content;
     return `${content}\n\nContext attachments:\n${refs}`;
   }
 
@@ -969,6 +1015,7 @@ export const useAppStore = defineStore('app', () => {
     attachWorkspaceFile,
     removeAttachment,
     uploadWorkspaceFile,
+    uploadResource,
     createWorkspaceDir,
     deleteWorkspacePath,
     renameWorkspacePath,

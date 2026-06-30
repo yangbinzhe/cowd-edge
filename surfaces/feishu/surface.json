@@ -2,12 +2,12 @@
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Surface",
-  "version": "0.9.414",
+  "version": "0.9.415",
   "kind": "external-integration",
   "entry": "./cowd-surface-feishu",
   "transport": "stdio-jsonl",
   "lifecycle": "managed",
-  "capabilities": ["ingress", "egress", "callback", "health"],
+  "capabilities": ["ingress", "egress", "callback", "health", "processing_lifecycle"],
   "routes": [
     {
       "kind": "callback",

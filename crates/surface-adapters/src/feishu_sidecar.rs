@@ -62,6 +62,7 @@ async fn handle_frame(
                 "inbound".to_string(),
                 "health".to_string(),
                 "websocket".to_string(),
+                "processing_lifecycle".to_string(),
             ],
         },
         SurfaceFrame::Configure {
@@ -314,6 +315,12 @@ async fn action_frame(
     state: Arc<Mutex<FeishuSidecarState>>,
     stdout: Arc<Mutex<tokio::io::Stdout>>,
 ) -> SurfaceFrame {
+    if matches!(
+        action.as_str(),
+        "message.processing_complete" | "message.processing_failed"
+    ) {
+        return processing_lifecycle_frame(id, action, payload, state).await;
+    }
     if action != "callback.dispatch" {
         return SurfaceFrame::Error {
             id: Some(id),
@@ -336,7 +343,8 @@ async fn action_frame(
     let callback_result = adapter
         .lock()
         .await
-        .process_webhook_event(event_payload.to_string().as_bytes());
+        .process_webhook_event_with_media(event_payload.to_string().as_bytes())
+        .await;
     match callback_result {
         Ok(Some(message)) => {
             let _ = emit_inbound_event(&stdout, message).await;
@@ -352,6 +360,70 @@ async fn action_frame(
         Err(error) => SurfaceFrame::Error {
             id: Some(id),
             code: "feishu_callback_failed".to_string(),
+            message: error.to_string(),
+        },
+    }
+}
+
+async fn processing_lifecycle_frame(
+    id: String,
+    action: String,
+    payload: serde_json::Value,
+    state: Arc<Mutex<FeishuSidecarState>>,
+) -> SurfaceFrame {
+    let message_id = payload
+        .get("message_id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    let Some(message_id) = message_id else {
+        return SurfaceFrame::Error {
+            id: Some(id),
+            code: "feishu_processing_lifecycle_missing_message_id".to_string(),
+            message: "message processing lifecycle action requires payload.message_id".to_string(),
+        };
+    };
+    let adapter = {
+        let state = state.lock().await;
+        state.adapter.clone()
+    };
+    let Some(adapter) = adapter else {
+        return SurfaceFrame::Error {
+            id: Some(id),
+            code: "feishu_not_configured".to_string(),
+            message: "configure feishu before processing lifecycle action".to_string(),
+        };
+    };
+    let adapter = adapter.lock().await;
+    let token = match adapter.ensure_token().await {
+        Ok(token) => token,
+        Err(error) => {
+            return SurfaceFrame::Error {
+                id: Some(id),
+                code: "feishu_token_unavailable".to_string(),
+                message: error.to_string(),
+            };
+        }
+    };
+    let result = if action == "message.processing_complete" {
+        adapter.reactions.mark_success(&token, &message_id).await
+    } else {
+        adapter.reactions.mark_failure(&token, &message_id).await
+    };
+    match result {
+        Ok(()) => SurfaceFrame::Ok {
+            id,
+            payload: serde_json::json!({
+                "status": if action == "message.processing_complete" { "cleared" } else { "failed" },
+                "surface": SURFACE_ID,
+                "message_id": message_id,
+                "action": action,
+            }),
+        },
+        Err(error) => SurfaceFrame::Error {
+            id: Some(id),
+            code: "feishu_processing_lifecycle_failed".to_string(),
             message: error.to_string(),
         },
     }

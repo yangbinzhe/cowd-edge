@@ -9,7 +9,7 @@
 //! |-----------|--------|----------|
 //! | Image upload | POST | `/im/v1/images` |
 //! | File upload  | POST | `/im/v1/files` |
-//! | Download     | GET  | `/im/v1/messages/{msg_id}/resources/{file_key}` |
+//! | Download     | GET  | `/im/v1/messages/{msg_id}/resources/{file_key}?type={resource_type}` |
 //!
 //! All endpoints use tenant access token auth via `Authorization: Bearer` header
 //! and retry up to 3 times on 429 (rate limit) or 5xx (server error) responses
@@ -271,15 +271,55 @@ pub async fn download_message_resource(
     message_id: &str,
     file_key: &str,
 ) -> PlatformResult<Vec<u8>> {
-    // SSRF guard: validate the URL before making the request
-    let url = format!(
-        "{}/im/v1/messages/{}/resources/{}?type=file",
+    download_message_resource_with_type(token, message_id, file_key, "file").await
+}
+
+/// Download a typed message resource from Feishu.
+///
+/// Feishu uses the same resource endpoint for images and files, but requires
+/// the `type` query to match the platform resource family. Images must use
+/// `type=image`; files, audio, and videos use `type=file`.
+pub async fn download_message_resource_with_type(
+    token: &str,
+    message_id: &str,
+    file_key: &str,
+    resource_type: &str,
+) -> PlatformResult<Vec<u8>> {
+    download_message_resource_with_base(
         super::api_base_url(),
+        token,
         message_id,
-        file_key
+        file_key,
+        resource_type,
+    )
+    .await
+}
+
+/// Download a typed message resource from an explicit API base URL.
+///
+/// This avoids the global Feishu base URL in tests and in sidecars that may run
+/// against different regional endpoints.
+pub async fn download_message_resource_with_base(
+    api_base_url: &str,
+    token: &str,
+    message_id: &str,
+    file_key: &str,
+    resource_type: &str,
+) -> PlatformResult<Vec<u8>> {
+    // SSRF guard: validate the URL before making the request
+    let normalized_resource_type = match resource_type {
+        "image" => "image",
+        _ => "file",
+    };
+    let url = format!(
+        "{}/im/v1/messages/{}/resources/{}?type={}",
+        api_base_url.trim_end_matches('/'),
+        message_id,
+        file_key,
+        normalized_resource_type
     );
 
-    if !is_feishu_domain(&url) {
+    if !is_allowed_download_url(&url) {
         return Err(PlatformError::SendFailed(format!(
             "download_message_resource: URL validation failed for {}",
             url
@@ -307,6 +347,18 @@ pub async fn download_message_resource(
     response.bytes().await.map(|b| b.to_vec()).map_err(|e| {
         PlatformError::SendFailed(format!("download_message_resource: read body: {}", e))
     })
+}
+
+fn is_allowed_download_url(url: &str) -> bool {
+    if is_feishu_domain(url) {
+        return true;
+    }
+    #[cfg(test)]
+    {
+        return url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:");
+    }
+    #[allow(unreachable_code)]
+    false
 }
 
 // ---------------------------------------------------------------------------
