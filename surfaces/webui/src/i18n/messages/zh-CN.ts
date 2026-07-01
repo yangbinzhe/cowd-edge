@@ -1404,7 +1404,7 @@ export const zhCN: MessageCatalog = {
   "settings.action.saveCurrent": "保存当前分区",
   "page.skills.translate.action": "翻译 SKILL.md",
   "page.skills.translate.prompt": "请把技能 {skill} 的 SKILL.md 翻译成清晰自然的中文，保留 Markdown 结构、命令、路径、代码块和约束语气，只输出译文。\n\n{content}",
-  "page.skills.translate.receipt": "翻译回执",
+  "page.skills.translate.receipt": "翻译证据载荷",
   "page.skills.translate.result": "翻译预览",
   "component.workbench.detail.drawer.title.selectedPayload": "选中行载荷",
   "component.workbench.evidence.object.detail.title.default": "证据对象详情",

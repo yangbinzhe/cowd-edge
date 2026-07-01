@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "wechat-ilink",
   "name": "WeChat iLink Surface",
-  "version": "0.9.417",
+  "version": "0.9.418",
   "kind": "external-integration",
   "entry": "./cowd-surface-wechat-ilink",
   "transport": "stdio-jsonl",

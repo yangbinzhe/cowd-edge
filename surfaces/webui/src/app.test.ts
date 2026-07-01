@@ -579,6 +579,8 @@ describe('Cowd Vue WebUI shell', () => {
     await api.updateMemoryEntry('mem-1', { title: 'updated' });
     await api.deleteMemoryEntry('L2', 'mem-1');
     await api.skillAction('local:test', 'validate', { session_id: 's1' });
+    await api.skillTranslate('local:test', '# Skill', 'SKILL.md');
+    await api.branchSession('s1');
     expect(fetchMock).toHaveBeenCalledWith('/api/memory/L2', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ title: 'fact' }),
@@ -592,6 +594,11 @@ describe('Cowd Vue WebUI shell', () => {
       method: 'POST',
       body: JSON.stringify({ session_id: 's1' }),
     }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/local%3Atest/translate', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ content: '# Skill', path: 'SKILL.md', locale: 'zh-CN' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/s1/branch', expect.objectContaining({ method: 'POST' }));
   });
 
   it('calls critical MFG write endpoints with explicit request bodies', async () => {

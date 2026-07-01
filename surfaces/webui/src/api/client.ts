@@ -551,6 +551,10 @@ export const api = {
   skillDetail: (id: string) => read(`/api/skills/${encodeURIComponent(id)}`, {}),
   skillFiles: (id: string) => read(`/api/skills/${encodeURIComponent(id)}/files`, {}),
   skillFileRaw: (id: string, path = 'SKILL.md') => read(`/api/skills/${encodeURIComponent(id)}/files/raw?path=${encodeURIComponent(path)}`, {}),
+  skillTranslate: (id: string, content: string, path = 'SKILL.md', locale = 'zh-CN') => write(`/api/skills/${encodeURIComponent(id)}/translate`, {
+    method: 'POST',
+    body: JSON.stringify({ content, path, locale }),
+  }),
   skillAction: (id: string, action: 'validate' | 'plan' | 'run', body: Record<string, unknown> = {}) => writeWithReceipt(`/api/skills/${encodeURIComponent(id)}/actions/${action}`, {
     method: 'POST',
     body: JSON.stringify(body),

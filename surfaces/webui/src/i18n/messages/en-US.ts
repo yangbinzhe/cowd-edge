@@ -1404,7 +1404,7 @@ export const enUS: MessageCatalog = {
   "settings.action.saveCurrent": "Save current section",
   "page.skills.translate.action": "Translate SKILL.md",
   "page.skills.translate.prompt": "Translate the SKILL.md for skill {skill} into clear natural Chinese. Preserve Markdown structure, commands, paths, code blocks, and constraint wording. Output only the translated document.\n\n{content}",
-  "page.skills.translate.receipt": "Translation receipt",
+  "page.skills.translate.receipt": "Translation evidence payload",
   "page.skills.translate.result": "Translation preview",
   "component.workbench.detail.drawer.title.selectedPayload": "Selected row payload",
   "component.workbench.evidence.object.detail.title.default": "Evidence object detail",

@@ -34,7 +34,8 @@ const selectedSkillId = ref('');
 const selectedFile = ref('SKILL.md');
 const selectedRunId = ref('');
 const actionResult = ref<any>(null);
-const translateReceipt = ref<any>(null);
+const translateResult = ref<any>(null);
+const translating = ref(false);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 const items = computed(() => Array.isArray(catalog.value?.items) ? catalog.value.items : []);
@@ -56,8 +57,8 @@ const fileItems = computed(() => Array.isArray(files.value?.files) ? files.value
 const runItems = computed(() => Array.isArray(runs.value?.items) ? runs.value.items : []);
 const markdownHtml = computed(() => markdown.render(rawFile.value?.content || ''));
 const translatedMarkdown = computed(() => {
-  const data = translateReceipt.value?.data || {};
-  return data.response || data.text || data.content || translateReceipt.value?.payload_summary || '';
+  const data = translateResult.value?.data || translateResult.value || {};
+  return data.translated_markdown || data.response || data.text || data.content || '';
 });
 const skillContext = computed(() => [
   { label: t('page.skills.context.skills'), value: filteredItems.value.length, tone: filteredItems.value.length ? 'success' : 'warn' },
@@ -165,11 +166,16 @@ async function runAction(action: 'validate' | 'plan' | 'run') {
 
 async function translateSkill() {
   if (!selectedSkillId.value || !rawFile.value?.content) return;
-  const prompt = t('page.skills.translate.prompt', {
-    skill: selectedSkillId.value,
-    content: String(rawFile.value.content).slice(0, 12000),
-  });
-  translateReceipt.value = await api.submitRuntimeTurn(prompt, 'webui-skills');
+  translating.value = true;
+  try {
+    translateResult.value = await api.skillTranslate(
+      selectedSkillId.value,
+      String(rawFile.value.content),
+      rawFile.value.path || selectedFile.value || 'SKILL.md',
+    );
+  } finally {
+    translating.value = false;
+  }
 }
 
 async function loadRunDetail(run: any) {
@@ -286,7 +292,7 @@ onMounted(refresh);
             <h2>{{ t('page.skills.page.text.44a674dcd4') }}</h2>
             <div class="button-row">
               <span>{{ formatCount('entries', fileItems.length) }}</span>
-              <button class="icon-action" type="button" :disabled="!rawFile.content" :aria-label="t('page.skills.translate.action')" @click="translateSkill"><Languages :size="14" /></button>
+              <button class="icon-action" type="button" :disabled="!rawFile.content || translating" :aria-label="t('page.skills.translate.action')" @click="translateSkill"><Languages :size="14" /></button>
             </div>
           </header>
           <div class="skill-files">
@@ -309,12 +315,12 @@ onMounted(refresh);
             <div v-if="rawFile.content" class="markdown-body" v-html="markdownHtml"></div>
             <pre v-else>{{ rawFile.content || '' }}</pre>
           </article>
-          <article v-if="translateReceipt" class="skill-markdown">
+          <article v-if="translateResult" class="skill-markdown">
             <header>
               <strong>{{ t('page.skills.translate.result') }}</strong>
             </header>
             <div v-if="translatedMarkdown" class="markdown-body" v-html="markdown.render(translatedMarkdown)"></div>
-            <RequestReceipt :receipt="translateReceipt" :title="t('page.skills.translate.receipt')" />
+            <RawPayload :title="t('page.skills.translate.receipt')" :data="translateResult" />
           </article>
         </section>
 

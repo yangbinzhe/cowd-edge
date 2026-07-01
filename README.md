@@ -1,6 +1,6 @@
 # Cowd Surface
 
-`cowd-surface` 是 Cowd 的独立 surface 仓库。当前版本：`0.9.417`。
+`cowd-surface` 是 Cowd 的独立 surface 仓库。当前版本：`0.9.418`。
 
 本仓库承载除 TUI 之外的所有 UI surface 和外部渠道 sidecar。core 仓库只保留 `surface` 协议、Gateway 装载/调度能力和可选 TUI；WebUI、飞书、邮件、企微、微信 iLink 以及后续更多 surface 都在本仓库按需独立构建、独立演进。
 
@@ -110,7 +110,7 @@ target/release/cowd-surface-wechat-ilink
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Surface",
-  "version": "0.9.417",
+  "version": "0.9.418",
   "kind": "external-integration",
   "entry": "./cowd-surface-feishu",
   "transport": "stdio-jsonl",
