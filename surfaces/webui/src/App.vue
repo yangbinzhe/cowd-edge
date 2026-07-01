@@ -63,7 +63,7 @@ function updateViewportMode() {
 }
 const canToggleCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
-  if (isChatRoute.value) return store.chatDisplayMode === 'panorama' && isCompactViewport.value;
+  if (isChatRoute.value) return store.chatDisplayMode === 'clean' ? store.companionTab === 'workspace' : isCompactViewport.value;
   return true;
 });
 const shellMode = computed(() => {
@@ -78,7 +78,7 @@ const activeSection = computed(() => {
 const showCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
   if (isChatRoute.value) {
-    if (store.chatDisplayMode !== 'panorama') return false;
+    if (store.chatDisplayMode === 'clean') return store.companionTab === 'workspace' && !store.companionCollapsed;
     return !isCompactViewport.value || !store.companionCollapsed;
   }
   return canToggleCompanion.value && !store.companionCollapsed;

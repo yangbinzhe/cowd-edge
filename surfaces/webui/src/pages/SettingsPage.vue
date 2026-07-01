@@ -245,6 +245,66 @@ async function verifyAuth() {
   });
 }
 
+async function saveCurrentSettingsSection() {
+  const section = activeSettingsSection.value;
+  if (section === 'ui') {
+    settingsReceipt.value = {
+      ok: true,
+      endpoint: 'localStorage:webui.ui',
+      method: 'PUT',
+      status: 'saved',
+      payload_summary: JSON.stringify({ theme: theme.value, locale: locale.value }),
+      retryable: false,
+    };
+    return;
+  }
+  if (section === 'providers') {
+    await saveDefaultModel();
+    return;
+  }
+  if (section === 'profile') {
+    if (profileName.value.trim()) await addProfile();
+    else await store.refreshProfiles();
+    return;
+  }
+  if (section === 'policy') {
+    await saveApprovalGoverned();
+    return;
+  }
+  if (section === 'gateway') {
+    await verifyAuth();
+    return;
+  }
+  settingsReceipt.value = null;
+}
+
+async function restoreCurrentSettingsSection() {
+  const section = activeSettingsSection.value;
+  if (section === 'ui') {
+    theme.value = localStorage.getItem('cowd-theme') || 'dark';
+    return;
+  }
+  if (section === 'providers') {
+    await store.reloadProviders();
+    defaultModel.value = '';
+    return;
+  }
+  if (section === 'profile') {
+    profileName.value = '';
+    await store.refreshProfiles();
+    return;
+  }
+  if (section === 'policy') {
+    store.approvalConfig = await api.approvalConfig();
+    return;
+  }
+  if (section === 'gateway') {
+    authResult.value = null;
+    return;
+  }
+  settingsReceipt.value = null;
+}
+
 function selectSettingsSection(id: string) {
   activeSettingsSection.value = id;
 }
@@ -290,8 +350,16 @@ function selectSettingsSection(id: string) {
           </div>
           <span class="status-badge">{{ displayStatus(currentSettingsSection.status) }}</span>
         </header>
+        <div class="settings-action-rail">
+          <button class="primary-action" type="button" :disabled="!!busyAction" @click="saveCurrentSettingsSection">
+            {{ t('settings.action.saveCurrent') }}
+          </button>
+          <button class="ghost-action" type="button" :disabled="!!busyAction" @click="restoreCurrentSettingsSection">
+            {{ t('settings.action.restoreCurrent') }}
+          </button>
+        </div>
 
-      <section class="settings-section" data-section="ui">
+      <section v-if="activeSettingsSection === 'ui'" class="settings-section" data-section="ui">
         <h2>{{ t('page.settings.page.text.3dc3553554') }}</h2>
         <div class="segmented">
           <button :class="{ active: theme === 'light' }" type="button" @click="theme = 'light'"><Sun :size="15" />{{ t('page.settings.page.text.9ee97c311d') }}</button>
@@ -306,7 +374,7 @@ function selectSettingsSection(id: string) {
         </label>
       </section>
 
-      <section class="settings-section" data-section="providers">
+      <section v-else-if="activeSettingsSection === 'providers'" class="settings-section" data-section="providers">
         <h2>{{ t('page.settings.page.text.d5957c1d34') }}</h2>
         <dl class="contract-list">
           <dt>{{ t('page.settings.page.text.2ffa592e62') }}</dt>
@@ -345,7 +413,7 @@ function selectSettingsSection(id: string) {
         </div>
       </section>
 
-      <section class="settings-section" data-section="profile">
+      <section v-else-if="activeSettingsSection === 'profile'" class="settings-section" data-section="profile">
         <h2>{{ t('page.settings.page.text.85e12584dd') }}</h2>
         <div class="profile-create-row">
           <input v-model="profileName" :placeholder="t('page.settings.page.placeholder.bcb07f475e')" @keydown.enter.prevent="addProfile" />
@@ -374,7 +442,7 @@ function selectSettingsSection(id: string) {
         </div>
       </section>
 
-      <section class="settings-section" data-section="policy">
+      <section v-else-if="activeSettingsSection === 'policy'" class="settings-section" data-section="policy">
         <h2>{{ t('page.settings.page.text.9f388e9984') }}</h2>
         <label><input type="checkbox" :checked="!!store.approvalConfig?.solo_mode" @change="toggleSoloGoverned" />{{ t('page.settings.page.text.7c3716e92b') }}</label>
         <textarea :value="approvalJson" spellcheck="false" @change="saveApprovalFromText" />
@@ -389,7 +457,7 @@ function selectSettingsSection(id: string) {
         <p v-if="store.settingsSavedAt" class="save-state">{{ t('page.settings.approval.savedAt', { time: store.settingsSavedAt }) }}</p>
       </section>
 
-      <section class="settings-section" data-section="gateway">
+      <section v-else-if="activeSettingsSection === 'gateway'" class="settings-section" data-section="gateway">
         <h2>{{ t('page.settings.page.text.5b4777815e') }}</h2>
         <p class="security-note"><Shield :size="16" />{{ t('page.settings.page.text.17c5ae3045') }}</p>
         <p class="security-note">{{ t('page.settings.security.origin', { origin }) }}</p>
@@ -405,7 +473,7 @@ function selectSettingsSection(id: string) {
         </dl>
       </section>
 
-      <section class="settings-section" data-section="receipts">
+      <section v-else class="settings-section" data-section="receipts">
         <h2>{{ t('page.settings.page.text.13785bef59') }}</h2>
         <RequestReceipt v-if="settingsReceipt" :receipt="settingsReceipt" :title="t('page.settings.page.title.39519790d9')" />
         <section v-else class="request-receipt">

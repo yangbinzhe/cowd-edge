@@ -19,6 +19,11 @@ export interface SessionSummary {
   model?: string;
   status?: string;
   updated_at?: number | string;
+  created_at?: number | string;
+  snippet?: string;
+  summary?: string;
+  first_message?: string;
+  message_count?: number;
 }
 
 export interface ChatTurn {

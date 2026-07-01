@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref, watch } from 'vue';
-import { FileText, RefreshCw, Search } from 'lucide-vue-next';
+import { FileText, Languages, RefreshCw, Search } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import { api } from '../api/client';
 import RawPayload from '../components/workbench/RawPayload.vue';
@@ -34,6 +34,7 @@ const selectedSkillId = ref('');
 const selectedFile = ref('SKILL.md');
 const selectedRunId = ref('');
 const actionResult = ref<any>(null);
+const translateReceipt = ref<any>(null);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 
 const items = computed(() => Array.isArray(catalog.value?.items) ? catalog.value.items : []);
@@ -54,6 +55,10 @@ const skill = computed(() => detail.value?.skill || filteredItems.value.find((it
 const fileItems = computed(() => Array.isArray(files.value?.files) ? files.value.files : []);
 const runItems = computed(() => Array.isArray(runs.value?.items) ? runs.value.items : []);
 const markdownHtml = computed(() => markdown.render(rawFile.value?.content || ''));
+const translatedMarkdown = computed(() => {
+  const data = translateReceipt.value?.data || {};
+  return data.response || data.text || data.content || translateReceipt.value?.payload_summary || '';
+});
 const skillContext = computed(() => [
   { label: t('page.skills.context.skills'), value: filteredItems.value.length, tone: filteredItems.value.length ? 'success' : 'warn' },
   { label: t('page.skills.context.selected'), value: selectedSkillId.value || t('status.none') },
@@ -139,7 +144,10 @@ async function loadSelectedSkill() {
   ]);
   detail.value = nextDetail;
   files.value = nextFiles;
-  selectedFile.value = nextFiles?.primary || fileItems.value.find((file: any) => file.kind === 'file')?.path || 'SKILL.md';
+  selectedFile.value = fileItems.value.find((file: any) => file.path === 'SKILL.md')?.path
+    || nextFiles?.primary
+    || fileItems.value.find((file: any) => file.kind === 'file')?.path
+    || 'SKILL.md';
   await loadRawFile();
 }
 
@@ -153,6 +161,15 @@ async function runAction(action: 'validate' | 'plan' | 'run') {
   if (!selectedSkillId.value) return;
   actionResult.value = await api.skillAction(selectedSkillId.value, action, { session_id: 'webui-skills' });
   await refresh();
+}
+
+async function translateSkill() {
+  if (!selectedSkillId.value || !rawFile.value?.content) return;
+  const prompt = t('page.skills.translate.prompt', {
+    skill: selectedSkillId.value,
+    content: String(rawFile.value.content).slice(0, 12000),
+  });
+  translateReceipt.value = await api.submitRuntimeTurn(prompt, 'webui-skills');
 }
 
 async function loadRunDetail(run: any) {
@@ -267,7 +284,10 @@ onMounted(refresh);
         <section class="management-panel" data-section="files">
           <header>
             <h2>{{ t('page.skills.page.text.44a674dcd4') }}</h2>
-            <span>{{ formatCount('entries', fileItems.length) }}</span>
+            <div class="button-row">
+              <span>{{ formatCount('entries', fileItems.length) }}</span>
+              <button class="icon-action" type="button" :disabled="!rawFile.content" :aria-label="t('page.skills.translate.action')" @click="translateSkill"><Languages :size="14" /></button>
+            </div>
           </header>
           <div class="skill-files">
             <button
@@ -288,6 +308,13 @@ onMounted(refresh);
             </header>
             <div v-if="rawFile.content" class="markdown-body" v-html="markdownHtml"></div>
             <pre v-else>{{ rawFile.content || '' }}</pre>
+          </article>
+          <article v-if="translateReceipt" class="skill-markdown">
+            <header>
+              <strong>{{ t('page.skills.translate.result') }}</strong>
+            </header>
+            <div v-if="translatedMarkdown" class="markdown-body" v-html="markdown.render(translatedMarkdown)"></div>
+            <RequestReceipt :receipt="translateReceipt" :title="t('page.skills.translate.receipt')" />
           </article>
         </section>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue';
-import { ChevronRight, Download, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Search } from 'lucide-vue-next';
+import { ChevronRight, Download, Eye, FileText, Folder, FolderOpen, MoreHorizontal, Plus, Search } from 'lucide-vue-next';
 import { t } from '../../i18n';
 import { useAppStore } from '../../stores/app';
 import {
@@ -205,10 +205,20 @@ async function dropOnNode(event: DragEvent, node: WorkspaceTreeNode) {
           <FolderOpen v-if="node.kind === 'dir' && node.expanded" :size="15" />
           <Folder v-else-if="node.kind === 'dir'" :size="15" />
           <FileText v-else :size="15" />
-          <span>{{ node.name }}</span>
+          <span class="workspace-tree-name" :title="node.path || node.name">{{ node.name }}</span>
           <i v-if="store.selectedFile === node.path && store.editorDirty" class="workspace-tree-dirty" :title="t('workspace.tree.dirty')"></i>
         </button>
         <small>{{ node.kind === 'dir' ? (node.loaded ? node.children.length : t('workspace.tree.lazy')) : (node.size || '') }}</small>
+        <button
+          v-if="node.kind === 'file'"
+          class="icon-action workspace-tree-preview"
+          type="button"
+          :aria-label="t('workspace.tree.action.previewTarget', { name: node.name })"
+          @click.stop="store.openFile(node.path)"
+        >
+          <Eye :size="14" />
+        </button>
+        <span v-else class="workspace-tree-placeholder"></span>
         <button
           class="icon-action workspace-tree-download"
           type="button"

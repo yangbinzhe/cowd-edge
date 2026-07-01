@@ -14,7 +14,7 @@ import {
   setWorkspaceTreeExpanded,
   type WorkspaceTreeNode,
 } from '../utils/workspaceTree';
-import { isWorkspaceTextPreview, workspacePreviewKind, workspacePreviewMime } from '../utils/workspacePreview';
+import { buildWorkspacePreviewHtml, isWorkspaceTextPreview, workspacePreviewKind, workspacePreviewMime } from '../utils/workspacePreview';
 
 function blockText(block: any): string {
   if (!block) return '';
@@ -37,6 +37,66 @@ function sanitizeActivityEvent(event: ActivityEvent): ActivityEvent {
     title: cleanRuntimeSummary(event.title),
     detail: cleanRuntimeSummary(event.detail),
   };
+}
+
+function comparableText(value: string) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function sameAssistantFinal(a: string, b: string) {
+  const left = comparableText(a);
+  const right = comparableText(b);
+  return !!left && left === right;
+}
+
+function turnStableKey(turn: ChatTurn) {
+  if (turn.id && !turn.id.startsWith('local-') && !turn.id.startsWith('assistant-stream-')) return `id:${turn.id}`;
+  if (turn.sequence !== undefined && turn.sequence !== null) return `seq:${turn.role}:${turn.sequence}`;
+  if (turn.tool_use_id) return `tool:${turn.role}:${turn.tool_use_id}`;
+  return '';
+}
+
+function updatedAtMs(session: SessionSummary) {
+  const value = session.updated_at || session.created_at || 0;
+  if (typeof value === 'number') return value > 10_000_000_000 ? value : value * 1000;
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sessionTitle(session: SessionSummary) {
+  const title = String(session.title || '').trim();
+  if (title && title !== session.id) return title;
+  const snippet = String(session.snippet || session.first_message || session.summary || '').replace(/\s+/g, ' ').trim();
+  if (snippet) return snippet.slice(0, 40);
+  return session.id ? session.id.slice(0, 12) : 'session';
+}
+
+function sessionSnippet(session: SessionSummary) {
+  return String(session.snippet || session.first_message || session.summary || '').replace(/\s+/g, ' ').trim();
+}
+
+function sessionGroupLabel(session: SessionSummary) {
+  const ms = updatedAtMs(session);
+  if (!ms) return t('session.group.earlier');
+  const date = new Date(ms);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.floor((startOfToday - startOfDate) / 86_400_000);
+  if (days <= 0) return t('session.group.today');
+  if (days === 1) return t('session.group.yesterday');
+  if (days < 7) return t('session.group.lastSevenDays');
+  return t('session.group.earlier');
+}
+
+function compactTime(session: SessionSummary) {
+  const ms = updatedAtMs(session);
+  if (!ms) return '-';
+  const delta = Date.now() - ms;
+  if (delta < 60_000) return t('session.time.justNow');
+  if (delta < 3_600_000) return t('session.time.minutesAgo', { count: Math.max(1, Math.round(delta / 60_000)) });
+  if (delta < 86_400_000) return t('session.time.hoursAgo', { count: Math.max(1, Math.round(delta / 3_600_000)) });
+  return new Date(ms).toLocaleDateString();
 }
 
 export const useAppStore = defineStore('app', () => {
@@ -90,7 +150,14 @@ export const useAppStore = defineStore('app', () => {
   const commandError = ref('');
   const contextUsagePercent = ref<number | null>(null);
   const contextUsageSource = ref(t('store.app.string.18eb606335'));
+  const contextUsedTokens = ref(0);
+  const contextLimitTokens = ref(0);
   const sessionQuery = ref('');
+  const sessionPageLimit = ref(50);
+  const sessionOffset = ref(0);
+  const sessionHasMore = ref(true);
+  const sessionLoadingMore = ref(false);
+  const selectedSessionIds = ref<string[]>([]);
   const actionResults = ref<Record<string, any>>({});
   const capabilitySnapshots = ref<Record<string, EndpointSnapshot[]>>({});
   const capabilityLoading = ref<Record<string, boolean>>({});
@@ -106,8 +173,25 @@ export const useAppStore = defineStore('app', () => {
   const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || sessions.value[0]);
   const filteredSessions = computed(() => {
     const query = sessionQuery.value.trim().toLowerCase();
-    if (!query) return sessions.value;
-    return sessions.value.filter((session) => `${session.title} ${session.model} ${session.status}`.toLowerCase().includes(query));
+    const sorted = [...sessions.value].sort((a, b) => updatedAtMs(b) - updatedAtMs(a));
+    if (!query) return sorted;
+    return sorted.filter((session) => `${sessionTitle(session)} ${sessionSnippet(session)} ${session.status}`.toLowerCase().includes(query));
+  });
+  const groupedSessions = computed(() => {
+    const groups = new Map<string, SessionSummary[]>();
+    filteredSessions.value.forEach((session) => {
+      const label = sessionGroupLabel(session);
+      groups.set(label, [...(groups.get(label) || []), session]);
+    });
+    return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
+  });
+  const contextUsageLabel = computed(() => {
+    const used = contextUsedTokens.value;
+    const limit = contextLimitTokens.value;
+    if (used > 0 && limit > 0) return `${used.toLocaleString()} / ${limit.toLocaleString()}`;
+    if (limit > 0) return `0 / ${limit.toLocaleString()}`;
+    if (used > 0) return `${used.toLocaleString()} / ${contextUsageSource.value}`;
+    return contextUsageSource.value;
   });
   const availableModels = computed(() => {
     const models = providerModels(controlPlane.value, providers.value || settings.value);
@@ -254,6 +338,115 @@ export const useAppStore = defineStore('app', () => {
     };
   }
 
+  function rowToTurn(row: any, index: number): ChatTurn {
+    const role = row.role || 'assistant';
+    const content = row.content || (row.blocks || []).map(blockText).join('') || '';
+    return {
+      id: String(row.id || row.sequence || index),
+      role,
+      content: normalizeTurnContent(role, content),
+      status: 'complete',
+      activity: [],
+      blocks: row.blocks || [],
+      sequence: row.sequence,
+      created_at_ms: row.created_at_ms,
+      tool_use_id: row.tool_use_id,
+      tool_name: row.tool_name,
+      token_usage: row.token_usage,
+    };
+  }
+
+  function mergeLoadedTurns(rows: any[]): ChatTurn[] {
+    const loaded = rows.map(rowToTurn);
+    const merged: ChatTurn[] = [];
+    const seen = new Set<string>();
+    loaded.forEach((turn) => {
+      const key = turnStableKey(turn);
+      const previous = merged.at(-1);
+      const duplicateStable = key && seen.has(key);
+      const duplicateAdjacentAssistant = previous
+        && previous.role === 'assistant'
+        && turn.role === 'assistant'
+        && sameAssistantFinal(previous.content, turn.content);
+      if (duplicateStable || duplicateAdjacentAssistant) return;
+      if (key) seen.add(key);
+      merged.push(turn);
+    });
+
+    const streaming = streamingAssistantId ? turns.value.find((turn) => turn.id === streamingAssistantId && turn.status === 'streaming') : null;
+    if (streaming) {
+      const hasFinal = merged.some((turn) => turn.role === 'assistant' && sameAssistantFinal(turn.content, streaming.content));
+      if (hasFinal) {
+        streamingAssistantId = '';
+      } else {
+        merged.push(streaming);
+      }
+    }
+    return merged;
+  }
+
+  function numberFrom(value: unknown) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : 0;
+  }
+
+  function findContextWindowIn(value: any, model = selectedModel.value): number {
+    const candidateKeys = [
+      'context_window',
+      'contextWindow',
+      'max_context_tokens',
+      'maxContextTokens',
+      'context_length',
+      'contextLength',
+      'max_input_tokens',
+      'maxInputTokens',
+      'token_budget',
+      'tokenBudget',
+    ];
+    const visited = new Set<any>();
+    const wantedModel = String(model || '').toLowerCase();
+    const visit = (node: any): number => {
+      if (!node || typeof node !== 'object' || visited.has(node)) return 0;
+      visited.add(node);
+      for (const key of candidateKeys) {
+        const direct = numberFrom(node[key]);
+        if (direct) return direct;
+      }
+      if (wantedModel) {
+        const name = String(node.id || node.name || node.model || '').toLowerCase();
+        if (name && name === wantedModel) {
+          for (const key of candidateKeys) {
+            const direct = numberFrom(node[key]);
+            if (direct) return direct;
+          }
+        }
+      }
+      if (Array.isArray(node)) {
+        for (const item of node) {
+          const found = visit(item);
+          if (found) return found;
+        }
+      } else {
+        for (const child of Object.values(node)) {
+          const found = visit(child);
+          if (found) return found;
+        }
+      }
+      return 0;
+    };
+    return visit(value);
+  }
+
+  function resolveContextLimit(stats: any) {
+    return numberFrom(stats.context_window)
+      || numberFrom(stats.max_context_tokens)
+      || numberFrom(stats.token_budget)
+      || numberFrom(stats.token_usage?.limit)
+      || findContextWindowIn(controlPlane.value)
+      || findContextWindowIn(providers.value)
+      || findContextWindowIn(settings.value);
+  }
+
   async function boot() {
     if (booted.value) return;
     busy.value = true;
@@ -279,6 +472,8 @@ export const useAppStore = defineStore('app', () => {
     selectedModel.value = reportedModel && reportedModel !== 'unknown' ? reportedModel : selectedModel.value;
     selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
     sessions.value = sessionData.sessions;
+    sessionOffset.value = sessions.value.length;
+    sessionHasMore.value = sessions.value.length >= sessionPageLimit.value;
     if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
     workspaceRoot.value = workspace.workspace_canonical || workspace.workspace_root || '';
     await Promise.all([
@@ -295,23 +490,7 @@ export const useAppStore = defineStore('app', () => {
     activeSessionId.value = sessionId;
     const data = await api.messages(sessionId);
     const rows = Array.isArray(data) ? data : (data.messages || []);
-    turns.value = rows.map((row: any, index: number) => {
-      const role = row.role || 'assistant';
-      const content = row.content || (row.blocks || []).map(blockText).join('') || '';
-      return {
-        id: String(row.id || row.sequence || index),
-        role,
-        content: normalizeTurnContent(role, content),
-        status: 'complete',
-        activity: [],
-        blocks: row.blocks || [],
-        sequence: row.sequence,
-        created_at_ms: row.created_at_ms,
-        tool_use_id: row.tool_use_id,
-        tool_name: row.tool_name,
-        token_usage: row.token_usage,
-      };
-    });
+    turns.value = mergeLoadedTurns(rows);
     if (!turns.value.length) turns.value = [{ id: 'empty', role: 'system', content: t('store.app.session.empty'), status: 'complete' }];
     connectSessionStream(sessionId);
     await refreshContextUsage(sessionId);
@@ -323,25 +502,46 @@ export const useAppStore = defineStore('app', () => {
     if (!sessionId) {
       contextUsagePercent.value = null;
       contextUsageSource.value = t('store.app.string.44a6946f79');
+      contextUsedTokens.value = 0;
+      contextLimitTokens.value = 0;
       return;
     }
     const stats: any = await api.sessionStats(sessionId);
     const used = Number(stats.input_tokens || stats.output_tokens || stats.total_tokens || stats.token_usage?.total || 0);
-    const limit = Number(stats.context_window || stats.max_context_tokens || stats.token_budget || stats.token_usage?.limit || 0);
+    const limit = resolveContextLimit(stats);
+    contextUsedTokens.value = Number.isFinite(used) && used > 0 ? used : 0;
+    contextLimitTokens.value = limit;
     if (used > 0 && limit > 0) {
       contextUsagePercent.value = Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
       contextUsageSource.value = t('store.app.string.6e69362394');
+    } else if (limit > 0) {
+      contextUsagePercent.value = 0;
+      contextUsageSource.value = t('chat.context.limitOnly');
     } else {
       contextUsagePercent.value = null;
       contextUsageSource.value = t('store.app.string.18eb606335');
     }
   }
 
-  async function refreshSessions(query = sessionQuery.value) {
-    const data = await api.searchSessions(query.trim());
-    sessions.value = data.sessions || [];
+  async function refreshSessions(query = sessionQuery.value, reset = true) {
+    const offset = reset ? 0 : sessionOffset.value;
+    const data = await api.searchSessions(query.trim(), sessionPageLimit.value, offset);
+    const nextSessions = data.sessions || [];
+    sessions.value = reset ? nextSessions : [...sessions.value, ...nextSessions.filter((session) => !sessions.value.some((item) => item.id === session.id))];
+    sessionOffset.value = sessions.value.length;
+    sessionHasMore.value = nextSessions.length >= sessionPageLimit.value;
     if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
     return data;
+  }
+
+  async function loadMoreSessions() {
+    if (sessionLoadingMore.value || !sessionHasMore.value) return;
+    sessionLoadingMore.value = true;
+    try {
+      await refreshSessions(sessionQuery.value, false);
+    } finally {
+      sessionLoadingMore.value = false;
+    }
   }
 
   async function createSession() {
@@ -357,11 +557,53 @@ export const useAppStore = defineStore('app', () => {
   async function deleteSession(sessionId: string) {
     await api.deleteSession(sessionId);
     sessions.value = sessions.value.filter((session) => session.id !== sessionId);
+    selectedSessionIds.value = selectedSessionIds.value.filter((id) => id !== sessionId);
     if (activeSessionId.value === sessionId) {
       activeSessionId.value = sessions.value[0]?.id || '';
       if (activeSessionId.value) await loadMessages(activeSessionId.value);
       else turns.value = [];
     }
+  }
+
+  function toggleSessionSelected(sessionId: string) {
+    selectedSessionIds.value = selectedSessionIds.value.includes(sessionId)
+      ? selectedSessionIds.value.filter((id) => id !== sessionId)
+      : [...selectedSessionIds.value, sessionId];
+  }
+
+  function clearSessionSelection() {
+    selectedSessionIds.value = [];
+  }
+
+  async function deleteSelectedSessions() {
+    const ids = [...selectedSessionIds.value];
+    const failures: any[] = [];
+    for (const id of ids) {
+      try {
+        await deleteSession(id);
+      } catch (error) {
+        failures.push({ id, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (failures.length) {
+      selectedActivity.value = { kind: 'session.bulk_delete', failures };
+      companionTab.value = 'inspector';
+    }
+    return { deleted: ids.length - failures.length, failures };
+  }
+
+  async function branchSession(sessionId: string) {
+    const receipt = await api.branchSession(sessionId);
+    if (receipt.ok && receipt.data) {
+      const next = receipt.data as SessionSummary;
+      sessions.value = [next, ...sessions.value.filter((item) => item.id !== next.id)];
+      activeSessionId.value = next.id;
+      await loadMessages(next.id);
+    } else {
+      selectedActivity.value = receipt as any;
+      companionTab.value = 'inspector';
+    }
+    return receipt;
   }
 
   async function compactSession(sessionId: string) {
@@ -423,7 +665,8 @@ export const useAppStore = defineStore('app', () => {
       && !turn.id.startsWith('local-')
       && !turn.id.startsWith('assistant-stream-')
       && !turn.id.startsWith('system-')
-      && turn.id !== 'empty';
+      && turn.id !== 'empty'
+      && (turn.id.startsWith('turn-') || turn.id.startsWith('runtime-turn-') || turn.id.startsWith('rt-'));
     if (canInspectTurn) {
       runtimeTurn = await api.runtimeTurn(turn.id).catch((error) => ({
         ok: false,
@@ -608,7 +851,11 @@ export const useAppStore = defineStore('app', () => {
       if (visibleContent && turn.content !== visibleContent && !turn.content.endsWith(visibleContent)) turn.content = visibleContent;
       turn.status = status;
     } else if (visibleContent) {
-      const alreadyShown = turns.value.some((item) => item.role === 'assistant' && item.content === visibleContent);
+      const alreadyShown = turns.value.some((item, index) => {
+        if (item.role !== 'assistant' || !sameAssistantFinal(item.content, visibleContent)) return false;
+        const next = turns.value[index + 1];
+        return !next || next.role !== 'user';
+      });
       if (!alreadyShown) turns.value.push({ id: `assistant-${Date.now()}`, role: status === 'error' ? 'system' : 'assistant', content: visibleContent, status });
     }
     streamingAssistantId = '';
@@ -849,7 +1096,11 @@ export const useAppStore = defineStore('app', () => {
     if (isWorkspaceTextPreview(path)) {
       let content = selectedFile.value === path ? editorContent.value : '';
       if (!content) content = await api.rawFile(path);
-      const blob = new Blob([content], { type: `${workspacePreviewMime(path)};charset=utf-8` });
+      const body = ['markdown', 'web', 'structured', 'text'].includes(kind)
+        ? buildWorkspacePreviewHtml(path, content)
+        : content;
+      const mime = ['markdown', 'web', 'structured', 'text'].includes(kind) ? 'text/html' : workspacePreviewMime(path);
+      const blob = new Blob([body], { type: `${mime};charset=utf-8` });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank', 'noopener,noreferrer');
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
@@ -1021,6 +1272,7 @@ export const useAppStore = defineStore('app', () => {
 
   function openModal(modal: 'model' | 'workspace' | 'commands') {
     activeModal.value = modal;
+    if (modal === 'commands' && !commands.value.length) refreshCommands().catch(() => undefined);
   }
 
   function closeModal() {
@@ -1211,11 +1463,18 @@ export const useAppStore = defineStore('app', () => {
     selectedProfile,
     contextUsagePercent,
     contextUsageSource,
+    contextUsedTokens,
+    contextLimitTokens,
+    contextUsageLabel,
     availableModels,
     availableProfiles,
     commandError,
     sessionQuery,
     filteredSessions,
+    groupedSessions,
+    sessionHasMore,
+    sessionLoadingMore,
+    selectedSessionIds,
     actionResults,
     capabilitySnapshots,
     capabilityLoading,
@@ -1225,10 +1484,15 @@ export const useAppStore = defineStore('app', () => {
     activeSession,
     boot,
     refreshSessions,
+    loadMoreSessions,
     loadMessages,
     refreshContextUsage,
     createSession,
     deleteSession,
+    toggleSessionSelected,
+    clearSessionSelection,
+    deleteSelectedSessions,
+    branchSession,
     compactSession,
     send,
     loadActivity,
@@ -1281,5 +1545,8 @@ export const useAppStore = defineStore('app', () => {
     refreshCommands,
     executeCommand,
     runCapabilityAction,
+    sessionTitle,
+    sessionSnippet,
+    compactTime,
   };
 });

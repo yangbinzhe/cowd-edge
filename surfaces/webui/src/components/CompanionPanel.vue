@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, ref } from 'vue';
-import { Brain, CircleDot, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, X } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Brain, ChevronLeft, ChevronRight, CircleDot, Code2, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from './MarkdownBlock.vue';
 import { displayStatus } from '../i18n/domain/status';
@@ -10,10 +10,16 @@ import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/works
 
 const store = useAppStore();
 const fileInput = ref<HTMLInputElement | null>(null);
+const previewOpen = ref(false);
+const previewMode = ref<'render' | 'source'>('render');
+const imageZoom = ref(1);
+const resizing = ref(false);
 
 const previewKind = computed(() => store.selectedFile ? workspacePreviewKind(store.selectedFile) : 'binary');
 const rawFileUrl = computed(() => store.rawWorkspaceFileUrl(store.selectedFile));
 const canEdit = computed(() => !!store.selectedFile && isWorkspaceEditablePreview(store.selectedFile));
+const previewableFiles = computed(() => store.filteredWorkspaceFiles.filter((file) => file.kind === 'file'));
+const selectedFileIndex = computed(() => previewableFiles.value.findIndex((file) => file.path === store.selectedFile));
 const workspaceMetaEntries = computed(() => {
   const meta = store.workspaceMeta || {};
   return Object.entries(meta).slice(0, 8).map(([key, value]) => ({
@@ -44,10 +50,75 @@ async function dropUpload(event: DragEvent) {
   event.preventDefault();
   await uploadFiles(event.dataTransfer?.files || null);
 }
+
+function applyCompanionWidth(width: number) {
+  const next = Math.max(320, Math.min(720, width));
+  document.documentElement.style.setProperty('--companion-width', `${next}px`);
+  localStorage.setItem('cowd-webui-companion-width', String(next));
+}
+
+function startResize(event: MouseEvent) {
+  resizing.value = true;
+  event.preventDefault();
+}
+
+function dragResize(event: MouseEvent) {
+  if (!resizing.value) return;
+  applyCompanionWidth(window.innerWidth - event.clientX);
+}
+
+function stopResize() {
+  resizing.value = false;
+}
+
+function openPreview() {
+  if (!store.selectedFile) return;
+  previewOpen.value = true;
+  previewMode.value = 'render';
+  imageZoom.value = 1;
+}
+
+function closePreview() {
+  previewOpen.value = false;
+}
+
+async function stepPreview(delta: number) {
+  if (!previewableFiles.value.length) return;
+  const current = selectedFileIndex.value >= 0 ? selectedFileIndex.value : 0;
+  const nextIndex = Math.max(0, Math.min(previewableFiles.value.length - 1, current + delta));
+  const next = previewableFiles.value[nextIndex];
+  if (next) {
+    await store.openFile(next.path);
+    openPreview();
+  }
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && previewOpen.value) closePreview();
+}
+
+watch(() => store.selectedFile, (path) => {
+  if (path) openPreview();
+});
+
+onMounted(() => {
+  const savedWidth = Number(localStorage.getItem('cowd-webui-companion-width') || 0);
+  if (savedWidth) applyCompanionWidth(savedWidth);
+  window.addEventListener('mousemove', dragResize);
+  window.addEventListener('mouseup', stopResize);
+  window.addEventListener('keydown', handleKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', dragResize);
+  window.removeEventListener('mouseup', stopResize);
+  window.removeEventListener('keydown', handleKeydown);
+});
 </script>
 
 <template>
   <aside class="companion-panel" :aria-label="t('component.companion.panel.aria-label.98b3d09f27')">
+    <button class="companion-resizer" type="button" :aria-label="t('workspace.preview.resize')" @mousedown="startResize"></button>
     <div class="companion-tabs" role="tablist">
       <button :class="{ active: store.companionTab === 'activity' }" type="button" @click="store.openCompanion('activity')">
         <Workflow :size="15" />
@@ -136,35 +207,17 @@ async function dropUpload(event: DragEvent) {
         <input v-model="store.workspaceFilter" type="search" :placeholder="t('component.companion.panel.placeholder.070c810b3f')" />
       </label>
       <WorkspaceTree />
-      <div class="preview-pane" v-if="store.selectedFile">
+      <div class="preview-summary" v-if="store.selectedFile">
         <div class="preview-head">
           <strong>{{ store.selectedFile }}</strong>
           <div>
+            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.preview')" @click="openPreview"><Eye :size="14" /></button>
             <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.openExternal')" @click="store.openWorkspacePathExternally(store.selectedFile)"><ExternalLink :size="14" /></button>
             <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.download')" @click="store.downloadWorkspacePath(store.selectedFile, 'file')"><Download :size="14" /></button>
             <button class="icon-action" type="button" @click="store.attachWorkspaceFile(store.selectedFile)"><Link2 :size="14" /></button>
             <button class="icon-action" type="button" :disabled="!store.editorDirty || !canEdit" @click="store.resetFile"><RotateCcw :size="14" /></button>
             <button class="icon-action" type="button" :disabled="!store.editorDirty || !canEdit" @click="store.saveFile"><Save :size="14" /></button>
           </div>
-        </div>
-        <div v-if="previewKind === 'image'" class="image-preview">
-          <img :src="rawFileUrl" alt="" />
-        </div>
-        <iframe v-else-if="previewKind === 'web'" class="browser-preview" :srcdoc="store.editorContent" sandbox="allow-same-origin"></iframe>
-        <iframe v-else-if="previewKind === 'pdf'" class="browser-preview" :src="rawFileUrl"></iframe>
-        <audio v-else-if="previewKind === 'audio'" class="media-preview" :src="rawFileUrl" controls></audio>
-        <video v-else-if="previewKind === 'video'" class="media-preview video" :src="rawFileUrl" controls></video>
-        <div v-else-if="previewKind === 'markdown'" class="render-preview">
-          <MarkdownBlock :content="store.editorContent" />
-        </div>
-        <textarea v-else-if="previewKind === 'structured'" v-model="store.editorContent" class="structured-preview" spellcheck="false" />
-        <textarea v-else-if="previewKind === 'text'" v-model="store.editorContent" spellcheck="false" />
-        <div v-else class="unsupported-preview">
-          <strong>{{ t('workspace.preview.unsupported.title') }}</strong>
-          <p>{{ t('workspace.preview.unsupported.body') }}</p>
-          <button class="ghost-action" type="button" @click="store.downloadWorkspacePath(store.selectedFile, 'file')">
-            <Download :size="14" />{{ t('workspace.preview.action.download') }}
-          </button>
         </div>
         <p v-if="store.fileError" class="file-error">{{ store.fileError }}</p>
         <p v-if="!canEdit" class="readonly-note"><Eye :size="14" />{{ t('component.companion.panel.text.be83b668ee') }}</p>
@@ -286,5 +339,46 @@ async function dropUpload(event: DragEvent) {
         </article>
       </div>
     </section>
+
+    <div v-if="previewOpen" class="modal-scrim workspace-preview-scrim" @click.self="closePreview">
+      <section class="workspace-preview-modal" tabindex="-1">
+        <header>
+          <div>
+            <strong>{{ store.selectedFile }}</strong>
+            <span>{{ previewKind }}</span>
+          </div>
+          <div class="preview-modal-actions">
+            <button class="icon-action" type="button" :disabled="selectedFileIndex <= 0" :aria-label="t('workspace.preview.previous')" @click="stepPreview(-1)"><ChevronLeft :size="16" /></button>
+            <button class="icon-action" type="button" :disabled="selectedFileIndex < 0 || selectedFileIndex >= previewableFiles.length - 1" :aria-label="t('workspace.preview.next')" @click="stepPreview(1)"><ChevronRight :size="16" /></button>
+            <button v-if="previewKind === 'image'" class="icon-action" type="button" :aria-label="t('workspace.preview.zoomOut')" @click="imageZoom = Math.max(0.4, imageZoom - 0.2)"><ZoomOut :size="16" /></button>
+            <button v-if="previewKind === 'image'" class="icon-action" type="button" :aria-label="t('workspace.preview.zoomIn')" @click="imageZoom = Math.min(3, imageZoom + 0.2)"><ZoomIn :size="16" /></button>
+            <button v-if="canEdit" class="icon-action" type="button" :aria-label="t('workspace.preview.toggleSource')" @click="previewMode = previewMode === 'render' ? 'source' : 'render'"><Code2 :size="16" /></button>
+            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.openExternal')" @click="store.openWorkspacePathExternally(store.selectedFile)"><ExternalLink :size="16" /></button>
+            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.download')" @click="store.downloadWorkspacePath(store.selectedFile, 'file')"><Download :size="16" /></button>
+            <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="closePreview"><X :size="16" /></button>
+          </div>
+        </header>
+        <div class="workspace-preview-content">
+          <div v-if="previewKind === 'image'" class="image-preview modal-image">
+            <img :src="rawFileUrl" alt="" :style="{ transform: `scale(${imageZoom})` }" />
+          </div>
+          <iframe v-else-if="previewKind === 'web' && previewMode === 'render'" class="browser-preview" :srcdoc="store.editorContent" sandbox="allow-same-origin"></iframe>
+          <iframe v-else-if="previewKind === 'pdf'" class="browser-preview" :src="rawFileUrl"></iframe>
+          <audio v-else-if="previewKind === 'audio'" class="media-preview" :src="rawFileUrl" controls></audio>
+          <video v-else-if="previewKind === 'video'" class="media-preview video" :src="rawFileUrl" controls></video>
+          <div v-else-if="previewKind === 'markdown' && previewMode === 'render'" class="render-preview">
+            <MarkdownBlock :content="store.editorContent" />
+          </div>
+          <textarea v-else-if="canEdit" v-model="store.editorContent" class="structured-preview" spellcheck="false" />
+          <div v-else class="unsupported-preview">
+            <strong>{{ t('workspace.preview.unsupported.title') }}</strong>
+            <p>{{ t('workspace.preview.unsupported.body') }}</p>
+            <button class="ghost-action" type="button" @click="store.downloadWorkspacePath(store.selectedFile, 'file')">
+              <Download :size="14" />{{ t('workspace.preview.action.download') }}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
   </aside>
 </template>

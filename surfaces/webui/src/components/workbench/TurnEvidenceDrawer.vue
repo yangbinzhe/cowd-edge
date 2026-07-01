@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
+import { onBeforeUnmount, onMounted } from 'vue';
+import { X } from 'lucide-vue-next';
 import DataTable from './DataTable.vue';
 import RawPayload from './RawPayload.vue';
 import RequestReceipt from './RequestReceipt.vue';
@@ -9,6 +11,13 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{ close: [] }>();
+
+function closeOnEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') emit('close');
+}
+
+onMounted(() => window.addEventListener('keydown', closeOnEscape));
+onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
 </script>
 
 <template>
@@ -18,7 +27,7 @@ const emit = defineEmits<{ close: [] }>();
         <h2>{{ t('component.workbench.turn.evidence.drawer.text.94cf533aa2') }}</h2>
         <p>{{ evidence?.source_note || t('component.workbench.turn.evidence.drawer.inline.584fcb1c46') }}</p>
       </div>
-      <button class="ghost-action" type="button" @click="emit('close')">{{ t('component.workbench.turn.evidence.drawer.text.c53c97c65c') }}</button>
+      <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="emit('close')"><X :size="16" /></button>
     </header>
 
     <div v-if="!evidence" class="empty-note">{{ t('component.workbench.turn.evidence.drawer.text.af19886bc3') }}</div>

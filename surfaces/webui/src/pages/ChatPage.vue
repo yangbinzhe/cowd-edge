@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, nextTick, ref } from 'vue';
-import { Bot, Boxes, Brain, CircleDot, FileText, Folder, Paperclip, RotateCcw, Send, Square, Zap } from 'lucide-vue-next';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { Bot, Boxes, Brain, CircleDot, FileText, Folder, Hash, Paperclip, RotateCcw, Search, Send, Square, Wrench, X, Zap } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
@@ -11,14 +11,12 @@ import { displayStatus } from '../i18n/domain/status';
 const store = useAppStore();
 const draft = ref('');
 const sending = ref(false);
+const commandQuery = ref('');
 const contextUsage = computed(() => store.contextUsagePercent);
 const modelLabel = computed(() => store.selectedModel || 'Select model');
 const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
 const chatContext = computed(() => [
-  { label: t('script.pages.chatpage.label.f7f1997c6c'), value: store.activeSessionId || 'new session' },
-  { label: t('script.pages.chatpage.label.68c2cc7f0c'), value: modelLabel.value },
-  { label: t('script.pages.chatpage.label.ff4fc0276e'), value: store.selectedProfile || 'default' },
-  { label: t('script.pages.chatpage.label.cc11b3a28f'), value: contextUsage.value === null ? store.contextUsageSource : `${contextUsage.value}%`, tone: contextUsage.value && contextUsage.value > 85 ? 'warn' : 'success' },
+  { label: t('script.pages.chatpage.label.cc11b3a28f'), value: store.contextUsageLabel, tone: contextUsage.value && contextUsage.value > 85 ? 'warn' : 'success' },
   { label: t('script.pages.chatpage.label.4fa8cc860c'), value: String(store.toolCallCount) },
   { label: t('script.pages.chatpage.label.89c8a2851d'), value: `${store.memoryRecallCount}/${store.memoryEvidenceCount}` },
 ]);
@@ -30,6 +28,25 @@ const cleanCounters = computed(() => [
 const runStatus = computed(() => store.currentRun?.status || 'idle');
 const runIdentity = computed(() => store.currentRun?.run_id || store.currentRun?.turn_id || store.activeSessionId || 'no active run');
 const visibleStages = computed(() => store.runStageSummary.filter((stage: any) => stage.status !== 'missing' || isPanorama.value));
+const filteredCommands = computed(() => {
+  const query = commandQuery.value.trim().toLowerCase().replace(/^\//, '');
+  if (!query) return store.commands;
+  return store.commands.filter((command: any) => `${command.name || ''} ${command.description || ''} ${command.detail || ''}`.toLowerCase().includes(query));
+});
+
+watch(draft, (value) => {
+  if (value.startsWith('/') && store.activeModal !== 'commands') {
+    commandQuery.value = value.slice(1);
+    store.openModal('commands');
+  }
+});
+
+function closeOnEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape' && store.activeModal) store.closeModal();
+}
+
+onMounted(() => window.addEventListener('keydown', closeOnEscape));
+onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
 
 async function submit() {
   const text = draft.value.trim();
@@ -79,6 +96,7 @@ async function chooseCommand(command: any) {
   }
   await store.executeCommand(name, { session_id: store.activeSessionId });
   draft.value = `${name} `;
+  commandQuery.value = '';
   store.closeModal();
 }
 </script>
@@ -97,7 +115,7 @@ async function chooseCommand(command: any) {
         </div>
         <div class="status-strip">
           <span>{{ displayStatus(store.health?.status || 'unknown') }}</span>
-          <button type="button" @click="store.openModal('model')">{{ modelLabel }}</button>
+          <button type="button" @click="store.openModal('model')">{{ store.selectedProfile || 'default' }}</button>
         </div>
       </div>
     </header>
@@ -143,10 +161,10 @@ async function chooseCommand(command: any) {
     <div class="transcript" :aria-label="t('page.chat.page.aria-label.e683294716')">
       <article v-for="turn in store.turns" :key="turn.id" class="turn" :data-role="turn.role">
         <div v-if="isPanorama" class="message-meta">
-          <span>{{ displayStatus(turn.status || 'unknown') }}</span>
-          <span v-if="turn.sequence">#{{ turn.sequence }}</span>
-          <span v-if="turn.tool_name">{{ turn.tool_name }}</span>
-          <button type="button" @click="inspectTurn(turn)">{{ t('page.chat.page.text.848af509ba') }}</button>
+          <span v-if="turn.sequence" class="meta-sequence">#{{ turn.sequence }}</span>
+          <span><CircleDot :size="12" />{{ displayStatus(turn.status || 'unknown') }}</span>
+          <span v-if="turn.tool_name"><Wrench :size="12" />{{ turn.tool_name }}</span>
+          <button type="button" @click="inspectTurn(turn)"><Hash :size="12" />{{ t('page.chat.page.text.848af509ba') }}</button>
         </div>
         <MarkdownBlock :content="turn.content" />
       </article>
@@ -163,9 +181,9 @@ async function chooseCommand(command: any) {
       <div class="composer-bar">
         <div class="composer-context">
           <button type="button" class="composer-chip" @click="store.openModal('workspace')"><Folder :size="14" /> {{ store.workspaceDir || t('page.chat.page.inline.59c92a9169') }}</button>
-          <button type="button" class="composer-chip" @click="store.openModal('model')"><Bot :size="14" /> {{ store.selectedProfile }}</button>
+          <button type="button" class="composer-chip" @click="store.openModal('model')"><Bot :size="14" /> {{ modelLabel }}</button>
           <button v-if="store.attachments.length" type="button" class="composer-chip" @click="store.openCompanion('workspace')"><Paperclip :size="14" /> {{ formatCount('sources', store.attachments.length) }}</button>
-          <span>{{ t('page.chat.context.usage', { value: contextUsage === null ? store.contextUsageSource : `${contextUsage}%` }) }}</span>
+          <span>{{ store.contextUsageLabel }}</span>
           <div class="context-meter"><i :style="{ width: `${contextUsage || 0}%` }" /></div>
         </div>
         <div class="composer-actions">
@@ -181,7 +199,7 @@ async function chooseCommand(command: any) {
       <section v-if="store.activeModal === 'model'" class="command-modal">
         <header>
           <h2>{{ t('page.chat.page.text.371e4b7b8d') }}</h2>
-          <button type="button" @click="store.closeModal">{{ t('page.chat.page.text.a98aee1251') }}</button>
+          <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="store.closeModal"><X :size="16" /></button>
         </header>
         <div class="modal-columns">
           <div>
@@ -205,7 +223,7 @@ async function chooseCommand(command: any) {
       <section v-else-if="store.activeModal === 'workspace'" class="command-modal">
         <header>
           <h2>{{ t('page.chat.page.text.46144acb47') }}</h2>
-          <button type="button" @click="store.closeModal">{{ t('page.chat.page.text.a98aee1251') }}</button>
+          <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="store.closeModal"><X :size="16" /></button>
         </header>
         <button class="choice-row active" type="button" @click="store.openCompanion('workspace'); store.closeModal()">
           <Folder :size="15" />
@@ -217,12 +235,16 @@ async function chooseCommand(command: any) {
       <section v-else class="command-modal">
         <header>
           <h2>{{ t('page.chat.page.text.01bed7d85c') }}</h2>
-          <button type="button" @click="store.closeModal">{{ t('page.chat.page.text.a98aee1251') }}</button>
+          <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="store.closeModal"><X :size="16" /></button>
         </header>
+        <label class="search-field command-search">
+          <Search :size="15" />
+          <input v-model="commandQuery" type="search" :placeholder="t('chat.commands.search')" />
+        </label>
         <p v-if="!store.commands.length" class="modal-note">{{ t('page.chat.page.text.0a237ff19e') }}</p>
-        <button v-for="command in store.commands" :key="command.name" class="command-row" type="button" @click="chooseCommand(command)">
+        <button v-for="command in filteredCommands" :key="command.name" class="command-row" type="button" @click="chooseCommand(command)">
           <Boxes :size="15" />
-          <span><strong>{{ command.name }}</strong><small>{{ command.description || command.detail }}</small></span>
+          <span><strong>{{ command.name }}</strong><small>{{ command.description || command.detail || command.args || '-' }}</small></span>
         </button>
       </section>
     </div>

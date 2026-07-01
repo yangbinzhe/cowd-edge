@@ -718,14 +718,23 @@ describe('Cowd Vue WebUI shell', () => {
     vi.stubGlobal('fetch', fetchMock);
     const wrapper = await mountApp('/settings');
     await settleAsync();
+    expect(wrapper.get('.settings-nav').attributes('aria-label')).toBe('设置分区');
+    expect(wrapper.text()).toContain('保存当前分区');
+    const settingsButtons = () => wrapper.findAll('.settings-nav button');
+    await settingsButtons()[1]?.trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('保存运行时模型配置');
+    await settingsButtons()[3]?.trigger('click');
+    await settleAsync();
+    expect(wrapper.text()).toContain('更新审批策略');
+    await settingsButtons()[4]?.trigger('click');
+    await settleAsync();
     await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('验证 Gateway 访问'))?.trigger('click');
     await settleAsync();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/verify', expect.any(Object));
     expect(wrapper.text()).toContain('同源内部访问');
-    expect(wrapper.get('.settings-nav').attributes('aria-label')).toBe('设置分区');
-    expect(wrapper.text()).toContain('Provider 与模型');
-    expect(wrapper.text()).toContain('保存运行时模型配置');
-    expect(wrapper.text()).toContain('更新审批策略');
+    await settingsButtons()[5]?.trigger('click');
+    await settleAsync();
     expect(wrapper.text()).toContain('设置写入回执');
   });
 

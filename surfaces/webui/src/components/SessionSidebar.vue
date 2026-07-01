@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { t } from '../i18n';
-import { Archive, Plus, RefreshCw, Search, Trash2 } from 'lucide-vue-next';
+import { Copy, GitBranch, Plus, Search, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
-import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 
 async function searchSessions() {
   await store.refreshSessions();
+}
+
+async function copySession(sessionId: string) {
+  await navigator.clipboard?.writeText(sessionId);
+}
+
+async function onScroll(event: Event) {
+  const target = event.currentTarget as HTMLElement;
+  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 32) {
+    await store.loadMoreSessions();
+  }
 }
 </script>
 
@@ -20,30 +30,44 @@ async function searchSessions() {
       </button>
       <label class="search-field">
         <Search :size="15" />
-        <input v-model="store.sessionQuery" type="search" :placeholder="t('component.session.sidebar.placeholder.e7ed08a804')" @keydown.enter.prevent="searchSessions" />
+        <input v-model="store.sessionQuery" type="search" :placeholder="t('component.session.sidebar.placeholder.e7ed08a804')" @input="searchSessions" />
       </label>
-      <button class="ghost-action" type="button" @click="searchSessions">
-        <RefreshCw :size="15" />
-        {{ t('template.components.sessionsidebar.56e3badc4e') }}
-      </button>
+      <div v-if="store.selectedSessionIds.length" class="session-bulk-bar">
+        <span>{{ t('session.bulk.selected', { count: store.selectedSessionIds.length }) }}</span>
+        <button class="icon-action danger" type="button" :aria-label="t('session.bulk.delete')" @click="store.deleteSelectedSessions"><X :size="14" /></button>
+        <button class="icon-action" type="button" :aria-label="t('session.bulk.clear')" @click="store.clearSessionSelection"><X :size="14" /></button>
+      </div>
     </header>
 
-    <div class="session-list" :aria-label="t('component.session.sidebar.aria-label.d05d37d8a1')">
-      <article
-        v-for="session in store.filteredSessions"
-        :key="session.id"
-        class="session-row"
-        :class="{ active: session.id === store.activeSessionId }"
-      >
-        <button type="button" class="session-open" @click="store.loadMessages(session.id)">
-          <span class="session-title">{{ session.title }}</span>
-          <span class="session-meta">{{ session.model || t('component.session.sidebar.inline.6fc3b1f59f') }} · {{ displayStatus(session.status || 'unknown') }}</span>
-        </button>
-        <span class="session-actions">
-          <button class="icon-action" type="button" :title="t('component.session.sidebar.title.38b7208b6a')" @click="store.compactSession(session.id)"><Archive :size="13" /></button>
-          <button class="icon-action danger" type="button" :title="t('component.session.sidebar.title.2d9ee31bda')" @click="store.deleteSession(session.id)"><Trash2 :size="13" /></button>
-        </span>
-      </article>
+    <div class="session-list" :aria-label="t('component.session.sidebar.aria-label.d05d37d8a1')" @scroll="onScroll">
+      <section v-for="group in store.groupedSessions" :key="group.label" class="session-group">
+        <header>{{ group.label }}</header>
+        <article
+          v-for="session in group.items"
+          :key="session.id"
+          class="session-row"
+          :class="{ active: session.id === store.activeSessionId, selected: store.selectedSessionIds.includes(session.id) }"
+        >
+          <input
+            type="checkbox"
+            :checked="store.selectedSessionIds.includes(session.id)"
+            :aria-label="t('session.select')"
+            @change="store.toggleSessionSelected(session.id)"
+          />
+          <button type="button" class="session-open" @click="store.loadMessages(session.id)">
+            <span class="session-title">{{ store.sessionTitle(session) }}</span>
+            <span class="session-meta">{{ store.compactTime(session) }} · {{ store.sessionSnippet(session) || session.id }}</span>
+          </button>
+          <span class="session-actions">
+            <button class="icon-action" type="button" :title="t('session.copyId')" @click="copySession(session.id)"><Copy :size="13" /></button>
+            <button class="icon-action" type="button" :title="t('session.branch')" @click="store.branchSession(session.id)"><GitBranch :size="13" /></button>
+            <button class="icon-action danger" type="button" :title="t('component.session.sidebar.title.2d9ee31bda')" @click="store.deleteSession(session.id)"><X :size="13" /></button>
+          </span>
+        </article>
+      </section>
+      <button v-if="store.sessionHasMore" class="ghost-action session-load-more" type="button" :disabled="store.sessionLoadingMore" @click="store.loadMoreSessions">
+        {{ store.sessionLoadingMore ? t('status.loading') : t('session.loadMore') }}
+      </button>
     </div>
 
     <footer class="sidebar-foot">
