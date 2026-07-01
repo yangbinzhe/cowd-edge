@@ -38,8 +38,8 @@ defineProps<{
       :endpoint="endpoint"
       :detail="statusDetail"
     />
-    <PrimaryContextBar v-if="context?.length" :items="context" />
-    <WorkflowStrip v-if="workflow?.length" :steps="workflow" :title="t('component.layout.access.workbench.layout.title.7b13b6c559')" />
+    <PrimaryContextBar v-if="context?.length" :items="context" density="compact" :max-visible="4" />
+    <WorkflowStrip v-if="workflow?.length" :steps="workflow" :title="t('component.layout.access.workbench.layout.title.7b13b6c559')" density="compact" />
     <slot />
   </section>
 </template>

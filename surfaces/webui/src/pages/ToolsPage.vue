@@ -311,8 +311,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="toolContext" />
-    <WorkflowStrip :steps="toolsWorkflow" :title="t('page.tools.page.title.94f33c18ea')" />
+    <PrimaryContextBar :items="toolContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="toolsWorkflow" :title="t('page.tools.page.title.94f33c18ea')" density="compact" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card" data-tone="success">

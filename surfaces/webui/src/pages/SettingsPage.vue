@@ -6,10 +6,10 @@ import { useAppStore } from '../stores/app';
 import { api } from '../api/client';
 import { useI18n, type Locale } from '../i18n';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
+import { displayBoolean, displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 const { locale, setLocale } = useI18n();
@@ -21,28 +21,41 @@ const authResult = ref<any>(null);
 const settingsReceipt = ref<any>(null);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const origin = computed(() => location.origin);
-const accessMode = computed(() => {
-  if (authResult.value?.valid || authResult.value?.auth_required === false) return 'internal webui access ready';
-  if (authResult.value?.__offline) return 'gateway offline';
-  if (authResult.value?.error || authResult.value?.__error) return 'external auth required';
-  return 'same-origin gateway surface';
+const accessModeLabels = {
+  internal: 'settings.access.internal',
+  offline: 'settings.access.offline',
+  external: 'settings.access.external',
+  sameOrigin: 'settings.access.sameOrigin',
+} as const;
+const accessModeCode = computed(() => {
+  if (authResult.value?.valid || authResult.value?.auth_required === false) return 'internal';
+  if (authResult.value?.__offline) return 'offline';
+  if (authResult.value?.error || authResult.value?.__error) return 'external';
+  return 'sameOrigin';
 });
+const accessMode = computed(() => t(accessModeLabels[accessModeCode.value]));
 const providerModels = computed(() => store.providers?.models || []);
 const providerRows = computed(() => store.providers?.providers || []);
 const configuredModel = computed(() => store.providers?.configured_model || store.controlPlane?.configured_model || store.settings?.model || '');
 const settingsContext = computed(() => [
   { label: t('script.pages.settingspage.label.44ab85a252'), value: origin.value },
-  { label: t('script.pages.settingspage.label.2f81a22de0'), value: accessMode.value, tone: accessMode.value.includes('offline') ? 'warn' : 'success' },
+  { label: t('script.pages.settingspage.label.2f81a22de0'), value: accessMode.value, tone: accessModeCode.value === 'offline' ? 'warn' : 'success' },
   { label: t('script.pages.settingspage.label.87b7c08bae'), value: providerRows.value.length },
-  { label: t('script.pages.settingspage.label.68c2cc7f0c'), value: configuredModel.value || 'unresolved' },
+  { label: t('script.pages.settingspage.label.68c2cc7f0c'), value: configuredModel.value || t('status.unknown') },
 ]);
-const settingsWorkflow = computed(() => [
-  { id: 'profile', label: t('script.pages.settingspage.label.ff4fc0276e'), status: store.profiles?.length ? 'ready' : 'idle', count: store.profiles?.length || 0 },
-  { id: 'gateway', label: t('script.pages.settingspage.label.5a0e181880'), status: accessMode.value.includes('offline') ? 'blocked' : 'ready', description: accessMode.value },
-  { id: 'providers', label: t('script.pages.settingspage.label.87b7c08bae'), status: providerRows.value.length ? 'ready' : 'degraded', count: providerRows.value.length },
-  { id: 'policy', label: t('script.pages.settingspage.label.bb9cf14180'), status: store.approvalConfig ? 'ready' : 'idle' },
-  { id: 'ui', label: 'UI', status: 'ready', description: theme.value },
+const settingsSections = computed(() => [
+  { id: 'ui', label: t('settings.nav.ui'), description: t('settings.nav.ui.desc'), status: theme.value },
+  { id: 'providers', label: t('settings.nav.providers'), description: t('settings.nav.providers.desc'), status: providerRows.value.length ? formatCount('models', store.providers?.provider_model_count ?? store.controlPlane?.provider_model_count ?? 0) : t('status.missing') },
+  { id: 'profile', label: t('settings.nav.profile'), description: t('settings.nav.profile.desc'), status: formatCount('profiles', store.profiles?.length || 0) },
+  { id: 'policy', label: t('settings.nav.policy'), description: t('settings.nav.policy.desc'), status: store.approvalConfig ? t('status.ready') : t('status.unknown') },
+  { id: 'gateway', label: t('settings.nav.gateway'), description: t('settings.nav.gateway.desc'), status: accessMode.value },
+  { id: 'receipts', label: t('settings.nav.receipts'), description: t('settings.nav.receipts.desc'), status: settingsReceipt.value ? t('status.ready') : t('status.waiting') },
 ]);
+const activeSettingsSection = computed({
+  get: () => store.activeSectionByPage.settings || 'ui',
+  set: (value: string) => store.selectSection('settings', value),
+});
+const currentSettingsSection = computed(() => settingsSections.value.find((section) => section.id === activeSettingsSection.value) || settingsSections.value[0]);
 const modelConfigContract = computed(() => ({
   id: 'settings.runtime.model',
   domain: 'settings',
@@ -144,7 +157,7 @@ async function previewDefaultModelGoverned(payload: Record<string, unknown> = {}
     method: 'PUT',
     status: model ? 'preview' : 'invalid',
     payload_summary: JSON.stringify({ model }),
-    error: model ? undefined : 'model is required',
+    error: model ? undefined : t('settings.providers.modelRequired'),
     retryable: false,
   };
 }
@@ -232,6 +245,10 @@ async function verifyAuth() {
   });
 }
 
+function selectSettingsSection(id: string) {
+  activeSettingsSection.value = id;
+}
+
 </script>
 
 <template>
@@ -248,10 +265,32 @@ async function verifyAuth() {
     </header>
 
     <p v-if="settingsError" class="settings-alert">{{ settingsError }}</p>
-    <PrimaryContextBar :items="settingsContext" />
-    <WorkflowStrip :steps="settingsWorkflow" :title="t('page.settings.page.title.885b2158fd')" />
+    <PrimaryContextBar :items="settingsContext" density="compact" :max-visible="4" />
 
-    <div class="settings-grid">
+    <div class="settings-workbench">
+      <aside class="settings-nav" :aria-label="t('settings.nav.aria')">
+        <button
+          v-for="section in settingsSections"
+          :key="section.id"
+          type="button"
+          :class="{ active: activeSettingsSection === section.id }"
+          @click="selectSettingsSection(section.id)"
+        >
+          <strong>{{ section.label }}</strong>
+          <span>{{ section.description }}</span>
+          <small>{{ displayStatus(section.status) }}</small>
+        </button>
+      </aside>
+
+      <div class="settings-content" :data-active-section="activeSettingsSection">
+        <header class="settings-content-head">
+          <div>
+            <h2>{{ currentSettingsSection.label }}</h2>
+            <p>{{ currentSettingsSection.description }}</p>
+          </div>
+          <span class="status-badge">{{ displayStatus(currentSettingsSection.status) }}</span>
+        </header>
+
       <section class="settings-section" data-section="ui">
         <h2>{{ t('page.settings.page.text.3dc3553554') }}</h2>
         <div class="segmented">
@@ -282,7 +321,7 @@ async function verifyAuth() {
         <label>
           {{ t('template.pages.settingspage.5fbae11ede') }}
           <select v-model="defaultModel">
-            <option value="">Keep {{ configuredModel || 'current' }}</option>
+            <option value="">{{ t('settings.providers.keepCurrent', { model: configuredModel || t('status.unknown') }) }}</option>
             <option v-for="model in providerModels" :key="model.id || model.name" :value="model.id || model.name">
               {{ model.id || model.name }} · {{ model.provider }}
             </option>
@@ -300,7 +339,7 @@ async function verifyAuth() {
           <article v-for="provider in providerRows" :key="provider.name" class="profile-row" role="button" tabindex="0" @click="selectedDetail = provider" @keydown.enter.prevent="selectedDetail = provider">
             <div>
               <strong>{{ provider.name }}</strong>
-              <span>{{ provider.protocol || 'openai-compat' }} · {{ formatCount('models', provider.model_count) }} · credential {{ provider.credential_present ? t('page.settings.page.inline.aaa6a21074') : t('page.settings.page.inline.c96aea5cbb') }}</span>
+              <span>{{ provider.protocol || 'openai-compat' }} · {{ formatCount('models', provider.model_count) }} · {{ t('settings.providers.credential') }} {{ provider.credential_present ? t('page.settings.page.inline.aaa6a21074') : t('page.settings.page.inline.c96aea5cbb') }}</span>
             </div>
           </article>
         </div>
@@ -327,7 +366,7 @@ async function verifyAuth() {
               >
                 {{ (profile.id || profile.name) === store.selectedProfile ? t('page.settings.page.inline.74c3bea5b7') : t('page.settings.page.inline.0499f64eb6') }}
               </button>
-              <button v-if="(profile.id || profile.name) !== 'default'" class="icon-action danger" type="button" @click="deleteProfile(profile.id || profile.name)">
+              <button v-if="(profile.id || profile.name) !== 'default'" class="icon-action danger" type="button" :aria-label="t('settings.profile.delete')" @click="deleteProfile(profile.id || profile.name)">
                 <Trash2 :size="14" />
               </button>
             </div>
@@ -360,10 +399,14 @@ async function verifyAuth() {
         </div>
         <dl v-if="authResult" class="contract-list">
           <dt>{{ t('page.settings.page.text.dcfaad321b') }}</dt>
-          <dd>{{ authResult.valid === true ? 'valid' : (authResult.status || authResult.authenticated || t('page.settings.page.inline.3be9ccc7cd')) }}</dd>
+          <dd>{{ authResult.valid === true ? displayStatus('valid') : (authResult.status ? displayStatus(authResult.status) : authResult.authenticated !== undefined ? displayBoolean(authResult.authenticated) : t('page.settings.page.inline.3be9ccc7cd')) }}</dd>
           <dt>{{ t('page.settings.page.text.b5fb67dcad') }}</dt>
           <dd>{{ authResult.__error || authResult.error || '-' }}</dd>
         </dl>
+      </section>
+
+      <section class="settings-section" data-section="receipts">
+        <h2>{{ t('page.settings.page.text.13785bef59') }}</h2>
         <RequestReceipt v-if="settingsReceipt" :receipt="settingsReceipt" :title="t('page.settings.page.title.39519790d9')" />
         <section v-else class="request-receipt">
           <header>
@@ -374,6 +417,7 @@ async function verifyAuth() {
         </section>
         <DetailDrawer :title="t('page.settings.page.title.c2b419daba')" :row="selectedDetail" @close="selectedDetail = null" />
       </section>
+      </div>
     </div>
   </section>
 </template>

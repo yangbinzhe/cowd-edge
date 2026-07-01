@@ -11,6 +11,7 @@ import RawPayload from '../components/workbench/RawPayload.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import MissionActionPreview from '../components/workbench/MissionActionPreview.vue';
 import { useAppStore } from '../stores/app';
+import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 const loading = ref(false);
@@ -434,7 +435,7 @@ onMounted(refresh);
             @click="selectSession(session.id)"
           >
             <strong>{{ session.title }}</strong>
-            <span>{{ session.id }} · {{ session.status }} · teams {{ session.teams }} · agents {{ session.agents }}</span>
+            <span>{{ session.id }} · {{ displayStatus(session.status) }} · teams {{ session.teams }} · agents {{ session.agents }}</span>
           </button>
           <p v-if="!sessionRows.length" class="empty-note">{{ t('page.mission.control.page.text.9c6452b08a') }}</p>
         </div>
@@ -468,7 +469,7 @@ onMounted(refresh);
             @click="loadTeamRun(team.id)"
           >
             <strong>{{ team.id }}</strong>
-            <span>{{ team.status }} · agents {{ team.agents }} · synthesis {{ team.synthesis }}</span>
+            <span>{{ displayStatus(team.status) }} · agents {{ team.agents }} · synthesis {{ displayStatus(team.synthesis) }}</span>
           </button>
           <p v-if="!teamRunRows.length" class="empty-note">{{ t('page.mission.control.page.text.f0c708899b') }}</p>
         </div>
@@ -512,7 +513,7 @@ onMounted(refresh);
         <div class="mission-command-list">
           <article v-for="command in sessionCommands" :key="command.command_id" class="activity-item">
             <div>
-              <strong>{{ command.kind || t('page.mission.control.fallback.command') }} · {{ command.status }}</strong>
+              <strong>{{ command.kind || t('page.mission.control.fallback.command') }} · {{ displayStatus(command.status) }}</strong>
               <p>{{ command.command }}</p>
               <small>{{ command.command_id }} · {{ t('page.mission.control.command.from', { source: command.from_session_id || '-' }) }}</small>
             </div>
@@ -541,7 +542,7 @@ onMounted(refresh);
           <StatusPill :status="pendingApprovals.length ? 'blocked' : 'ready'" />
         </header>
         <article v-for="approval in pendingApprovals" :key="approval.approval_id || approval.id" class="approval-row">
-          <span>{{ approval.summary || approval.action || approval.command }} · {{ approval.session_id || approval.agent_id || approval.tool || 'mission' }} · {{ approval.risk || 'policy' }}</span>
+          <span>{{ approval.summary || approval.action || approval.command }} · {{ approval.session_id || approval.agent_id || approval.tool || 'mission' }} · {{ displayStatus(approval.risk || 'policy') }}</span>
           <button class="ghost-action" type="button" @click="decideApproval(approval.approval_id || approval.id, true)">
             <CheckCircle2 :size="15" />{{ t('page.mission.control.page.text.d282699e33') }}</button>
           <button class="danger-action" type="button" @click="decideApproval(approval.approval_id || approval.id, false)">
@@ -558,7 +559,7 @@ onMounted(refresh);
       </header>
       <div class="evidence-list">
         <article v-for="item in evidenceRows" :key="`${item.source}-${item.kind}-${item.summary}`" class="evidence-item">
-          <strong>{{ item.source }} · {{ item.kind }} · {{ item.status }}</strong>
+          <strong>{{ item.source }} · {{ item.kind }} · {{ displayStatus(item.status) }}</strong>
           <p>{{ item.summary }}</p>
         </article>
         <p v-if="!evidenceRows.length" class="empty-note">{{ t('page.mission.control.page.text.4c14c2f5a7') }}</p>

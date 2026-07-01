@@ -22,6 +22,9 @@ import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
 import mfgWriteContracts from './data/mfgWriteContracts.json';
+import { cleanAssistantContent } from './utils/chatContent';
+import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
+import { isWorkspaceTextPreview, workspacePreviewKind } from './utils/workspacePreview';
 
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
 vi.mock('vue-echarts', () => ({ default: { template: '<div class="chart"></div>' } }));
@@ -104,6 +107,43 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.chat-page').exists()).toBe(true);
   });
 
+  it('keeps mobile Chat panorama usable by collapsing companion until requested', async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const wrapper = await mountApp('/chat');
+    await settle();
+    expect(wrapper.get('.chat-page').exists()).toBe(true);
+    expect(wrapper.find('.companion-panel').exists()).toBe(false);
+    expect(wrapper.find('.companion-toggle').exists()).toBe(true);
+    await wrapper.get('.companion-toggle').trigger('click');
+    await settle();
+    expect(wrapper.find('.companion-panel').exists()).toBe(true);
+    wrapper.unmount();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+  });
+
+  it('cleans raw tool evidence from assistant-visible Chat content', () => {
+    const raw = [
+      'Done.',
+      'Tool workspace.read completed. Raw evidence ref: evidence://tool/1',
+      'Summary: {"path":"README.md","content":"large payload"}',
+      'Next step is ready.',
+    ].join('\n');
+    const cleaned = cleanAssistantContent(raw, (tool) => `工具 ${tool} 已完成，详细证据已进入证据面板。`);
+    expect(cleaned).toContain('工具 workspace.read 已完成');
+    expect(cleaned).toContain('Next step is ready.');
+    expect(cleaned).not.toContain('Raw evidence ref');
+    expect(cleaned).not.toContain('Summary: {');
+  });
+
+  it('cleans failed tool evidence from assistant-visible Chat content', () => {
+    const raw = 'Tool read_file failed. Raw evidence ref: tool://tool-1. Summary: No such file or directory';
+    const cleaned = cleanAssistantContent(raw, (tool, outcome) => `工具 ${tool} ${outcome === 'failed' ? '失败' : '完成'}，详细证据已进入证据面板。`);
+    expect(cleaned).toContain('工具 read_file 失败');
+    expect(cleaned).not.toContain('Raw evidence ref');
+    expect(cleaned).not.toContain('Summary:');
+  });
+
   it('switches Chat into clean mode and hides panorama projections', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
@@ -118,6 +158,14 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.clean-counts').text()).toContain('工具调用');
     expect(wrapper.get('.clean-counts').text()).toContain('记忆唤起');
     expect(wrapper.get('.clean-counts').text()).toContain('记忆证据');
+  });
+
+  it('renders Surface workflow as a compact high-signal strip', async () => {
+    const wrapper = await mountApp('/surfaces');
+    await settle();
+    const workflowSteps = wrapper.findAll('.workflow-strip .workflow-step');
+    expect(workflowSteps.length).toBeLessThanOrEqual(5);
+    expect(wrapper.text()).toContain('更多');
   });
 
   it('opens a Chat turn evidence drawer from current session projections', async () => {
@@ -144,21 +192,105 @@ describe('Cowd Vue WebUI shell', () => {
     expect(store.selectedTurnEvidence?.summary.map((item: any) => item.label)).toContain('工具');
   });
 
-  it('renders Workspace rename controls and Inspector tab from real store state', async () => {
+  it('renders Workspace file tree controls and Inspector tab from real store state', async () => {
     const wrapper = await mountApp('/chat');
     await settleAsync();
     const store = useAppStore();
     store.workspaceFiles = [{ name: 'a.md', path: 'docs/a.md', kind: 'file' }];
+    store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', store.workspaceFiles, new Set(['']));
     store.openCompanion('workspace');
     await settle();
-    await wrapper.get('button[aria-label="重命名 a.md"]').trigger('click');
+    expect(wrapper.find('.workspace-tree').exists()).toBe(true);
+    expect(wrapper.find('.workspace-tree-node').text()).toContain('a.md');
+    await wrapper.get('button[aria-label="a.md 更多操作"]').trigger('click');
     await settle();
-    expect(wrapper.find('.rename-row').exists()).toBe(true);
-    expect(wrapper.find('.rename-row input').element.value).toBe('docs/a.md');
+    expect(wrapper.find('.workspace-context-menu').exists()).toBe(true);
+    expect(wrapper.find('.workspace-context-menu').text()).toContain('重命名');
     store.openCompanion('inspector');
     await settle();
     expect(wrapper.text()).toContain('检查器');
     expect(wrapper.text()).toContain('上下文');
+  });
+
+  it('executes Workspace tree right-click create through the store action', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const files = [{ name: 'docs', path: 'docs', kind: 'dir' as const }];
+    store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
+    const createFile = vi.spyOn(store, 'createWorkspaceFile').mockResolvedValue(undefined as any);
+    store.openCompanion('workspace');
+    await settle();
+    await wrapper.get('button[aria-label="docs 更多操作"]').trigger('click');
+    await settle();
+    await wrapper.findAll('.workspace-context-menu button').find((button) => button.text().includes('新建文件'))?.trigger('click');
+    await settle();
+    await wrapper.get('.workspace-inline-action input').setValue('plan.md');
+    await wrapper.findAll('.workspace-inline-action button').find((button) => button.text().includes('创建'))?.trigger('click');
+    await settleAsync();
+    expect(createFile).toHaveBeenCalledWith('docs/plan.md');
+  });
+
+  it('requires confirmation before Workspace tree delete calls the backend action', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const files = [{ name: 'a.md', path: 'docs/a.md', kind: 'file' as const }];
+    store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
+    const deletePath = vi.spyOn(store, 'deleteWorkspacePathConfirmed').mockResolvedValue(undefined as any);
+    store.openCompanion('workspace');
+    await settle();
+    await wrapper.get('button[aria-label="a.md 更多操作"]').trigger('click');
+    await settle();
+    const deleteButton = () => wrapper.findAll('.workspace-context-menu button').find((button) => button.text().includes('删除'));
+    await deleteButton()?.trigger('click');
+    await settle();
+    expect(deletePath).not.toHaveBeenCalled();
+    expect(wrapper.find('.workspace-context-menu').text()).toContain('确认删除');
+    await deleteButton()?.trigger('click');
+    await settleAsync();
+    expect(deletePath).toHaveBeenCalledWith('docs/a.md');
+  });
+
+  it('exposes Workspace download and browser-open actions from tree menus', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const files = [{ name: 'a.md', path: 'docs/a.md', kind: 'file' as const }];
+    store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
+    const download = vi.spyOn(store, 'downloadWorkspacePath').mockImplementation(() => undefined);
+    const openExternal = vi.spyOn(store, 'openWorkspacePathExternally').mockResolvedValue(undefined as any);
+    store.openCompanion('workspace');
+    await settle();
+    await wrapper.get('button[aria-label="a.md 更多操作"]').trigger('click');
+    await settle();
+    const menuText = wrapper.find('.workspace-context-menu').text();
+    expect(menuText).toContain('下载');
+    expect(menuText).toContain('在浏览器打开');
+    await wrapper.findAll('.workspace-context-menu button').find((button) => button.text().includes('下载'))?.trigger('click');
+    await wrapper.get('button[aria-label="a.md 更多操作"]').trigger('click');
+    await settle();
+    await wrapper.findAll('.workspace-context-menu button').find((button) => button.text().includes('在浏览器打开'))?.trigger('click');
+    expect(download).toHaveBeenCalledWith('docs/a.md', 'file');
+    expect(openExternal).toHaveBeenCalledWith('docs/a.md');
+  });
+
+  it('uploads dropped local files directly into a Workspace folder node', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const files = [{ name: 'docs', path: 'docs', kind: 'dir' as const }];
+    store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
+    const upload = vi.spyOn(store, 'uploadWorkspaceFiles').mockResolvedValue([] as any);
+    const reload = vi.spyOn(store, 'loadWorkspaceTreeDir').mockResolvedValue([] as any);
+    store.openCompanion('workspace');
+    await settle();
+    await wrapper.get('.workspace-tree-node').trigger('drop', {
+      dataTransfer: { files: [new File(['hello'], 'dropped.txt', { type: 'text/plain' })] },
+    });
+    await settleAsync();
+    expect(upload).toHaveBeenCalledWith(expect.any(Array), 'docs');
+    expect(reload).toHaveBeenCalledWith('docs', true);
   });
 
   it('renders tools management page with real registry controls', async () => {
@@ -282,6 +414,22 @@ describe('Cowd Vue WebUI shell', () => {
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.body).toBeInstanceOf(FormData);
     expect(new Headers(init.headers).has('Content-Type')).toBe(false);
+  });
+
+  it('builds Workspace raw and download URLs through API helpers', () => {
+    expect(api.workspaceRawUrl('docs/a b.md')).toBe('/api/file/raw?path=docs%2Fa%20b.md');
+    expect(api.workspaceDownloadUrl('docs/a b.md')).toBe('/api/workspace/download?path=docs%2Fa%20b.md');
+  });
+
+  it('classifies Workspace preview types before loading file content', () => {
+    expect(workspacePreviewKind('README.md')).toBe('markdown');
+    expect(workspacePreviewKind('public/index.html')).toBe('web');
+    expect(workspacePreviewKind('diagram.png')).toBe('image');
+    expect(workspacePreviewKind('manual.pdf')).toBe('pdf');
+    expect(workspacePreviewKind('audio.mp3')).toBe('audio');
+    expect(workspacePreviewKind('archive.zip')).toBe('binary');
+    expect(isWorkspaceTextPreview('src/main.rs')).toBe(true);
+    expect(isWorkspaceTextPreview('archive.zip')).toBe(false);
   });
 
   it('uploads chat resources through the resource endpoint', async () => {
@@ -574,7 +722,8 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/verify', expect.any(Object));
     expect(wrapper.text()).toContain('同源内部访问');
-    expect(wrapper.text()).toContain('配置流程');
+    expect(wrapper.get('.settings-nav').attributes('aria-label')).toBe('设置分区');
+    expect(wrapper.text()).toContain('Provider 与模型');
     expect(wrapper.text()).toContain('保存运行时模型配置');
     expect(wrapper.text()).toContain('更新审批策略');
     expect(wrapper.text()).toContain('设置写入回执');

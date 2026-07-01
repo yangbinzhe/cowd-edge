@@ -13,6 +13,7 @@ import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
+import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 const route = useRoute();
@@ -254,13 +255,13 @@ onMounted(() => {
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="realityContext" />
-    <WorkflowStrip :steps="realityWorkflow" :title="t('page.reality.core.page.title.a62035dbcf')" />
+    <PrimaryContextBar :items="realityContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="realityWorkflow" :title="t('page.reality.core.page.title.a62035dbcf')" density="compact" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card">
         <span>{{ t('page.reality.core.page.text.7014b73d37') }}</span>
-        <strong>{{ status.reality_core?.status || t('page.reality.core.page.inline.0fbea42253') }}</strong>
+        <strong>{{ displayStatus(status.reality_core?.status || 'unknown') }}</strong>
         <small>{{ status.reality_core?.degraded ? t('page.reality.core.page.inline.a4c5a4d346') : t('page.reality.core.page.inline.363d2a9470') }}</small>
       </article>
       <article class="metric-card" data-tone="info">

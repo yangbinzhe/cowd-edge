@@ -329,6 +329,8 @@ export const api = {
       files: [],
     });
   },
+  workspaceRawUrl: (path: string) => `/api/file/raw?path=${encodeURIComponent(path)}`,
+  workspaceDownloadUrl: (path: string) => `/api/workspace/download?path=${encodeURIComponent(path)}`,
   rawFile: (path: string) => readText(`/api/file/raw?path=${encodeURIComponent(path)}`),
   saveFile: (path: string, content: string) => write('/api/workspace/files', {
     method: 'POST',

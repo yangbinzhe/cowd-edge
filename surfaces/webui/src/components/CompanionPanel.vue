@@ -1,36 +1,26 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, ref } from 'vue';
-import { Brain, ChevronUp, CircleDot, Eye, FilePenLine, FilePlus2, FileText, Folder, FolderPlus, Info, Link2, RotateCcw, Save, Search, Trash2, Upload, Workflow, X } from 'lucide-vue-next';
+import { Brain, CircleDot, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from './MarkdownBlock.vue';
+import { displayStatus } from '../i18n/domain/status';
+import WorkspaceTree from './workspace/WorkspaceTree.vue';
+import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/workspacePreview';
 
 const store = useAppStore();
-const newFolderName = ref('');
-const renamePath = ref('');
-const renameTarget = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
 
-const breadcrumbs = computed(() => {
-  const parts = store.workspaceDir.split('/').filter(Boolean);
-  return [{ label: 'root', path: '' }, ...parts.map((part, index) => ({
-    label: part,
-    path: parts.slice(0, index + 1).join('/'),
-  }))];
+const previewKind = computed(() => store.selectedFile ? workspacePreviewKind(store.selectedFile) : 'binary');
+const rawFileUrl = computed(() => store.rawWorkspaceFileUrl(store.selectedFile));
+const canEdit = computed(() => !!store.selectedFile && isWorkspaceEditablePreview(store.selectedFile));
+const workspaceMetaEntries = computed(() => {
+  const meta = store.workspaceMeta || {};
+  return Object.entries(meta).slice(0, 8).map(([key, value]) => ({
+    key,
+    value: typeof value === 'string' ? value : JSON.stringify(value),
+  }));
 });
-
-const parentDir = computed(() => {
-  const parts = store.workspaceDir.split('/').filter(Boolean);
-  parts.pop();
-  return parts.join('/');
-});
-
-const selectedExt = computed(() => store.selectedFile.split('.').pop()?.toLowerCase() || '');
-const isMarkdown = computed(() => ['md', 'markdown'].includes(selectedExt.value));
-const isImage = computed(() => ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(selectedExt.value));
-const isStructured = computed(() => ['json', 'yaml', 'yml', 'toml'].includes(selectedExt.value));
-const rawFileUrl = computed(() => `/api/file/raw?path=${encodeURIComponent(store.selectedFile)}`);
-const canEdit = computed(() => !!store.selectedFile && !isImage.value);
 const thinkingEvents = computed(() => store.activity.filter((event) => event.kind === 'think'));
 const inspectorEvents = computed(() => store.activity.filter((event) => event.kind === 'error' || event.status === 'error'));
 const contextItems = computed(() => {
@@ -44,41 +34,15 @@ const contextItems = computed(() => {
 const realityStages = computed(() => (Array.isArray(store.currentRealityFlow?.stages) ? store.currentRealityFlow.stages : []).slice(0, 12));
 const timelineEvents = computed(() => (Array.isArray(store.currentTimeline?.events) ? store.currentTimeline.events : []).slice(0, 14));
 
-function openFile(path: string, kind: string) {
-  if (kind === 'dir') store.loadWorkspace(path);
-  else store.openFile(path);
-}
-
-async function createFolder() {
-  const name = newFolderName.value.trim();
-  if (!name) return;
-  await store.createWorkspaceDir(name);
-  newFolderName.value = '';
-}
-
 async function uploadFiles(files: FileList | null) {
   if (!files?.length) return;
-  for (const file of Array.from(files)) {
-    await store.uploadResource(file);
-  }
+  await store.uploadWorkspaceFiles(files);
   if (fileInput.value) fileInput.value.value = '';
 }
 
 async function dropUpload(event: DragEvent) {
   event.preventDefault();
   await uploadFiles(event.dataTransfer?.files || null);
-}
-
-function startRename(path: string) {
-  renamePath.value = path;
-  renameTarget.value = path;
-}
-
-async function commitRename() {
-  if (!renamePath.value || !renameTarget.value.trim()) return;
-  await store.renameWorkspacePath(renamePath.value, renameTarget.value.trim());
-  renamePath.value = '';
-  renameTarget.value = '';
 }
 </script>
 
@@ -118,7 +82,7 @@ async function commitRename() {
             <strong>{{ event.title }}</strong>
             <p>{{ event.detail || t('component.companion.panel.inline.f3fd2cb8bf') }}</p>
           </div>
-          <span>{{ event.status || t('component.companion.panel.inline.77e447be0d') }}</span>
+          <span>{{ displayStatus(event.status || 'unknown') }}</span>
         </article>
       </div>
     </section>
@@ -134,7 +98,7 @@ async function commitRename() {
             <strong>{{ event.title }}</strong>
             <p>{{ event.detail || t('component.companion.panel.inline.1f965eaa31') }}</p>
           </div>
-          <span>{{ event.status || t('component.companion.panel.inline.77e447be0d') }}</span>
+          <span>{{ displayStatus(event.status || 'unknown') }}</span>
         </article>
         <div v-if="!thinkingEvents.length" class="empty-state">
           <strong>{{ t('component.companion.panel.text.7817ce5674') }}</strong>
@@ -155,13 +119,6 @@ async function commitRename() {
         <button type="button" @click="fileInput?.click()">{{ t('component.companion.panel.text.5231b7a1c8') }}</button>
         <input ref="fileInput" type="file" multiple @change="uploadFiles(($event.target as HTMLInputElement).files)" />
       </div>
-      <div class="workspace-create">
-        <label>
-          <FolderPlus :size="14" />
-          <input v-model="newFolderName" type="text" :placeholder="t('component.companion.panel.placeholder.08fa8937cf')" @keydown.enter.prevent="createFolder" />
-        </label>
-        <button class="icon-action" type="button" :disabled="!newFolderName.trim()" @click="createFolder"><FilePlus2 :size="14" /></button>
-      </div>
       <div v-if="store.attachments.length" class="attachment-list">
         <div class="panel-title compact">
           <h2>{{ t('component.companion.panel.text.7a057b8ff5') }}</h2>
@@ -170,64 +127,60 @@ async function commitRename() {
         <article v-for="attachment in store.attachments" :key="attachment.ref_id" class="attachment-row">
           <Link2 :size="14" />
           <span>{{ attachment.label || attachment.path }}</span>
-          <small>{{ attachment.kind }} · {{ attachment.detected_mime || attachment.status || t('component.companion.panel.inline.1bb23d605f') }}</small>
+          <small>{{ attachment.kind }} · {{ attachment.detected_mime || displayStatus(attachment.status || 'unknown') }}</small>
           <button class="icon-action" type="button" @click="store.removeAttachment(attachment.ref_id)"><X :size="13" /></button>
         </article>
       </div>
-      <nav class="breadcrumbs" :aria-label="t('component.companion.panel.aria-label.4ee55d3234')">
-        <button v-for="crumb in breadcrumbs" :key="crumb.path || 'root'" type="button" @click="store.loadWorkspace(crumb.path)">
-          {{ crumb.label }}
-        </button>
-      </nav>
-      <button class="ghost-action" type="button" @click="store.loadWorkspace(parentDir)">
-        <ChevronUp :size="15" />
-        {{ t('component.companion.panel.text.parentFolder') }}
-      </button>
       <label class="workspace-search">
         <Search :size="14" />
         <input v-model="store.workspaceFilter" type="search" :placeholder="t('component.companion.panel.placeholder.070c810b3f')" />
       </label>
-      <div class="file-list">
-        <article
-          v-for="file in store.filteredWorkspaceFiles"
-          :key="file.path"
-          class="file-row"
-        >
-          <button type="button" @click="openFile(file.path, file.kind)">
-            <Folder v-if="file.kind === 'dir'" :size="16" />
-            <FileText v-else :size="16" />
-            <span>{{ file.name }}</span>
-          </button>
-          <small>{{ file.kind }}</small>
-          <button class="icon-action" type="button" :aria-label="t('component.companion.panel.aria.renameFile', { name: file.name })" @click="startRename(file.path)"><FilePenLine :size="13" /></button>
-          <button class="icon-action" type="button" :aria-label="t('component.companion.panel.aria.deleteFile', { name: file.name })" @click="store.deleteWorkspacePath(file.path)"><Trash2 :size="13" /></button>
-          <div v-if="renamePath === file.path" class="rename-row">
-            <input v-model="renameTarget" type="text" @keydown.enter.prevent="commitRename" />
-            <button class="ghost-action" type="button" @click="commitRename">{{ t('component.companion.panel.text.feb4f37c13') }}</button>
-            <button class="ghost-action" type="button" @click="renamePath = ''">{{ t('component.companion.panel.text.8881905a84') }}</button>
-          </div>
-        </article>
-      </div>
+      <WorkspaceTree />
       <div class="preview-pane" v-if="store.selectedFile">
         <div class="preview-head">
           <strong>{{ store.selectedFile }}</strong>
           <div>
+            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.openExternal')" @click="store.openWorkspacePathExternally(store.selectedFile)"><ExternalLink :size="14" /></button>
+            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.download')" @click="store.downloadWorkspacePath(store.selectedFile, 'file')"><Download :size="14" /></button>
             <button class="icon-action" type="button" @click="store.attachWorkspaceFile(store.selectedFile)"><Link2 :size="14" /></button>
             <button class="icon-action" type="button" :disabled="!store.editorDirty || !canEdit" @click="store.resetFile"><RotateCcw :size="14" /></button>
             <button class="icon-action" type="button" :disabled="!store.editorDirty || !canEdit" @click="store.saveFile"><Save :size="14" /></button>
           </div>
         </div>
-        <div v-if="isImage" class="image-preview">
+        <div v-if="previewKind === 'image'" class="image-preview">
           <img :src="rawFileUrl" alt="" />
         </div>
-        <div v-else-if="isMarkdown" class="render-preview">
+        <iframe v-else-if="previewKind === 'web'" class="browser-preview" :srcdoc="store.editorContent" sandbox="allow-same-origin"></iframe>
+        <iframe v-else-if="previewKind === 'pdf'" class="browser-preview" :src="rawFileUrl"></iframe>
+        <audio v-else-if="previewKind === 'audio'" class="media-preview" :src="rawFileUrl" controls></audio>
+        <video v-else-if="previewKind === 'video'" class="media-preview video" :src="rawFileUrl" controls></video>
+        <div v-else-if="previewKind === 'markdown'" class="render-preview">
           <MarkdownBlock :content="store.editorContent" />
         </div>
-        <textarea v-else-if="isStructured" v-model="store.editorContent" class="structured-preview" spellcheck="false" />
-        <textarea v-else v-model="store.editorContent" spellcheck="false" />
+        <textarea v-else-if="previewKind === 'structured'" v-model="store.editorContent" class="structured-preview" spellcheck="false" />
+        <textarea v-else-if="previewKind === 'text'" v-model="store.editorContent" spellcheck="false" />
+        <div v-else class="unsupported-preview">
+          <strong>{{ t('workspace.preview.unsupported.title') }}</strong>
+          <p>{{ t('workspace.preview.unsupported.body') }}</p>
+          <button class="ghost-action" type="button" @click="store.downloadWorkspacePath(store.selectedFile, 'file')">
+            <Download :size="14" />{{ t('workspace.preview.action.download') }}
+          </button>
+        </div>
         <p v-if="store.fileError" class="file-error">{{ store.fileError }}</p>
         <p v-if="!canEdit" class="readonly-note"><Eye :size="14" />{{ t('component.companion.panel.text.be83b668ee') }}</p>
         <span class="dirty-state" :class="{ dirty: store.editorDirty }">{{ store.editorDirty ? t('component.companion.panel.inline.cc6b6c33d6') : t('component.companion.panel.inline.86b4b292f0') }}</span>
+      </div>
+      <div v-if="workspaceMetaEntries.length" class="workspace-meta-panel">
+        <div class="panel-title compact">
+          <h2>{{ t('workspace.preview.meta.title') }}</h2>
+          <span>{{ workspaceMetaEntries.length }}</span>
+        </div>
+        <dl class="detail-list">
+          <template v-for="item in workspaceMetaEntries" :key="item.key">
+            <dt>{{ item.key }}</dt>
+            <dd>{{ item.value }}</dd>
+          </template>
+        </dl>
       </div>
     </section>
 
@@ -238,7 +191,7 @@ async function commitRename() {
       </div>
       <dl class="detail-list evidence-summary">
         <dt>{{ t('component.companion.panel.text.f37df354d9') }}</dt>
-        <dd>{{ store.currentRun?.status || t('component.companion.panel.inline.4a44588598') }}</dd>
+        <dd>{{ displayStatus(store.currentRun?.status || 'unknown') }}</dd>
         <dt>{{ t('component.companion.panel.text.97f11d23ce') }}</dt>
         <dd>{{ store.currentRun?.run_id || store.currentRun?.turn_id || store.activeSessionId || '-' }}</dd>
         <dt>{{ t('component.companion.panel.text.2c11686ce6') }}</dt>
@@ -249,7 +202,7 @@ async function commitRename() {
       <div class="stage-list">
         <article v-for="stage in store.runStageSummary" :key="stage.id" class="stage-row" :data-status="stage.status">
           <strong>{{ stage.label }}</strong>
-          <span>{{ stage.status }}</span>
+          <span>{{ displayStatus(stage.status) }}</span>
           <small>{{ stage.count }}</small>
         </article>
       </div>
@@ -275,7 +228,7 @@ async function commitRename() {
       </div>
       <div class="evidence-list">
         <article v-for="stage in realityStages" :key="String(stage.id || stage.kind || stage.ref || JSON.stringify(stage).slice(0, 40))" class="evidence-item">
-          <strong>{{ stage.kind || stage.stage || stage.status || t('component.companion.panel.inline.33236162c2') }}</strong>
+          <strong>{{ stage.kind || stage.stage || displayStatus(stage.status || 'unknown') }}</strong>
           <p>{{ stage.summary || stage.detail || stage.message || JSON.stringify(stage).slice(0, 180) }}</p>
         </article>
       </div>
@@ -287,7 +240,7 @@ async function commitRename() {
       <div class="evidence-list">
         <article v-for="file in store.currentRunFiles" :key="file.path" class="evidence-item">
           <strong>{{ file.path }}</strong>
-          <p>{{ file.kind }} · {{ file.status }} · {{ file.ref }}</p>
+          <p>{{ file.kind }} · {{ displayStatus(file.status) }} · {{ file.ref }}</p>
         </article>
       </div>
 
@@ -299,9 +252,9 @@ async function commitRename() {
         <article v-for="event in timelineEvents" :key="String(event.sequence || event.id || JSON.stringify(event).slice(0, 40))" class="activity-item" :data-kind="String(event.kind || event.type || 'runtime').toLowerCase().includes('error') ? 'error' : 'runtime'">
           <div>
             <strong>{{ event.kind || event.type || event.event_type || t('component.companion.panel.inline.edbaf9232e') }}</strong>
-            <p>{{ event.summary || event.detail || event.status || JSON.stringify(event).slice(0, 180) }}</p>
+            <p>{{ event.summary || event.detail || (event.status ? displayStatus(event.status) : JSON.stringify(event).slice(0, 180)) }}</p>
           </div>
-          <span>{{ event.status || event.sequence || t('component.companion.panel.inline.77e447be0d') }}</span>
+          <span>{{ event.status ? displayStatus(event.status) : (event.sequence || t('component.companion.panel.inline.77e447be0d')) }}</span>
         </article>
       </div>
     </section>
@@ -329,7 +282,7 @@ async function commitRename() {
             <strong>{{ event.title }}</strong>
             <p>{{ event.detail || t('component.companion.panel.inline.f3fd2cb8bf') }}</p>
           </div>
-          <span>{{ event.status || t('component.companion.panel.inline.0bafd75e47') }}</span>
+          <span>{{ displayStatus(event.status || 'error') }}</span>
         </article>
       </div>
     </section>

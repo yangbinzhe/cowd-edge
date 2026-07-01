@@ -12,6 +12,7 @@ import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import { displayStatus } from '../i18n/domain/status';
 
 const loading = ref(false);
 const error = ref('');
@@ -363,8 +364,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="agentsContext" />
-    <WorkflowStrip :steps="agentsWorkflow" :title="t('page.agents.page.title.01566a0372')" />
+    <PrimaryContextBar :items="agentsContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="agentsWorkflow" :title="t('page.agents.page.title.01566a0372')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -471,7 +472,7 @@ onMounted(refresh);
       <section class="management-panel agents-panel wide" data-section="tasks">
         <header>
           <h2>{{ t('page.agents.page.text.9574008891') }}</h2>
-          <span>{{ selectedTask?.status || t('page.agents.page.inline.5adf7ffa15') }}</span>
+          <span>{{ selectedTask?.status ? displayStatus(selectedTask.status) : t('page.agents.page.inline.5adf7ffa15') }}</span>
         </header>
         <div class="agents-task-layout">
           <aside class="task-list">
@@ -485,7 +486,7 @@ onMounted(refresh);
             >
               <strong>{{ task.objective || task.id }}</strong>
               <span>{{ task.id }}</span>
-              <small>{{ task.status }} · failures {{ task.failure_count || 0 }}</small>
+              <small>{{ displayStatus(task.status) }} · failures {{ task.failure_count || 0 }}</small>
             </button>
             <EmptyState v-if="!taskItems.length" :title="t('page.agents.page.title.6c2217048b')" :detail="t('page.agents.page.detail.f95c3d582c')" />
           </aside>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { formatCount, t } from '../../i18n';
+import { displayStatus } from '../../i18n/domain/status';
 defineProps<{
   rows: Array<Record<string, unknown>>;
 }>();
@@ -15,7 +16,7 @@ defineProps<{
       <strong>{{ row.lane }}</strong>
       <dl class="detail-list">
         <dt>{{ t('component.workbench.surface.diagnostic.playbook.text.09f6e21c9c') }}</dt>
-        <dd>{{ row.status }}</dd>
+        <dd>{{ displayStatus(row.status) }}</dd>
         <dt>{{ t('component.workbench.surface.diagnostic.playbook.text.7c947f641c') }}</dt>
         <dd>{{ row.evidence }}</dd>
         <dt>{{ t('component.workbench.surface.diagnostic.playbook.text.23d6f3dce6') }}</dt>

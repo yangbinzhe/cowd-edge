@@ -12,6 +12,7 @@ import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import type { EvidenceObject } from '../types/evidence';
+import { displayStatus } from '../i18n/domain/status';
 
 const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
 const loading = ref(false);
@@ -310,8 +311,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="auditContext" />
-    <WorkflowStrip :steps="auditWorkflow" :title="t('page.audit.page.title.79a1baef6a')" />
+    <PrimaryContextBar :items="auditContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="auditWorkflow" :title="t('page.audit.page.title.79a1baef6a')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card" data-tone="info">
@@ -331,7 +332,7 @@ onMounted(refresh);
       </article>
       <article class="metric-card" data-tone="success">
         <span>{{ t('page.audit.page.text.c2a8e12d35') }}</span>
-        <strong>{{ state.harnessEvalLatest?.report?.status || 'empty' }}</strong>
+        <strong>{{ displayStatus(state.harnessEvalLatest?.report?.status || 'empty') }}</strong>
         <small>{{ formatCount('reports', harnessEvalReports.length) }}</small>
       </article>
     </section>
@@ -412,7 +413,7 @@ onMounted(refresh);
       <section class="management-panel gateway-panel" data-section="usage">
         <header>
           <h2>{{ t('page.audit.page.text.c3d8bf1440') }}</h2>
-          <span>{{ state.usage?.status || 'usage' }}</span>
+          <span>{{ displayStatus(state.usage?.status || 'usage') }}</span>
         </header>
         <ChartPanel v-if="usageChart.length" :title="t('page.audit.page.title.cc6c932771')" kind="bar" :data="usageChart" />
         <EmptyState v-else :title="t('page.audit.page.title.0b5fa8afd6')" :detail="t('page.audit.page.detail.f250d3c233')" />
@@ -447,7 +448,7 @@ onMounted(refresh);
       <section class="management-panel gateway-panel wide" data-section="harness-eval">
         <header>
           <h2>{{ t('page.audit.page.text.c2a8e12d35') }}</h2>
-          <span>{{ state.harnessEvalLatest?.status || 'reports' }}</span>
+          <span>{{ displayStatus(state.harnessEvalLatest?.status || 'reports') }}</span>
         </header>
         <div class="button-row">
           <button class="primary-action" type="button" @click="runHarnessEvalSmoke">{{ t('page.audit.page.text.96e9252cbf') }}</button>
@@ -457,7 +458,7 @@ onMounted(refresh);
           <dt>{{ t('page.audit.page.text.f1b114ace3') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.id || 'none' }}</dd>
           <dt>{{ t('page.audit.page.text.9e51188c8e') }}</dt>
-          <dd>{{ state.harnessEvalLatest?.report?.status || state.harnessEvalLatest?.status || 'empty' }}</dd>
+          <dd>{{ displayStatus(state.harnessEvalLatest?.report?.status || state.harnessEvalLatest?.status || 'empty') }}</dd>
           <dt>{{ t('page.audit.page.text.e60fd065c9') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.total_tokens || 0 }}</dd>
           <dt>{{ t('page.audit.page.text.a61ad14bd4') }}</dt>

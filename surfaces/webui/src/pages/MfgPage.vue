@@ -13,6 +13,7 @@ import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import mfgWriteContracts from '../data/mfgWriteContracts.json';
+import { displayStatus } from '../i18n/domain/status';
 
 const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
 const store = useAppStore();
@@ -913,8 +914,8 @@ onMounted(refresh);
       :detail="t('page.mfg.page.detail.0ce99abd6b')"
       endpoint="/api/apps/mfg/*"
     />
-    <PrimaryContextBar :items="mfgContext" />
-    <WorkflowStrip :steps="mfgWorkflow" :title="t('page.mfg.page.title.19a9d42267')" />
+    <PrimaryContextBar :items="mfgContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="mfgWorkflow" :title="t('page.mfg.page.title.19a9d42267')" density="compact" />
 
     <section class="mfg-lanes" :aria-label="t('page.mfg.page.aria-label.916bf99d57')">
       <a v-for="lane in mfgLanes" :key="lane.id" class="mfg-lane" :href="lane.target" :data-status="lane.health">
@@ -953,7 +954,7 @@ onMounted(refresh);
       <article class="management-panel mfg-command-panel" data-section="overview">
         <header>
           <h2>{{ t('page.mfg.page.text.07a633c300') }}</h2>
-          <span>{{ state?.health?.status || t('page.mfg.page.inline.51a32dd32d') }}</span>
+          <span>{{ displayStatus(state?.health?.status || 'unknown') }}</span>
         </header>
         <dl class="detail-list">
           <dt>{{ t('page.mfg.page.text.f2580d8506') }}</dt>
@@ -998,7 +999,7 @@ onMounted(refresh);
       <article id="data-plane" class="management-panel" data-section="data-plane">
         <header>
           <h2>{{ t('page.mfg.page.text.3f43ee8666') }}</h2>
-          <span>{{ state?.dataPlane?.status || t('page.mfg.page.inline.51a32dd32d') }}</span>
+          <span>{{ displayStatus(state?.dataPlane?.status || 'unknown') }}</span>
         </header>
         <dl class="detail-list">
           <dt>{{ t('page.mfg.page.text.37ca559655') }}</dt>
@@ -1008,7 +1009,7 @@ onMounted(refresh);
           <dt>{{ t('page.mfg.page.text.cde1dbdf25') }}</dt>
           <dd>{{ state?.dataPlane?.watermark_count || 0 }}</dd>
           <dt>{{ t('page.mfg.page.text.025af3e6bd') }}</dt>
-          <dd>{{ state?.governance?.status || state?.governance?.kind || t('page.mfg.page.inline.51a32dd32d') }}</dd>
+          <dd>{{ state?.governance?.status ? displayStatus(state.governance.status) : (state?.governance?.kind || t('page.mfg.page.inline.51a32dd32d')) }}</dd>
         </dl>
         <label class="field-line">
           {{ t('page.mfg.field.sourcePackId') }}

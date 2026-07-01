@@ -13,6 +13,7 @@ import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import SurfaceDiagnosticPlaybook from '../components/workbench/SurfaceDiagnosticPlaybook.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import { displayStatus } from '../i18n/domain/status';
 
 const loading = ref(false);
 const error = ref('');
@@ -41,6 +42,11 @@ function isActiveInboxStatus(status: unknown) {
 
 function isActiveOutboxStatus(status: unknown) {
   return ['queued', 'sending', 'retry_scheduled'].includes(String(status || '').toLowerCase());
+}
+
+function workflowStatus(status: unknown, fallback: 'idle' | 'ready' = 'ready') {
+  const value = String(status || '').toLowerCase();
+  return ['idle', 'ready', 'active', 'blocked', 'done', 'degraded', 'error', 'offline', 'running'].includes(value) ? value : fallback;
 }
 
 const surfaces = computed(() => registrySurfaces(state.value.registry));
@@ -183,8 +189,8 @@ const surfaceContext = computed(() => [
 ]);
 const surfaceWorkflow = computed(() => [
   { id: 'registry', label: t('script.pages.surfacepage.label.1fd6a805da'), status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
-  { id: 'supervisor', label: t('script.pages.surfacepage.label.2cd4fa195e'), status: selectedRuntime.value.status || 'idle', description: selectedSurface.value },
-  { id: 'health', label: t('script.pages.surfacepage.label.3703cd2168'), status: state.value.selectedHealth?.status === 'error' ? 'blocked' : (selectedRuntime.value.status || 'ready'), description: selectedSurface.value },
+  { id: 'supervisor', label: t('script.pages.surfacepage.label.2cd4fa195e'), status: workflowStatus(selectedRuntime.value.status, selectedRuntime.value.status ? 'ready' : 'idle'), description: selectedSurface.value },
+  { id: 'health', label: t('script.pages.surfacepage.label.3703cd2168'), status: state.value.selectedHealth?.status === 'error' ? 'blocked' : workflowStatus(selectedRuntime.value.status, 'ready'), description: selectedSurface.value },
   { id: 'routes', label: t('script.pages.surfacepage.label.03730e5840'), status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
   { id: 'routes', label: t('script.pages.surfacepage.label.87df60de33'), status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
   { id: 'dispatch', label: t('script.pages.surfacepage.label.840e1b364a'), status: actionResult.value ? 'active' : 'idle' },
@@ -397,8 +403,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="surfaceContext" />
-    <WorkflowStrip :steps="surfaceWorkflow" :title="t('page.surface.page.title.30a83906c7')" />
+    <PrimaryContextBar :items="surfaceContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="surfaceWorkflow" :title="t('page.surface.page.title.30a83906c7')" density="compact" :max-visible="4" />
 
     <section class="metric-row tools-metrics" data-section="health">
       <article class="metric-card" data-tone="success">
@@ -418,7 +424,7 @@ onMounted(refresh);
       </article>
       <article class="metric-card">
         <span>{{ t('page.surface.page.text.713ff0b8f0') }}</span>
-        <strong>{{ host.status || state.health?.status || t('page.surface.page.inline.f2606fa5d7') }}</strong>
+        <strong>{{ displayStatus(host.status || state.health?.status || 'unknown') }}</strong>
         <small>{{ t('page.surface.page.text.e2665719ee') }}</small>
       </article>
       <article class="metric-card" :data-tone="degradedSurfaces ? 'warn' : 'success'">

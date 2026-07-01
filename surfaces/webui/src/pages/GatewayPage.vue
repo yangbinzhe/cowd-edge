@@ -14,6 +14,7 @@ import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import GatewayRemediationList from '../components/workbench/GatewayRemediationList.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import { displayStatus } from '../i18n/domain/status';
 
 const loading = ref(false);
 const error = ref('');
@@ -566,14 +567,14 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="gatewayContext" />
-    <WorkflowStrip :steps="gatewayWorkflow" :title="t('page.gateway.page.title.15380a6a3f')" />
+    <PrimaryContextBar :items="gatewayContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="gatewayWorkflow" :title="t('page.gateway.page.title.15380a6a3f')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card">
         <span>{{ t('page.gateway.page.text.614b9c3c15') }}</span>
         <strong>{{ accounts.length }}</strong>
-        <small>{{ state.summary?.status || t('page.gateway.page.inline.67a83904ea') }}</small>
+        <small>{{ displayStatus(state.summary?.status || 'unknown') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
         <span>{{ t('page.gateway.page.text.93f1af14ce') }}</span>
@@ -588,7 +589,7 @@ onMounted(refresh);
       <article class="metric-card" data-tone="info">
         <span>{{ t('page.gateway.page.text.d5cf00c093') }}</span>
         <strong>{{ surfaces.length }}</strong>
-        <small>{{ surfaceHost.status || state.surfaceHealth?.status || 'host' }} / {{ surfaceHost.circuit_open_count || 0 }} circuit</small>
+        <small>{{ displayStatus(surfaceHost.status || state.surfaceHealth?.status || 'unknown') }} / {{ surfaceHost.circuit_open_count || 0 }} circuit</small>
       </article>
       <article class="metric-card" data-tone="info">
         <span>{{ t('page.gateway.page.text.9fcdea7846') }}</span>
@@ -713,7 +714,7 @@ onMounted(refresh);
       <section class="management-panel gateway-panel" data-section="executions">
         <header>
           <h2>{{ t('page.gateway.page.text.edae12bca9') }}</h2>
-          <span>{{ state.crossPlane?.status || 'preflight' }}</span>
+          <span>{{ displayStatus(state.crossPlane?.status || 'preflight') }}</span>
         </header>
         <label class="field-line">
           {{ t('page.tools.field.actor') }}

@@ -2,7 +2,7 @@
 import { t } from '../../i18n';
 import { computed } from 'vue';
 import type { ApiReceipt, ApiWriteError } from '../../api/client';
-import { displayBoolean } from '../../i18n/domain/status';
+import { displayBoolean, displayStatus } from '../../i18n/domain/status';
 import StatusPill from './StatusPill.vue';
 
 const props = withDefaults(defineProps<{
@@ -38,7 +38,7 @@ function value(key: string) {
       <dt>{{ t('requestReceipt.method') }}</dt>
       <dd>{{ value('method') || '-' }}</dd>
       <dt>{{ t('requestReceipt.status') }}</dt>
-      <dd>{{ value('status') || value('status_text') || '-' }}</dd>
+      <dd>{{ value('status') || value('status_text') ? displayStatus(value('status') || value('status_text')) : '-' }}</dd>
       <dt>{{ t('requestReceipt.retryable') }}</dt>
       <dd>{{ value('retryable') === undefined ? '-' : displayBoolean(value('retryable')) }}</dd>
       <dt>{{ t('requestReceipt.error') }}</dt>

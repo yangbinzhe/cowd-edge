@@ -13,6 +13,7 @@ import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import type { EvidenceObject } from '../types/evidence';
+import { displayStatus } from '../i18n/domain/status';
 
 const loading = ref(false);
 const error = ref('');
@@ -319,13 +320,13 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="memoryContext" />
-    <WorkflowStrip :steps="memoryWorkflow" :title="t('page.memory.page.title.965180676a')" />
+    <PrimaryContextBar :items="memoryContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="memoryWorkflow" :title="t('page.memory.page.title.965180676a')" density="compact" />
 
     <section class="metric-row memory-overview">
       <article class="metric-card">
         <span>{{ t('page.memory.page.text.b18fa8ad53') }}</span>
-        <strong>{{ healthLevel }}</strong>
+        <strong>{{ displayStatus(healthLevel) }}</strong>
         <small>{{ status.enabled === false ? t('page.memory.page.inline.4838a2ce38') : `${stats.total_entries || 0} entries` }}</small>
       </article>
       <article class="metric-card" data-tone="info">

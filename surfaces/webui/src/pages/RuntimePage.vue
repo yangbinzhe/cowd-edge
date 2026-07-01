@@ -14,6 +14,7 @@ import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
+import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 const loading = ref(false);
@@ -286,8 +287,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="runtimeContext" />
-    <WorkflowStrip :steps="runtimeWorkflow" :title="t('page.runtime.page.title.cd537a35f0')" />
+    <PrimaryContextBar :items="runtimeContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="runtimeWorkflow" :title="t('page.runtime.page.title.cd537a35f0')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -349,9 +350,9 @@ onMounted(refresh);
         </header>
         <dl class="detail-list">
           <dt>{{ t('page.runtime.page.text.2076b210ae') }}</dt>
-          <dd>{{ runtimeSnapshot.status || runtimeSnapshot.kind || '-' }}</dd>
+          <dd>{{ runtimeSnapshot.status ? displayStatus(runtimeSnapshot.status) : (runtimeSnapshot.kind || '-') }}</dd>
           <dt>{{ t('page.runtime.page.text.8023cbd84d') }}</dt>
-          <dd>{{ sourceAudit.report?.ok === false ? t('page.runtime.page.inline.023e5f7fa9') : 'ok' }}</dd>
+          <dd>{{ sourceAudit.report?.ok === false ? t('page.runtime.page.inline.023e5f7fa9') : displayStatus('ok') }}</dd>
           <dt>{{ t('page.runtime.page.text.27a30f378f') }}</dt>
           <dd>{{ sourceRepairPlan.repair_plan?.length || 0 }}</dd>
         </dl>
@@ -485,7 +486,7 @@ onMounted(refresh);
           <dt>{{ t('page.runtime.page.text.c247c75434') }}</dt>
           <dd>{{ growthSources }}</dd>
           <dt>{{ t('page.runtime.page.text.1debc04086') }}</dt>
-          <dd>{{ growthStatus.status || (growthStatus.__offline ? t('page.runtime.page.inline.461aa94b0c') : t('page.runtime.page.inline.a6b1ab29de')) }}</dd>
+          <dd>{{ growthStatus.status ? displayStatus(growthStatus.status) : (growthStatus.__offline ? t('page.runtime.page.inline.461aa94b0c') : t('page.runtime.page.inline.a6b1ab29de')) }}</dd>
         </dl>
         <DataTable v-if="growthEventRows.length" :rows="growthEventRows" :columns="['id', 'source', 'mode', 'risk', 'at']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.78769f1c69')" :detail="t('page.runtime.page.detail.340bd22f56')" />

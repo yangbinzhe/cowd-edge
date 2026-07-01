@@ -2,6 +2,7 @@
 import { t } from '../i18n';
 import { Archive, Plus, RefreshCw, Search, Trash2 } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
+import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 
@@ -36,7 +37,7 @@ async function searchSessions() {
       >
         <button type="button" class="session-open" @click="store.loadMessages(session.id)">
           <span class="session-title">{{ session.title }}</span>
-          <span class="session-meta">{{ session.model || t('component.session.sidebar.inline.6fc3b1f59f') }} · {{ session.status || t('component.session.sidebar.inline.9b5ba6995b') }}</span>
+          <span class="session-meta">{{ session.model || t('component.session.sidebar.inline.6fc3b1f59f') }} · {{ displayStatus(session.status || 'unknown') }}</span>
         </button>
         <span class="session-actions">
           <button class="icon-action" type="button" :title="t('component.session.sidebar.title.38b7208b6a')" @click="store.compactSession(session.id)"><Archive :size="13" /></button>

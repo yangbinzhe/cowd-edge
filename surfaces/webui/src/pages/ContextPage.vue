@@ -137,8 +137,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="contextBar" />
-    <WorkflowStrip :steps="contextWorkflow" :title="t('page.context.page.title.eaa4662226')" />
+    <PrimaryContextBar :items="contextBar" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="contextWorkflow" :title="t('page.context.page.title.eaa4662226')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card">

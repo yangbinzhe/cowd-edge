@@ -3,11 +3,40 @@ import { computed, ref } from 'vue';
 import { api, normalizeActivity, providerModels, type EndpointSnapshot } from '../api/client';
 import { t } from '../i18n';
 import type { ActivityEvent, ChatDisplayMode, ChatTurn, CompanionTab, NavId, RuntimeResourceUpload, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
+import { cleanAssistantContent } from '../utils/chatContent';
+import {
+  createWorkspaceRoot,
+  findWorkspaceTreeNode,
+  joinWorkspacePath,
+  markWorkspaceTreeLoading,
+  mergeWorkspaceTreeChildren,
+  parentPathOf,
+  setWorkspaceTreeExpanded,
+  type WorkspaceTreeNode,
+} from '../utils/workspaceTree';
+import { isWorkspaceTextPreview, workspacePreviewKind, workspacePreviewMime } from '../utils/workspacePreview';
 
 function blockText(block: any): string {
   if (!block) return '';
   if (typeof block === 'string') return block;
   return block.text || block.content || block.output || block.thinking || '';
+}
+
+function normalizeTurnContent(role: string, content: string) {
+  if (String(role || '').toLowerCase() === 'user') return content;
+  return cleanAssistantContent(content, (tool, outcome) => t(outcome === 'failed' ? 'chat.toolEvidence.failed' : 'chat.toolEvidence.inline', { tool }));
+}
+
+function cleanRuntimeSummary(content: string) {
+  return cleanAssistantContent(String(content || ''), (tool, outcome) => t(outcome === 'failed' ? 'chat.toolEvidence.failed' : 'chat.toolEvidence.inline', { tool }));
+}
+
+function sanitizeActivityEvent(event: ActivityEvent): ActivityEvent {
+  return {
+    ...event,
+    title: cleanRuntimeSummary(event.title),
+    detail: cleanRuntimeSummary(event.detail),
+  };
 }
 
 export const useAppStore = defineStore('app', () => {
@@ -41,6 +70,10 @@ export const useAppStore = defineStore('app', () => {
   const workspaceRoot = ref('');
   const workspaceDir = ref('');
   const workspaceFiles = ref<WorkspaceFile[]>([]);
+  const workspaceTreeRoot = ref<WorkspaceTreeNode>(createWorkspaceRoot());
+  const expandedWorkspaceDirs = ref<string[]>(['']);
+  const workspaceTreeLoading = ref<Record<string, boolean>>({});
+  const workspaceMeta = ref<Record<string, unknown> | null>(null);
   const attachments = ref<SessionAttachment[]>([]);
   const selectedFile = ref('');
   const selectedFileContent = ref('');
@@ -50,6 +83,7 @@ export const useAppStore = defineStore('app', () => {
   const uploadBusy = ref(false);
   const settingsSavedAt = ref('');
   const activeSectionByPage = ref<Record<string, string>>({});
+  const companionCollapsed = ref(true);
   const activeModal = ref<'model' | 'workspace' | 'commands' | null>(null);
   const selectedModel = ref('');
   const selectedProfile = ref('default');
@@ -261,19 +295,23 @@ export const useAppStore = defineStore('app', () => {
     activeSessionId.value = sessionId;
     const data = await api.messages(sessionId);
     const rows = Array.isArray(data) ? data : (data.messages || []);
-    turns.value = rows.map((row: any, index: number) => ({
-      id: String(row.id || row.sequence || index),
-      role: row.role || 'assistant',
-      content: row.content || (row.blocks || []).map(blockText).join('') || '',
-      status: 'complete',
-      activity: [],
-      blocks: row.blocks || [],
-      sequence: row.sequence,
-      created_at_ms: row.created_at_ms,
-      tool_use_id: row.tool_use_id,
-      tool_name: row.tool_name,
-      token_usage: row.token_usage,
-    }));
+    turns.value = rows.map((row: any, index: number) => {
+      const role = row.role || 'assistant';
+      const content = row.content || (row.blocks || []).map(blockText).join('') || '';
+      return {
+        id: String(row.id || row.sequence || index),
+        role,
+        content: normalizeTurnContent(role, content),
+        status: 'complete',
+        activity: [],
+        blocks: row.blocks || [],
+        sequence: row.sequence,
+        created_at_ms: row.created_at_ms,
+        tool_use_id: row.tool_use_id,
+        tool_name: row.tool_name,
+        token_usage: row.token_usage,
+      };
+    });
     if (!turns.value.length) turns.value = [{ id: 'empty', role: 'system', content: t('store.app.session.empty'), status: 'complete' }];
     connectSessionStream(sessionId);
     await refreshContextUsage(sessionId);
@@ -373,7 +411,7 @@ export const useAppStore = defineStore('app', () => {
     }
     const data: any = await api.runtimeTimeline(activeSessionId.value);
     currentTimeline.value = data;
-    activity.value = normalizeActivity(data.events || data.timeline || []);
+    activity.value = normalizeActivity(data.events || data.timeline || []).map(sanitizeActivityEvent);
   }
 
   async function loadTurnEvidence(turn: ChatTurn) {
@@ -564,13 +602,14 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function completeAssistantTurn(content: string, status: 'complete' | 'error' = 'complete') {
+    const visibleContent = normalizeTurnContent(status === 'error' ? 'system' : 'assistant', content);
     const turn = streamingAssistantId ? turns.value.find((item) => item.id === streamingAssistantId) : null;
     if (turn) {
-      if (content && turn.content !== content && !turn.content.endsWith(content)) turn.content = content;
+      if (visibleContent && turn.content !== visibleContent && !turn.content.endsWith(visibleContent)) turn.content = visibleContent;
       turn.status = status;
-    } else if (content) {
-      const alreadyShown = turns.value.some((item) => item.role === 'assistant' && item.content === content);
-      if (!alreadyShown) turns.value.push({ id: `assistant-${Date.now()}`, role: status === 'error' ? 'system' : 'assistant', content, status });
+    } else if (visibleContent) {
+      const alreadyShown = turns.value.some((item) => item.role === 'assistant' && item.content === visibleContent);
+      if (!alreadyShown) turns.value.push({ id: `assistant-${Date.now()}`, role: status === 'error' ? 'system' : 'assistant', content: visibleContent, status });
     }
     streamingAssistantId = '';
   }
@@ -580,8 +619,8 @@ export const useAppStore = defineStore('app', () => {
     const event = {
       id: `${id}-${Date.now()}`,
       kind,
-      title,
-      detail: String(detail || '').slice(0, 240),
+      title: cleanRuntimeSummary(title),
+      detail: cleanRuntimeSummary(String(detail || '').slice(0, 240)),
       status,
     };
     const existingIndex = activity.value.findIndex((item) => item.title === title && item.kind === kind && item.status !== 'complete' && item.status !== 'error');
@@ -623,20 +662,111 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function loadWorkspace(dir = workspaceDir.value) {
-    const data = await api.files(dir);
-    workspaceDir.value = data.dir || dir || '';
-    workspaceFiles.value = (data.files || []).map((file: any) => ({
+  function normalizeWorkspaceFiles(files: any[]): WorkspaceFile[] {
+    return (files || []).map((file: any) => ({
       ...file,
       kind: file.kind || (file.is_dir ? 'dir' : 'file'),
     }));
   }
 
+  function rememberExpandedDir(dir: string) {
+    const normalized = String(dir || '');
+    if (!expandedWorkspaceDirs.value.includes(normalized)) {
+      expandedWorkspaceDirs.value = [...expandedWorkspaceDirs.value, normalized];
+    }
+  }
+
+  function forgetExpandedDir(dir: string) {
+    const normalized = String(dir || '');
+    expandedWorkspaceDirs.value = expandedWorkspaceDirs.value.filter((item) => item !== normalized);
+  }
+
+  function mergeWorkspaceTreeDir(dir: string, files: WorkspaceFile[]) {
+    const expanded = new Set(expandedWorkspaceDirs.value);
+    workspaceTreeRoot.value = mergeWorkspaceTreeChildren(workspaceTreeRoot.value, dir, files, expanded);
+  }
+
+  async function loadWorkspace(dir = workspaceDir.value) {
+    const data = await api.files(dir);
+    const currentDir = data.dir || dir || '';
+    const files = normalizeWorkspaceFiles(data.files || []);
+    workspaceDir.value = currentDir;
+    workspaceFiles.value = files;
+    rememberExpandedDir(currentDir);
+    mergeWorkspaceTreeDir(currentDir, files);
+  }
+
+  async function loadWorkspaceTreeDir(dir = '', setCurrent = false) {
+    const currentDir = String(dir || '');
+    workspaceTreeLoading.value = { ...workspaceTreeLoading.value, [currentDir]: true };
+    workspaceTreeRoot.value = markWorkspaceTreeLoading(workspaceTreeRoot.value, currentDir, true);
+    try {
+      const data = await api.files(currentDir);
+      const resolvedDir = data.dir || currentDir;
+      const files = normalizeWorkspaceFiles(data.files || []);
+      rememberExpandedDir(resolvedDir);
+      if (setCurrent) {
+        workspaceDir.value = resolvedDir;
+        workspaceFiles.value = files;
+      }
+      mergeWorkspaceTreeDir(resolvedDir, files);
+      return files;
+    } catch (error) {
+      fileError.value = error instanceof Error ? error.message : String(error);
+      companionTab.value = 'inspector';
+      throw error;
+    } finally {
+      workspaceTreeLoading.value = { ...workspaceTreeLoading.value, [currentDir]: false };
+      workspaceTreeRoot.value = markWorkspaceTreeLoading(workspaceTreeRoot.value, currentDir, false);
+    }
+  }
+
+  async function toggleWorkspaceTreeDir(path: string) {
+    const node = findWorkspaceTreeNode(workspaceTreeRoot.value, path);
+    if (node?.expanded) {
+      forgetExpandedDir(path);
+      workspaceTreeRoot.value = setWorkspaceTreeExpanded(workspaceTreeRoot.value, path, false);
+      return;
+    }
+    rememberExpandedDir(path);
+    workspaceTreeRoot.value = setWorkspaceTreeExpanded(workspaceTreeRoot.value, path, true);
+    if (!node?.loaded) await loadWorkspaceTreeDir(path, true);
+    else {
+      workspaceDir.value = path;
+      workspaceFiles.value = node.children.map((child) => ({
+        name: child.name,
+        path: child.path,
+        kind: child.kind,
+        is_dir: child.is_dir,
+        size: child.size,
+        modified: child.modified,
+      }));
+    }
+  }
+
+  async function selectWorkspacePath(path: string, kind: 'dir' | 'file') {
+    if (kind === 'dir') {
+      await toggleWorkspaceTreeDir(path);
+      return;
+    }
+    await openFile(path);
+  }
+
+  async function refreshWorkspaceTreeParent(path: string) {
+    const parent = parentPathOf(path);
+    await loadWorkspaceTreeDir(parent, workspaceDir.value === parent);
+  }
+
   async function openFile(path: string) {
     selectedFile.value = path;
     fileError.value = '';
-    selectedFileContent.value = await api.rawFile(path);
-    editorContent.value = selectedFileContent.value;
+    if (isWorkspaceTextPreview(path)) {
+      selectedFileContent.value = await api.rawFile(path);
+      editorContent.value = selectedFileContent.value;
+    } else {
+      selectedFileContent.value = '';
+      editorContent.value = '';
+    }
     companionTab.value = 'workspace';
   }
 
@@ -678,6 +808,7 @@ export const useAppStore = defineStore('app', () => {
     try {
       const result: any = await api.uploadFile(file, dir);
       await loadWorkspace(dir);
+      await loadWorkspaceTreeDir(dir, workspaceDir.value === dir);
       activity.value.unshift({ id: `upload-${Date.now()}`, kind: 'context', title: t('script.stores.app.title.71be2f4e38'), detail: `${result.path} (${result.size} bytes)`, status: 'complete' });
       return result;
     } catch (error) {
@@ -687,6 +818,48 @@ export const useAppStore = defineStore('app', () => {
     } finally {
       uploadBusy.value = false;
     }
+  }
+
+  async function uploadWorkspaceFiles(files: FileList | File[], dir = workspaceDir.value) {
+    const uploaded = [];
+    for (const file of Array.from(files)) {
+      uploaded.push(await uploadWorkspaceFile(file, dir));
+    }
+    return uploaded;
+  }
+
+  function rawWorkspaceFileUrl(path = selectedFile.value) {
+    return path ? api.workspaceRawUrl(path) : '';
+  }
+
+  function downloadWorkspacePath(path: string, kind: 'file' | 'dir' = 'file') {
+    if (!path) return;
+    const link = document.createElement('a');
+    link.href = api.workspaceDownloadUrl(path);
+    link.download = kind === 'dir' ? `${path.split('/').filter(Boolean).at(-1) || 'workspace'}.tar` : path.split('/').filter(Boolean).at(-1) || 'download';
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function openWorkspacePathExternally(path = selectedFile.value) {
+    if (!path) return;
+    const kind = workspacePreviewKind(path);
+    if (isWorkspaceTextPreview(path)) {
+      let content = selectedFile.value === path ? editorContent.value : '';
+      if (!content) content = await api.rawFile(path);
+      const blob = new Blob([content], { type: `${workspacePreviewMime(path)};charset=utf-8` });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return;
+    }
+    if (kind !== 'binary') {
+      window.open(api.workspaceRawUrl(path), '_blank', 'noopener,noreferrer');
+      return;
+    }
+    downloadWorkspacePath(path, 'file');
   }
 
   async function uploadResource(file: File) {
@@ -722,10 +895,30 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function createWorkspaceDir(name: string) {
-    const path = [workspaceDir.value, name.trim()].filter(Boolean).join('/');
+    return createWorkspaceDirAt(workspaceDir.value, name);
+  }
+
+  async function createWorkspaceDirAt(parent: string, name: string) {
+    const path = joinWorkspacePath(parent, name.trim());
+    if (!path) return;
     try {
       await api.createDir(path);
-      await loadWorkspace(workspaceDir.value);
+      await loadWorkspaceTreeDir(parent, workspaceDir.value === parent);
+      fileError.value = '';
+    } catch (error) {
+      fileError.value = error instanceof Error ? error.message : String(error);
+      companionTab.value = 'inspector';
+      throw error;
+    }
+  }
+
+  async function createWorkspaceFile(path: string, content = '') {
+    const cleanPath = String(path || '').trim();
+    if (!cleanPath) return;
+    try {
+      await api.saveFile(cleanPath, content);
+      await refreshWorkspaceTreeParent(cleanPath);
+      await openFile(cleanPath);
       fileError.value = '';
     } catch (error) {
       fileError.value = error instanceof Error ? error.message : String(error);
@@ -735,6 +928,10 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function deleteWorkspacePath(path: string) {
+    return deleteWorkspacePathConfirmed(path);
+  }
+
+  async function deleteWorkspacePathConfirmed(path: string) {
     try {
       await api.deleteWorkspacePath(path);
       if (selectedFile.value === path) {
@@ -742,7 +939,7 @@ export const useAppStore = defineStore('app', () => {
         selectedFileContent.value = '';
         editorContent.value = '';
       }
-      await loadWorkspace(workspaceDir.value);
+      await refreshWorkspaceTreeParent(path);
       fileError.value = '';
     } catch (error) {
       fileError.value = error instanceof Error ? error.message : String(error);
@@ -754,10 +951,24 @@ export const useAppStore = defineStore('app', () => {
   async function renameWorkspacePath(path: string, to: string) {
     try {
       const result: any = await api.renameWorkspacePath(path, to);
-      if (selectedFile.value === path) selectedFile.value = result.to || to;
-      await loadWorkspace(workspaceDir.value);
+      const nextPath = result.to || to;
+      if (selectedFile.value === path) selectedFile.value = nextPath;
+      await refreshWorkspaceTreeParent(path);
+      if (parentPathOf(nextPath) !== parentPathOf(path)) await refreshWorkspaceTreeParent(nextPath);
       fileError.value = '';
       return result;
+    } catch (error) {
+      fileError.value = error instanceof Error ? error.message : String(error);
+      companionTab.value = 'inspector';
+      throw error;
+    }
+  }
+
+  async function loadWorkspaceMeta(path: string) {
+    try {
+      workspaceMeta.value = await api.workspaceMeta(path) as Record<string, unknown>;
+      fileError.value = '';
+      return workspaceMeta.value;
     } catch (error) {
       fileError.value = error instanceof Error ? error.message : String(error);
       companionTab.value = 'inspector';
@@ -793,6 +1004,15 @@ export const useAppStore = defineStore('app', () => {
 
   function openCompanion(tab: CompanionTab) {
     companionTab.value = tab;
+    companionCollapsed.value = false;
+  }
+
+  function closeCompanion() {
+    companionCollapsed.value = true;
+  }
+
+  function toggleCompanion() {
+    companionCollapsed.value = !companionCollapsed.value;
   }
 
   function selectSection(page: string, sectionId: string) {
@@ -971,6 +1191,10 @@ export const useAppStore = defineStore('app', () => {
     workspaceRoot,
     workspaceDir,
     workspaceFiles,
+    workspaceTreeRoot,
+    expandedWorkspaceDirs,
+    workspaceTreeLoading,
+    workspaceMeta,
     attachments,
     workspaceFilter,
     filteredWorkspaceFiles,
@@ -981,6 +1205,7 @@ export const useAppStore = defineStore('app', () => {
     uploadBusy,
     settingsSavedAt,
     activeSectionByPage,
+    companionCollapsed,
     activeModal,
     selectedModel,
     selectedProfile,
@@ -1011,18 +1236,31 @@ export const useAppStore = defineStore('app', () => {
     clearTurnEvidence,
     refreshChatProjection,
     loadWorkspace,
+    loadWorkspaceTreeDir,
+    toggleWorkspaceTreeDir,
+    selectWorkspacePath,
     openFile,
     loadAttachments,
     attachWorkspaceFile,
     removeAttachment,
     uploadWorkspaceFile,
+    uploadWorkspaceFiles,
     uploadResource,
     createWorkspaceDir,
+    createWorkspaceDirAt,
+    createWorkspaceFile,
     deleteWorkspacePath,
+    deleteWorkspacePathConfirmed,
     renameWorkspacePath,
+    loadWorkspaceMeta,
+    rawWorkspaceFileUrl,
+    downloadWorkspacePath,
+    openWorkspacePathExternally,
     saveFile,
     resetFile,
     openCompanion,
+    closeCompanion,
+    toggleCompanion,
     stopCurrentTurn,
     retryLastUserTurn,
     setChatDisplayMode,

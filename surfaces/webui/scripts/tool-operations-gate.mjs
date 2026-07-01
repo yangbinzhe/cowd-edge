@@ -73,6 +73,8 @@ const files = {
     : path.join(backendRoot, 'crates/cowd-cli/src/system_service.rs'),
   client: path.join(webuiRoot, 'src/api/client.ts'),
   page: path.join(webuiRoot, 'src/pages/ToolsPage.vue'),
+  app: path.join(webuiRoot, 'src/App.vue'),
+  workflowStrip: path.join(webuiRoot, 'src/components/layout/WorkflowStrip.vue'),
   capabilities: path.join(webuiRoot, 'src/data/capabilities.ts'),
   styles: path.join(webuiRoot, 'src/styles/base.css'),
   tuiPanel: fs.existsSync(path.join(backendRoot, 'crates/tui/src/components/tool_ops_panel.rs'))
@@ -133,6 +135,8 @@ const backendText = `${read(files.backend)}\n${read(files.backendService)}`;
 const clientText = read(files.client);
 const pageText = read(files.page);
 const pageEvidenceText = renderablePageEvidence(pageText);
+const appText = read(files.app);
+const workflowStripText = read(files.workflowStrip);
 const capabilitiesText = read(files.capabilities);
 const stylesText = read(files.styles);
 const tuiPanelText = read(files.tuiPanel);
@@ -149,8 +153,11 @@ for (const method of hasAll(clientText, requiredClientMethods)) failures.push(`c
 for (const section of requiredSections) {
   if (!capabilitiesText.includes(`id: '${section}'`)) failures.push(`capabilities missing section ${section}`);
   if (!pageText.includes(`data-section="${section}"`)) failures.push(`ToolsPage missing data-section ${section}`);
-  if (!stylesText.includes(`data-active-section="${section}"`)) failures.push(`section filter missing ${section}`);
 }
+if (!appText.includes("querySelectorAll<HTMLElement>('.main-surface [data-section]')")) failures.push('generic section visibility controller missing in App.vue');
+if (!appText.includes('panel.hidden = hidden')) failures.push('generic section visibility must use hidden attribute');
+if (!workflowStripText.includes('store.selectSection')) failures.push('WorkflowStrip must select active section before scrolling');
+if (stylesText.includes('data-active-section="registry"')) failures.push('legacy per-section CSS whitelist should not be restored');
 for (const heading of hasAll(pageEvidenceText, requiredHeadings)) failures.push(`ToolsPage missing heading ${heading}`);
 
 const pageMustUse = [

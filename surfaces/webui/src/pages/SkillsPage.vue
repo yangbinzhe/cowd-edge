@@ -11,6 +11,7 @@ import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import { displayStatus } from '../i18n/domain/status';
 
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
 const loading = ref(false);
@@ -180,8 +181,8 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="skillContext" />
-    <WorkflowStrip :steps="skillWorkflow" :title="t('page.skills.page.title.f6cccf3371')" />
+    <PrimaryContextBar :items="skillContext" density="compact" :max-visible="4" />
+    <WorkflowStrip :steps="skillWorkflow" :title="t('page.skills.page.title.f6cccf3371')" density="compact" />
 
     <section class="skills-console" data-section="catalog">
       <aside class="skills-catalog">
@@ -228,7 +229,7 @@ onMounted(refresh);
         >
           <strong>{{ item.name }}</strong>
           <span>{{ item.description || item.source }}</span>
-          <small>{{ item.scope }} · {{ item.status }} · {{ item.risk }}</small>
+          <small>{{ item.scope }} · {{ displayStatus(item.status) }} · {{ displayStatus(item.risk) }}</small>
         </button>
       </aside>
 
@@ -307,7 +308,7 @@ onMounted(refresh);
               @keydown.enter.prevent="loadRunDetail(run)"
             >
               <strong>{{ run.skill_id || run.skill_name || run.id }}</strong>
-              <span>{{ run.status || run.outcome || t('page.skills.page.inline.34f5cf4d66') }}</span>
+              <span>{{ run.status || run.outcome ? displayStatus(run.status || run.outcome) : t('page.skills.page.inline.34f5cf4d66') }}</span>
             </article>
           </div>
           <DetailDrawer :title="t('page.skills.page.title.14b2c03b91')" :row="selectedDetail || skill" @close="selectedDetail = null" />

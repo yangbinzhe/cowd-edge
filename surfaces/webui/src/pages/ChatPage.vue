@@ -6,6 +6,7 @@ import { useAppStore } from '../stores/app';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import TurnEvidenceDrawer from '../components/workbench/TurnEvidenceDrawer.vue';
+import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 const draft = ref('');
@@ -95,12 +96,12 @@ async function chooseCommand(command: any) {
           <button type="button" :class="{ active: !isPanorama }" @click="store.setChatDisplayMode('clean')">{{ t('page.chat.page.text.864a2f44ef') }}</button>
         </div>
         <div class="status-strip">
-          <span>{{ store.health?.status || t('page.chat.page.inline.b82c49c3b2') }}</span>
+          <span>{{ displayStatus(store.health?.status || 'unknown') }}</span>
           <button type="button" @click="store.openModal('model')">{{ modelLabel }}</button>
         </div>
       </div>
     </header>
-    <PrimaryContextBar v-if="isPanorama" :items="chatContext" />
+    <PrimaryContextBar v-if="isPanorama" :items="chatContext" density="compact" :max-visible="4" />
     <div v-else class="clean-counts" :aria-label="t('page.chat.page.aria-label.91fba48319')">
       <span v-for="item in cleanCounters" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</span>
     </div>
@@ -114,7 +115,7 @@ async function chooseCommand(command: any) {
     <section v-if="isPanorama" class="run-panorama" :aria-label="t('page.chat.page.aria-label.62b09f4b3d')">
       <div class="run-card primary">
         <span>{{ t('page.chat.page.text.ae6ca51251') }}</span>
-        <strong>{{ runStatus }}</strong>
+        <strong>{{ displayStatus(runStatus) }}</strong>
         <small>{{ runIdentity }}</small>
       </div>
       <div class="run-stage-grid">
@@ -133,7 +134,7 @@ async function chooseCommand(command: any) {
       </div>
       <div class="run-actions">
         <button class="ghost-action" type="button" @click="store.openCompanion('evidence')"><Brain :size="15" />{{ t('page.chat.page.text.848af509ba') }}</button>
-        <button class="ghost-action" type="button" @click="store.openCompanion('workspace')"><FileText :size="15" /> Files {{ store.currentRunFiles.length }}</button>
+        <button class="ghost-action" type="button" @click="store.openCompanion('workspace')"><FileText :size="15" /> {{ t('component.companion.panel.text.727690de87') }} {{ store.currentRunFiles.length }}</button>
         <button class="ghost-action" type="button" @click="store.retryLastUserTurn"><RotateCcw :size="15" />{{ t('page.chat.page.text.5699b59e33') }}</button>
         <button class="danger-action" type="button" @click="stop"><Square :size="15" />{{ t('page.chat.page.text.2090c0732a') }}</button>
       </div>
@@ -142,7 +143,7 @@ async function chooseCommand(command: any) {
     <div class="transcript" :aria-label="t('page.chat.page.aria-label.e683294716')">
       <article v-for="turn in store.turns" :key="turn.id" class="turn" :data-role="turn.role">
         <div v-if="isPanorama" class="message-meta">
-          <span>{{ turn.status || t('page.chat.page.inline.86e76c9ec6') }}</span>
+          <span>{{ displayStatus(turn.status || 'unknown') }}</span>
           <span v-if="turn.sequence">#{{ turn.sequence }}</span>
           <span v-if="turn.tool_name">{{ turn.tool_name }}</span>
           <button type="button" @click="inspectTurn(turn)">{{ t('page.chat.page.text.848af509ba') }}</button>
@@ -168,7 +169,7 @@ async function chooseCommand(command: any) {
           <div class="context-meter"><i :style="{ width: `${contextUsage || 0}%` }" /></div>
         </div>
         <div class="composer-actions">
-          <button class="icon-action" type="button" @click="store.openCompanion('workspace')"><Paperclip :size="16" /></button>
+          <button class="icon-action" type="button" :aria-label="t('component.companion.panel.text.727690de87')" @click="store.openCompanion('workspace')"><Paperclip :size="16" /></button>
           <button class="ghost-action" type="button" @click="store.openModal('commands')"><Zap :size="15" />{{ t('page.chat.page.text.01bed7d85c') }}</button>
           <button v-if="sending" class="primary-action" type="button" @click="stop"><Square :size="15" />{{ t('page.chat.page.text.2090c0732a') }}</button>
           <button v-else class="primary-action" type="button" :disabled="!draft.trim()" @click="submit"><Send :size="15" />{{ t('page.chat.page.text.aeee9b2149') }}</button>

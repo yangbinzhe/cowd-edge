@@ -22,6 +22,7 @@ const unitKeys: Record<string, string> = {
   packets: 'unit.packets',
   pending: 'unit.pending',
   phases: 'unit.phases',
+  profiles: 'unit.profiles',
   promotions: 'unit.promotions',
   receipts: 'unit.receipts',
   records: 'unit.records',
