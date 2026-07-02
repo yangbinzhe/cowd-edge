@@ -1,8 +1,8 @@
 # Cowd Edge
 
-`cowd-edge` 是 Cowd 的独立边缘能力仓库。当前代码目录仍可能叫 `cowd-surface`，但项目语义已经收束为 Edge：它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
+`cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.418`。
+当前版本：`0.9.419`。
 
 ## 1. 定位
 
@@ -18,7 +18,7 @@ connectors
   message
     飞书、邮件、企微、微信 iLink 等消息入口/出口。
   source
-    飞书多维表、Lark Base、本地批次、后续表格/数据源快照。
+    PostgreSQL、MySQL、MariaDB、飞书多维表、Lark Base 等数据源快照和事件归一化。
   automation
     后续 webhook、browser-rpa 等副作用动作。
 ```
@@ -35,7 +35,7 @@ connectors
 
 ## 3. 当前目录
 
-当前仓库正在从 `cowd-surface` 过渡到 `cowd-edge` 语义，目标结构如下：
+当前仓库的目标结构如下：
 
 ```text
 crates/edge-contract
@@ -53,9 +53,11 @@ connectors/message/wecom
 connectors/message/wechat-ilink
   消息连接器 manifest 和发布单元。
 
+connectors/source/postgres
+connectors/source/mysql
+connectors/source/mariadb
 connectors/source/feishu-bitable
 connectors/source/lark-bitable
-connectors/source/local-file
   Source connector manifest 和发布单元。
 ```
 
@@ -76,6 +78,7 @@ Edge sidecar：
 ```bash
 cargo check --workspace --bins
 cargo build --release --workspace --bins
+cargo build --release -p edge-adapters --features source-db --bin cowd-edge-postgres-source --bin cowd-edge-mysql-source --bin cowd-edge-mariadb-source
 ```
 
 构建产物按连接器类型进入对应安装目录：
@@ -86,6 +89,9 @@ connectors/message/feishu/cowd-edge-feishu-message
 connectors/message/email/cowd-edge-email-message
 connectors/message/wecom/cowd-edge-wecom-message
 connectors/message/wechat-ilink/cowd-edge-wechat-ilink-message
+connectors/source/postgres/cowd-edge-postgres-source
+connectors/source/mysql/cowd-edge-mysql-source
+connectors/source/mariadb/cowd-edge-mariadb-source
 connectors/source/feishu-bitable/cowd-edge-feishu-bitable-source
 connectors/source/lark-bitable/cowd-edge-lark-bitable-source
 ```
@@ -101,7 +107,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.418",
+  "version": "0.9.419",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -117,7 +123,7 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.418",
+  "version": "0.9.419",
   "kind": "message-connector",
   "entry": "./cowd-edge-feishu-message",
   "transport": "stdio-jsonl",
@@ -143,7 +149,7 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.418",
+  "version": "0.9.419",
   "kind": "source-connector",
   "entry": "./cowd-edge-feishu-bitable-source",
   "transport": "stdio-jsonl",
@@ -152,6 +158,7 @@ Source connector：
     "source.schema_discovery",
     "source.snapshot",
     "source.incremental",
+    "source.event",
     "source.health"
   ],
   "default_enabled": false
@@ -163,7 +170,7 @@ Source connector：
 Gateway 与 sidecar 每行传输一个 JSON frame。生命周期帧在 Surface、Message Connector、Source Connector 之间复用：
 
 ```json
-{"type":"handshake","id":"req-1","protocol":"cowd.surface.v1","gateway_version":"0.9.418"}
+{"type":"handshake","id":"req-1","protocol":"cowd.surface.v1","gateway_version":"0.9.419"}
 {"type":"configure","id":"req-2","surface":"feishu","config":{}}
 {"type":"connect","id":"req-3","surface":"feishu"}
 {"type":"health","id":"req-4","surface":"feishu"}
@@ -180,6 +187,8 @@ Source connector 使用 source action：
 
 ```json
 {"type":"action","id":"req-7","surface":"feishu-bitable","action":"source.read_batch","payload":{"adapter_id":"feishu_bitable","resource_ref":"feishu-bitable://app/table","limit":100}}
+{"type":"action","id":"req-8","surface":"postgres","action":"source.schema_discovery","payload":{"adapter_id":"postgres","resource_ref":"postgres://***:***@localhost/db","table":"public.orders"}}
+{"type":"action","id":"req-9","surface":"feishu-bitable","action":"source.event.normalize","payload":{"events":[{"event_type":"record.changed","app_token":"app","table_id":"tbl","record_ids":["rec_1"]}]}}
 ```
 
 响应必须返回标准 payload；Source connector 的 `source.read_batch` 必须返回 core `connector::SourceRecordBatch` 兼容结构。
@@ -213,5 +222,8 @@ Gateway API 分层：
 | `email` | Message Connector | 已有 sidecar scaffold，需按 message connector 目录迁移 |
 | `wecom` | Message Connector | 已有 sidecar scaffold，需按 message connector 目录迁移 |
 | `wechat-ilink` | Message Connector | 已有 sidecar scaffold，需按 message connector 目录迁移 |
-| `feishu-bitable` | Source Connector | 已有 `source.read_batch` sidecar 闭环；fixture 可测，真实远端读取需配置飞书凭据和 app/table。 |
-| `lark-bitable` | Source Connector | 已有 `source.read_batch` sidecar 闭环；fixture 可测，真实远端读取需配置 Lark 凭据和 app/table。 |
+| `postgres` | Source Connector | 已有 schema discovery、snapshot batch、incremental plan、event normalize；需使用 `source-db` feature 构建，真实读取需配置 DSN 或 host/database/user。 |
+| `mysql` | Source Connector | 已有 schema discovery、snapshot batch、incremental plan、event normalize；需使用 `source-db` feature 构建，真实读取需配置 DSN 或 host/database/user。 |
+| `mariadb` | Source Connector | 已有 schema discovery、snapshot batch、incremental plan、event normalize；需使用 `source-db` feature 构建，通过 MySQL wire protocol 连接。 |
+| `feishu-bitable` | Source Connector | 已有 schema discovery、snapshot batch、incremental plan、event normalize；fixture 可测，真实远端读取需配置飞书凭据和 app/table。 |
+| `lark-bitable` | Source Connector | 已有 schema discovery、snapshot batch、incremental plan、event normalize；fixture 可测，真实远端读取需配置 Lark 凭据和 app/table。 |

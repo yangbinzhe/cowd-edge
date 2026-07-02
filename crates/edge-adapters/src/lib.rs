@@ -26,4 +26,6 @@ pub mod cowd_dirs;
 pub mod feishu_sidecar;
 pub mod message_sidecar;
 pub mod platform;
+#[cfg(feature = "source-db")]
+mod source_db;
 pub mod source_sidecar;

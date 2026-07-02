@@ -12,7 +12,7 @@ function argValue(name, fallback) {
 }
 
 const edgeRoot = path.resolve(new URL('../', import.meta.url).pathname);
-const expectedVersion = argValue('--version', process.env.COWD_EDGE_VERSION || process.env.COWD_SURFACE_VERSION || '');
+const expectedVersion = argValue('--version', process.env.COWD_EDGE_VERSION || '');
 const coreRoot = path.resolve(argValue('--core', process.env.COWD_BACKEND_REPO || path.join(edgeRoot, '..', 'cowd-develop')));
 
 function readJson(file) {

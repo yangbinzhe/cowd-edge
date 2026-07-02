@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "lark-bitable",
   "name": "Lark Base Source Connector",
-  "version": "0.9.418",
+  "version": "0.9.419",
   "kind": "source-connector",
   "entry": "./cowd-edge-lark-bitable-source",
   "transport": "stdio-jsonl",
@@ -11,6 +11,7 @@
     "source.schema_discovery",
     "source.snapshot",
     "source.incremental",
+    "source.event",
     "source.health"
   ],
   "routes": [],

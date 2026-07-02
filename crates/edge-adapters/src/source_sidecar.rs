@@ -10,6 +10,9 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
+#[cfg(feature = "source-db")]
+use crate::source_db::{self, DatabaseDialect};
+
 #[derive(Debug, Default)]
 struct SourceSidecarState {
     config: Value,
@@ -18,57 +21,59 @@ struct SourceSidecarState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SourceReadPlan {
-    adapter_id: String,
-    resource_ref: String,
+pub(crate) struct SourceReadPlan {
     #[serde(default)]
-    table: Option<String>,
+    pub(crate) adapter_id: String,
     #[serde(default)]
-    fields: Vec<String>,
+    pub(crate) resource_ref: String,
     #[serde(default)]
-    limit: Option<usize>,
+    pub(crate) table: Option<String>,
     #[serde(default)]
-    offset: Option<usize>,
+    pub(crate) fields: Vec<String>,
     #[serde(default)]
-    cursor: Option<String>,
+    pub(crate) limit: Option<usize>,
     #[serde(default)]
-    metadata: Value,
+    pub(crate) offset: Option<usize>,
+    #[serde(default)]
+    pub(crate) cursor: Option<String>,
+    #[serde(default)]
+    pub(crate) metadata: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SourceFieldSchema {
-    name: String,
-    data_type: String,
-    nullable: bool,
+pub(crate) struct SourceFieldSchema {
+    pub(crate) name: String,
+    pub(crate) data_type: String,
+    pub(crate) nullable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SourceTableSchema {
-    table_name: String,
-    fields: Vec<SourceFieldSchema>,
-    primary_key: Vec<String>,
+pub(crate) struct SourceTableSchema {
+    pub(crate) table_name: String,
+    pub(crate) fields: Vec<SourceFieldSchema>,
+    pub(crate) primary_key: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct SourceBatchCursor {
-    offset: usize,
-    limit: usize,
+pub(crate) struct SourceBatchCursor {
+    pub(crate) offset: usize,
+    pub(crate) limit: usize,
     #[serde(default)]
-    next_offset: Option<usize>,
+    pub(crate) next_offset: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct SourceRecordBatch {
-    adapter_id: String,
-    resource_ref: String,
+pub(crate) struct SourceRecordBatch {
+    pub(crate) adapter_id: String,
+    pub(crate) resource_ref: String,
     #[serde(default)]
-    table: Option<String>,
-    schema: SourceTableSchema,
-    rows: Vec<Value>,
-    cursor: SourceBatchCursor,
-    row_count: usize,
-    checksum: String,
-    truncated: bool,
+    pub(crate) table: Option<String>,
+    pub(crate) schema: SourceTableSchema,
+    pub(crate) rows: Vec<Value>,
+    pub(crate) cursor: SourceBatchCursor,
+    pub(crate) row_count: usize,
+    pub(crate) checksum: String,
+    pub(crate) truncated: bool,
 }
 
 pub async fn run_stdio_source_connector(
@@ -126,6 +131,7 @@ async fn handle_frame(
                 "source.schema_discovery".to_string(),
                 "source.snapshot".to_string(),
                 "source.incremental".to_string(),
+                "source.event".to_string(),
                 "source.health".to_string(),
             ],
         },
@@ -189,6 +195,79 @@ async fn handle_frame(
                 }
             }
         }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload,
+            ..
+        } if action == "source.schema_discovery" || action == "source.discover_schema" => {
+            match discover_source_schema(payload, adapter_id, default_base_url, state.clone()).await
+            {
+                Ok(payload) => SurfaceFrame::Ok { id, payload },
+                Err(error) => {
+                    state.lock().await.last_error = Some(error.clone());
+                    SurfaceFrame::Error {
+                        id: Some(id),
+                        code: "source_schema_discovery_failed".to_string(),
+                        message: error,
+                    }
+                }
+            }
+        }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload,
+            ..
+        } if action == "source.incremental_plan" || action == "source.plan_incremental" => {
+            match incremental_source_plan(payload, adapter_id) {
+                Ok(payload) => SurfaceFrame::Ok { id, payload },
+                Err(error) => {
+                    state.lock().await.last_error = Some(error.clone());
+                    SurfaceFrame::Error {
+                        id: Some(id),
+                        code: "source_incremental_plan_failed".to_string(),
+                        message: error,
+                    }
+                }
+            }
+        }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload,
+            ..
+        } if action == "source.event.normalize" || action == "source.events.normalize" => {
+            match normalize_source_events(payload, adapter_id) {
+                Ok(payload) => SurfaceFrame::Ok { id, payload },
+                Err(error) => {
+                    state.lock().await.last_error = Some(error.clone());
+                    SurfaceFrame::Error {
+                        id: Some(id),
+                        code: "source_event_normalize_failed".to_string(),
+                        message: error,
+                    }
+                }
+            }
+        }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload,
+            ..
+        } if action == "source.poll_events" || action == "source.event_poll" => {
+            match poll_source_events(payload, adapter_id, state.clone()).await {
+                Ok(payload) => SurfaceFrame::Ok { id, payload },
+                Err(error) => {
+                    state.lock().await.last_error = Some(error.clone());
+                    SurfaceFrame::Error {
+                        id: Some(id),
+                        code: "source_event_poll_failed".to_string(),
+                        message: error,
+                    }
+                }
+            }
+        }
         SurfaceFrame::Action { id, action, .. } => SurfaceFrame::Error {
             id: Some(id),
             code: "source_action_unsupported".to_string(),
@@ -226,21 +305,60 @@ async fn read_source_batch(
     default_base_url: &str,
     state: Arc<Mutex<SourceSidecarState>>,
 ) -> Result<SourceRecordBatch, String> {
-    let plan = serde_json::from_value::<SourceReadPlan>(payload)
-        .map_err(|error| format!("invalid source read plan: {error}"))?;
-    if plan.adapter_id != adapter_id {
-        return Err(format!(
-            "adapter mismatch: request `{}` routed to `{adapter_id}`",
-            plan.adapter_id
-        ));
-    }
+    let plan = source_plan_from_payload(payload, adapter_id)?;
 
     if let Some(rows) = rows_from_metadata(&plan.metadata)? {
         return Ok(record_batch_from_rows(plan, rows, false));
     }
 
     let config = state.lock().await.config.clone();
+    #[cfg(feature = "source-db")]
+    if let Some(dialect) = DatabaseDialect::from_adapter(adapter_id) {
+        return source_db::read_database_batch(plan, config, dialect).await;
+    }
     read_feishu_bitable_batch(plan, config, default_base_url).await
+}
+
+async fn discover_source_schema(
+    payload: Value,
+    adapter_id: &str,
+    default_base_url: &str,
+    state: Arc<Mutex<SourceSidecarState>>,
+) -> Result<Value, String> {
+    let config = state.lock().await.config.clone();
+    #[cfg(feature = "source-db")]
+    if DatabaseDialect::from_adapter(adapter_id).is_some() {
+        return source_db::discover_database_schema(payload, adapter_id, config).await;
+    }
+    discover_bitable_schema(payload, adapter_id, config, default_base_url).await
+}
+
+fn incremental_source_plan(payload: Value, adapter_id: &str) -> Result<Value, String> {
+    #[cfg(feature = "source-db")]
+    if DatabaseDialect::from_adapter(adapter_id).is_some() {
+        return source_db::incremental_plan(payload, adapter_id);
+    }
+    bitable_incremental_plan(payload, adapter_id)
+}
+
+fn source_plan_from_payload(payload: Value, adapter_id: &str) -> Result<SourceReadPlan, String> {
+    let value = payload
+        .get("read_plan")
+        .or_else(|| payload.get("source_read_plan"))
+        .cloned()
+        .unwrap_or(payload);
+    let mut plan = serde_json::from_value::<SourceReadPlan>(value)
+        .map_err(|error| format!("invalid source read plan: {error}"))?;
+    if plan.adapter_id.trim().is_empty() {
+        plan.adapter_id = adapter_id.to_string();
+    }
+    if plan.adapter_id != adapter_id {
+        return Err(format!(
+            "adapter mismatch: request `{}` routed to `{adapter_id}`",
+            plan.adapter_id
+        ));
+    }
+    Ok(plan)
 }
 
 fn rows_from_metadata(metadata: &Value) -> Result<Option<Vec<Value>>, String> {
@@ -343,6 +461,318 @@ async fn read_feishu_bitable_batch(
     Ok(batch)
 }
 
+async fn discover_bitable_schema(
+    payload: Value,
+    adapter_id: &str,
+    config: Value,
+    default_base_url: &str,
+) -> Result<Value, String> {
+    let plan = source_plan_from_payload(payload, adapter_id)?;
+    if let Some(rows) = rows_from_metadata(&plan.metadata)? {
+        let table_name = plan.table.as_deref().unwrap_or("records");
+        return Ok(serde_json::json!({
+            "status": "ok",
+            "adapter_id": adapter_id,
+            "resource_ref": sanitize_resource_ref(&plan.resource_ref),
+            "source_schema": {
+                "tables": [infer_schema(table_name, &rows)],
+            }
+        }));
+    }
+
+    let app_id = config
+        .get("app_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "source connector config missing app_id".to_string())?;
+    let app_secret = config
+        .get("app_secret")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "source connector config missing app_secret".to_string())?;
+    let base_url = config
+        .get("base_url")
+        .and_then(Value::as_str)
+        .unwrap_or(default_base_url)
+        .trim_end_matches('/');
+    let (app_token, table_id) = resolve_bitable_target(&plan)?;
+    let token = tenant_access_token(base_url, app_id, app_secret).await?;
+    let response = reqwest::Client::new()
+        .get(format!(
+            "{base_url}/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/fields?page_size=100"
+        ))
+        .bearer_auth(token)
+        .send()
+        .await
+        .map_err(|error| format!("bitable fields request failed: {error}"))?;
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .map_err(|error| format!("bitable fields response read failed: {error}"))?;
+    if !status.is_success() {
+        return Err(format!(
+            "bitable fields request failed with {status}: {body}"
+        ));
+    }
+    let value = serde_json::from_str::<Value>(&body)
+        .map_err(|error| format!("bitable fields response parse failed: {error}"))?;
+    if value.get("code").and_then(Value::as_i64).unwrap_or(0) != 0 {
+        return Err(format!("bitable fields api error: {body}"));
+    }
+    let items = value
+        .get("data")
+        .and_then(|data| data.get("items"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let fields = items
+        .iter()
+        .filter_map(bitable_field_schema)
+        .collect::<Vec<_>>();
+    let primary_key = items
+        .iter()
+        .filter(|item| {
+            item.get("is_primary")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        })
+        .filter_map(|item| bitable_field_name(item).map(ToString::to_string))
+        .collect::<Vec<_>>();
+    Ok(serde_json::json!({
+        "status": "ok",
+        "adapter_id": adapter_id,
+        "resource_ref": sanitize_resource_ref(&plan.resource_ref),
+        "source_schema": {
+            "tables": [{
+                "table_name": plan.table.unwrap_or(table_id),
+                "fields": fields,
+                "primary_key": primary_key,
+            }],
+        }
+    }))
+}
+
+fn bitable_field_schema(item: &Value) -> Option<SourceFieldSchema> {
+    let name = bitable_field_name(item)?.to_string();
+    let data_type = item
+        .get("ui_type")
+        .or_else(|| item.get("type"))
+        .map(|value| {
+            value
+                .as_str()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| value.to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+    Some(SourceFieldSchema {
+        name,
+        data_type,
+        nullable: true,
+    })
+}
+
+fn bitable_field_name(item: &Value) -> Option<&str> {
+    item.get("field_name")
+        .or_else(|| item.get("name"))
+        .and_then(Value::as_str)
+}
+
+fn bitable_incremental_plan(payload: Value, adapter_id: &str) -> Result<Value, String> {
+    let mut plan = source_plan_from_payload(payload.clone(), adapter_id)?;
+    let limit = plan.limit.unwrap_or(100).clamp(1, 500);
+    let next_page_token = string_at(&payload, &["next_page_token"])
+        .or_else(|| string_at(&payload, &["source_batch", "next_page_token"]))
+        .or_else(|| string_at(&payload, &["source_batch", "cursor", "next_page_token"]))
+        .or_else(|| string_at(&payload, &["cursor", "next_page_token"]))
+        .map(ToString::to_string);
+    if let Some(next_page_token) = next_page_token.clone() {
+        plan.cursor = Some(next_page_token.clone());
+        if !plan.metadata.is_object() {
+            plan.metadata = Value::Object(Default::default());
+        }
+        plan.metadata["page_token"] = Value::String(next_page_token);
+    } else {
+        let offset = plan.offset.unwrap_or(0);
+        plan.offset = Some(offset.saturating_add(limit));
+    }
+    Ok(serde_json::json!({
+        "status": "ok",
+        "adapter_id": adapter_id,
+        "incremental_plan": {
+            "mode": if next_page_token.is_some() { "page_token" } else { "offset_hint" },
+            "next_read_plan": plan,
+            "notes": [
+                "Bitable incremental reads use page tokens when provided by upstream data",
+                "webhook callbacks can be normalized through source.event.normalize"
+            ]
+        }
+    }))
+}
+
+async fn poll_source_events(
+    payload: Value,
+    adapter_id: &str,
+    state: Arc<Mutex<SourceSidecarState>>,
+) -> Result<Value, String> {
+    let config = state.lock().await.config.clone();
+    let mut events = events_from_value(&payload)?;
+    if events.is_empty() {
+        events = events_from_value(&config)?;
+    }
+    Ok(normalized_events_payload(adapter_id, events))
+}
+
+fn normalize_source_events(payload: Value, adapter_id: &str) -> Result<Value, String> {
+    let mut events = events_from_value(&payload)?;
+    if events.is_empty() {
+        events.push(payload);
+    }
+    Ok(normalized_events_payload(adapter_id, events))
+}
+
+fn events_from_value(value: &Value) -> Result<Vec<Value>, String> {
+    if let Some(path) = value
+        .get("event_fixture_path")
+        .or_else(|| value.get("events_fixture_path"))
+        .and_then(Value::as_str)
+    {
+        return read_fixture_rows(PathBuf::from(path));
+    }
+    if let Some(events) = value.get("events").and_then(Value::as_array) {
+        return Ok(events.clone());
+    }
+    if let Some(events) = value
+        .get("metadata")
+        .and_then(|metadata| metadata.get("events"))
+        .and_then(Value::as_array)
+    {
+        return Ok(events.clone());
+    }
+    if let Some(events) = value
+        .get("data")
+        .and_then(|data| data.get("events"))
+        .and_then(Value::as_array)
+    {
+        return Ok(events.clone());
+    }
+    if value.is_array() {
+        return Ok(value.as_array().cloned().unwrap_or_default());
+    }
+    Ok(Vec::new())
+}
+
+fn normalized_events_payload(adapter_id: &str, events: Vec<Value>) -> Value {
+    let normalized = events
+        .iter()
+        .map(|event| normalize_source_event(adapter_id, event))
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "status": "ok",
+        "adapter_id": adapter_id,
+        "event_count": normalized.len(),
+        "source_events": normalized,
+    })
+}
+
+fn normalize_source_event(adapter_id: &str, event: &Value) -> Value {
+    let table = string_at(event, &["table"])
+        .or_else(|| string_at(event, &["table_id"]))
+        .or_else(|| string_at(event, &["event", "table_id"]))
+        .or_else(|| string_at(event, &["event", "table", "table_id"]));
+    let app_token =
+        string_at(event, &["app_token"]).or_else(|| string_at(event, &["event", "app_token"]));
+    let resource_ref = string_at(event, &["resource_ref"])
+        .map(ToString::to_string)
+        .or_else(|| match (app_token, table) {
+            (Some(app_token), Some(table)) if adapter_id.contains("bitable") => {
+                Some(format!("bitable://{app_token}/{table}"))
+            }
+            _ => None,
+        });
+    serde_json::json!({
+        "adapter_id": adapter_id,
+        "event_id": string_at(event, &["event_id"])
+            .or_else(|| string_at(event, &["uuid"]))
+            .or_else(|| string_at(event, &["header", "event_id"]))
+            .unwrap_or(""),
+        "event_type": string_at(event, &["event_type"])
+            .or_else(|| string_at(event, &["type"]))
+            .or_else(|| string_at(event, &["header", "event_type"]))
+            .or_else(|| string_at(event, &["event", "type"]))
+            .unwrap_or("unknown"),
+        "operation": string_at(event, &["operation"])
+            .or_else(|| string_at(event, &["action"]))
+            .or_else(|| string_at(event, &["event", "operation"]))
+            .or_else(|| string_at(event, &["event", "action"]))
+            .unwrap_or("unknown"),
+        "resource_ref": resource_ref,
+        "table": table,
+        "record_ids": record_ids_from_event(event),
+        "rows": rows_from_event(event),
+        "occurred_at": string_at(event, &["occurred_at"])
+            .or_else(|| string_at(event, &["timestamp"]))
+            .or_else(|| string_at(event, &["header", "create_time"])),
+        "raw": event,
+    })
+}
+
+fn rows_from_event(event: &Value) -> Vec<Value> {
+    event
+        .get("rows")
+        .or_else(|| event.get("records"))
+        .or_else(|| event.get("items"))
+        .or_else(|| event.get("event").and_then(|event| event.get("records")))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn record_ids_from_event(event: &Value) -> Vec<String> {
+    let mut ids = Vec::new();
+    for path in [
+        &["record_id"][..],
+        &["event", "record_id"][..],
+        &["data", "record_id"][..],
+    ] {
+        if let Some(value) = string_at(event, path) {
+            ids.push(value.to_string());
+        }
+    }
+    for path in [
+        &["record_ids"][..],
+        &["event", "record_ids"][..],
+        &["data", "record_ids"][..],
+    ] {
+        if let Some(values) = array_strings_at(event, path) {
+            ids.extend(values);
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn string_at<'a>(value: &'a Value, path: &[&str]) -> Option<&'a str> {
+    let mut cursor = value;
+    for key in path {
+        cursor = cursor.get(*key)?;
+    }
+    cursor.as_str()
+}
+
+fn array_strings_at(value: &Value, path: &[&str]) -> Option<Vec<String>> {
+    let mut cursor = value;
+    for key in path {
+        cursor = cursor.get(*key)?;
+    }
+    cursor.as_array().map(|items| {
+        items
+            .iter()
+            .filter_map(Value::as_str)
+            .map(ToString::to_string)
+            .collect()
+    })
+}
+
 async fn tenant_access_token(
     base_url: &str,
     app_id: &str,
@@ -437,7 +867,7 @@ fn record_batch_from_rows(
     let row_count = rows.len();
     SourceRecordBatch {
         adapter_id: plan.adapter_id,
-        resource_ref: plan.resource_ref,
+        resource_ref: sanitize_resource_ref(&plan.resource_ref),
         table: plan.table,
         schema,
         rows,
@@ -487,13 +917,125 @@ fn value_type(value: &Value) -> &'static str {
     }
 }
 
-fn checksum_rows(rows: &[Value]) -> String {
+fn sanitize_resource_ref(resource_ref: &str) -> String {
+    let Some((scheme, tail)) = resource_ref.split_once("://") else {
+        return resource_ref.to_string();
+    };
+    let Some((userinfo, rest)) = tail.split_once('@') else {
+        return resource_ref.to_string();
+    };
+    if userinfo.contains(':') {
+        format!("{scheme}://***:***@{rest}")
+    } else {
+        resource_ref.to_string()
+    }
+}
+
+pub(crate) fn checksum_rows(rows: &[Value]) -> String {
     let mut hasher = Sha256::new();
     for row in rows {
         hasher.update(serde_json::to_vec(row).unwrap_or_default());
         hasher.update(b"\n");
     }
     format!("{:x}", hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_wrapped_read_plan_payload() {
+        let plan = source_plan_from_payload(
+            serde_json::json!({
+                "read_plan": {
+                    "adapter_id": "feishu_bitable",
+                    "resource_ref": "bitable://app/table",
+                    "table": "table",
+                    "metadata": {"rows": [{"name": "alpha"}]}
+                }
+            }),
+            "feishu_bitable",
+        )
+        .unwrap();
+
+        assert_eq!(plan.adapter_id, "feishu_bitable");
+        assert_eq!(plan.table.as_deref(), Some("table"));
+    }
+
+    #[tokio::test]
+    async fn discovers_fixture_schema_without_remote_credentials() {
+        let payload = serde_json::json!({
+            "adapter_id": "feishu_bitable",
+            "resource_ref": "bitable://app/table",
+            "table": "orders",
+            "metadata": {
+                "rows": [
+                    {"sku": "A1", "qty": 3, "ready": true}
+                ]
+            }
+        });
+        let schema = discover_bitable_schema(
+            payload,
+            "feishu_bitable",
+            Value::Null,
+            "https://open.feishu.cn",
+        )
+        .await
+        .unwrap();
+        let fields = schema
+            .pointer("/source_schema/tables/0/fields")
+            .and_then(Value::as_array)
+            .unwrap();
+
+        assert!(fields.iter().any(|field| field["name"] == "sku"));
+        assert!(fields.iter().any(|field| field["name"] == "qty"));
+    }
+
+    #[test]
+    fn normalizes_source_events_from_remote_payload() {
+        let payload = serde_json::json!({
+            "events": [{
+                "event_id": "evt-1",
+                "event_type": "record.changed",
+                "operation": "update",
+                "app_token": "app",
+                "table_id": "tbl",
+                "record_ids": ["rec-1", "rec-1", "rec-2"]
+            }]
+        });
+        let normalized = normalize_source_events(payload, "feishu_bitable").unwrap();
+
+        assert_eq!(normalized["event_count"], 1);
+        assert_eq!(
+            normalized["source_events"][0]["resource_ref"],
+            "bitable://app/tbl"
+        );
+        assert_eq!(
+            normalized["source_events"][0]["record_ids"],
+            serde_json::json!(["rec-1", "rec-2"])
+        );
+    }
+
+    #[test]
+    fn fixture_batch_masks_resource_credentials() {
+        let batch = record_batch_from_rows(
+            SourceReadPlan {
+                adapter_id: "postgres".to_string(),
+                resource_ref: "postgres://user:secret@localhost/db".to_string(),
+                table: Some("orders".to_string()),
+                fields: Vec::new(),
+                limit: None,
+                offset: None,
+                cursor: None,
+                metadata: Value::Null,
+            },
+            vec![serde_json::json!({"sku": "A1"})],
+            false,
+        );
+
+        assert_eq!(batch.resource_ref, "postgres://***:***@localhost/db");
+    }
 }
 
 fn unexpected_request_frame(id: String) -> SurfaceFrame {

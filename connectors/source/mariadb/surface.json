@@ -1,10 +1,10 @@
 {
   "schema": "cowd.surface.v1",
-  "id": "feishu-bitable",
-  "name": "Feishu Bitable Source Connector",
+  "id": "mariadb",
+  "name": "MariaDB Source Connector",
   "version": "0.9.419",
   "kind": "source-connector",
-  "entry": "./cowd-edge-feishu-bitable-source",
+  "entry": "./cowd-edge-mariadb-source",
   "transport": "stdio-jsonl",
   "lifecycle": "managed",
   "capabilities": [
@@ -22,8 +22,18 @@
     "timeout_ms": 5000
   },
   "config_schema": {
-    "required": ["app_id", "app_secret"],
-    "optional": ["base_url", "app_token", "table_id"]
+    "required": [],
+    "optional": [
+      "database_url",
+      "database_url_env",
+      "host",
+      "port",
+      "database",
+      "database_name",
+      "user",
+      "username",
+      "password"
+    ]
   },
   "default_enabled": false
 }
