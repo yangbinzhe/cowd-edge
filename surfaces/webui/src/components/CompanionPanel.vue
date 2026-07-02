@@ -206,6 +206,16 @@ onBeforeUnmount(() => {
         <Search :size="14" />
         <input v-model="store.workspaceFilter" type="search" :placeholder="t('component.companion.panel.placeholder.070c810b3f')" />
       </label>
+      <div v-if="store.recentWorkspaceFiles.length" class="workspace-recent">
+        <div class="panel-title compact">
+          <h2>{{ t('workspace.preview.recent') }}</h2>
+          <span>{{ store.recentWorkspaceFiles.length }}</span>
+        </div>
+        <button v-for="file in store.recentWorkspaceFiles" :key="file.path" type="button" @click="store.openFile(file.path)">
+          <span>{{ file.name }}</span>
+          <small>{{ file.path }}</small>
+        </button>
+      </div>
       <WorkspaceTree />
       <div class="preview-summary" v-if="store.selectedFile">
         <div class="preview-head">
@@ -359,7 +369,14 @@ onBeforeUnmount(() => {
           </div>
         </header>
         <div class="workspace-preview-content">
-          <div v-if="previewKind === 'image'" class="image-preview modal-image">
+          <div v-if="store.fileError" class="unsupported-preview">
+            <strong>{{ t('workspace.preview.blocked') }}</strong>
+            <p>{{ store.fileError }}</p>
+            <button class="ghost-action" type="button" @click="store.downloadWorkspacePath(store.selectedFile, 'file')">
+              <Download :size="14" />{{ t('workspace.preview.action.download') }}
+            </button>
+          </div>
+          <div v-else-if="previewKind === 'image'" class="image-preview modal-image">
             <img :src="rawFileUrl" alt="" :style="{ transform: `scale(${imageZoom})` }" />
           </div>
           <iframe v-else-if="previewKind === 'web' && previewMode === 'render'" class="browser-preview" :srcdoc="store.editorContent" sandbox="allow-same-origin"></iframe>

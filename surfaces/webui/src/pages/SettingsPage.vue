@@ -20,6 +20,8 @@ const busyAction = ref('');
 const authResult = ref<any>(null);
 const settingsReceipt = ref<any>(null);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
+const lastSavedSection = ref('');
+const lastRestoredSection = ref('');
 const origin = computed(() => location.origin);
 const accessModeLabels = {
   internal: 'settings.access.internal',
@@ -117,6 +119,48 @@ const approvalJson = computed({
   get: () => JSON.stringify(store.approvalConfig || {}, null, 2),
   set: () => undefined,
 });
+const settingsSectionDirty = computed(() => {
+  const section = activeSettingsSection.value;
+  if (section === 'providers') return !!defaultModel.value && defaultModel.value !== configuredModel.value;
+  if (section === 'profile') return !!profileName.value.trim();
+  if (section === 'gateway') return !!authResult.value;
+  return false;
+});
+const settingsSectionState = computed(() => {
+  if (settingsSectionDirty.value) return t('settings.state.unsaved');
+  if (lastSavedSection.value === activeSettingsSection.value) return t('settings.state.clean');
+  if (lastRestoredSection.value === activeSettingsSection.value) return t('settings.state.clean');
+  return t('settings.state.clean');
+});
+
+function contextWindowOf(model: any) {
+  return model?.context_window || model?.contextWindow || model?.max_context_tokens || model?.max_context || model?.context_length || model?.max_tokens || null;
+}
+
+function modelOptionContext(model: any) {
+  const window = contextWindowOf(model);
+  if (!window) return t('settings.providers.contextUnknown');
+  const value = Number(window);
+  const tokens = Number.isFinite(value) ? value.toLocaleString() : String(window);
+  return t('settings.providers.contextWindow', { tokens });
+}
+
+function modelOptionLabel(model: any) {
+  const id = model.id || model.name;
+  const provider = model.provider || t('status.unknown');
+  return `${id} · ${provider} · ${modelOptionContext(model)}`;
+}
+
+function markSettingsSaved(section = activeSettingsSection.value) {
+  lastSavedSection.value = section;
+  lastRestoredSection.value = '';
+  store.settingsSavedAt = new Date().toLocaleTimeString();
+}
+
+function markSettingsRestored(section = activeSettingsSection.value) {
+  lastRestoredSection.value = section;
+  lastSavedSection.value = '';
+}
 
 async function run(label: string, action: () => Promise<unknown>) {
   settingsError.value = '';
@@ -256,23 +300,28 @@ async function saveCurrentSettingsSection() {
       payload_summary: JSON.stringify({ theme: theme.value, locale: locale.value }),
       retryable: false,
     };
+    markSettingsSaved(section);
     return;
   }
   if (section === 'providers') {
     await saveDefaultModel();
+    markSettingsSaved(section);
     return;
   }
   if (section === 'profile') {
     if (profileName.value.trim()) await addProfile();
     else await store.refreshProfiles();
+    markSettingsSaved(section);
     return;
   }
   if (section === 'policy') {
     await saveApprovalGoverned();
+    markSettingsSaved(section);
     return;
   }
   if (section === 'gateway') {
     await verifyAuth();
+    markSettingsSaved(section);
     return;
   }
   settingsReceipt.value = null;
@@ -282,24 +331,29 @@ async function restoreCurrentSettingsSection() {
   const section = activeSettingsSection.value;
   if (section === 'ui') {
     theme.value = localStorage.getItem('cowd-theme') || 'dark';
+    markSettingsRestored(section);
     return;
   }
   if (section === 'providers') {
     await store.reloadProviders();
     defaultModel.value = '';
+    markSettingsRestored(section);
     return;
   }
   if (section === 'profile') {
     profileName.value = '';
     await store.refreshProfiles();
+    markSettingsRestored(section);
     return;
   }
   if (section === 'policy') {
     store.approvalConfig = await api.approvalConfig();
+    markSettingsRestored(section);
     return;
   }
   if (section === 'gateway') {
     authResult.value = null;
+    markSettingsRestored(section);
     return;
   }
   settingsReceipt.value = null;
@@ -350,7 +404,8 @@ function selectSettingsSection(id: string) {
           </div>
           <span class="status-badge">{{ displayStatus(currentSettingsSection.status) }}</span>
         </header>
-        <div class="settings-action-rail">
+        <div class="settings-action-rail" :data-dirty="settingsSectionDirty">
+          <span class="settings-dirty-state">{{ settingsSectionState }}</span>
           <button class="primary-action" type="button" :disabled="!!busyAction" @click="saveCurrentSettingsSection">
             {{ t('settings.action.saveCurrent') }}
           </button>
@@ -391,7 +446,7 @@ function selectSettingsSection(id: string) {
           <select v-model="defaultModel">
             <option value="">{{ t('settings.providers.keepCurrent', { model: configuredModel || t('status.unknown') }) }}</option>
             <option v-for="model in providerModels" :key="model.id || model.name" :value="model.id || model.name">
-              {{ model.id || model.name }} · {{ model.provider }}
+              {{ modelOptionLabel(model) }}
             </option>
           </select>
         </label>

@@ -34,6 +34,29 @@ const wechatQrCode = ref('');
 const connectorServiceId = ref('');
 const connectorServiceToolId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
+const sourceSnapshotResult = ref<any>(null);
+const sourceSnapshotPackId = ref('webui-edge-supply');
+const sourceSnapshotAdapterId = ref('csv');
+const sourceSnapshotResourceRef = ref('file:///tmp/cowd-edge-supply-orders.csv');
+const sourceSnapshotTable = ref('orders');
+const sourceSnapshotLimit = ref(100);
+const sourceSnapshotRowsText = ref(JSON.stringify([
+  {
+    order_id: 'O-1001',
+    supplier_id: 'S-A',
+    part_id: 'P-7',
+    qty: 12,
+    event_time: '2026-07-02T00:00:00Z',
+  },
+  {
+    order_id: 'O-1002',
+    supplier_id: 'S-B',
+    part_id: 'P-9',
+    qty: 4,
+    event_time: '2026-07-02T01:00:00Z',
+  },
+], null, 2));
+const sourceSnapshotError = ref('');
 
 const accounts = computed(() => Array.isArray(state.value.accounts?.accounts) ? state.value.accounts.accounts : []);
 const capabilities = computed(() => Array.isArray(state.value.capabilities?.capabilities) ? state.value.capabilities.capabilities : []);
@@ -43,10 +66,62 @@ const connectorServices = computed(() => Array.isArray(state.value.connectorServ
 const surfaces = computed(() => Array.isArray(state.value.surfaces?.registry?.surfaces) ? state.value.surfaces.registry.surfaces : []);
 const surfaceHost = computed(() => state.value.surfaceHealth?.host || state.value.surfaceHealth || {});
 const surfaceRuntime = computed(() => Array.isArray(state.value.surfaceHealth?.runtime) ? state.value.surfaceHealth.runtime : []);
+const edgeRegistry = computed(() => state.value.edge || {});
+const edgeHealth = computed(() => edgeRegistry.value.health || state.value.edgeHealth?.health || {});
+const edgeSurfaces = computed(() => Array.isArray(edgeRegistry.value.surfaces) ? edgeRegistry.value.surfaces : []);
+const edgeMessageConnectors = computed(() => Array.isArray(edgeRegistry.value.message_connectors) ? edgeRegistry.value.message_connectors : []);
+const edgeSourceConnectors = computed(() => Array.isArray(edgeRegistry.value.source_connectors) ? edgeRegistry.value.source_connectors : []);
+const edgeAutomationConnectors = computed(() => Array.isArray(edgeRegistry.value.automation_connectors) ? edgeRegistry.value.automation_connectors : []);
 const channels = computed(() => Array.isArray(state.value.channels?.channels) ? state.value.channels.channels : []);
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
 const identities = computed(() => Array.isArray(state.value.identities?.identities) ? state.value.identities.identities : []);
 const grants = computed(() => Array.isArray(state.value.grants?.grants) ? state.value.grants.grants : []);
+const edgeRows = computed(() => [
+  ...edgeSurfaces.value.map((item: any) => ({ ...item, edge_type: 'surface' })),
+  ...edgeMessageConnectors.value.map((item: any) => ({ ...item, edge_type: 'message' })),
+  ...edgeSourceConnectors.value.map((item: any) => ({ ...item, edge_type: 'source' })),
+  ...edgeAutomationConnectors.value.map((item: any) => ({ ...item, edge_type: 'automation' })),
+].map((item: any) => ({
+  domain: item.domain || item.edge_type || '-',
+  id: item.id || '-',
+  name: item.name || item.id || '-',
+  status: item.runtime?.status || item.status || (item.requires_sidecar ? 'sidecar' : 'declared'),
+  lifecycle: item.lifecycle || item.access_mode || '-',
+  capabilities: Array.isArray(item.capabilities) ? item.capabilities.length : item.capability_count ?? '-',
+  routes: item.route_count ?? '-',
+  resources: item.resource_count ?? '-',
+  source: item.source || item.family || '-',
+})));
+const messageConnectorRows = computed(() => edgeMessageConnectors.value.map((item: any) => ({
+  id: item.id || '-',
+  name: item.name || item.id || '-',
+  status: item.runtime?.status || item.status || 'declared',
+  capabilities: Array.isArray(item.capabilities) ? item.capabilities.join(', ') : item.capability_count ?? '-',
+  entry: item.entry || '-',
+  diagnostics: Array.isArray(item.diagnostics) ? item.diagnostics.length : 0,
+})));
+const sourceConnectorRows = computed(() => edgeSourceConnectors.value.map((item: any) => ({
+  id: item.id || '-',
+  name: item.name || item.id || '-',
+  adapter: item.adapter_id || '-',
+  family: item.family || '-',
+  mode: item.access_mode || '-',
+  sidecar: item.requires_sidecar ? 'required' : 'optional',
+  snapshot: item.supports_snapshot ? 'yes' : 'no',
+  incremental: item.supports_incremental ? 'yes' : 'no',
+  schema: item.supports_schema_discovery ? 'yes' : 'no',
+  runtime: item.runtime?.status || 'declared',
+})));
+const sourceSnapshotReadPlan = computed(() => ({
+  adapter_id: sourceSnapshotAdapterId.value.trim() || 'csv',
+  resource_ref: sourceSnapshotResourceRef.value.trim(),
+  table: sourceSnapshotTable.value.trim() || undefined,
+  limit: Number(sourceSnapshotLimit.value) || 100,
+  metadata: {
+    source: 'webui-edge',
+    intent: 'matrix-source-snapshot',
+  },
+}));
 const accountRows = computed(() => accounts.value.map((item: any) => ({
   provider: item.provider || item.provider_id || item.id,
   account: item.account_id || item.id || '-',
@@ -107,6 +182,14 @@ const channelRows = computed(() => channels.value.slice(0, 12).map((item: any) =
 })));
 const gatewayAlignmentRows = computed(() => [
   {
+    lane: 'EdgeHost',
+    owner: 'Gateway',
+    backend: edgeHealth.value.status || 'unknown',
+    webui: `${edgeRows.value.length} edges`,
+    tui: 'surface unchanged',
+    action: edgeRows.value.length ? 'monitor edge domains' : 'refresh /api/edges projection',
+  },
+  {
     lane: 'Surface host',
     owner: 'Gateway',
     backend: surfaceHost.value.status || state.value.surfaceHealth?.status || 'unknown',
@@ -145,6 +228,14 @@ const gatewayAlignmentStatus = computed(() => {
   return 'ready';
 });
 const gatewayRemediationRows = computed(() => [
+  {
+    id: 'edge-host',
+    lane: 'EdgeHost',
+    severity: edgeRows.value.length ? 'ready' : 'degraded',
+    problem: edgeRows.value.length ? 'Edge projection is visible.' : 'No Edge projection data is available.',
+    evidence: `surfaces=${edgeSurfaces.value.length}, message=${edgeMessageConnectors.value.length}, source=${edgeSourceConnectors.value.length}, automation=${edgeAutomationConnectors.value.length}`,
+    next_action: edgeRows.value.length ? 'Use Edge rows to distinguish UI surfaces, message connectors, and source connectors.' : 'Verify /api/edges and SurfaceHost manifest roots.',
+  },
   {
     id: 'surface-host',
     lane: 'Surface host',
@@ -202,12 +293,14 @@ const connectorServiceToolRows = computed(() => {
   })) : [];
 });
 const gatewayContext = computed(() => [
+  { label: t('edge.context.total'), value: edgeRows.value.length, tone: edgeRows.value.length ? 'success' : 'warn' },
   { label: t('script.pages.gatewaypage.label.f243224b11'), value: `${surfaces.value.length} surfaces`, tone: surfaces.value.length ? 'success' : 'warn' },
   { label: t('script.pages.gatewaypage.label.4b1e9501b9'), value: accounts.value.length, tone: accounts.value.length ? 'success' : 'warn' },
   { label: t('script.pages.gatewaypage.label.42c248d3eb'), value: identities.value.length },
   { label: t('script.pages.gatewaypage.label.8999e5848a'), value: executions.value.length },
 ]);
 const gatewayWorkflow = computed(() => [
+  { id: 'surfaces', label: t('edge.workflow.host'), status: edgeRows.value.length ? 'ready' : 'degraded', count: edgeRows.value.length },
   { id: 'surfaces', label: t('script.pages.gatewaypage.label.f086bb51e1'), status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
   { id: 'connectors', label: t('script.pages.gatewaypage.label.4b1e9501b9'), status: accounts.value.length ? 'ready' : 'degraded', count: accounts.value.length },
   { id: 'resources', label: t('script.pages.gatewaypage.label.87df60de33'), status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
@@ -368,11 +461,117 @@ function crossPlaneAction() {
   };
 }
 
+function defaultEdgeSourcePack() {
+  return {
+    source_pack_id: sourceSnapshotPackId.value,
+    source_name: 'webui_edge_supply',
+    owner: 'webui',
+    access_mode: 'file',
+    refresh_mode: 'snapshot',
+    entity_mappings: [
+      {
+        source_entity: 'supplier',
+        matrix_entity_type: 'supplier',
+        source_key_field: 'supplier_id',
+      },
+      {
+        source_entity: 'part',
+        matrix_entity_type: 'part',
+        source_key_field: 'part_id',
+      },
+    ],
+    fact_mappings: [{
+      source_table: sourceSnapshotTable.value.trim() || 'orders',
+      fact_type: 'supply.order',
+      metric_key: 'supply_qty',
+      entity_ref_fields: ['supplier_id', 'part_id'],
+      measure_fields: ['qty'],
+      event_time_field: 'event_time',
+      dedup_key: 'order_id',
+      delta_signature: 'order_id',
+    }],
+    relation_mappings: [{
+      source_table: sourceSnapshotTable.value.trim() || 'orders',
+      relation_type: 'supplies',
+      from_source_key_field: 'supplier_id',
+      to_source_key_field: 'part_id',
+      attribute_fields: ['qty'],
+      dedup_key: 'order_id',
+    }],
+    reconciliation_rules: ['source_snapshot_is_idempotent'],
+    quality_rules: ['dedup_key_required'],
+    metadata: {
+      source: 'webui-edge',
+      edge_domain: 'source-connector',
+    },
+  };
+}
+
+function parseSourceSnapshotRows() {
+  const parsed = JSON.parse(sourceSnapshotRowsText.value || '[]');
+  if (!Array.isArray(parsed)) throw new Error(t('edge.snapshot.rowsInvalid'));
+  return parsed;
+}
+
+async function upsertEdgeSourcePack() {
+  sourceSnapshotError.value = '';
+  sourceSnapshotResult.value = await api.matrixSourcePackUpsert(defaultEdgeSourcePack());
+  selectedDetail.value = sourceSnapshotResult.value;
+}
+
+async function planEdgeSourceSnapshot() {
+  sourceSnapshotError.value = '';
+  sourceSnapshotResult.value = await api.matrixSourceSnapshotPlan(sourceSnapshotPackId.value, {
+    resource_ref: sourceSnapshotResourceRef.value,
+    estimated_rows: Number(sourceSnapshotLimit.value) || undefined,
+  });
+  selectedDetail.value = sourceSnapshotResult.value;
+}
+
+async function runEdgeSourceSnapshotRows() {
+  sourceSnapshotError.value = '';
+  try {
+    const rows = parseSourceSnapshotRows();
+    sourceSnapshotResult.value = await api.matrixSourceSnapshotRun(sourceSnapshotPackId.value, {
+      snapshot: {
+        source_system: 'webui_edge_supply',
+        source_kind: 'file',
+        resource_ref: sourceSnapshotResourceRef.value,
+        schema_version: `source:${sourceSnapshotAdapterId.value || 'webui'}:${sourceSnapshotTable.value || 'orders'}`,
+        row_count: rows.length,
+        confidence: 0.95,
+        metadata: {
+          source: 'webui-edge',
+          mode: 'direct_rows',
+        },
+      },
+      rows,
+    });
+    selectedDetail.value = sourceSnapshotResult.value;
+  } catch (err) {
+    sourceSnapshotError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function runEdgeSourceSnapshotReadPlan() {
+  sourceSnapshotError.value = '';
+  sourceSnapshotResult.value = await api.matrixSourceSnapshotRun(sourceSnapshotPackId.value, {
+    source_read_plan: sourceSnapshotReadPlan.value,
+  });
+  selectedDetail.value = sourceSnapshotResult.value;
+}
+
+async function loadEdgeSourceSnapshots() {
+  sourceSnapshotError.value = '';
+  sourceSnapshotResult.value = await api.matrixSourceSnapshots(sourceSnapshotPackId.value);
+  selectedDetail.value = sourceSnapshotResult.value;
+}
+
 async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -381,6 +580,7 @@ async function refresh() {
       api.connectorResources(),
       api.connectorMcpServers(),
       api.connectorServices(),
+      api.edgeRegistry(),
       api.surfaceRegistry(),
       api.surfaceHostHealth(),
       api.channels(),
@@ -394,7 +594,7 @@ async function refresh() {
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -596,9 +796,25 @@ onMounted(refresh);
         <strong>{{ identities.length }}/{{ grants.length }}</strong>
         <small>{{ t('page.gateway.page.text.caec320908') }}</small>
       </article>
+      <article class="metric-card" :data-tone="edgeRows.length ? 'success' : 'warn'">
+        <span>{{ t('edge.metric.total') }}</span>
+        <strong>{{ edgeRows.length }}</strong>
+        <small>{{ t('edge.metric.breakdown', { surfaces: edgeSurfaces.length, message: edgeMessageConnectors.length, source: edgeSourceConnectors.length }) }}</small>
+      </article>
     </section>
 
     <section class="gateway-grid">
+      <section class="management-panel gateway-panel wide" data-section="surfaces">
+        <header>
+          <h2>{{ t('edge.gateway.title') }}</h2>
+          <StatusPill :status="edgeHealth.status || 'unknown'" />
+        </header>
+        <p>{{ t('edge.gateway.detail') }}</p>
+        <DataTable v-if="edgeRows.length" :rows="edgeRows" :columns="['domain', 'id', 'name', 'status', 'lifecycle', 'capabilities', 'routes', 'resources', 'source']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('edge.empty.title')" :detail="t('edge.empty.detail')" />
+        <RawPayload :title="t('edge.gateway.raw')" :data="edgeHealth || {}" />
+      </section>
+
       <section class="management-panel gateway-panel wide" data-section="alignment">
         <header>
           <h2>{{ t('page.gateway.page.text.3aaa20c63d') }}</h2>
@@ -630,6 +846,73 @@ onMounted(refresh);
         <DataTable v-if="channelRows.length" :rows="channelRows" :columns="['channel', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
         <RawPayload :title="t('page.gateway.page.title.a0df395cfc')" :data="state.platforms || {}" />
         <RawPayload :title="t('page.gateway.page.title.513df4116b')" :data="state.channels || {}" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="connectors">
+        <header>
+          <h2>{{ t('edge.connectors.title') }}</h2>
+          <StatusPill :status="edgeMessageConnectors.length || edgeSourceConnectors.length ? 'ready' : 'degraded'" />
+        </header>
+        <p>{{ t('edge.connectors.detail') }}</p>
+        <DataTable v-if="messageConnectorRows.length" :rows="messageConnectorRows" :columns="['id', 'name', 'status', 'capabilities', 'entry', 'diagnostics']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('edge.message.empty.title')" :detail="t('edge.message.empty.detail')" />
+        <DataTable v-if="sourceConnectorRows.length" :rows="sourceConnectorRows" :columns="['id', 'name', 'adapter', 'family', 'mode', 'sidecar', 'snapshot', 'incremental', 'schema', 'runtime']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('edge.source.empty.title')" :detail="t('edge.source.empty.detail')" />
+        <RawPayload :title="t('edge.connectors.raw')" :data="{ message_connectors: edgeMessageConnectors, source_connectors: edgeSourceConnectors, automation_connectors: edgeAutomationConnectors }" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="connectors">
+        <header>
+          <h2>{{ t('edge.snapshot.title') }}</h2>
+          <span>/api/matrix/source-packs/:id/snapshots/run</span>
+        </header>
+        <p>{{ t('edge.snapshot.detail') }}</p>
+        <div class="memory-form-row">
+          <label class="field-line">
+            {{ t('edge.snapshot.field.sourcePack') }}
+            <input v-model="sourceSnapshotPackId" type="text" />
+          </label>
+          <label class="field-line">
+            {{ t('edge.snapshot.field.adapter') }}
+            <input v-model="sourceSnapshotAdapterId" type="text" list="edge-source-adapters" />
+            <datalist id="edge-source-adapters">
+              <option v-for="connector in edgeSourceConnectors" :key="connector.adapter_id || connector.id" :value="connector.adapter_id || connector.id" />
+              <option value="csv" />
+              <option value="jsonl" />
+              <option value="sqlite" />
+              <option value="feishu_bitable" />
+              <option value="lark_bitable" />
+            </datalist>
+          </label>
+        </div>
+        <div class="memory-form-row">
+          <label class="field-line">
+            {{ t('edge.snapshot.field.resource') }}
+            <input v-model="sourceSnapshotResourceRef" type="text" />
+          </label>
+          <label class="field-line">
+            {{ t('edge.snapshot.field.table') }}
+            <input v-model="sourceSnapshotTable" type="text" />
+          </label>
+          <label class="field-line">
+            {{ t('edge.snapshot.field.limit') }}
+            <input v-model.number="sourceSnapshotLimit" type="number" min="1" max="1000" />
+          </label>
+        </div>
+        <label class="field-line">
+          {{ t('edge.snapshot.field.rows') }}
+          <textarea v-model="sourceSnapshotRowsText" rows="6" />
+        </label>
+        <p v-if="sourceSnapshotError" class="field-error">{{ sourceSnapshotError }}</p>
+        <div class="button-row">
+          <button class="ghost-action" type="button" @click="upsertEdgeSourcePack">{{ t('edge.snapshot.action.seed') }}</button>
+          <button class="ghost-action" type="button" @click="planEdgeSourceSnapshot">{{ t('edge.snapshot.action.plan') }}</button>
+          <button class="primary-action" type="button" @click="runEdgeSourceSnapshotRows">{{ t('edge.snapshot.action.runRows') }}</button>
+          <button class="ghost-action" type="button" @click="runEdgeSourceSnapshotReadPlan">{{ t('edge.snapshot.action.runReadPlan') }}</button>
+          <button class="ghost-action" type="button" @click="loadEdgeSourceSnapshots">{{ t('edge.snapshot.action.list') }}</button>
+        </div>
+        <RequestReceipt :receipt="sourceSnapshotResult" :title="t('edge.snapshot.receipt')" />
+        <RawPayload :title="t('edge.snapshot.readPlan')" :data="sourceSnapshotReadPlan" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">

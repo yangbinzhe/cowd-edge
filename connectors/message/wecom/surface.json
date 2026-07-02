@@ -1,0 +1,28 @@
+{
+  "schema": "cowd.surface.v1",
+  "id": "wecom",
+  "name": "WeCom Message Connector",
+  "version": "0.9.418",
+  "kind": "message-connector",
+  "entry": "./cowd-edge-wecom-message",
+  "transport": "stdio-jsonl",
+  "lifecycle": "managed",
+  "capabilities": ["message.ingress", "message.egress", "message.callback", "message.crypto", "message.health"],
+  "routes": [
+    {
+      "kind": "callback",
+      "path": "/events",
+      "method": "POST",
+      "public": true
+    }
+  ],
+  "resources": [],
+  "health": {
+    "mode": "jsonl",
+    "interval_ms": 30000
+  },
+  "config_schema": {
+    "required": ["corp_id", "corp_secret", "agent_id"]
+  },
+  "default_enabled": false
+}

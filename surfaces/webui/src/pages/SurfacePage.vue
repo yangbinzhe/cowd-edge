@@ -50,6 +50,11 @@ function workflowStatus(status: unknown, fallback: 'idle' | 'ready' = 'ready') {
 }
 
 const surfaces = computed(() => registrySurfaces(state.value.registry));
+const edgeRegistry = computed(() => state.value.edge || {});
+const edgeSurfaces = computed(() => Array.isArray(edgeRegistry.value.surfaces) ? edgeRegistry.value.surfaces : []);
+const edgeMessageConnectors = computed(() => Array.isArray(edgeRegistry.value.message_connectors) ? edgeRegistry.value.message_connectors : []);
+const edgeSourceConnectors = computed(() => Array.isArray(edgeRegistry.value.source_connectors) ? edgeRegistry.value.source_connectors : []);
+const edgeAutomationConnectors = computed(() => Array.isArray(edgeRegistry.value.automation_connectors) ? edgeRegistry.value.automation_connectors : []);
 const host = computed(() => state.value.health?.host || state.value.health || {});
 const runtimeSnapshots = computed(() => {
   const items = state.value.health?.runtime || state.value.registry?.runtime || [];
@@ -118,6 +123,12 @@ const surfaceRows = computed(() => surfaces.value.map((surface: any) => ({
   routes: valueCount(surface.routes),
   resources: valueCount(surface.resources),
 })));
+const edgePartitionRows = computed(() => [
+  { domain: 'surface', count: edgeSurfaces.value.length, purpose: t('edge.partition.surface'), endpoint: '/api/edges/surfaces' },
+  { domain: 'message', count: edgeMessageConnectors.value.length, purpose: t('edge.partition.message'), endpoint: '/api/edges/connectors/message' },
+  { domain: 'source', count: edgeSourceConnectors.value.length, purpose: t('edge.partition.source'), endpoint: '/api/edges/connectors/source' },
+  { domain: 'automation', count: edgeAutomationConnectors.value.length, purpose: t('edge.partition.automation'), endpoint: '/api/edges/connectors' },
+]);
 const runtimeRows = computed(() => runtimeSnapshots.value.map((runtime: any) => ({
   surface: runtime.surface || '-',
   status: runtime.status || '-',
@@ -306,13 +317,14 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [registry, health] = await Promise.all([
+    const [registry, health, edge] = await Promise.all([
       api.surfaceRegistry(),
       api.surfaceHostHealth(),
+      api.edgeRegistry(),
     ]);
     const nextSurfaces = registrySurfaces(registry);
     const nextSelected = selectedSurface.value || nextSurfaces[0]?.id || 'webui';
-    state.value = { ...state.value, registry, health };
+    state.value = { ...state.value, registry, health, edge };
     await loadSurface(nextSurfaces.some((surface: any) => surface.id === nextSelected) ? nextSelected : nextSurfaces[0]?.id || nextSelected);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -437,9 +449,24 @@ onMounted(refresh);
         <strong>{{ activeInboxItems.length + activeOutboxItems.length }}</strong>
         <small>{{ t('page.surface.summary.deliveryQueue', { total: outboxRows.length, dlq: deadLetterItems.length }) }}</small>
       </article>
+      <article class="metric-card" :data-tone="edgeSurfaces.length || edgeMessageConnectors.length || edgeSourceConnectors.length ? 'success' : 'warn'">
+        <span>{{ t('edge.metric.total') }}</span>
+        <strong>{{ edgeSurfaces.length + edgeMessageConnectors.length + edgeSourceConnectors.length + edgeAutomationConnectors.length }}</strong>
+        <small>{{ t('edge.metric.breakdown', { surfaces: edgeSurfaces.length, message: edgeMessageConnectors.length, source: edgeSourceConnectors.length }) }}</small>
+      </article>
     </section>
 
     <section class="gateway-grid">
+      <section class="management-panel gateway-panel wide" data-section="registry">
+        <header>
+          <h2>{{ t('edge.surface.partition.title') }}</h2>
+          <StatusPill :status="state.edge?.health?.status || 'unknown'" />
+        </header>
+        <p>{{ t('edge.surface.partition.detail') }}</p>
+        <DataTable :rows="edgePartitionRows" :columns="['domain', 'count', 'purpose', 'endpoint']" @row-click="selectedDetail = $event" />
+        <RawPayload :title="t('edge.gateway.raw')" :data="state.edge?.health || {}" />
+      </section>
+
       <section class="management-panel gateway-panel wide" data-section="registry">
         <header>
           <h2>{{ t('page.surface.page.text.d0eb56ac2a') }}</h2>

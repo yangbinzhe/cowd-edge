@@ -1,5 +1,5 @@
 {
-  "name": "@cowd-surface/webui",
+  "name": "@cowd-edge/webui",
   "private": true,
   "type": "module",
   "scripts": {

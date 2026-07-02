@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Bot, Boxes, Brain, CircleDot, FileText, Folder, Hash, Paperclip, RotateCcw, Search, Send, Square, Wrench, X, Zap } from 'lucide-vue-next';
+import { Bot, Boxes, Brain, ChevronDown, CircleDot, FileText, Folder, Hash, Paperclip, RotateCcw, Search, Send, Square, Wrench, X, Zap } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
@@ -12,6 +12,7 @@ const store = useAppStore();
 const draft = ref('');
 const sending = ref(false);
 const commandQuery = ref('');
+const inlineCommandIndex = ref(0);
 const contextUsage = computed(() => store.contextUsagePercent);
 const modelLabel = computed(() => store.selectedModel || 'Select model');
 const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
@@ -33,12 +34,13 @@ const filteredCommands = computed(() => {
   if (!query) return store.commands;
   return store.commands.filter((command: any) => `${command.name || ''} ${command.description || ''} ${command.detail || ''}`.toLowerCase().includes(query));
 });
-
-watch(draft, (value) => {
-  if (value.startsWith('/') && store.activeModal !== 'commands') {
-    commandQuery.value = value.slice(1);
-    store.openModal('commands');
-  }
+const activeSlash = computed(() => activeSlashCommand(draft.value));
+const inlineCommandOptions = computed(() => {
+  const query = activeSlash.value?.query.trim().toLowerCase().replace(/^\//, '') || '';
+  const rows = query
+    ? store.commands.filter((command: any) => `${command.name || ''} ${command.description || ''} ${command.detail || ''} ${command.args || ''}`.toLowerCase().includes(query))
+    : store.commands;
+  return rows.slice(0, 8);
 });
 
 function closeOnEscape(event: KeyboardEvent) {
@@ -47,6 +49,94 @@ function closeOnEscape(event: KeyboardEvent) {
 
 onMounted(() => window.addEventListener('keydown', closeOnEscape));
 onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
+
+watch(() => activeSlash.value?.query, () => {
+  inlineCommandIndex.value = 0;
+});
+
+function commandName(command: any) {
+  const name = String(command?.name || command || '').trim();
+  return name.startsWith('/') ? name : `/${name}`;
+}
+
+function activeSlashCommand(value: string) {
+  const text = String(value || '');
+  const caret = text.length;
+  const before = text.slice(0, caret);
+  const match = before.match(/(^|\s)\/([^\s/]*)$/);
+  if (!match || match.index === undefined) return null;
+  const start = match.index + match[1].length;
+  return {
+    start,
+    end: caret,
+    query: match[2] || '',
+  };
+}
+
+function commandDescription(command: any) {
+  return command.description || command.detail || command.args || t('chat.commands.noDescription');
+}
+
+function commandSource(command: any) {
+  return command.source || command.kind || command.group || t('chat.commands.source.gateway');
+}
+
+function replaceActiveSlash(name: string) {
+  const active = activeSlash.value;
+  if (!active) return;
+  draft.value = `${draft.value.slice(0, active.start)}${name} ${draft.value.slice(active.end)}`;
+}
+
+async function selectInlineCommand(command: any) {
+  const name = commandName(command);
+  if (name === '/model') {
+    replaceActiveSlash('');
+    store.openModal('model');
+    return;
+  }
+  if (name === '/workspace') {
+    replaceActiveSlash('');
+    store.openModal('workspace');
+    return;
+  }
+  if (name === '/status') {
+    replaceActiveSlash('');
+    store.openCompanion('activity');
+    return;
+  }
+  replaceActiveSlash(name);
+  await nextTick();
+}
+
+async function handleComposerKeydown(event: KeyboardEvent) {
+  const hasInline = !!activeSlash.value && inlineCommandOptions.value.length > 0;
+  if (hasInline) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      inlineCommandIndex.value = (inlineCommandIndex.value + 1) % inlineCommandOptions.value.length;
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      inlineCommandIndex.value = (inlineCommandIndex.value - 1 + inlineCommandOptions.value.length) % inlineCommandOptions.value.length;
+      return;
+    }
+    if (event.key === 'Tab' || event.key === 'Enter') {
+      event.preventDefault();
+      await selectInlineCommand(inlineCommandOptions.value[inlineCommandIndex.value] || inlineCommandOptions.value[0]);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      replaceActiveSlash('');
+      return;
+    }
+  }
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    await submit();
+  }
+}
 
 async function submit() {
   const text = draft.value.trim();
@@ -82,8 +172,18 @@ async function inspectTurn(turn: any) {
   await store.loadTurnEvidence(turn);
 }
 
+function turnActivityParts(turn: any) {
+  const summary = store.turnActivitySummary(turn);
+  return [
+    { key: 'tool', icon: Wrench, value: summary.tools, label: t('chat.turnActivity.tools') },
+    { key: 'thinking', icon: Brain, value: summary.thinking, label: t('chat.turnActivity.thinking') },
+    { key: 'context', icon: CircleDot, value: summary.context, label: t('chat.turnActivity.context') },
+    { key: 'approval', icon: Hash, value: summary.approvals, label: t('chat.turnActivity.approvals') },
+  ].filter((item) => item.value > 0);
+}
+
 async function chooseCommand(command: any) {
-  const name = command.name || command;
+  const name = commandName(command);
   if (name === '/model') {
     store.closeModal();
     store.openModal('model');
@@ -167,6 +267,27 @@ async function chooseCommand(command: any) {
           <button type="button" @click="inspectTurn(turn)"><Hash :size="12" />{{ t('page.chat.page.text.848af509ba') }}</button>
         </div>
         <MarkdownBlock :content="turn.content" />
+        <section
+          v-if="isPanorama && turn.role === 'assistant' && store.turnActivitySummary(turn).total"
+          class="turn-activity"
+          :data-open="store.isTurnActivityOpen(turn.id)"
+        >
+          <button class="turn-activity-summary" type="button" @click="store.toggleTurnActivity(turn.id)">
+            <ChevronDown :size="14" />
+            <span>{{ t('chat.turnActivity.title') }}</span>
+            <small v-for="item in turnActivityParts(turn)" :key="item.key">
+              <component :is="item.icon" :size="12" />
+              {{ item.value }} {{ item.label }}
+            </small>
+          </button>
+          <div v-if="store.isTurnActivityOpen(turn.id)" class="turn-activity-list">
+            <article v-for="event in turn.activity" :key="event.id" class="turn-activity-item" :data-kind="event.kind">
+              <strong>{{ event.title }}</strong>
+              <span>{{ displayStatus(event.status || 'observed') }}</span>
+              <p v-if="event.detail">{{ event.detail }}</p>
+            </article>
+          </div>
+        </section>
       </article>
     </div>
 
@@ -177,7 +298,25 @@ async function chooseCommand(command: any) {
     />
 
     <footer class="composer">
-      <textarea v-model="draft" :placeholder="t('page.chat.page.placeholder.3e0e768fa8')" @keydown.enter.exact.prevent="submit" />
+      <textarea v-model="draft" :placeholder="t('page.chat.page.placeholder.3e0e768fa8')" @keydown="handleComposerKeydown" />
+      <div v-if="activeSlash && inlineCommandOptions.length" class="composer-command-popover">
+        <div class="command-inline-head">
+          <strong>{{ t('chat.commands.inline.title') }}</strong>
+          <span>{{ t('chat.commands.inline.hint') }}</span>
+        </div>
+        <button
+          v-for="(command, index) in inlineCommandOptions"
+          :key="command.name || index"
+          class="command-inline-row"
+          :class="{ active: inlineCommandIndex === index }"
+          type="button"
+          @mousedown.prevent="selectInlineCommand(command)"
+        >
+          <Boxes :size="15" />
+          <span><strong>{{ commandName(command) }}</strong><small>{{ commandDescription(command) }}</small></span>
+          <em>{{ commandSource(command) }}</em>
+        </button>
+      </div>
       <div class="composer-bar">
         <div class="composer-context">
           <button type="button" class="composer-chip" @click="store.openModal('workspace')"><Folder :size="14" /> {{ store.workspaceDir || t('page.chat.page.inline.59c92a9169') }}</button>
@@ -244,7 +383,7 @@ async function chooseCommand(command: any) {
         <p v-if="!store.commands.length" class="modal-note">{{ t('page.chat.page.text.0a237ff19e') }}</p>
         <button v-for="command in filteredCommands" :key="command.name" class="command-row" type="button" @click="chooseCommand(command)">
           <Boxes :size="15" />
-          <span><strong>{{ command.name }}</strong><small>{{ command.description || command.detail || command.args || '-' }}</small></span>
+          <span><strong>{{ commandName(command) }}</strong><small>{{ commandDescription(command) }}</small></span>
         </button>
       </section>
     </div>

@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/surface",
-    "crates/surface-adapters",
+    "crates/edge-contract",
+    "crates/edge-adapters",
 ]
 resolver = "2"
 

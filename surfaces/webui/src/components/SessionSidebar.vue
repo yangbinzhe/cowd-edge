@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from '../i18n';
-import { Copy, GitBranch, Plus, Search, X } from 'lucide-vue-next';
+import { Copy, GitBranch, Pin, Plus, Radio, Search, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -16,7 +16,8 @@ async function copySession(sessionId: string) {
 async function onScroll(event: Event) {
   const target = event.currentTarget as HTMLElement;
   if (target.scrollTop + target.clientHeight >= target.scrollHeight - 32) {
-    await store.loadMoreSessions();
+    if (store.sessionRenderHasMore) store.revealMoreSessions();
+    else await store.loadMoreSessions();
   }
 }
 </script>
@@ -55,18 +56,29 @@ async function onScroll(event: Event) {
             @change="store.toggleSessionSelected(session.id)"
           />
           <button type="button" class="session-open" @click="store.loadMessages(session.id)">
-            <span class="session-title">{{ store.sessionTitle(session) }}</span>
+            <span class="session-title">
+              <Radio v-if="store.isSessionRunning(session)" :size="11" />
+              <i v-else-if="store.isSessionUnread(session)" class="session-unread-dot"></i>
+              {{ store.sessionTitle(session) }}
+            </span>
             <span class="session-meta">{{ store.compactTime(session) }} · {{ store.sessionSnippet(session) || session.id }}</span>
+            <span class="session-badges">
+              <small v-if="store.isSessionPinned(session)">{{ t('session.badge.pinned') }}</small>
+              <small v-if="store.isSessionRunning(session)">{{ t('session.badge.running') }}</small>
+              <small v-else-if="store.isSessionUnread(session)">{{ t('session.badge.unread') }}</small>
+              <small v-if="session.parent_session_id || session.branch_count">{{ t('session.badge.branch') }}</small>
+            </span>
           </button>
           <span class="session-actions">
+            <button class="icon-action" type="button" :title="store.isSessionPinned(session) ? t('session.unpin') : t('session.pin')" @click="store.toggleSessionPin(session.id)"><Pin :size="13" /></button>
             <button class="icon-action" type="button" :title="t('session.copyId')" @click="copySession(session.id)"><Copy :size="13" /></button>
             <button class="icon-action" type="button" :title="t('session.branch')" @click="store.branchSession(session.id)"><GitBranch :size="13" /></button>
             <button class="icon-action danger" type="button" :title="t('component.session.sidebar.title.2d9ee31bda')" @click="store.deleteSession(session.id)"><X :size="13" /></button>
           </span>
         </article>
       </section>
-      <button v-if="store.sessionHasMore" class="ghost-action session-load-more" type="button" :disabled="store.sessionLoadingMore" @click="store.loadMoreSessions">
-        {{ store.sessionLoadingMore ? t('status.loading') : t('session.loadMore') }}
+      <button v-if="store.sessionRenderHasMore || store.sessionHasMore" class="ghost-action session-load-more" type="button" :disabled="store.sessionLoadingMore" @click="store.sessionRenderHasMore ? store.revealMoreSessions() : store.loadMoreSessions()">
+        {{ store.sessionLoadingMore ? t('status.loading') : (store.sessionRenderHasMore ? t('session.renderMore') : t('session.loadMore')) }}
       </button>
     </div>
 

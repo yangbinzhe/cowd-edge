@@ -1,0 +1,28 @@
+{
+  "schema": "cowd.surface.v1",
+  "id": "feishu-bitable",
+  "name": "Feishu Bitable Source Connector",
+  "version": "0.9.418",
+  "kind": "source-connector",
+  "entry": "./cowd-edge-feishu-bitable-source",
+  "transport": "stdio-jsonl",
+  "lifecycle": "managed",
+  "capabilities": [
+    "source.schema_discovery",
+    "source.snapshot",
+    "source.incremental",
+    "source.health"
+  ],
+  "routes": [],
+  "resources": [],
+  "health": {
+    "mode": "jsonl",
+    "interval_ms": 30000,
+    "timeout_ms": 5000
+  },
+  "config_schema": {
+    "required": ["app_id", "app_secret"],
+    "optional": ["base_url", "app_token", "table_id"]
+  },
+  "default_enabled": false
+}

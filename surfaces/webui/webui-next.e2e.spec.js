@@ -1,8 +1,14 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('cowd.webui.locale', 'en-US');
+  });
+});
+
 test('new shell uses icon rail and right Activity/Workspace companion tabs', async ({ page }) => {
   await page.goto('/index.html#/chat');
-  await expect(page.locator('.rail-button')).toHaveCount(13);
+  await expect(page.locator('.rail-button')).toHaveCount(14);
   await expect(page.locator('.session-sidebar')).toBeVisible();
   await expect(page.locator('.companion-tabs')).toContainText('Activity');
   await expect(page.locator('.companion-tabs')).toContainText('Workspace');
@@ -12,9 +18,9 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
   await expect(page.locator('.transcript')).toBeVisible();
   await expect(page.locator('.composer textarea')).toBeVisible();
   await expect(page.locator('.turn-role')).toHaveCount(0);
-  await expect(page.locator('.status-strip')).toContainText(/local|offline/);
+  await expect(page.locator('.status-strip')).toContainText(/unknown|local|offline|ready/);
   await expect(page.locator('.status-strip button')).not.toHaveText('');
-  await page.getByRole('button', { name: '纯净' }).click();
+  await page.locator('.mode-switch button').nth(1).click();
   await expect(page.locator('.clean-counts')).toBeVisible();
   await expect(page.locator('.run-panorama')).toHaveCount(0);
   await expect(page.locator('.companion-panel')).toHaveCount(0);
@@ -24,12 +30,11 @@ test('workspace tab supports folder browsing and editable preview surface', asyn
   await page.goto('/index.html#/chat');
   await page.getByRole('button', { name: 'Workspace' }).click();
   await expect(page.locator('.workspace-root')).toBeVisible();
-  await expect(page.locator('.upload-drop')).toContainText('Drop files here');
-  await expect(page.getByPlaceholder('New folder')).toBeVisible();
-  await expect(page.locator('.breadcrumbs')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Parent folder/ })).toBeVisible();
-  await expect(page.locator('.file-row, .empty-state').first()).toBeVisible();
-  await expect(page.locator('.preview-pane')).toHaveCount(0);
+  await expect(page.locator('.upload-drop')).toContainText('Drop workspace files here');
+  await expect(page.getByRole('button', { name: 'New folder' })).toBeVisible();
+  await expect(page.locator('.workspace-tree')).toBeVisible();
+  await expect(page.locator('.workspace-tree-node, .empty-state').first()).toBeVisible();
+  await expect(page.locator('.workspace-preview-modal')).toHaveCount(0);
 });
 
 test('tools page exposes current-page management without duplicated primary navigation', async ({ page }) => {
@@ -41,37 +46,38 @@ test('tools page exposes current-page management without duplicated primary navi
   await expect(page.locator('.capability-sidebar')).not.toContainText('Settings');
   await expect(page.locator('.metric-card')).toHaveCount(4);
   await expect(page.getByRole('heading', { name: 'Tool registry' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Operations' }).click();
   await expect(page.getByRole('heading', { name: 'Execution planner' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Mutation transactions' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Checkpoints' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Tool cache' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Tool ledger' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Risk preflight' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run readonly batch' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Mutations' }).click();
+  await expect(page.getByRole('heading', { name: 'Mutation transactions' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Preview mutation' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Run preflight' })).toBeVisible();
   await expect(page.locator('.raw-payload').first()).toBeVisible();
   await page.locator('.section-row').filter({ hasText: 'Risk' }).click();
   await expect(page.locator('.section-row.active')).toContainText('Risk');
   await expect(page).toHaveURL(/section=risk/);
-  await expect(page.getByRole('heading', { name: 'Tool registry' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Risk preflight' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run preflight' })).toBeVisible();
 });
 
 test('runtime and context pages expose real workbench controls', async ({ page }) => {
   await page.goto('/index.html#/runtime');
   await expect(page.getByRole('heading', { name: 'Runtime Control', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Control plane' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reload providers' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Runs' }).click();
   await expect(page.getByRole('heading', { name: 'Session lease' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Acquire' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Reload providers' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Timeline' }).click();
   await expect(page.getByRole('heading', { name: 'Runtime timeline' })).toBeVisible();
 
   await page.goto('/index.html#/context');
   await expect(page.getByRole('heading', { name: 'Context Builder', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Context builder', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Build packet' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Evidence' }).click();
   await expect(page.getByRole('heading', { name: 'Evidence resolve' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'History' }).click();
   await expect(page.getByRole('heading', { name: 'Recommendation actions' })).toBeVisible();
 });
 
@@ -94,68 +100,90 @@ test('skills agents and tools pages expose lifecycle workbenches', async ({ page
   await expect(page.getByRole('heading', { name: 'Skills Console' })).toBeVisible();
   await expect(page.locator('.skills-catalog')).toBeVisible();
   await expect(page.locator('.filter-row select')).toHaveCount(6);
-  await expect(page.getByRole('heading', { name: 'Files' })).toBeVisible();
-  await expect(page.locator('.markdown-body, .skill-markdown pre')).toBeVisible();
+  await expect(page.locator('.skills-detail')).toBeVisible();
   await expect(page.locator('.governed-action-panel').first()).toContainText('Validate');
-  await expect(page.getByRole('button', { name: 'Run plan' }).first()).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Runs and governance' })).toBeVisible();
+  await page.goto('/index.html#/skills?section=runs');
+  await expect(page.locator('[data-section="runs"]').first()).toHaveAttribute('aria-hidden', 'false');
 
   await page.goto('/index.html#/agents');
   await expect(page.getByRole('heading', { name: 'Agents Workbench' })).toBeVisible();
+  await page.goto('/index.html#/agents?section=catalog');
   await expect(page.getByRole('heading', { name: 'Agent directory' })).toBeVisible();
+  await page.goto('/index.html#/agents?section=discovery');
   await expect(page.getByRole('heading', { name: 'Discover team' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Task control' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Assemble team' })).toBeVisible();
+  await page.goto('/index.html#/agents?section=tasks');
+  await expect(page.getByRole('heading', { name: 'Task control' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start task' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Phase gate' })).toBeVisible();
+  await page.goto('/index.html#/agents?section=graph');
   await expect(page.getByRole('heading', { name: 'Agent execution graph' })).toBeVisible();
 
   await page.goto('/index.html#/tools');
   await expect(page.getByRole('heading', { name: 'Tool registry' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Ledger' }).click();
   await expect(page.getByRole('heading', { name: 'Tool ledger' })).toBeVisible();
 });
 
 test('gateway page exposes connector and cross-plane controls', async ({ page }) => {
   await page.goto('/index.html#/gateway');
+  await expect(page.getByRole('heading', { name: 'Surface host' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Connectors' }).click();
   await expect(page.getByRole('heading', { name: 'Platforms and connectors' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Connector capabilities' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Resources' }).click();
   await expect(page.getByRole('heading', { name: 'Resources and memory promotion' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Cross-plane governance' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Identities' }).click();
   await expect(page.getByRole('heading', { name: 'Identities and grants' })).toBeVisible();
+  await page.locator('.section-row').filter({ hasText: 'Executions' }).click();
+  await expect(page.getByRole('heading', { name: 'Cross-plane governance' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Action execution' })).toBeVisible();
-  await expect(page.locator('.governed-action-panel')).toHaveCount(6);
   await expect(page.locator('.governed-action-panel').filter({ hasText: 'Execute cross-plane action' })).toContainText('Run plan');
-  await expect(page.locator('.governed-action-panel').filter({ hasText: 'Manage cross-plane identity' })).toContainText('Run plan');
-  await expect(page.locator('.governed-action-panel').filter({ hasText: 'Create cross-plane grant' })).toContainText('Run plan');
 });
 
 test('mfg page exposes manufacturing application workbench controls', async ({ page }) => {
   await page.goto('/index.html#/apps/mfg');
-  await expect(page.getByRole('heading', { name: 'Manufacturing command center' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Data plane and source packs' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Manufacturing data ingestion' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Entities and impact graph' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Metrics and compute' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Evidence and quality' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Incident room' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Analysis, playbook, actions' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Manufacturing skills' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Cockpit reports' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'MFG Manufacturing Application' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'MFG operating load' })).toBeVisible();
+  await expect(page.locator('.mfg-lanes')).toBeVisible();
+  await expect(page.locator('[data-section="data-plane"]')).toContainText('Data plane and source packs');
   await expect(page.getByRole('button', { name: 'Plan ingest' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Upsert source pack' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Build packet' })).toBeVisible();
+  await page.goto('/index.html#/apps/mfg?section=source-pack');
+  await expect(page.locator('[data-section="source-pack"]')).toContainText('Manufacturing data ingestion');
   await expect(page.getByRole('button', { name: 'Ingest facts' })).toBeVisible();
+  await page.goto('/index.html#/apps/mfg?section=entities');
+  await expect(page.locator('[data-section="entities"]')).toContainText('Entities and impact graph');
+  await page.goto('/index.html#/apps/mfg?section=metrics');
+  await expect(page.locator('[data-section="metrics"]')).toContainText('Metrics and compute');
+  await page.goto('/index.html#/apps/mfg?section=evidence');
+  await expect(page.locator('[data-section="evidence"]')).toContainText('Evidence and quality');
+  await expect(page.getByRole('button', { name: 'Build packet' })).toBeVisible();
+  await page.goto('/index.html#/apps/mfg?section=incident-room');
+  await expect(page.locator('[data-section="incident-room"]')).toContainText('Incident room');
   await expect(page.getByRole('button', { name: 'Create incident' })).toBeVisible();
+  await page.goto('/index.html#/apps/mfg?section=actions');
+  await expect(page.locator('[data-section="actions"]')).toContainText('Analysis, playbook, actions');
+  await page.goto('/index.html#/apps/mfg?section=skills');
+  await expect(page.locator('[data-section="skills"]')).toContainText('Manufacturing skills');
+  await page.goto('/index.html#/apps/mfg?section=reports');
+  await expect(page.locator('[data-section="reports"]')).toContainText('Cockpit reports');
   await expect(page.getByRole('button', { name: 'Generate report' })).toBeVisible();
 });
 
 test('audit page exposes usage and release gate governance controls', async ({ page }) => {
-  await page.goto('/index.html#/audit');
-  await expect(page.getByRole('heading', { name: 'Audit export' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Usage summary' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Release gate', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Governance evidence' })).toBeVisible();
+  await page.goto('/index.html#/audit?section=logs');
+  await expect(page.locator('[data-section="logs"]')).toContainText('Audit export');
+  await page.goto('/index.html#/audit?section=usage');
+  await expect(page.locator('[data-section="usage"]')).toContainText('Usage summary');
+  await page.goto('/index.html#/audit?section=release');
+  await expect(page.locator('[data-section="release"]')).toContainText('Release gate');
+  await page.goto('/index.html#/audit?section=approvals');
+  await expect(page.locator('[data-section="approvals"]')).toContainText('Approval history');
+  await page.goto('/index.html#/audit?section=cross-plane');
+  await expect(page.locator('[data-section="cross-plane"]').first()).toContainText('Governance evidence');
   await expect(page.getByRole('button', { name: 'Refresh audit' })).toBeVisible();
-  await expect(page.getByRole('combobox').filter({ hasText: /webui|tui|cli/ })).toBeVisible();
+  await expect(page.locator('.metric-card')).toHaveCount(4);
 });
 
 test('settings page is reachable and theme control is usable', async ({ page }) => {

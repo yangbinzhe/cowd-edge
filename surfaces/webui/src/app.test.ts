@@ -23,6 +23,7 @@ import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
 import mfgWriteContracts from './data/mfgWriteContracts.json';
 import { cleanAssistantContent } from './utils/chatContent';
+import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
 import { isWorkspaceTextPreview, workspacePreviewKind } from './utils/workspacePreview';
 
@@ -192,6 +193,46 @@ describe('Cowd Vue WebUI shell', () => {
     expect(store.selectedTurnEvidence?.summary.map((item: any) => item.label)).toContain('工具');
   });
 
+  it('deduplicates turn activity and summarizes assistant work signals', () => {
+    const activity = mergeTurnActivity([], [
+      { id: 'a1', kind: 'tool', title: 'workspace.read', detail: 'README.md', status: 'complete' },
+      { id: 'a2', kind: 'tool', title: 'workspace.read', detail: 'README.md', status: 'complete' },
+      { id: 'a3', kind: 'context', title: 'context packed', detail: 'memory', status: 'observed' },
+      { id: 'a4', kind: 'approval', title: 'approval', detail: 'allowed', status: 'approved' },
+    ]);
+    expect(activity).toHaveLength(3);
+    expect(activitySummary({ activity, tool_name: 'workspace.read' })).toMatchObject({
+      total: 3,
+      tools: 1,
+      context: 1,
+      approvals: 1,
+    });
+  });
+
+  it('tracks session attention, pinning, and loaded-list pagination in the store', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.sessions = Array.from({ length: 105 }, (_, index) => ({
+      id: `session-${index}`,
+      title: `Session ${index}`,
+      status: index === 0 ? 'running' : 'complete',
+      message_count: index + 1,
+      updated_at: Date.now() - index * 1000,
+    }));
+    expect(store.groupedSessions.flatMap((group) => group.items)).toHaveLength(100);
+    expect(store.sessionRenderHasMore).toBe(true);
+    store.revealMoreSessions();
+    expect(store.groupedSessions.flatMap((group) => group.items)).toHaveLength(105);
+    store.toggleSessionPin('session-90');
+    expect(store.isSessionPinned(store.sessions[90])).toBe(true);
+    expect(store.groupedSessions[0].items[0].id).toBe('session-90');
+    expect(store.isSessionRunning(store.sessions[0])).toBe(true);
+    store.markSessionViewed('session-0');
+    expect(store.isSessionUnread(store.sessions[0])).toBe(false);
+    wrapper.unmount();
+  });
+
   it('renders Workspace file tree controls and Inspector tab from real store state', async () => {
     const wrapper = await mountApp('/chat');
     await settleAsync();
@@ -273,6 +314,23 @@ describe('Cowd Vue WebUI shell', () => {
     await wrapper.findAll('.workspace-context-menu button').find((button) => button.text().includes('在浏览器打开'))?.trigger('click');
     expect(download).toHaveBeenCalledWith('docs/a.md', 'file');
     expect(openExternal).toHaveBeenCalledWith('docs/a.md');
+  });
+
+  it('records recent Workspace files and blocks oversized inline text preview', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const rawFile = vi.spyOn(api, 'rawFile').mockResolvedValue('should not load');
+    const files = [{ name: 'huge.md', path: 'docs/huge.md', kind: 'file' as const, size: 700 * 1024 }];
+    store.workspaceFiles = files;
+    store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
+    await store.openFile('docs/huge.md');
+    expect(rawFile).not.toHaveBeenCalled();
+    expect(store.recentWorkspaceFiles[0].path).toBe('docs/huge.md');
+    expect(store.fileError).toContain('超过内嵌预览阈值');
+    expect(store.editorContent).toBe('');
+    rawFile.mockRestore();
+    wrapper.unmount();
   });
 
   it('uploads dropped local files directly into a Workspace folder node', async () => {
@@ -972,6 +1030,16 @@ describe('Cowd Vue WebUI shell', () => {
     await api.surfaceRepair('webui');
     await api.surfaceSend('webui', 'operator', 'hello');
     await api.surfaceAction('webui', 'health', { source: 'test' });
+    await api.edgeRegistry();
+    await api.edgeHealth();
+    await api.edgeSurfaces();
+    await api.edgeConnectors();
+    await api.edgeMessageConnectors();
+    await api.edgeSourceConnectors();
+    await api.matrixSourcePackUpsert({ source_pack_id: 'pack-1' });
+    await api.matrixSourceSnapshotPlan('pack-1', { resource_ref: 'file://orders.csv', estimated_rows: 2 });
+    await api.matrixSourceSnapshotRun('pack-1', { source_read_plan: { adapter_id: 'csv', resource_ref: 'file://orders.csv' } });
+    await api.matrixSourceSnapshots('pack-1');
     await api.channels();
     await api.channelStatus('webui');
     await api.channelRepair('webui');
@@ -1001,6 +1069,19 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/repair', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/send', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/action', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/edges', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/edges/health', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/edges/surfaces', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/edges/connectors', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/edges/connectors/message', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/edges/connectors/source', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/source-packs/upsert', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/source-packs/pack-1/snapshots/plan', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/source-packs/pack-1/snapshots/run', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ source_read_plan: { adapter_id: 'csv', resource_ref: 'file://orders.csv' }, session_id: 'webui-edge' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/matrix/source-packs/pack-1/snapshots', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/channels', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/channels/webui/status', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/channels/webui/repair', expect.objectContaining({ method: 'POST' }));

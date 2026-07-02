@@ -15,6 +15,65 @@ import {
   type WorkspaceTreeNode,
 } from '../utils/workspaceTree';
 import { buildWorkspacePreviewHtml, isWorkspaceTextPreview, workspacePreviewKind, workspacePreviewMime } from '../utils/workspacePreview';
+import { activitySummary, mergeTurnActivity, normalizeTurnActivity } from '../utils/turnSettlement';
+
+const PINNED_SESSION_KEY = 'cowd.webui.sessions.pinned';
+const VIEWED_SESSION_KEY = 'cowd.webui.sessions.viewedCounts';
+const WORKSPACE_RECENT_KEY = 'cowd.webui.workspace.recentFiles';
+const WORKSPACE_TEXT_PREVIEW_LIMIT_BYTES = 512 * 1024;
+
+function readStoredArray(key: string) {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredRecord(key: string) {
+  if (typeof localStorage === 'undefined') return {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, number> : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStored(key: string, value: unknown) {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function readStoredWorkspaceFiles() {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WORKSPACE_RECENT_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item.path === 'string' && typeof item.name === 'string')
+      .map((item) => ({
+        name: item.name,
+        path: item.path,
+        kind: 'file' as const,
+        size: typeof item.size === 'number' ? item.size : undefined,
+        modified: typeof item.modified === 'string' ? item.modified : undefined,
+      }))
+      .slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
+function formatFileSize(size?: number) {
+  const value = Number(size || 0);
+  if (!value) return '0 B';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
 
 function blockText(block: any): string {
   if (!block) return '';
@@ -134,6 +193,7 @@ export const useAppStore = defineStore('app', () => {
   const expandedWorkspaceDirs = ref<string[]>(['']);
   const workspaceTreeLoading = ref<Record<string, boolean>>({});
   const workspaceMeta = ref<Record<string, unknown> | null>(null);
+  const recentWorkspaceFiles = ref<WorkspaceFile[]>(readStoredWorkspaceFiles());
   const attachments = ref<SessionAttachment[]>([]);
   const selectedFile = ref('');
   const selectedFileContent = ref('');
@@ -158,6 +218,10 @@ export const useAppStore = defineStore('app', () => {
   const sessionHasMore = ref(true);
   const sessionLoadingMore = ref(false);
   const selectedSessionIds = ref<string[]>([]);
+  const openTurnActivity = ref<Record<string, boolean>>({});
+  const pinnedSessionIds = ref<string[]>(readStoredArray(PINNED_SESSION_KEY));
+  const sessionViewedCounts = ref<Record<string, number>>(readStoredRecord(VIEWED_SESSION_KEY));
+  const sessionRenderLimit = ref(100);
   const actionResults = ref<Record<string, any>>({});
   const capabilitySnapshots = ref<Record<string, EndpointSnapshot[]>>({});
   const capabilityLoading = ref<Record<string, boolean>>({});
@@ -173,13 +237,20 @@ export const useAppStore = defineStore('app', () => {
   const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || sessions.value[0]);
   const filteredSessions = computed(() => {
     const query = sessionQuery.value.trim().toLowerCase();
-    const sorted = [...sessions.value].sort((a, b) => updatedAtMs(b) - updatedAtMs(a));
+    const pinned = new Set(pinnedSessionIds.value);
+    const sorted = [...sessions.value].sort((a, b) => {
+      const pinDelta = Number(pinned.has(b.id)) - Number(pinned.has(a.id));
+      if (pinDelta) return pinDelta;
+      return updatedAtMs(b) - updatedAtMs(a);
+    });
     if (!query) return sorted;
     return sorted.filter((session) => `${sessionTitle(session)} ${sessionSnippet(session)} ${session.status}`.toLowerCase().includes(query));
   });
+  const renderedSessions = computed(() => filteredSessions.value.slice(0, sessionRenderLimit.value));
+  const sessionRenderHasMore = computed(() => filteredSessions.value.length > renderedSessions.value.length);
   const groupedSessions = computed(() => {
     const groups = new Map<string, SessionSummary[]>();
-    filteredSessions.value.forEach((session) => {
+    renderedSessions.value.forEach((session) => {
       const label = sessionGroupLabel(session);
       groups.set(label, [...(groups.get(label) || []), session]);
     });
@@ -271,6 +342,47 @@ export const useAppStore = defineStore('app', () => {
       summary: String(event.detail || event.summary || event.message || event.title || event.ref || event.id || '').slice(0, 180),
       raw: event,
     };
+  }
+
+  function turnActivityStorageKey(sessionId = activeSessionId.value) {
+    return `cowd.webui.turnActivityOpen.${sessionId || 'none'}`;
+  }
+
+  function loadTurnActivityState(sessionId = activeSessionId.value) {
+    if (typeof localStorage === 'undefined') return {};
+    try {
+      const parsed = JSON.parse(localStorage.getItem(turnActivityStorageKey(sessionId)) || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function persistTurnActivityState(sessionId = activeSessionId.value) {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(turnActivityStorageKey(sessionId), JSON.stringify(openTurnActivity.value));
+  }
+
+  function isTurnActivityOpen(turnId: string) {
+    return !!openTurnActivity.value[turnId];
+  }
+
+  function toggleTurnActivity(turnId: string) {
+    openTurnActivity.value = {
+      ...openTurnActivity.value,
+      [turnId]: !openTurnActivity.value[turnId],
+    };
+    persistTurnActivityState();
+  }
+
+  function turnActivitySummary(turn: ChatTurn) {
+    return activitySummary(turn);
+  }
+
+  function attachActivityToStreamingTurn(event: ActivityEvent) {
+    const turn = streamingAssistantId ? turns.value.find((item) => item.id === streamingAssistantId) : null;
+    if (!turn) return;
+    turn.activity = mergeTurnActivity(turn.activity || [], event);
   }
 
   function eventText(event: any) {
@@ -488,10 +600,12 @@ export const useAppStore = defineStore('app', () => {
 
   async function loadMessages(sessionId: string) {
     activeSessionId.value = sessionId;
+    openTurnActivity.value = loadTurnActivityState(sessionId);
     const data = await api.messages(sessionId);
     const rows = Array.isArray(data) ? data : (data.messages || []);
     turns.value = mergeLoadedTurns(rows);
     if (!turns.value.length) turns.value = [{ id: 'empty', role: 'system', content: t('store.app.session.empty'), status: 'complete' }];
+    markSessionViewed(sessionId);
     connectSessionStream(sessionId);
     await refreshContextUsage(sessionId);
     await loadAttachments(sessionId);
@@ -551,6 +665,7 @@ export const useAppStore = defineStore('app', () => {
     selectedModel.value = session.model || selectedModel.value;
     turns.value = [{ id: `system-${Date.now()}`, role: 'system', content: t('store.app.session.created'), status: 'complete' }];
     attachments.value = [];
+    markSessionViewed(session.id);
     connectSessionStream(session.id);
   }
 
@@ -569,6 +684,46 @@ export const useAppStore = defineStore('app', () => {
     selectedSessionIds.value = selectedSessionIds.value.includes(sessionId)
       ? selectedSessionIds.value.filter((id) => id !== sessionId)
       : [...selectedSessionIds.value, sessionId];
+  }
+
+  function markSessionViewed(sessionId: string) {
+    const session = sessions.value.find((item) => item.id === sessionId);
+    const count = Number(session?.message_count || turns.value.length || 0);
+    sessionViewedCounts.value = { ...sessionViewedCounts.value, [sessionId]: count };
+    writeStored(VIEWED_SESSION_KEY, sessionViewedCounts.value);
+  }
+
+  function isSessionPinned(session: SessionSummary) {
+    return session.pinned === true || pinnedSessionIds.value.includes(session.id);
+  }
+
+  function isSessionUnread(session: SessionSummary) {
+    if (session.id === activeSessionId.value) return false;
+    const count = Number(session.message_count || 0);
+    return count > Number(sessionViewedCounts.value[session.id] || 0);
+  }
+
+  function isSessionRunning(session: SessionSummary) {
+    const status = String(session.status || '').toLowerCase();
+    return !!session.is_streaming || !!session.active_stream_id || !!session.pending_user_message || ['running', 'active', 'queued', 'processing', 'replying'].some((item) => status.includes(item));
+  }
+
+  function sessionAttention(session: SessionSummary) {
+    if (isSessionRunning(session)) return 'running';
+    if (isSessionUnread(session)) return 'unread';
+    if (isSessionPinned(session)) return 'pinned';
+    return '';
+  }
+
+  function toggleSessionPin(sessionId: string) {
+    pinnedSessionIds.value = pinnedSessionIds.value.includes(sessionId)
+      ? pinnedSessionIds.value.filter((id) => id !== sessionId)
+      : [sessionId, ...pinnedSessionIds.value];
+    writeStored(PINNED_SESSION_KEY, pinnedSessionIds.value);
+  }
+
+  function revealMoreSessions() {
+    sessionRenderLimit.value += 100;
   }
 
   function clearSessionSelection() {
@@ -863,13 +1018,13 @@ export const useAppStore = defineStore('app', () => {
 
   function recordLiveActivity(kind: ActivityEvent['kind'], title: string, detail: string, status: string) {
     const id = `live-${title}-${status}`;
-    const event = {
+    const event = normalizeTurnActivity({
       id: `${id}-${Date.now()}`,
       kind,
       title: cleanRuntimeSummary(title),
       detail: cleanRuntimeSummary(String(detail || '').slice(0, 240)),
       status,
-    };
+    });
     const existingIndex = activity.value.findIndex((item) => item.title === title && item.kind === kind && item.status !== 'complete' && item.status !== 'error');
     if (existingIndex >= 0) {
       activity.value.splice(existingIndex, 1, event);
@@ -877,6 +1032,7 @@ export const useAppStore = defineStore('app', () => {
       activity.value.unshift(event);
     }
     activity.value = activity.value.slice(0, 80);
+    attachActivityToStreamingTurn(event);
     const lower = `${title} ${detail}`.toLowerCase();
     if (kind === 'context' && (lower.includes('memory') || lower.includes('recall'))) liveMemoryRecallCount.value += 1;
   }
@@ -931,6 +1087,34 @@ export const useAppStore = defineStore('app', () => {
   function mergeWorkspaceTreeDir(dir: string, files: WorkspaceFile[]) {
     const expanded = new Set(expandedWorkspaceDirs.value);
     workspaceTreeRoot.value = mergeWorkspaceTreeChildren(workspaceTreeRoot.value, dir, files, expanded);
+  }
+
+  function workspaceFileMeta(path: string): WorkspaceFile | null {
+    const treeNode = findWorkspaceTreeNode(workspaceTreeRoot.value, path);
+    if (treeNode) {
+      return {
+        name: treeNode.name,
+        path: treeNode.path,
+        kind: treeNode.kind,
+        is_dir: treeNode.is_dir,
+        size: treeNode.size,
+        modified: treeNode.modified,
+      };
+    }
+    return workspaceFiles.value.find((file) => file.path === path) || null;
+  }
+
+  function rememberRecentWorkspaceFile(path: string) {
+    const meta = workspaceFileMeta(path);
+    const file: WorkspaceFile = {
+      name: meta?.name || path.split('/').filter(Boolean).at(-1) || path,
+      path,
+      kind: 'file',
+      size: meta?.size,
+      modified: meta?.modified,
+    };
+    recentWorkspaceFiles.value = [file, ...recentWorkspaceFiles.value.filter((item) => item.path !== path)].slice(0, 8);
+    writeStored(WORKSPACE_RECENT_KEY, recentWorkspaceFiles.value);
   }
 
   async function loadWorkspace(dir = workspaceDir.value) {
@@ -1007,7 +1191,16 @@ export const useAppStore = defineStore('app', () => {
   async function openFile(path: string) {
     selectedFile.value = path;
     fileError.value = '';
+    rememberRecentWorkspaceFile(path);
     if (isWorkspaceTextPreview(path)) {
+      const meta = workspaceFileMeta(path);
+      if (Number(meta?.size || 0) > WORKSPACE_TEXT_PREVIEW_LIMIT_BYTES) {
+        selectedFileContent.value = '';
+        editorContent.value = '';
+        fileError.value = t('workspace.preview.largeFile', { size: formatFileSize(meta?.size) });
+        companionTab.value = 'workspace';
+        return;
+      }
       selectedFileContent.value = await api.rawFile(path);
       editorContent.value = selectedFileContent.value;
     } else {
@@ -1447,6 +1640,7 @@ export const useAppStore = defineStore('app', () => {
     expandedWorkspaceDirs,
     workspaceTreeLoading,
     workspaceMeta,
+    recentWorkspaceFiles,
     attachments,
     workspaceFilter,
     filteredWorkspaceFiles,
@@ -1475,6 +1669,10 @@ export const useAppStore = defineStore('app', () => {
     sessionHasMore,
     sessionLoadingMore,
     selectedSessionIds,
+    pinnedSessionIds,
+    sessionRenderLimit,
+    sessionRenderHasMore,
+    openTurnActivity,
     actionResults,
     capabilitySnapshots,
     capabilityLoading,
@@ -1492,17 +1690,28 @@ export const useAppStore = defineStore('app', () => {
     toggleSessionSelected,
     clearSessionSelection,
     deleteSelectedSessions,
+    markSessionViewed,
+    isSessionPinned,
+    isSessionUnread,
+    isSessionRunning,
+    sessionAttention,
+    toggleSessionPin,
+    revealMoreSessions,
     branchSession,
     compactSession,
     send,
     loadActivity,
     loadTurnEvidence,
     clearTurnEvidence,
+    isTurnActivityOpen,
+    toggleTurnActivity,
+    turnActivitySummary,
     refreshChatProjection,
     loadWorkspace,
     loadWorkspaceTreeDir,
     toggleWorkspaceTreeDir,
     selectWorkspacePath,
+    rememberRecentWorkspaceFile,
     openFile,
     loadAttachments,
     attachWorkspaceFile,

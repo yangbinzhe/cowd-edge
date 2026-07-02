@@ -32,9 +32,9 @@ function argValues(name) {
   return values;
 }
 
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0628-框架核心与Surface能力闭环治理');
+const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0702-Edge治理终态落地方案');
 const reportDir = path.resolve(argValue('--report-dir', process.env.COWD_REPORT_DIR || path.join(planRoot, 'reports')));
-const version = argValue('--version', process.env.COWD_VERSION || 'v0.9.410');
+const version = argValue('--version', process.env.COWD_VERSION || 'v0.9.444');
 const requiredRoutes = argValues('--require');
 
 const clientPath = path.join(webuiRoot, 'src/api/client.ts');
@@ -61,6 +61,9 @@ const criticalMethods = {
   updateMemoryEntry: { criticality: 'p1', page: 'memory' },
   deleteMemoryEntry: { criticality: 'p1', page: 'memory' },
   crossPlaneExecute: { criticality: 'p0', page: 'gateway' },
+  matrixSourcePackUpsert: { criticality: 'p0', page: 'gateway' },
+  matrixSourceSnapshotPlan: { criticality: 'p0', page: 'gateway' },
+  matrixSourceSnapshotRun: { criticality: 'p0', page: 'gateway' },
   mfgSourcePackUpsert: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
   mfgIngestFact: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
   mfgEntityUpsert: { criticality: 'p0', page: 'mfg', quarantineRequired: true },

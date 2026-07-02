@@ -18,6 +18,12 @@ export interface SessionSummary {
   title: string;
   model?: string;
   status?: string;
+  active_stream_id?: string | null;
+  pending_user_message?: string | null;
+  is_streaming?: boolean;
+  pinned?: boolean;
+  parent_session_id?: string;
+  branch_count?: number;
   updated_at?: number | string;
   created_at?: number | string;
   snippet?: string;
@@ -32,6 +38,7 @@ export interface ChatTurn {
   content: string;
   status?: 'streaming' | 'complete' | 'error';
   activity?: ActivityEvent[];
+  activity_open?: boolean;
   blocks?: Array<Record<string, unknown>>;
   sequence?: number;
   created_at_ms?: number;
