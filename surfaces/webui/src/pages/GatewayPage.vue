@@ -72,6 +72,11 @@ const edgeSurfaces = computed(() => Array.isArray(edgeRegistry.value.surfaces) ?
 const edgeMessageConnectors = computed(() => Array.isArray(edgeRegistry.value.message_connectors) ? edgeRegistry.value.message_connectors : []);
 const edgeSourceConnectors = computed(() => Array.isArray(edgeRegistry.value.source_connectors) ? edgeRegistry.value.source_connectors : []);
 const edgeAutomationConnectors = computed(() => Array.isArray(edgeRegistry.value.automation_connectors) ? edgeRegistry.value.automation_connectors : []);
+const configReloadStatus = computed(() => state.value.configReload || {});
+const configReloadRestartFields = computed(() => {
+  const fields = configReloadStatus.value?.restart_required?.fields;
+  return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
+});
 const channels = computed(() => Array.isArray(state.value.channels?.channels) ? state.value.channels.channels : []);
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
 const identities = computed(() => Array.isArray(state.value.identities?.identities) ? state.value.identities.identities : []);
@@ -297,7 +302,7 @@ const gatewayContext = computed(() => [
   { label: t('script.pages.gatewaypage.label.f243224b11'), value: `${surfaces.value.length} surfaces`, tone: surfaces.value.length ? 'success' : 'warn' },
   { label: t('script.pages.gatewaypage.label.4b1e9501b9'), value: accounts.value.length, tone: accounts.value.length ? 'success' : 'warn' },
   { label: t('script.pages.gatewaypage.label.42c248d3eb'), value: identities.value.length },
-  { label: t('script.pages.gatewaypage.label.8999e5848a'), value: executions.value.length },
+  { label: t('config.reload.label'), value: configReloadStatus.value?.status || 'unknown', tone: configReloadStatus.value?.restart_required?.required ? 'warn' : 'success' },
 ]);
 const gatewayWorkflow = computed(() => [
   { id: 'surfaces', label: t('edge.workflow.host'), status: edgeRows.value.length ? 'ready' : 'degraded', count: edgeRows.value.length },
@@ -571,7 +576,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -590,11 +595,12 @@ async function refresh() {
       api.crossPlaneAudit(),
       api.crossPlaneAdapters(),
       api.crossPlaneExecutions(),
+      api.configReloadStatus(),
     ]);
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -801,6 +807,11 @@ onMounted(refresh);
         <strong>{{ edgeRows.length }}</strong>
         <small>{{ t('edge.metric.breakdown', { surfaces: edgeSurfaces.length, message: edgeMessageConnectors.length, source: edgeSourceConnectors.length }) }}</small>
       </article>
+      <article class="metric-card" :data-tone="configReloadStatus.restart_required?.required ? 'warn' : (configReloadStatus.status === 'invalid' ? 'danger' : 'success')">
+        <span>{{ t('config.reload.label') }}</span>
+        <strong>{{ configReloadStatus.status || 'unknown' }}</strong>
+        <small>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : (configReloadStatus.trigger || 'auto') }}</small>
+      </article>
     </section>
 
     <section class="gateway-grid">
@@ -810,7 +821,7 @@ onMounted(refresh);
           <StatusPill :status="edgeHealth.status || 'unknown'" />
         </header>
         <p>{{ t('edge.gateway.detail') }}</p>
-        <DataTable v-if="edgeRows.length" :rows="edgeRows" :columns="['domain', 'id', 'name', 'status', 'lifecycle', 'capabilities', 'routes', 'resources', 'source']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="edgeRows.length" searchable copyable row-key="id" :rows="edgeRows" :columns="['domain', 'id', 'name', 'status', 'lifecycle', 'capabilities', 'routes', 'resources', 'source']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('edge.empty.title')" :detail="t('edge.empty.detail')" />
         <RawPayload :title="t('edge.gateway.raw')" :data="edgeHealth || {}" />
       </section>
@@ -821,7 +832,7 @@ onMounted(refresh);
           <StatusPill :status="gatewayAlignmentStatus" />
         </header>
         <p>{{ t('page.gateway.page.text.5a99daa9a9') }}</p>
-        <DataTable :rows="gatewayAlignmentRows" :columns="['lane', 'owner', 'backend', 'webui', 'tui', 'action']" @row-click="selectedDetail = $event" />
+        <DataTable searchable copyable row-key="lane" :rows="gatewayAlignmentRows" :columns="['lane', 'owner', 'backend', 'webui', 'tui', 'action']" @row-click="selectedDetail = $event" />
         <GatewayRemediationList :rows="gatewayRemediationRows" />
       </section>
 
@@ -831,7 +842,7 @@ onMounted(refresh);
           <StatusPill :status="state.surfaceHealth?.__offline ? 'offline' : (surfaceHost.status || state.surfaceHealth?.status || 'ready')" />
         </header>
         <p>{{ t('page.gateway.page.text.7fa2efe0a9') }}</p>
-        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="surfaceRows.length" searchable copyable row-key="id" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.ae647d6b79')" :detail="t('page.gateway.page.detail.767891561a')" />
         <RawPayload :title="t('page.gateway.page.title.ed73c8169c')" :data="state.surfaceHealth || {}" />
       </section>
@@ -841,9 +852,9 @@ onMounted(refresh);
           <h2>{{ t('page.gateway.page.text.df4bfe6273') }}</h2>
           <StatusPill :status="state.summary?.__offline ? 'offline' : 'ready'" />
         </header>
-        <DataTable v-if="accountRows.length" :rows="accountRows" :columns="['provider', 'account', 'status', 'scopes']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="accountRows.length" searchable copyable :rows="accountRows" :columns="['provider', 'account', 'status', 'scopes']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.bed97233b0')" :detail="t('page.gateway.page.detail.51394d64f1')" />
-        <DataTable v-if="channelRows.length" :rows="channelRows" :columns="['channel', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="channelRows.length" searchable copyable row-key="channel" :rows="channelRows" :columns="['channel', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
         <RawPayload :title="t('page.gateway.page.title.a0df395cfc')" :data="state.platforms || {}" />
         <RawPayload :title="t('page.gateway.page.title.513df4116b')" :data="state.channels || {}" />
       </section>
@@ -854,9 +865,9 @@ onMounted(refresh);
           <StatusPill :status="edgeMessageConnectors.length || edgeSourceConnectors.length ? 'ready' : 'degraded'" />
         </header>
         <p>{{ t('edge.connectors.detail') }}</p>
-        <DataTable v-if="messageConnectorRows.length" :rows="messageConnectorRows" :columns="['id', 'name', 'status', 'capabilities', 'entry', 'diagnostics']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="messageConnectorRows.length" searchable copyable row-key="id" :rows="messageConnectorRows" :columns="['id', 'name', 'status', 'capabilities', 'entry', 'diagnostics']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('edge.message.empty.title')" :detail="t('edge.message.empty.detail')" />
-        <DataTable v-if="sourceConnectorRows.length" :rows="sourceConnectorRows" :columns="['id', 'name', 'adapter', 'family', 'mode', 'sidecar', 'snapshot', 'incremental', 'schema', 'runtime']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="sourceConnectorRows.length" searchable copyable row-key="id" :rows="sourceConnectorRows" :columns="['id', 'name', 'adapter', 'family', 'mode', 'sidecar', 'snapshot', 'incremental', 'schema', 'runtime']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('edge.source.empty.title')" :detail="t('edge.source.empty.detail')" />
         <RawPayload :title="t('edge.connectors.raw')" :data="{ message_connectors: edgeMessageConnectors, source_connectors: edgeSourceConnectors, automation_connectors: edgeAutomationConnectors }" />
       </section>
@@ -939,13 +950,13 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="startWechatQr">{{ t('page.gateway.page.text.5b05d63e12') }}</button>
           <button class="ghost-action" type="button" :disabled="!wechatQrCode" @click="pollWechatQr">{{ t('page.gateway.page.text.45ad9b8b7f') }}</button>
         </div>
-        <DataTable v-if="connectorServiceRows.length" :rows="connectorServiceRows" :columns="['id', 'provider', 'family', 'mode']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="connectorServiceRows.length" searchable copyable row-key="id" :rows="connectorServiceRows" :columns="['id', 'provider', 'family', 'mode']" @row-click="selectedDetail = $event" />
         <label class="field-line">
           {{ t('page.gateway.field.connectorService') }}
           <input v-model="connectorServiceId" type="text" />
         </label>
         <button class="ghost-action" type="button" :disabled="!connectorServiceId" @click="loadConnectorServiceTools">{{ t('page.gateway.page.text.63dce7d3eb') }}</button>
-        <DataTable v-if="connectorServiceToolRows.length" :rows="connectorServiceToolRows" :columns="['id', 'family', 'risk', 'mode']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="connectorServiceToolRows.length" searchable copyable row-key="id" :rows="connectorServiceToolRows" :columns="['id', 'family', 'risk', 'mode']" @row-click="selectedDetail = $event" />
         <label class="field-line">
           {{ t('page.gateway.field.serviceTool') }}
           <input v-model="connectorServiceToolId" type="text" />
@@ -960,7 +971,7 @@ onMounted(refresh);
           <h2>{{ t('page.gateway.page.text.b4e80b5466') }}</h2>
           <span>{{ t('common.shownCount', { count: capabilityRows.length, unit: t('unit.capabilities') }) }}</span>
         </header>
-        <DataTable v-if="capabilityRows.length" :rows="capabilityRows" :columns="['id', 'provider', 'risk', 'mode']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="capabilityRows.length" searchable copyable row-key="id" :rows="capabilityRows" :columns="['id', 'provider', 'risk', 'mode']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.e6acca3a2d')" :detail="t('page.gateway.page.detail.662c9ed56d')" />
       </section>
 
@@ -990,7 +1001,7 @@ onMounted(refresh);
           @live="promoteResourceMemory"
         />
         <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.1355cb4c75')" />
-        <DataTable v-if="resourceRows.length" :rows="resourceRows" :columns="['reference', 'title', 'kind', 'status']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="resourceRows.length" searchable copyable row-key="reference" :rows="resourceRows" :columns="['reference', 'title', 'kind', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.e0f40327a7')" :detail="t('page.gateway.page.detail.fe442047a7')" />
       </section>
 
@@ -1052,7 +1063,7 @@ onMounted(refresh);
           @live="revokeIdentity"
         />
         <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.5951c14fea')" />
-        <DataTable v-if="identityRows.length" :rows="identityRows" :columns="['id', 'principal', 'identity', 'trust']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="identityRows.length" searchable copyable row-key="id" :rows="identityRows" :columns="['id', 'principal', 'identity', 'trust']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.ade00e463b')" :detail="t('page.gateway.page.detail.deb867b228')" />
         <label class="field-line">
           {{ t('page.gateway.field.grantId') }}
@@ -1075,7 +1086,7 @@ onMounted(refresh);
           @live="revokeGrant"
         />
         <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.008a7b6909')" />
-        <DataTable v-if="grantRows.length" :rows="grantRows" :columns="['id', 'principal', 'capability', 'type']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="grantRows.length" searchable copyable row-key="id" :rows="grantRows" :columns="['id', 'principal', 'capability', 'type']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.aca4aa4ff7')" :detail="t('page.gateway.page.detail.f58a29a773')" />
       </section>
 
@@ -1104,7 +1115,7 @@ onMounted(refresh);
           <h2>{{ t('page.gateway.page.text.0cef581c98') }}</h2>
           <span>{{ formatCount('executions', executionRows.length) }}</span>
         </header>
-        <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'capability', 'provider']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="executionRows.length" searchable copyable row-key="id" :rows="executionRows" :columns="['id', 'status', 'capability', 'provider']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.746b965ff4')" :detail="t('page.gateway.page.detail.10a566c783')" />
         <EvidenceTrace :items="gatewayEvidence" :title="t('page.gateway.page.title.abd0756c8f')" />
         <DetailDrawer :title="t('page.gateway.page.title.402c21482a')" :row="selectedDetail" @close="selectedDetail = null" />

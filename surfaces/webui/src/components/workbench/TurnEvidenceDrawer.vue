@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
-import { onBeforeUnmount, onMounted } from 'vue';
 import { X } from 'lucide-vue-next';
+import { useEscapeKey } from '../../composables/useEscapeKey';
 import DataTable from './DataTable.vue';
 import RawPayload from './RawPayload.vue';
 import RequestReceipt from './RequestReceipt.vue';
@@ -12,12 +12,7 @@ defineProps<{
 
 const emit = defineEmits<{ close: [] }>();
 
-function closeOnEscape(event: KeyboardEvent) {
-  if (event.key === 'Escape') emit('close');
-}
-
-onMounted(() => window.addEventListener('keydown', closeOnEscape));
-onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
+useEscapeKey(() => emit('close'));
 </script>
 
 <template>

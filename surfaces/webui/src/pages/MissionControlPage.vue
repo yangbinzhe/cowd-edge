@@ -9,6 +9,7 @@ import { api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import DataTable from '../components/workbench/DataTable.vue';
 import MissionActionPreview from '../components/workbench/MissionActionPreview.vue';
 import { useAppStore } from '../stores/app';
 import { displayStatus } from '../i18n/domain/status';
@@ -122,6 +123,14 @@ const teamRunRows = computed(() => collaborationRuns.value.slice(0, 8).map((run:
     synthesis: run.execution_summary?.synthesis_status || team.execution_summary?.synthesis_status || '-',
   };
 }));
+const agentRows = computed(() => agents.value.slice(0, 24).map((agent: any) => ({
+  id: agent.agent_id || agent.id || agent.name || '-',
+  role: agent.role || agent.kind || agent.profile || '-',
+  status: agent.status || agent.lifecycle || '-',
+  session: agent.session_id || agent.active_session_id || activeSession.value || '-',
+  team: agent.team_id || agent.active_team_id || '-',
+  summary: agent.summary || agent.objective || agent.last_message || agent.name || '-',
+})));
 const dispatchPreview = computed(() => ({
   affected: sessionCommands.value.slice(0, 8).map((command: any) => command.target_session_id || activeSession.value || command.command_id),
   expected: ['mission.command.claimed', 'session.inbox.updated', 'runtime.turn.optional'],
@@ -336,7 +345,7 @@ onMounted(refresh);
 
     <div v-if="error" class="file-error">{{ error }}</div>
 
-    <div class="metric-row tools-metrics">
+    <div class="metric-row tools-metrics" data-section="overview">
       <article class="metric-card">
         <span>{{ t('page.mission.control.page.text.3ca3f069de') }}</span>
         <strong>{{ sessions.length }}</strong>
@@ -364,7 +373,7 @@ onMounted(refresh);
       </article>
     </div>
 
-    <div class="clean-counts">
+    <div class="clean-counts" data-section="overview">
       <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
       <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
       <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
@@ -372,7 +381,7 @@ onMounted(refresh);
     </div>
 
     <div class="mission-grid">
-      <section class="mission-panel governed-wide">
+      <section class="mission-panel governed-wide" data-section="overview">
         <header>
           <h2>{{ t('page.mission.control.page.text.658886936e') }}</h2>
           <span>{{ t('page.mission.control.page.text.5e7c8e4b54') }}</span>
@@ -420,7 +429,7 @@ onMounted(refresh);
         <RequestReceipt v-if="recoveryReport" :receipt="recoveryReport" :title="t('page.mission.control.page.title.7590b53f8e')" />
       </section>
 
-      <section class="mission-panel">
+      <section class="mission-panel" data-section="sessions">
         <header>
           <h2>{{ t('page.mission.control.page.text.3ca3f069de') }}</h2>
           <span>{{ activeSession || t('page.mission.control.page.inline.54b8982e68') }}</span>
@@ -441,7 +450,7 @@ onMounted(refresh);
         </div>
       </section>
 
-      <section class="mission-panel">
+      <section class="mission-panel" data-section="teams">
         <header>
           <h2>{{ t('page.mission.control.page.text.5901596e99') }}</h2>
           <StatusPill :status="activeSession ? 'ready' : 'idle'" />
@@ -454,7 +463,7 @@ onMounted(refresh);
           <Users :size="16" />{{ t('page.mission.control.page.text.978a4ee277') }}</button>
       </section>
 
-      <section class="mission-panel">
+      <section class="mission-panel" data-section="teams">
         <header>
           <h2>{{ t('page.mission.control.page.text.ed040118e2') }}</h2>
           <StatusPill :status="selectedTeamId ? 'ready' : 'idle'" />
@@ -486,7 +495,24 @@ onMounted(refresh);
         <RawPayload v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
       </section>
 
-      <section class="mission-panel">
+      <section class="mission-panel" data-section="agents">
+        <header>
+          <h2>{{ t('capability.section.mission.agents.label') }}</h2>
+          <span>{{ formatCount('agents', agentRows.length) }}</span>
+        </header>
+        <DataTable
+          v-if="agentRows.length"
+          searchable
+          selectable
+          copyable
+          row-key="id"
+          :rows="agentRows"
+          :columns="['id', 'role', 'status', 'session', 'team', 'summary']"
+        />
+        <p v-else class="empty-note">{{ t('capability.section.mission.agents.description') }}</p>
+      </section>
+
+      <section class="mission-panel" data-section="routes">
         <header>
           <h2>{{ t('page.mission.control.page.text.eb5e456863') }}</h2>
           <StatusPill :status="routeTarget ? 'ready' : 'idle'" />
@@ -505,7 +531,7 @@ onMounted(refresh);
     </div>
 
     <div class="mission-grid lower">
-      <section class="mission-panel wide">
+      <section class="mission-panel wide" data-section="inbox">
         <header>
           <h2>{{ t('page.mission.control.page.text.38c0d91903') }}</h2>
           <span>{{ selectedSession.title || selectedSessionId || activeSession }}</span>
@@ -536,7 +562,7 @@ onMounted(refresh);
         </div>
       </section>
 
-      <section class="mission-panel">
+      <section class="mission-panel" data-section="approvals">
         <header>
           <h2>{{ t('page.mission.control.page.text.ba7c90b793') }}</h2>
           <StatusPill :status="pendingApprovals.length ? 'blocked' : 'ready'" />
@@ -552,7 +578,7 @@ onMounted(refresh);
       </section>
     </div>
 
-    <section v-if="showFullTrace" class="mission-panel trace-panel">
+    <section v-if="showFullTrace" class="mission-panel trace-panel" data-section="trace">
       <header>
         <h2>{{ t('page.mission.control.page.text.c54e2b4723') }}</h2>
         <span>{{ formatCount('records', evidenceRows.length) }}</span>

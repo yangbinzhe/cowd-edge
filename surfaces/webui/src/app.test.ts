@@ -22,7 +22,7 @@ import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
 import mfgWriteContracts from './data/mfgWriteContracts.json';
-import { cleanAssistantContent } from './utils/chatContent';
+import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
 import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
 import { isWorkspaceTextPreview, workspacePreviewKind } from './utils/workspacePreview';
@@ -94,14 +94,15 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.companion-tabs').text()).toContain('检查器');
   });
 
-  it('renders chat, composer, panorama controls, markdown body, and context meter', async () => {
+  it('renders chat, composer, mode controls, markdown body, and bottom context stats', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
     expect(wrapper.get('.transcript').exists()).toBe(true);
     expect(wrapper.get('.composer textarea').exists()).toBe(true);
     expect(wrapper.get('.context-meter').exists()).toBe(true);
     expect(wrapper.get('.mode-switch').text()).toContain('全景');
-    expect(wrapper.get('.run-panorama').exists()).toBe(true);
+    expect(wrapper.find('.run-panorama').exists()).toBe(false);
+    expect(wrapper.get('.composer-stats').text()).toContain('工具调用');
     expect(wrapper.get('.companion-panel').exists()).toBe(true);
     expect(wrapper.text()).toContain('上下文');
     expect(wrapper.text()).toContain('未报告');
@@ -145,7 +146,12 @@ describe('Cowd Vue WebUI shell', () => {
     expect(cleaned).not.toContain('Summary:');
   });
 
-  it('switches Chat into clean mode and hides panorama projections', async () => {
+  it('collapses repeated assistant-visible content', () => {
+    const repeated = ['完成第一步。', '继续处理第二步。'].join('\n\n');
+    expect(collapseRepeatedText([repeated, repeated, repeated].join('\n\n'))).toBe(repeated);
+  });
+
+  it('switches Chat into clean mode and keeps stats in the composer footer', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
     const store = useAppStore();
@@ -156,9 +162,10 @@ describe('Cowd Vue WebUI shell', () => {
     expect(store.chatDisplayMode).toBe('clean');
     expect(wrapper.find('.run-panorama').exists()).toBe(false);
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
-    expect(wrapper.get('.clean-counts').text()).toContain('工具调用');
-    expect(wrapper.get('.clean-counts').text()).toContain('记忆唤起');
-    expect(wrapper.get('.clean-counts').text()).toContain('记忆证据');
+    expect(wrapper.find('.clean-counts').exists()).toBe(false);
+    expect(wrapper.get('.composer-stats').text()).toContain('工具调用');
+    expect(wrapper.get('.composer-stats').text()).toContain('记忆唤起');
+    expect(wrapper.get('.composer-stats').text()).toContain('记忆证据');
   });
 
   it('renders Surface workflow as a compact high-signal strip', async () => {

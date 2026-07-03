@@ -189,7 +189,7 @@ const mfgLanes = computed(() => [
     summary: t('script.pages.mfgpage.summary.ae62a02f5a'),
     health: sourcePackResult.value || dataPlaneResult.value ? 'active' : 'ready',
     count: state.value?.health?.fact_count || 0,
-    target: '#data-plane',
+    target: 'data-plane',
   },
   {
     id: 'entities',
@@ -197,7 +197,7 @@ const mfgLanes = computed(() => [
     summary: t('script.pages.mfgpage.summary.e193f114b0'),
     health: entities.value.length || metrics.value.length ? 'ready' : 'idle',
     count: entities.value.length + metrics.value.length,
-    target: '#entities',
+    target: 'entities',
   },
   {
     id: 'incident-room',
@@ -205,7 +205,7 @@ const mfgLanes = computed(() => [
     summary: t('script.pages.mfgpage.summary.422a8cfef7'),
     health: incidents.value.length ? 'blocked' : 'idle',
     count: incidents.value.length + recommendedActions.value.length,
-    target: '#incident-room',
+    target: 'incident-room',
   },
   {
     id: 'reports',
@@ -213,9 +213,14 @@ const mfgLanes = computed(() => [
     summary: t('script.pages.mfgpage.summary.194357bd3f'),
     health: cockpitReportId.value ? 'done' : 'idle',
     count: cockpitReportId.value ? 1 : 0,
-    target: '#reports',
+    target: 'reports',
   },
 ]);
+
+function scrollToMfgSection(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 const mfgEvidence = computed(() => [
   {
     id: sourcePackId.value,
@@ -918,11 +923,11 @@ onMounted(refresh);
     <WorkflowStrip :steps="mfgWorkflow" :title="t('page.mfg.page.title.19a9d42267')" density="compact" />
 
     <section class="mfg-lanes" :aria-label="t('page.mfg.page.aria-label.916bf99d57')">
-      <a v-for="lane in mfgLanes" :key="lane.id" class="mfg-lane" :href="lane.target" :data-status="lane.health">
+      <button v-for="lane in mfgLanes" :key="lane.id" class="mfg-lane" type="button" :data-status="lane.health" @click="scrollToMfgSection(lane.target)">
         <span>{{ lane.title }}</span>
         <strong>{{ lane.count }}</strong>
         <p>{{ lane.summary }}</p>
-      </a>
+      </button>
     </section>
 
     <section class="metric-row" :aria-label="t('page.mfg.page.aria-label.5cf0cb320e')">
@@ -992,7 +997,7 @@ onMounted(refresh);
         </header>
         <p class="panel-note">{{ t('page.mfg.page.text.8d61d2ebc3') }}</p>
         <p class="panel-note">{{ t('page.mfg.decisionTrace.source') }}: {{ state?.decisionTrace?.kind || t('page.mfg.page.inline.0f9fa91718') }} / {{ state?.decisionTrace?.chain || t('page.mfg.decisionTrace.chainLabel') }}</p>
-        <DataTable :rows="decisionTraceRows" :columns="['stage', 'ref', 'domain', 'signal', 'next']" />
+        <DataTable :rows="decisionTraceRows" searchable copyable :columns="['stage', 'ref', 'domain', 'signal', 'next']" row-key="stage" />
         <EvidenceTrace :items="mfgEvidence" :title="t('page.mfg.page.title.3d3887d1d7')" />
       </article>
 
@@ -1069,7 +1074,7 @@ onMounted(refresh);
           @dry-run="dryRunFactIngest"
           @live="ingestManufacturingFacts"
         />
-        <DataTable v-if="metrics.length" :rows="metrics.slice(0, 8)" :columns="['metric_id', 'name', 'unit', 'status']" />
+        <DataTable v-if="metrics.length" searchable copyable :rows="metrics.slice(0, 8)" :columns="['metric_id', 'name', 'unit', 'status']" row-key="metric_id" />
         <RawPayload :title="t('page.mfg.page.title.cd2cc28173')" :data="{ metrics: state?.metrics, attention: state?.attention, changes: state?.changes }" />
       </article>
 
@@ -1092,7 +1097,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="resolveEntitySourceKey">{{ t('page.mfg.page.text.72e19f1838') }}</button>
         </div>
         <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgRelationUpsert" type="button" :disabled="!selectedEntityId || !relationTargetId" @click="upsertRelation">{{ t('page.mfg.page.text.e91fcaef8f') }}</button>
-        <DataTable v-if="entities.length" :rows="entities.slice(0, 8)" :columns="['entity_id', 'entity_type', 'canonical_key', 'display_name']" />
+        <DataTable v-if="entities.length" searchable copyable :rows="entities.slice(0, 8)" :columns="['entity_id', 'entity_type', 'canonical_key', 'display_name']" row-key="entity_id" />
         <RequestReceipt :receipt="entityResult" :title="t('page.mfg.page.title.d69adeadb8')" />
         <GovernedActionPanel
           :contract="contract('entity-upsert')"
@@ -1200,7 +1205,7 @@ onMounted(refresh);
             </option>
           </select>
         </label>
-        <DataTable v-if="incidents.length" :rows="incidents.slice(0, 8)" :columns="['incident_id', 'title', 'severity', 'status']" />
+        <DataTable v-if="incidents.length" searchable copyable :rows="incidents.slice(0, 8)" :columns="['incident_id', 'title', 'severity', 'status']" row-key="incident_id" />
         <GovernedActionPanel
           :contract="contract('incident-create-analyze')"
           :payload="incidentGovernedPayload()"
@@ -1286,8 +1291,8 @@ onMounted(refresh);
           <input v-model="selectedSkillRunId" type="text" />
         </label>
         <button class="ghost-action" type="button" :disabled="!selectedSkillRunId" @click="inspectSkillRun">{{ t('page.mfg.page.text.5e038b547e') }}</button>
-        <DataTable v-if="skills.length" :rows="skills.slice(0, 8)" :columns="['skill_id', 'name', 'risk', 'status']" />
-        <DataTable v-if="skillRuns.length" :rows="skillRuns.slice(0, 8)" />
+        <DataTable v-if="skills.length" searchable copyable :rows="skills.slice(0, 8)" :columns="['skill_id', 'name', 'risk', 'status']" row-key="skill_id" />
+        <DataTable v-if="skillRuns.length" searchable copyable :rows="skillRuns.slice(0, 8)" row-key="run_id" />
         <RawPayload :title="t('page.mfg.page.title.8b3d8aa5ff')" :data="{ skills: state?.skills, skill_runs: skillRuns, result }" />
       </article>
 

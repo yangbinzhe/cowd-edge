@@ -11,7 +11,12 @@ const route = useRoute();
 const router = useRouter();
 const store = useAppStore();
 
-const pageId = computed(() => route.path.replace('/', '') as Exclude<NavId, 'chat' | 'settings'>);
+function capabilityPageId(path: string): Exclude<NavId, 'chat' | 'settings'> {
+  if (path.startsWith('/apps/mfg')) return 'mfg';
+  return path.replace(/^\/+/, '').split('/')[0] as Exclude<NavId, 'chat' | 'settings'>;
+}
+
+const pageId = computed(() => capabilityPageId(route.path));
 const spec = computed(() => buildCapabilitySpecs()[pageId.value]);
 const snapshots = computed(() => store.capabilitySnapshots[pageId.value] || []);
 type CapabilitySection = NonNullable<(typeof spec.value)>['sections'][number];

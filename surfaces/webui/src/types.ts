@@ -117,6 +117,10 @@ export interface CapabilitySection {
   id: string;
   label: string;
   description: string;
+  displayMode?: 'summary' | 'table' | 'timeline' | 'tree' | 'graph' | 'form' | 'reader' | 'governance' | 'queue' | 'detail';
+  density?: 'compact' | 'standard' | 'inspect';
+  primaryObject?: string;
+  riskLevel?: Tone;
 }
 
 export interface ChartPoint {

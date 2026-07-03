@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
 import { computed, ref } from 'vue';
+import { Copy } from 'lucide-vue-next';
 import { displayColumn } from '../../i18n/domain/columns';
 import StatusPill from './StatusPill.vue';
+
+interface RowAction {
+  id: string;
+  label: string;
+  tone?: 'neutral' | 'danger';
+}
 
 const props = withDefaults(defineProps<{
   rows: Record<string, unknown>[];
@@ -10,16 +17,30 @@ const props = withDefaults(defineProps<{
   searchable?: boolean;
   rowKey?: string;
   compact?: boolean;
+  selectable?: boolean;
+  copyable?: boolean;
+  loading?: boolean;
+  rowActions?: RowAction[];
 }>(), {
   searchable: false,
   rowKey: '',
   compact: false,
+  selectable: false,
+  copyable: false,
+  loading: false,
+  rowActions: () => [],
 });
 
-const emit = defineEmits<{ rowClick: [row: Record<string, unknown>] }>();
+const emit = defineEmits<{
+  rowClick: [row: Record<string, unknown>];
+  selectionChange: [rows: Record<string, unknown>[]];
+  rowAction: [payload: { action: RowAction; row: Record<string, unknown> }];
+  copyRow: [row: Record<string, unknown>];
+}>();
 const query = ref('');
 const sortColumn = ref('');
 const sortDirection = ref<'asc' | 'desc'>('asc');
+const selectedKeys = ref<Set<string | number>>(new Set());
 
 const visibleColumns = computed(() => props.columns || Object.keys(props.rows[0] || {}));
 const filteredRows = computed(() => {
@@ -34,6 +55,9 @@ const filteredRows = computed(() => {
     return sortDirection.value === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
   });
 });
+const hasActions = computed(() => props.copyable || props.rowActions.length > 0);
+const selectedRows = computed(() => filteredRows.value.filter((row, index) => selectedKeys.value.has(keyFor(row, index))));
+const allVisibleSelected = computed(() => filteredRows.value.length > 0 && selectedRows.value.length === filteredRows.value.length);
 
 function toggleSort(column: string) {
   if (sortColumn.value === column) {
@@ -46,6 +70,43 @@ function toggleSort(column: string) {
 
 function keyFor(row: Record<string, unknown>, index: number) {
   return props.rowKey && row[props.rowKey] ? String(row[props.rowKey]) : index;
+}
+
+function emitSelection(next: Set<string | number>) {
+  selectedKeys.value = next;
+  emit('selectionChange', filteredRows.value.filter((row, index) => next.has(keyFor(row, index))));
+}
+
+function toggleRow(row: Record<string, unknown>, index: number) {
+  if (!props.selectable) return;
+  const key = keyFor(row, index);
+  const next = new Set(selectedKeys.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  emitSelection(next);
+}
+
+function toggleAll() {
+  if (!props.selectable) return;
+  if (allVisibleSelected.value) {
+    emitSelection(new Set());
+    return;
+  }
+  emitSelection(new Set(filteredRows.value.map((row, index) => keyFor(row, index))));
+}
+
+function handleRowKeydown(event: KeyboardEvent, row: Record<string, unknown>, index: number) {
+  if (event.key === 'Enter') emit('rowClick', row);
+  if (event.key === ' ' && props.selectable) {
+    event.preventDefault();
+    toggleRow(row, index);
+  }
+}
+
+async function copyRow(row: Record<string, unknown>) {
+  const text = JSON.stringify(row, null, 2);
+  await navigator.clipboard?.writeText(text).catch(() => undefined);
+  emit('copyRow', row);
 }
 
 function columnLabel(column: string) {
@@ -97,25 +158,79 @@ function fullCell(value: unknown) {
         <span>{{ t('component.workbench.data.table.text.d79b22c9c0') }}</span>
         <input v-model="query" type="search" :placeholder="t('component.workbench.data.table.placeholder.cd98a7dd38')" />
       </label>
-      <small>{{ filteredRows.length }} / {{ rows.length }}</small>
+      <small>{{ selectable ? t('component.workbench.data.table.selected', { selected: selectedRows.length, total: filteredRows.length }) : `${filteredRows.length} / ${rows.length}` }}</small>
+    </div>
+    <div v-else-if="selectable" class="data-table-toolbar">
+      <small>{{ t('component.workbench.data.table.selected', { selected: selectedRows.length, total: filteredRows.length }) }}</small>
     </div>
     <table class="data-table">
       <thead>
         <tr>
+          <th v-if="selectable" class="data-table-select">
+            <input
+              type="checkbox"
+              :aria-label="t('component.workbench.data.table.selectAll')"
+              :checked="allVisibleSelected"
+              @change="toggleAll"
+            />
+          </th>
           <th v-for="column in visibleColumns" :key="column">
             <button type="button" @click="toggleSort(column)">
               {{ columnLabel(column) }}
               <span v-if="sortColumn === column">{{ sortDirection === 'asc' ? '↑' : '↓' }}</span>
             </button>
           </th>
+          <th v-if="hasActions" class="data-table-actions">{{ t('component.workbench.data.table.actions') }}</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(row, index) in filteredRows" :key="keyFor(row, index)" @click="emit('rowClick', row)">
+        <tr v-if="loading">
+          <td class="data-table-empty" :colspan="visibleColumns.length + (selectable ? 1 : 0) + (hasActions ? 1 : 0)">
+            {{ t('common.loading') }}
+          </td>
+        </tr>
+        <tr v-else-if="!filteredRows.length">
+          <td class="data-table-empty" :colspan="visibleColumns.length + (selectable ? 1 : 0) + (hasActions ? 1 : 0)">
+            {{ t('component.workbench.data.table.empty') }}
+          </td>
+        </tr>
+        <tr
+          v-for="(row, index) in filteredRows"
+          v-else
+          :key="keyFor(row, index)"
+          :data-selected="selectedKeys.has(keyFor(row, index))"
+          tabindex="0"
+          @click="emit('rowClick', row)"
+          @keydown="handleRowKeydown($event, row, index)"
+        >
+          <td v-if="selectable" class="data-table-select" @click.stop>
+            <input
+              type="checkbox"
+              :aria-label="t('component.workbench.data.table.selectRow')"
+              :checked="selectedKeys.has(keyFor(row, index))"
+              @change="toggleRow(row, index)"
+            />
+          </td>
           <td v-for="column in visibleColumns" :key="column" :data-kind="cellKind(column, row[column])" :title="fullCell(row[column])">
             <StatusPill v-if="cellKind(column, row[column]) === 'status'" :status="String(row[column] || 'empty')" />
             <code v-else-if="cellKind(column, row[column]) === 'code'">{{ formatCell(column, row[column]) }}</code>
             <span v-else>{{ formatCell(column, row[column]) }}</span>
+          </td>
+          <td v-if="hasActions" class="data-table-actions">
+            <div class="data-table-actions-cell">
+              <button v-if="copyable" class="icon-action" type="button" :aria-label="t('component.workbench.data.table.copyRow')" @click.stop="copyRow(row)">
+                <Copy :size="14" />
+              </button>
+              <button
+                v-for="action in rowActions"
+                :key="action.id"
+                :class="action.tone === 'danger' ? 'danger-action' : 'ghost-action'"
+                type="button"
+                @click.stop="emit('rowAction', { action, row })"
+              >
+                {{ action.label }}
+              </button>
+            </div>
           </td>
         </tr>
       </tbody>

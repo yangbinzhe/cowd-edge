@@ -16,6 +16,20 @@
   --warn: #e6b15c;
   --danger: #ff6b6b;
   --info: #8fb7ff;
+  --state-success: var(--success);
+  --state-warning: var(--warn);
+  --state-danger: var(--danger);
+  --state-info: var(--info);
+  --state-running: #74c0fc;
+  --state-waiting: #c9a66b;
+  --state-disabled: #60625b;
+  --state-reload: #b197fc;
+  --z-dropdown: 20;
+  --z-sticky: 30;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-tooltip: 70;
   --radius: 8px;
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Noto Sans Mono CJK SC", monospace;
@@ -39,4 +53,12 @@
   --warn: #b87916;
   --danger: #d44d4d;
   --info: #3867b7;
+  --state-success: var(--success);
+  --state-warning: var(--warn);
+  --state-danger: var(--danger);
+  --state-info: var(--info);
+  --state-running: #2563eb;
+  --state-waiting: #a16207;
+  --state-disabled: #9ca3af;
+  --state-reload: #7c3aed;
 }

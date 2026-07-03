@@ -55,6 +55,11 @@ const edgeSurfaces = computed(() => Array.isArray(edgeRegistry.value.surfaces) ?
 const edgeMessageConnectors = computed(() => Array.isArray(edgeRegistry.value.message_connectors) ? edgeRegistry.value.message_connectors : []);
 const edgeSourceConnectors = computed(() => Array.isArray(edgeRegistry.value.source_connectors) ? edgeRegistry.value.source_connectors : []);
 const edgeAutomationConnectors = computed(() => Array.isArray(edgeRegistry.value.automation_connectors) ? edgeRegistry.value.automation_connectors : []);
+const configReloadStatus = computed(() => state.value.configReload || {});
+const configReloadRestartFields = computed(() => {
+  const fields = configReloadStatus.value?.restart_required?.fields;
+  return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
+});
 const host = computed(() => state.value.health?.host || state.value.health || {});
 const runtimeSnapshots = computed(() => {
   const items = state.value.health?.runtime || state.value.registry?.runtime || [];
@@ -195,7 +200,7 @@ const surfaceContext = computed(() => [
   { label: t('script.pages.surfacepage.label.22b4b0c3c3'), value: surfaces.value.length, tone: surfaces.value.length ? 'success' : 'warn' },
   { label: t('script.pages.surfacepage.label.20c7c5522f'), value: host.value.ready_count ?? '-', tone: degradedSurfaces.value ? 'warn' : 'success' },
   { label: t('script.pages.surfacepage.label.13c27ff80a'), value: degradedSurfaces.value, tone: degradedSurfaces.value ? 'warn' : 'success' },
-  { label: t('script.pages.surfacepage.label.03730e5840'), value: totalRoutes.value },
+  { label: t('config.reload.label'), value: configReloadStatus.value?.status || 'unknown', tone: configReloadStatus.value?.restart_required?.required ? 'warn' : 'success' },
   { label: t('script.pages.surfacepage.label.87df60de33'), value: totalResources.value },
 ]);
 const surfaceWorkflow = computed(() => [
@@ -317,14 +322,15 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [registry, health, edge] = await Promise.all([
+    const [registry, health, edge, configReload] = await Promise.all([
       api.surfaceRegistry(),
       api.surfaceHostHealth(),
       api.edgeRegistry(),
+      api.configReloadStatus(),
     ]);
     const nextSurfaces = registrySurfaces(registry);
     const nextSelected = selectedSurface.value || nextSurfaces[0]?.id || 'webui';
-    state.value = { ...state.value, registry, health, edge };
+    state.value = { ...state.value, registry, health, edge, configReload };
     await loadSurface(nextSurfaces.some((surface: any) => surface.id === nextSelected) ? nextSelected : nextSurfaces[0]?.id || nextSelected);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -454,6 +460,11 @@ onMounted(refresh);
         <strong>{{ edgeSurfaces.length + edgeMessageConnectors.length + edgeSourceConnectors.length + edgeAutomationConnectors.length }}</strong>
         <small>{{ t('edge.metric.breakdown', { surfaces: edgeSurfaces.length, message: edgeMessageConnectors.length, source: edgeSourceConnectors.length }) }}</small>
       </article>
+      <article class="metric-card" :data-tone="configReloadStatus.restart_required?.required ? 'warn' : (configReloadStatus.status === 'invalid' ? 'danger' : 'success')">
+        <span>{{ t('config.reload.label') }}</span>
+        <strong>{{ configReloadStatus.status || 'unknown' }}</strong>
+        <small>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : (configReloadStatus.trigger || 'auto') }}</small>
+      </article>
     </section>
 
     <section class="gateway-grid">
@@ -463,7 +474,7 @@ onMounted(refresh);
           <StatusPill :status="state.edge?.health?.status || 'unknown'" />
         </header>
         <p>{{ t('edge.surface.partition.detail') }}</p>
-        <DataTable :rows="edgePartitionRows" :columns="['domain', 'count', 'purpose', 'endpoint']" @row-click="selectedDetail = $event" />
+        <DataTable searchable copyable :rows="edgePartitionRows" :columns="['domain', 'count', 'purpose', 'endpoint']" @row-click="selectedDetail = $event" />
         <RawPayload :title="t('edge.gateway.raw')" :data="state.edge?.health || {}" />
       </section>
 
@@ -472,7 +483,7 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.d0eb56ac2a') }}</h2>
           <StatusPill :status="state.registry?.__offline ? 'offline' : 'ready'" />
         </header>
-        <DataTable v-if="surfaceRows.length" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="surfaceRows.length" searchable copyable row-key="id" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.surface.page.title.9e87656d55')" :detail="t('page.surface.page.detail.7941de7927')" />
         <SurfaceDiagnosticPlaybook :rows="surfaceDiagnosticRows" />
         <label class="field-line">
@@ -511,7 +522,7 @@ onMounted(refresh);
             {{ t('page.surface.action.repair') }}
           </button>
         </div>
-        <DataTable v-if="runtimeRows.length" :rows="runtimeRows" :columns="['surface', 'status', 'active', 'pid', 'failures', 'restarts', 'circuit', 'last_seen', 'next_retry']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="runtimeRows.length" searchable copyable row-key="surface" :rows="runtimeRows" :columns="['surface', 'status', 'active', 'pid', 'failures', 'restarts', 'circuit', 'last_seen', 'next_retry']" @row-click="selectedDetail = $event" />
         <RawPayload :title="t('page.surface.page.title.8f45531e08')" :data="state.selectedHealth || {}" />
         <RawPayload :title="t('page.surface.page.title.640ad216d7')" :data="state.status || selectedRuntime || {}" />
       </section>
@@ -521,7 +532,7 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.e3d84f3df6') }}</h2>
           <span>{{ formatCount('entries', routeRows.length) }}</span>
         </header>
-        <DataTable v-if="routeRows.length" :rows="routeRows" :columns="['method', 'path', 'target', 'status']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="routeRows.length" searchable copyable row-key="path" :rows="routeRows" :columns="['method', 'path', 'target', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.surface.page.title.0926c31b98')" :detail="t('page.surface.page.detail.833cc1397b')" />
       </section>
 
@@ -530,7 +541,7 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.df4e5009f8') }}</h2>
           <span>{{ formatCount('entries', resourceRows.length) }}</span>
         </header>
-        <DataTable v-if="resourceRows.length" :rows="resourceRows" :columns="['path', 'file', 'type', 'spa']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="resourceRows.length" searchable copyable row-key="path" :rows="resourceRows" :columns="['path', 'file', 'type', 'spa']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.surface.page.title.bbd67aec43')" :detail="t('page.surface.page.detail.da70eaf510')" />
       </section>
 
@@ -588,10 +599,10 @@ onMounted(refresh);
             {{ t('template.pages.surfacepage.a89fd9f7cf') }}
           </button>
         </div>
-        <DataTable v-if="inboxRows.length" :rows="inboxRows" :columns="['message_id', 'status', 'thread', 'sender', 'session', 'turn', 'error']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="inboxRows.length" searchable copyable row-key="message_id" :rows="inboxRows" :columns="['message_id', 'status', 'thread', 'sender', 'session', 'turn', 'error']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.surface.page.title.6e2d0aef09')" :detail="t('page.surface.page.detail.d4f6163244')" />
-        <DataTable v-if="outboxRows.length" :rows="outboxRows" :columns="['delivery_id', 'status', 'recipient', 'attempts', 'next_retry', 'error']" @row-click="selectedDetail = $event" />
-        <DataTable v-if="deliveryRows.length" :rows="deliveryRows" :columns="['kind', 'status', 'delivery_id', 'message_id', 'at']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="outboxRows.length" searchable copyable row-key="delivery_id" :rows="outboxRows" :columns="['delivery_id', 'status', 'recipient', 'attempts', 'next_retry', 'error']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="deliveryRows.length" searchable copyable :rows="deliveryRows" :columns="['kind', 'status', 'delivery_id', 'message_id', 'at']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="events">
@@ -599,8 +610,8 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.a14d7b470c') }}</h2>
           <span>{{ eventRows.length + supervisorRows.length }} recent</span>
         </header>
-        <DataTable v-if="eventRows.length" :rows="eventRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
-        <DataTable v-if="supervisorRows.length" :rows="supervisorRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="eventRows.length" searchable copyable :rows="eventRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="supervisorRows.length" searchable copyable :rows="supervisorRows" :columns="['kind', 'status', 'message', 'at']" @row-click="selectedDetail = $event" />
         <EmptyState v-if="!eventRows.length && !supervisorRows.length" :title="t('page.surface.page.title.4ed86fdc14')" :detail="t('page.surface.page.detail.5d2cac078e')" />
         <EvidenceTrace :items="surfaceEvidence" :title="t('page.surface.page.title.a565340669')" />
       </section>

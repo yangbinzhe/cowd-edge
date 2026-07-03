@@ -140,7 +140,7 @@ onMounted(refresh);
     <PrimaryContextBar :items="contextBar" density="compact" :max-visible="4" />
     <WorkflowStrip :steps="contextWorkflow" :title="t('page.context.page.title.eaa4662226')" density="compact" />
 
-    <section class="metric-row">
+    <section class="metric-row" data-section="budget">
       <article class="metric-card">
         <span>{{ t('page.context.page.text.2109fa7d46') }}</span>
         <strong>{{ itemRows.length }}</strong>
@@ -159,7 +159,7 @@ onMounted(refresh);
     </section>
 
     <section class="context-grid">
-      <section class="management-panel context-panel wide">
+      <section class="management-panel context-panel wide" data-section="packet">
         <header>
           <h2>{{ t('page.context.page.text.00bcbce604') }}</h2>
           <StatusPill :status="envelope.__offline ? 'offline' : 'ready'" />
@@ -182,12 +182,12 @@ onMounted(refresh);
           <Search :size="15" />
           {{ t('template.pages.contextpage.2e16e8d2e9') }}
         </button>
-        <DataTable v-if="itemRows.length" :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="itemRows.length" searchable copyable :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.3e00f7b727')" :detail="t('page.context.page.detail.0f6e3d1ebe')" />
         <EvidenceTrace :items="contextEvidence" :title="t('page.context.page.title.97f9320e36')" />
       </section>
 
-      <section class="management-panel context-panel">
+      <section class="management-panel context-panel" data-section="evidence">
         <header>
           <h2>{{ t('page.context.page.text.a8dd41fa22') }}</h2>
           <span>{{ t('page.context.page.text.08cb9c66d5') }}</span>
@@ -201,7 +201,7 @@ onMounted(refresh);
         <RawPayload :title="t('page.context.page.title.5f71074cfb')" :data="evidence" />
       </section>
 
-      <section class="management-panel context-panel">
+      <section class="management-panel context-panel" data-section="budget">
         <header>
           <h2>{{ t('page.context.page.text.92f813f7b1') }}</h2>
           <span>{{ envelopeId || t('page.context.page.inline.46721d3741') }}</span>
@@ -215,16 +215,16 @@ onMounted(refresh);
           {{ t('template.pages.contextpage.9beb96dac8') }}
         </button>
         <RequestReceipt :receipt="actionResult" :title="t('page.context.page.title.ea2c090ac6')" />
-        <DataTable v-if="recommendationRows.length" :rows="recommendationRows" :columns="['id', 'action', 'count', 'status']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="recommendationRows.length" searchable copyable :rows="recommendationRows" :columns="['id', 'action', 'count', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.e62d3fb566')" :detail="t('page.context.page.detail.dcd7576e63')" />
       </section>
 
-      <section class="management-panel context-panel wide">
+      <section class="management-panel context-panel wide" data-section="history">
         <header>
           <h2>{{ t('page.context.page.text.397af08f0b') }}</h2>
           <span>{{ historyRows.length }} history rows</span>
         </header>
-        <DataTable v-if="historyRows.length" :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="historyRows.length" searchable copyable :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.fae4d2126c')" :detail="t('page.context.page.detail.56aba34430')" />
         <DetailDrawer :title="t('page.context.page.title.66cb55e17d')" :row="selectedDetail" @close="selectedDetail = null" />
         <RawPayload :title="t('page.context.page.title.b8176568a4')" :data="envelope" />

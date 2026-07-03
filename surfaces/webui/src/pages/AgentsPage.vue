@@ -396,7 +396,7 @@ onMounted(refresh);
           <h2>{{ t('page.agents.page.text.c1a824a193') }}</h2>
           <span>{{ agentRows.length }} definitions</span>
         </header>
-        <DataTable v-if="agentRows.length" :rows="agentRows" :columns="['name', 'active', 'source', 'model', 'description']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="agentRows.length" searchable copyable row-key="name" :rows="agentRows" :columns="['name', 'active', 'source', 'model', 'description']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.agents.page.title.5eba27eab7')" :detail="t('page.agents.page.detail.c7ca371a29')" />
       </section>
 
@@ -410,10 +410,10 @@ onMounted(refresh);
           <input v-model="discoverQuery" type="search" :placeholder="t('page.agents.page.placeholder.703309ce06')" @keyup.enter="discoverAgents" />
         </label>
         <button class="primary-action" type="button" @click="discoverAgents">{{ t('page.agents.page.text.961a6c8625') }}</button>
-        <DataTable v-if="discoveredRows.length" :rows="discoveredRows" :columns="['agent_id', 'role', 'reputation', 'status']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="discoveredRows.length" searchable copyable row-key="agent_id" :rows="discoveredRows" :columns="['agent_id', 'role', 'reputation', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.agents.page.title.1f579ef765')" :detail="t('page.agents.page.detail.eb533ab1ab')" />
         <RawPayload :title="t('page.agents.page.title.425652af9a')" :data="discovery.team || {}" />
-        <DataTable v-if="reputationRows.length" :rows="reputationRows" :columns="['agent_id', 'reputation', 'status']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="reputationRows.length" searchable copyable row-key="agent_id" :rows="reputationRows" :columns="['agent_id', 'reputation', 'status']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel agents-panel wide" data-section="discovery">
@@ -528,7 +528,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!currentPhase" @click="reviewPhase(true)">{{ t('page.agents.page.text.b98caebe44') }}</button>
         </div>
         <RequestReceipt :receipt="actionResult" :title="t('page.agents.page.title.7122dde1ab')" />
-        <DataTable v-if="phaseItems.length" :rows="phaseItems" @row-click="selectedDetail = $event" />
+        <DataTable v-if="phaseItems.length" searchable copyable :rows="phaseItems" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.agents.page.title.e026c4dcdc')" :detail="t('page.agents.page.detail.113c5f31fe')" />
       </section>
 

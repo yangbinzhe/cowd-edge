@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
-import { RefreshCw, RotateCcw, ShieldCheck } from 'lucide-vue-next';
+import { RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
@@ -10,6 +10,7 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import TimelineList from '../components/workbench/TimelineList.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
@@ -35,7 +36,6 @@ const timeline = ref<any>({});
 const tasks = ref<any>({});
 const growthStatus = ref<any>({});
 const growthEvents = ref<any>({});
-const reloadResult = ref<any>(null);
 const actionResult = ref<any>(null);
 const leaseOwner = ref('webui');
 const leaseMode = ref('shared');
@@ -43,6 +43,12 @@ const turnPrompt = ref('Summarize current runtime state and blockers');
 const selectedTurnId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const sessionId = computed(() => store.activeSessionId || 'api-context');
+const configReloadStatus = computed(() => store.configReloadStatus || {});
+const configReloadRestartFields = computed(() => {
+  const fields = configReloadStatus.value?.restart_required?.fields;
+  return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
+});
+const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.status || 'unknown'));
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
 const missionControlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
 const mission = computed(() => missionControlProjection.value?.mission || {});
@@ -69,6 +75,12 @@ const timelineRows = computed(() => (Array.isArray(timeline.value?.events) ? tim
   kind: event.kind || event.type || '-',
   status: event.status || event.phase || '-',
   detail: event.detail || event.summary || event.message || '-',
+})));
+const timelineListItems = computed(() => timelineRows.value.map((row: any) => ({
+  id: row.sequence,
+  title: row.kind,
+  status: row.status,
+  detail: `${row.scope} · ${row.detail}`,
 })));
 const taskRows = computed(() => (Array.isArray(tasks.value?.tasks) ? tasks.value.tasks : []).slice(0, 12).map((task: any) => ({
   id: task.id,
@@ -106,7 +118,7 @@ const runtimeContext = computed(() => [
   { label: t('script.pages.runtimepage.label.f7f1997c6c'), value: sessionId.value },
   { label: t('script.pages.runtimepage.label.68c2cc7f0c'), value: controlPlane.value.configured_model || effectiveConfig.value?.model || 'unresolved' },
   { label: t('script.pages.runtimepage.label.7ceee3f361'), value: controlPlane.value.provider_count ?? 0, tone: controlPlane.value.provider_count ? 'success' : 'warn' },
-  { label: t('script.pages.runtimepage.label.6dc1222c37'), value: controlPlane.value.production_ready === true ? 'production ready' : 'attention', tone: controlPlane.value.production_ready === true ? 'success' : 'warn' },
+  { label: t('config.reload.label'), value: configReloadStatusLabel.value, tone: store.configReloadAttention ? 'warn' : 'success' },
 ]);
 const runtimeWorkflow = computed(() => [
   { id: 'overview', label: t('script.pages.runtimepage.label.8851142da5'), status: controlPlane.value.degraded ? 'degraded' : 'ready', count: controlPlane.value.provider_count ?? 0, description: 'providers' },
@@ -166,6 +178,12 @@ const selectedEvidence = computed<EvidenceObject | null>(() => {
   };
 });
 
+function formatEpochMs(value: unknown) {
+  const ms = Number(value || 0);
+  if (!Number.isFinite(ms) || ms <= 0) return '-';
+  return new Date(ms).toLocaleString();
+}
+
 async function refresh() {
   loading.value = true;
   error.value = '';
@@ -187,6 +205,7 @@ async function refresh() {
       nextTasks,
       nextGrowthStatus,
       nextGrowthEvents,
+      nextReloadStatus,
     ] = await Promise.all([
       api.runtimeControlPlane(),
       api.runtimeStatus(),
@@ -204,6 +223,7 @@ async function refresh() {
       api.tasks(),
       api.growthStatus(),
       api.growthEvents(),
+      store.refreshConfigReloadStatus(),
     ]);
     controlPlane.value = nextControl;
     runtimeStatus.value = nextStatus;
@@ -221,6 +241,7 @@ async function refresh() {
     tasks.value = nextTasks;
     growthStatus.value = nextGrowthStatus;
     growthEvents.value = nextGrowthEvents;
+    store.configReloadStatus = nextReloadStatus;
     selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -244,12 +265,6 @@ async function inspectTurn() {
 async function cancelTurn() {
   if (!selectedTurnId.value) return;
   actionResult.value = await api.cancelRuntimeTurn(selectedTurnId.value);
-  await refresh();
-}
-
-async function reloadProviders() {
-  reloadResult.value = await api.reloadProviders();
-  actionResult.value = reloadResult.value;
   await refresh();
 }
 
@@ -316,16 +331,18 @@ onMounted(refresh);
         <strong>{{ growthStatus.event_count ?? growthEventRows.length }}</strong>
         <small>{{ formatCount('promotions', growthStatus.promotion_count ?? growthPromotionRows.length) }}</small>
       </article>
+      <article class="metric-card" :data-tone="store.configReloadInvalid ? 'danger' : (store.configReloadNeedsRestart ? 'warn' : 'success')">
+        <span>{{ t('config.reload.label') }}</span>
+        <strong>{{ configReloadStatusLabel }}</strong>
+        <small>{{ store.configReloadNeedsRestart ? configReloadRestartFields : (configReloadStatus.trigger || 'auto') }}</small>
+      </article>
     </section>
 
     <section class="runtime-grid">
       <section class="management-panel runtime-panel" data-section="overview">
         <header>
           <h2>{{ t('page.runtime.page.text.895180bcc2') }}</h2>
-          <button class="ghost-action" type="button" @click="reloadProviders">
-            <RotateCcw :size="14" />
-            {{ t('template.pages.runtimepage.13cb300646') }}
-          </button>
+          <StatusPill :status="configReloadStatusLabel" />
         </header>
         <dl class="detail-list">
           <dt>{{ t('page.runtime.page.text.1debc04086') }}</dt>
@@ -336,11 +353,19 @@ onMounted(refresh);
           <dd>{{ controlPlane.config_source || effectiveConfig.source || '-' }}</dd>
           <dt>{{ t('page.runtime.page.text.1b6d171a3f') }}</dt>
           <dd>{{ controlPlane.workspace_root || '-' }}</dd>
+          <dt>{{ t('config.reload.label') }}</dt>
+          <dd>{{ configReloadStatusLabel }} / {{ configReloadStatus.trigger || '-' }}</dd>
+          <dt>{{ t('config.reload.lastChecked') }}</dt>
+          <dd>{{ formatEpochMs(configReloadStatus.last_checked_at_ms) }}</dd>
+          <dt>{{ t('config.reload.lastApplied') }}</dt>
+          <dd>{{ formatEpochMs(configReloadStatus.last_applied_at_ms) }}</dd>
+          <dt>{{ t('config.reload.restartRequired') }}</dt>
+          <dd>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : t('config.reload.no') }}</dd>
         </dl>
         <RawPayload :title="t('page.runtime.page.title.bd73a88559')" :data="effectiveConfig" />
+        <RawPayload :title="t('config.reload.statusTitle')" :data="configReloadStatus" />
         <RawPayload :title="t('page.runtime.page.title.c86b8b732a')" :data="runtimeStatus" />
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.d71a6eb85e')" />
-        <RawPayload :title="t('page.runtime.page.title.c320bdf9a0')" :data="reloadResult || {}" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="overview">
@@ -432,6 +457,7 @@ onMounted(refresh);
           <h2>{{ t('page.runtime.page.text.f3558aafc0') }}</h2>
           <StatusPill :status="timeline.__offline ? 'offline' : 'ready'" />
         </header>
+        <TimelineList v-if="timelineListItems.length" :items="timelineListItems" />
         <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.16b97cb353')" :detail="t('page.runtime.page.detail.059281d68e')" />
       </section>

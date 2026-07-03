@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Brain, ChevronLeft, ChevronRight, CircleDot, Code2, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from './MarkdownBlock.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 import WorkspaceTree from './workspace/WorkspaceTree.vue';
 import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/workspacePreview';
@@ -93,26 +94,22 @@ async function stepPreview(delta: number) {
   }
 }
 
-function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && previewOpen.value) closePreview();
-}
-
 watch(() => store.selectedFile, (path) => {
   if (path) openPreview();
 });
+
+useEscapeKey(() => closePreview(), () => previewOpen.value);
 
 onMounted(() => {
   const savedWidth = Number(localStorage.getItem('cowd-webui-companion-width') || 0);
   if (savedWidth) applyCompanionWidth(savedWidth);
   window.addEventListener('mousemove', dragResize);
   window.addEventListener('mouseup', stopResize);
-  window.addEventListener('keydown', handleKeydown);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('mousemove', dragResize);
   window.removeEventListener('mouseup', stopResize);
-  window.removeEventListener('keydown', handleKeydown);
 });
 </script>
 

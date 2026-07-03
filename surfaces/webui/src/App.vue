@@ -85,6 +85,22 @@ const showCompanion = computed(() => {
 });
 const companionState = computed(() => showCompanion.value ? 'open' : (canToggleCompanion.value ? 'collapsed' : 'hidden'));
 const companionToggleLabel = computed(() => store.companionCollapsed ? t('app.companion.open') : t('app.companion.close'));
+const configReloadStatus = computed(() => store.configReloadStatus || {});
+const configReloadFields = computed(() => {
+  const fields = configReloadStatus.value?.restart_required?.fields;
+  return Array.isArray(fields) ? fields.filter(Boolean).join(', ') : '';
+});
+const configReloadNotice = computed(() => {
+  if (store.configReloadInvalid) {
+    const error = configReloadStatus.value?.last_error || configReloadStatus.value?.warnings?.[0] || t('config.reload.invalidFallback');
+    return t('config.reload.invalidNotice', { error });
+  }
+  if (store.configReloadNeedsRestart) {
+    return t('config.reload.restartNotice', { fields: configReloadFields.value || t('config.reload.noFields') });
+  }
+  return '';
+});
+const configReloadTone = computed(() => store.configReloadInvalid ? 'danger' : 'warn');
 
 function syncSectionVisibility() {
   const active = activeSection.value;
@@ -139,6 +155,10 @@ onBeforeUnmount(() => {
     <CapabilitySidebar v-else-if="!isSettingsRoute" />
 
     <main class="main-surface" :data-page="currentPage" :data-active-section="activeSection">
+      <div v-if="configReloadNotice" class="config-reload-banner" :data-tone="configReloadTone">
+        <strong>{{ store.configReloadInvalid ? t('config.reload.notApplied') : t('config.reload.needRestart') }}</strong>
+        <span>{{ configReloadNotice }}</span>
+      </div>
       <RouterView />
     </main>
 

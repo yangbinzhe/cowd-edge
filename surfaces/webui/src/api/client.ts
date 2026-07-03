@@ -459,7 +459,7 @@ export const api = {
   growthEvents: () => read('/api/growth/events', { events: [], promotions: [] }),
   providers: () => read('/api/config/providers', { providers: [], models: [] }),
   effectiveConfig: () => read('/api/runtime/config/effective', {}),
-  reloadProviders: () => write('/api/runtime/providers/reload', { method: 'POST' }),
+  configReloadStatus: () => read('/api/runtime/config/reload/status', {}),
   approvalConfig: () => read('/api/approval/config', {}),
   updateApprovalConfig: (config: Record<string, unknown>) => write('/api/approval/config', {
     method: 'PUT',

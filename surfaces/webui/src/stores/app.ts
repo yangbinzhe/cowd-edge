@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import { api, normalizeActivity, providerModels, type EndpointSnapshot } from '../api/client';
 import { t } from '../i18n';
 import type { ActivityEvent, ChatDisplayMode, ChatTurn, CompanionTab, NavId, RuntimeResourceUpload, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
-import { cleanAssistantContent } from '../utils/chatContent';
+import { cleanAssistantContent, collapseRepeatedText } from '../utils/chatContent';
 import {
   createWorkspaceRoot,
   findWorkspaceTreeNode,
@@ -82,8 +82,9 @@ function blockText(block: any): string {
 }
 
 function normalizeTurnContent(role: string, content: string) {
-  if (String(role || '').toLowerCase() === 'user') return content;
-  return cleanAssistantContent(content, (tool, outcome) => t(outcome === 'failed' ? 'chat.toolEvidence.failed' : 'chat.toolEvidence.inline', { tool }));
+  const normalized = String(content || '').replace(/\r\n/g, '\n');
+  if (String(role || '').toLowerCase() === 'user') return normalized;
+  return cleanAssistantContent(collapseRepeatedText(normalized), (tool, outcome) => t(outcome === 'failed' ? 'chat.toolEvidence.failed' : 'chat.toolEvidence.inline', { tool }));
 }
 
 function cleanRuntimeSummary(content: string) {
@@ -106,6 +107,18 @@ function sameAssistantFinal(a: string, b: string) {
   const left = comparableText(a);
   const right = comparableText(b);
   return !!left && left === right;
+}
+
+function sameTurnContent(a: ChatTurn | null | undefined, b: ChatTurn) {
+  if (!a || a.role !== b.role) return false;
+  const left = comparableText(a.content);
+  const right = comparableText(b.content);
+  return !!left && left === right;
+}
+
+function contentDedupeKey(turn: ChatTurn) {
+  const text = comparableText(turn.content).toLowerCase();
+  return text ? `${turn.role}:${text}` : '';
 }
 
 function turnStableKey(turn: ChatTurn) {
@@ -151,22 +164,21 @@ function sessionGroupLabel(session: SessionSummary) {
 function compactTime(session: SessionSummary) {
   const ms = updatedAtMs(session);
   if (!ms) return '-';
-  const delta = Date.now() - ms;
-  if (delta < 60_000) return t('session.time.justNow');
-  if (delta < 3_600_000) return t('session.time.minutesAgo', { count: Math.max(1, Math.round(delta / 60_000)) });
-  if (delta < 86_400_000) return t('session.time.hoursAgo', { count: Math.max(1, Math.round(delta / 3_600_000)) });
-  return new Date(ms).toLocaleDateString();
+  const date = new Date(ms);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 export const useAppStore = defineStore('app', () => {
   let sessionStream: EventSource | null = null;
   let sessionStreamId = '';
   let streamingAssistantId = '';
+  let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   const booted = ref(false);
   const health = ref<any>(null);
   const settings = ref<any>(null);
   const controlPlane = ref<any>(null);
   const providers = ref<any>(null);
+  const configReloadStatus = ref<any>({});
   const profiles = ref<any[]>([]);
   const commands = ref<any[]>([]);
   const commandHistory = ref<any[]>([]);
@@ -269,6 +281,12 @@ export const useAppStore = defineStore('app', () => {
     return models.length ? models : (selectedModel.value ? [selectedModel.value] : []);
   });
   const availableProfiles = computed(() => profiles.value.map((profile: any) => profile.id || profile.name).filter(Boolean));
+  const configReloadInvalid = computed(() => String(configReloadStatus.value?.status || '').toLowerCase() === 'invalid');
+  const configReloadNeedsRestart = computed(() => configReloadStatus.value?.restart_required?.required === true);
+  const configReloadAttention = computed(() => {
+    const status = String(configReloadStatus.value?.status || '').toLowerCase();
+    return configReloadInvalid.value || configReloadNeedsRestart.value || status === 'attention' || status === 'reload_needed';
+  });
   const toolCallCount = computed(() => {
     const timelineEvents = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
     const timelineCount = timelineEvents.filter((event: any) => String(event.kind || event.event_type || event.type || '').toLowerCase().includes('tool')).length;
@@ -450,21 +468,46 @@ export const useAppStore = defineStore('app', () => {
     };
   }
 
+  function rowContent(row: any) {
+    const direct = String(row?.content || '').trim();
+    if (direct) return direct;
+    const blockParts = (Array.isArray(row?.blocks) ? row.blocks : [])
+      .map(blockText)
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+      .filter((part, index, parts) => index === 0 || comparableText(part) !== comparableText(parts[index - 1]));
+    return blockParts.join('\n\n');
+  }
+
+  function rowActivity(row: any) {
+    const events = Array.isArray(row?.activity) ? row.activity : Array.isArray(row?.events) ? row.events : [];
+    return events.map((event: any) => sanitizeActivityEvent(normalizeTurnActivity(event)));
+  }
+
+  function rowTokenUsage(row: any) {
+    return row?.token_usage
+      || row?.usage
+      || row?.usage_metadata
+      || row?.stats?.token_usage
+      || row?.metrics?.token_usage
+      || undefined;
+  }
+
   function rowToTurn(row: any, index: number): ChatTurn {
     const role = row.role || 'assistant';
-    const content = row.content || (row.blocks || []).map(blockText).join('') || '';
+    const content = rowContent(row);
     return {
       id: String(row.id || row.sequence || index),
       role,
       content: normalizeTurnContent(role, content),
       status: 'complete',
-      activity: [],
+      activity: rowActivity(row),
       blocks: row.blocks || [],
       sequence: row.sequence,
       created_at_ms: row.created_at_ms,
       tool_use_id: row.tool_use_id,
       tool_name: row.tool_name,
-      token_usage: row.token_usage,
+      token_usage: rowTokenUsage(row),
     };
   }
 
@@ -472,16 +515,18 @@ export const useAppStore = defineStore('app', () => {
     const loaded = rows.map(rowToTurn);
     const merged: ChatTurn[] = [];
     const seen = new Set<string>();
+    const assistantContentSinceUser = new Set<string>();
     loaded.forEach((turn) => {
       const key = turnStableKey(turn);
       const previous = merged.at(-1);
       const duplicateStable = key && seen.has(key);
-      const duplicateAdjacentAssistant = previous
-        && previous.role === 'assistant'
-        && turn.role === 'assistant'
-        && sameAssistantFinal(previous.content, turn.content);
-      if (duplicateStable || duplicateAdjacentAssistant) return;
+      const duplicateAdjacent = sameTurnContent(previous, turn);
+      const contentKey = contentDedupeKey(turn);
+      const duplicateAssistantInSameReply = turn.role === 'assistant' && contentKey && assistantContentSinceUser.has(contentKey);
+      if (duplicateStable || duplicateAdjacent || duplicateAssistantInSameReply) return;
       if (key) seen.add(key);
+      if (turn.role === 'user') assistantContentSinceUser.clear();
+      if (turn.role === 'assistant' && contentKey) assistantContentSinceUser.add(contentKey);
       merged.push(turn);
     });
 
@@ -502,16 +547,60 @@ export const useAppStore = defineStore('app', () => {
     return Number.isFinite(number) && number > 0 ? number : 0;
   }
 
+  function tokenCountFrom(value: any) {
+    if (!value || typeof value !== 'object') return 0;
+    const direct = numberFrom(value.total_tokens)
+      || numberFrom(value.totalTokens)
+      || numberFrom(value.total)
+      || numberFrom(value.tokens_total)
+      || numberFrom(value.token_count)
+      || numberFrom(value.tokenCount)
+      || numberFrom(value.token_usage?.total_tokens)
+      || numberFrom(value.token_usage?.total)
+      || numberFrom(value.usage?.total_tokens)
+      || numberFrom(value.usage?.total)
+      || numberFrom(value.usage_metadata?.total_tokens)
+      || numberFrom(value.usage_metadata?.total);
+    if (direct) return direct;
+    const input = numberFrom(value.input_tokens)
+      || numberFrom(value.prompt_tokens)
+      || numberFrom(value.inputTokens)
+      || numberFrom(value.promptTokens)
+      || numberFrom(value.token_usage?.input_tokens)
+      || numberFrom(value.token_usage?.prompt_tokens)
+      || numberFrom(value.usage?.input_tokens)
+      || numberFrom(value.usage?.prompt_tokens)
+      || numberFrom(value.usage_metadata?.input_tokens)
+      || numberFrom(value.usage_metadata?.prompt_tokens);
+    const output = numberFrom(value.output_tokens)
+      || numberFrom(value.completion_tokens)
+      || numberFrom(value.outputTokens)
+      || numberFrom(value.completionTokens)
+      || numberFrom(value.token_usage?.output_tokens)
+      || numberFrom(value.token_usage?.completion_tokens)
+      || numberFrom(value.usage?.output_tokens)
+      || numberFrom(value.usage?.completion_tokens)
+      || numberFrom(value.usage_metadata?.output_tokens)
+      || numberFrom(value.usage_metadata?.completion_tokens);
+    return input + output;
+  }
+
   function findContextWindowIn(value: any, model = selectedModel.value): number {
     const candidateKeys = [
       'context_window',
       'contextWindow',
       'max_context_tokens',
       'maxContextTokens',
+      'context_limit',
+      'contextLimit',
       'context_length',
       'contextLength',
+      'model_context_window',
+      'modelContextWindow',
       'max_input_tokens',
       'maxInputTokens',
+      'max_tokens',
+      'maxTokens',
       'token_budget',
       'tokenBudget',
     ];
@@ -552,8 +641,14 @@ export const useAppStore = defineStore('app', () => {
   function resolveContextLimit(stats: any) {
     return numberFrom(stats.context_window)
       || numberFrom(stats.max_context_tokens)
+      || numberFrom(stats.context_limit)
       || numberFrom(stats.token_budget)
+      || numberFrom(stats.model_context_window)
       || numberFrom(stats.token_usage?.limit)
+      || numberFrom(stats.token_usage?.context_window)
+      || numberFrom(stats.usage?.limit)
+      || numberFrom(stats.usage?.context_window)
+      || findContextWindowIn(stats)
       || findContextWindowIn(controlPlane.value)
       || findContextWindowIn(providers.value)
       || findContextWindowIn(settings.value);
@@ -562,12 +657,13 @@ export const useAppStore = defineStore('app', () => {
   async function boot() {
     if (booted.value) return;
     busy.value = true;
-    const [manifest, sessionData, config, runtime, providerData, profileData, commandData, workspace, approvals] = await Promise.all([
+    const [manifest, sessionData, config, runtime, providerData, reloadStatus, profileData, commandData, workspace, approvals] = await Promise.all([
       api.health(),
       api.sessions(),
       api.settings(),
       api.runtimeControlPlane(),
       api.providers(),
+      api.configReloadStatus(),
       api.profiles(),
       api.commands(),
       api.workspace(),
@@ -577,6 +673,7 @@ export const useAppStore = defineStore('app', () => {
     settings.value = config;
     controlPlane.value = runtime;
     providers.value = providerData;
+    configReloadStatus.value = reloadStatus;
     profiles.value = profileData.profiles || [];
     commands.value = commandData.commands || [];
     approvalConfig.value = approvals;
@@ -596,6 +693,20 @@ export const useAppStore = defineStore('app', () => {
     ]);
     busy.value = false;
     booted.value = true;
+    startConfigReloadPolling();
+  }
+
+  function startConfigReloadPolling() {
+    if (typeof window === 'undefined' || configReloadTimer) return;
+    configReloadTimer = window.setInterval(() => {
+      refreshConfigReloadStatus().catch(() => undefined);
+    }, 5000);
+  }
+
+  async function refreshConfigReloadStatus() {
+    const status = await api.configReloadStatus();
+    configReloadStatus.value = status || {};
+    return configReloadStatus.value;
   }
 
   async function loadMessages(sessionId: string) {
@@ -621,7 +732,7 @@ export const useAppStore = defineStore('app', () => {
       return;
     }
     const stats: any = await api.sessionStats(sessionId);
-    const used = Number(stats.input_tokens || stats.output_tokens || stats.total_tokens || stats.token_usage?.total || 0);
+    const used = tokenCountFrom(stats);
     const limit = resolveContextLimit(stats);
     contextUsedTokens.value = Number.isFinite(used) && used > 0 ? used : 0;
     contextLimitTokens.value = limit;
@@ -996,14 +1107,33 @@ export const useAppStore = defineStore('app', () => {
   function appendAssistantDelta(delta: string) {
     if (!delta) return;
     const turn = ensureStreamingAssistantTurn();
-    turn.content += delta;
+    const incoming = String(delta || '');
+    const current = comparableText(turn.content);
+    const incomingComparable = comparableText(incoming);
+    if (current && incomingComparable.startsWith(current)) {
+      turn.content = normalizeTurnContent('assistant', incoming);
+    } else {
+      turn.content += incoming;
+    }
   }
 
   function completeAssistantTurn(content: string, status: 'complete' | 'error' = 'complete') {
     const visibleContent = normalizeTurnContent(status === 'error' ? 'system' : 'assistant', content);
     const turn = streamingAssistantId ? turns.value.find((item) => item.id === streamingAssistantId) : null;
     if (turn) {
-      if (visibleContent && turn.content !== visibleContent && !turn.content.endsWith(visibleContent)) turn.content = visibleContent;
+      const currentContent = normalizeTurnContent(turn.role, turn.content);
+      if (visibleContent && !sameAssistantFinal(currentContent, visibleContent)) {
+        const currentComparable = comparableText(currentContent);
+        const visibleComparable = comparableText(visibleContent);
+        turn.content = currentComparable
+          && visibleComparable
+          && currentComparable.length > visibleComparable.length
+          && currentComparable.includes(visibleComparable)
+          ? currentContent
+          : visibleContent;
+      } else if (currentContent) {
+        turn.content = currentContent;
+      }
       turn.status = status;
     } else if (visibleContent) {
       const alreadyShown = turns.value.some((item, index) => {
@@ -1498,11 +1628,20 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function reloadProviders() {
-    const result = await api.reloadProviders();
-    const [runtime, providerData] = await Promise.all([api.runtimeControlPlane(), api.providers()]);
+  async function refreshRuntimeConfigProjection() {
+    const [runtime, providerData, reloadStatus] = await Promise.all([
+      api.runtimeControlPlane(),
+      api.providers(),
+      api.configReloadStatus(),
+    ]);
     controlPlane.value = runtime;
     providers.value = providerData;
+    configReloadStatus.value = reloadStatus;
+    const result = {
+      kind: 'runtime_projection_refresh',
+      status: reloadStatus?.status || 'refreshed',
+      config_reload_status: reloadStatus,
+    };
     activity.value.unshift({ id: `providers-${Date.now()}`, kind: 'runtime', title: t('script.stores.app.title.8f89f14595'), detail: JSON.stringify(result).slice(0, 240), status: 'complete' });
     return result;
   }
@@ -1510,6 +1649,7 @@ export const useAppStore = defineStore('app', () => {
   async function saveDefaultModel(model: string) {
     settings.value = await api.saveConfig({ model });
     providers.value = await api.providers();
+    await refreshConfigReloadStatus();
     selectedModel.value = model;
     settingsSavedAt.value = new Date().toLocaleTimeString();
   }
@@ -1612,6 +1752,10 @@ export const useAppStore = defineStore('app', () => {
     settings,
     controlPlane,
     providers,
+    configReloadStatus,
+    configReloadInvalid,
+    configReloadNeedsRestart,
+    configReloadAttention,
     profiles,
     commands,
     commandHistory,
@@ -1742,7 +1886,8 @@ export const useAppStore = defineStore('app', () => {
     closeModal,
     chooseModel,
     chooseProfile,
-    reloadProviders,
+    refreshRuntimeConfigProjection,
+    refreshConfigReloadStatus,
     saveDefaultModel,
     refreshProfiles,
     createProfile,

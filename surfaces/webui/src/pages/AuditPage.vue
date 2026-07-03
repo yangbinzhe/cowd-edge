@@ -378,7 +378,7 @@ onMounted(refresh);
             <input v-model="timelineSurface" type="search" :placeholder="t('page.audit.placeholder.surfaceChannel')" />
           </label>
         </div>
-        <DataTable v-if="globalTimelineRows.length" :rows="globalTimelineRows" :columns="['source', 'session', 'agent', 'tool', 'evidence', 'approval', 'surface', 'status', 'timestamp', 'summary']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="globalTimelineRows.length" searchable copyable :rows="globalTimelineRows" :columns="['source', 'session', 'agent', 'tool', 'evidence', 'approval', 'surface', 'status', 'timestamp', 'summary']" row-key="evidence" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.audit.page.title.c8ee651d5f')" :detail="t('page.audit.page.detail.79d5d32b7b')" />
       </section>
 
@@ -405,7 +405,7 @@ onMounted(refresh);
             <input v-model.number="offset" type="number" min="0" @change="refresh" />
           </label>
         </div>
-        <DataTable v-if="auditRows.length" :rows="auditRows" :columns="['source', 'id', 'summary', 'timestamp']" @row-click="selectedDetail = { ...$event, source: 'audit', evidence: $event.id }" />
+        <DataTable v-if="auditRows.length" searchable copyable :rows="auditRows" :columns="['source', 'id', 'summary', 'timestamp']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'audit', evidence: $event.id }" />
         <EmptyState v-else :title="t('page.audit.page.title.534295d677')" :detail="t('page.audit.page.detail.6b368c2a44')" />
         <EvidenceTrace :items="auditEvidence" :title="t('page.audit.page.title.69b367b2b4')" />
       </section>
@@ -442,7 +442,7 @@ onMounted(refresh);
         </label>
         <ChartPanel v-if="releaseChart.length" :title="t('page.audit.page.title.e79ee7c0be')" kind="radar" :data="releaseChart" />
         <EmptyState v-else :title="t('page.audit.page.title.b7e0b61c96')" :detail="t('page.audit.page.detail.27b53763a7')" />
-        <DataTable v-if="releaseRows.length" :rows="releaseRows" :columns="['name', 'status', 'detail']" @row-click="selectedDetail = { ...$event, source: 'release', evidence: $event.name, summary: $event.detail }" />
+        <DataTable v-if="releaseRows.length" searchable copyable :rows="releaseRows" :columns="['name', 'status', 'detail']" row-key="name" @row-click="selectedDetail = { ...$event, source: 'release', evidence: $event.name, summary: $event.detail }" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="harness-eval">
@@ -464,7 +464,7 @@ onMounted(refresh);
           <dt>{{ t('page.audit.page.text.a61ad14bd4') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.tool_calls || 0 }}</dd>
         </dl>
-        <DataTable v-if="harnessEvalRows.length" :rows="harnessEvalRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'scenarios', 'elapsed_ms']" @row-click="openHarnessEvalReport" />
+        <DataTable v-if="harnessEvalRows.length" searchable copyable :rows="harnessEvalRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'scenarios', 'elapsed_ms']" row-key="id" @row-click="openHarnessEvalReport" />
         <EmptyState v-else :title="t('page.audit.page.title.6d80665780')" :detail="t('page.audit.page.detail.64a90473e7')" />
         <RequestReceipt v-if="evalActionResult" :receipt="evalActionResult" :title="t('page.audit.page.title.7e07abe625')" />
         <RawPayload v-if="evalReportDetail" :title="t('page.audit.page.title.052bb3b0c7')" :data="evalReportDetail" />
@@ -475,7 +475,7 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.4444545e37') }}</h2>
           <span>{{ formatCount('runs', harnessEvalRuns.length) }}</span>
         </header>
-        <DataTable v-if="harnessEvalRunRows.length" :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'report']" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
+        <DataTable v-if="harnessEvalRunRows.length" searchable copyable :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'report']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
         <EmptyState v-else :title="t('page.audit.page.title.2029dfea2e')" :detail="t('page.audit.page.detail.d6935f4575')" />
       </section>
 
@@ -484,7 +484,7 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.171edf1adf') }}</h2>
           <span>{{ formatCount('scenarios', harnessEvalScenarios.length) }}</span>
         </header>
-        <DataTable v-if="harnessEvalScenarioRows.length" :rows="harnessEvalScenarioRows" :columns="['id', 'kind', 'fake', 'real', 'evidence']" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, summary: $event.evidence }" />
+        <DataTable v-if="harnessEvalScenarioRows.length" searchable copyable :rows="harnessEvalScenarioRows" :columns="['id', 'kind', 'fake', 'real', 'evidence']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, summary: $event.evidence }" />
         <EmptyState v-else :title="t('page.audit.page.title.1d4e669193')" :detail="t('page.audit.page.detail.4976a6366c')" />
       </section>
 
@@ -493,7 +493,7 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.c9312c41ba') }}</h2>
           <span>{{ t('common.shownCount', { count: approvalRows.length, unit: t('unit.records') }) }}</span>
         </header>
-        <DataTable v-if="approvalRows.length" :rows="approvalRows" :columns="['id', 'command', 'decision', 'resolved']" @row-click="selectedDetail = { ...$event, source: 'approval', evidence: $event.id, status: $event.decision, summary: $event.command }" />
+        <DataTable v-if="approvalRows.length" searchable copyable :rows="approvalRows" :columns="['id', 'command', 'decision', 'resolved']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'approval', evidence: $event.id, status: $event.decision, summary: $event.command }" />
         <EmptyState v-else :title="t('page.audit.page.title.292a2d77e6')" :detail="t('page.audit.page.detail.abb458c609')" />
       </section>
 
@@ -502,7 +502,7 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.02318ae2d0') }}</h2>
           <span>{{ formatCount('records', crossPlaneRows.length) }}</span>
         </header>
-        <DataTable v-if="crossPlaneRows.length" :rows="crossPlaneRows" :columns="['id', 'result', 'capability', 'summary']" @row-click="selectedDetail = { ...$event, source: 'cross-plane', evidence: $event.id, status: $event.result }" />
+        <DataTable v-if="crossPlaneRows.length" searchable copyable :rows="crossPlaneRows" :columns="['id', 'result', 'capability', 'summary']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'cross-plane', evidence: $event.id, status: $event.result }" />
         <EmptyState v-else :title="t('page.audit.page.title.8f881836e9')" :detail="t('page.audit.page.detail.bc95f49231')" />
       </section>
 
@@ -511,7 +511,7 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.4e1a860d2d') }}</h2>
           <span>{{ formatCount('receipts', executionRows.length) }}</span>
         </header>
-        <DataTable v-if="executionRows.length" :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" @row-click="selectedDetail = { ...$event, source: 'execution', evidence: $event.id }" />
+        <DataTable v-if="executionRows.length" searchable copyable :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'execution', evidence: $event.id }" />
         <EvidenceObjectDetail :title="t('page.audit.page.title.f699e4008c')" :evidence="selectedEvidence" @close="selectedDetail = null" />
         <RawPayload :title="t('page.audit.page.title.ad0dea9223')" :data="{ capabilities: state.capabilities, projection: state.projection, surfaces: state.surfaces }" />
       </section>

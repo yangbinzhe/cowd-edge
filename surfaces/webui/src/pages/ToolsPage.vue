@@ -343,7 +343,7 @@ onMounted(refresh);
           <h2>{{ t('page.tools.page.text.a4819572ae') }}</h2>
           <span>{{ formatCount('tools', tools.length) }}</span>
         </header>
-        <DataTable v-if="toolRows.length" searchable :rows="toolRows" :columns="['name', 'enabled', 'safety', 'cache', 'readonly', 'concurrency', 'tags']" />
+        <DataTable v-if="toolRows.length" searchable selectable copyable row-key="name" :rows="toolRows" :columns="['name', 'enabled', 'safety', 'cache', 'readonly', 'concurrency', 'tags']" />
         <EmptyState v-else :title="t('page.tools.page.title.3b32f8db00')" :detail="t('page.tools.page.detail.23ef32f1f0')" />
         <div class="button-row">
           <label class="field-line compact-field">
@@ -380,7 +380,7 @@ onMounted(refresh);
           {{ t('template.pages.toolspage.d1dcd42299') }}
           <textarea v-model="fanoutPrompt" rows="3" />
         </label>
-        <DataTable v-if="fanoutRows.length" :rows="fanoutRows" :columns="['tool', 'purpose', 'cache', 'risk']" />
+        <DataTable v-if="fanoutRows.length" searchable copyable :rows="fanoutRows" :columns="['tool', 'purpose', 'cache', 'risk']" />
         <label class="field-line">
           {{ t('template.pages.toolspage.92049fab60') }}
           <textarea v-model="batchCallsText" rows="6" />
@@ -433,7 +433,7 @@ onMounted(refresh);
           @dry-run="previewMutation"
           @live="applyMutation"
         />
-        <DataTable v-if="mutationPreviewRows.length" :rows="mutationPreviewRows" :columns="['path', 'status', 'expected_hash', 'changed']" />
+        <DataTable v-if="mutationPreviewRows.length" searchable copyable row-key="path" :rows="mutationPreviewRows" :columns="['path', 'status', 'expected_hash', 'changed']" />
         <RawPayload :title="t('page.tools.page.title.141f116987')" :data="expectedHashes" />
       </section>
 
@@ -486,7 +486,7 @@ onMounted(refresh);
           @dry-run="diffCheckpoint()"
           @live="restoreCheckpoint()"
         />
-        <DataTable v-if="checkpointRows.length" :rows="checkpointRows" :columns="['id', 'label', 'files', 'created']" />
+        <DataTable v-if="checkpointRows.length" searchable copyable row-key="id" :rows="checkpointRows" :columns="['id', 'label', 'files', 'created']" />
         <EmptyState v-else :title="t('page.tools.page.title.a19a3515e0')" :detail="t('page.tools.page.detail.f539f4ce24')" />
       </section>
 
@@ -495,7 +495,7 @@ onMounted(refresh);
           <h2>{{ t('page.tools.page.text.54a5a2e2a7') }}</h2>
           <span>{{ formatCount('metrics', cacheRows.length) }}</span>
         </header>
-        <DataTable v-if="cacheRows.length" :rows="cacheRows" :columns="['metric', 'value']" />
+        <DataTable v-if="cacheRows.length" searchable copyable row-key="metric" :rows="cacheRows" :columns="['metric', 'value']" />
         <EmptyState v-else :title="t('page.tools.page.title.d30324b46e')" :detail="t('page.tools.page.detail.5ad74f74b7')" />
       </section>
 
@@ -504,7 +504,7 @@ onMounted(refresh);
           <h2>{{ t('page.tools.page.text.237dfb0a3b') }}</h2>
           <span>{{ ledgerRows.length }} recent events</span>
         </header>
-        <DataTable v-if="ledgerRows.length" searchable :rows="ledgerRows" :columns="['seq', 'kind', 'status', 'tool', 'at']" />
+        <DataTable v-if="ledgerRows.length" searchable copyable row-key="seq" :rows="ledgerRows" :columns="['seq', 'kind', 'status', 'tool', 'at']" />
         <EmptyState v-else :title="t('page.tools.page.title.31c128d6c2')" :detail="t('page.tools.page.detail.ad2723c87a')" />
         <RequestReceipt :receipt="result" :title="t('page.tools.page.title.184f1d349a')" />
         <RawPayload :title="t('page.tools.page.title.d1d15f8e25')" :data="result || state.cache || {}" />
@@ -530,7 +530,7 @@ onMounted(refresh);
             {{ t('page.tools.action.runPreflight') }}
           </button>
         </div>
-        <DataTable v-if="commandRows.length" :rows="commandRows" :columns="['name', 'action', 'target', 'description']" />
+        <DataTable v-if="commandRows.length" searchable copyable row-key="name" :rows="commandRows" :columns="['name', 'action', 'target', 'description']" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="risk">
@@ -549,7 +549,7 @@ onMounted(refresh);
           <Play :size="15" />
           {{ t('template.pages.toolspage.91f6f78d5d') }}
         </button>
-        <DataTable v-if="historyRows.length" :rows="historyRows" :columns="['command', 'action', 'target', 'at']" />
+        <DataTable v-if="historyRows.length" searchable copyable :rows="historyRows" :columns="['command', 'action', 'target', 'at']" />
         <EmptyState v-else :title="t('page.tools.page.title.4390982ec3')" :detail="t('page.tools.page.detail.8ee3ea19f0')" />
       </section>
     </section>

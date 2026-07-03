@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, ref } from 'vue';
-import { Moon, Plus, RefreshCw, Shield, Sun, Trash2 } from 'lucide-vue-next';
+import { computed, ref, watch } from 'vue';
+import { Moon, Plus, Shield, Sun, Trash2 } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { api } from '../api/client';
 import { useI18n, type Locale } from '../i18n';
@@ -22,6 +22,9 @@ const settingsReceipt = ref<any>(null);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const lastSavedSection = ref('');
 const lastRestoredSection = ref('');
+const theme = ref(document.documentElement.dataset.theme || localStorage.getItem('cowd-theme') || 'dark');
+const draftLocale = ref<Locale>(locale.value);
+const approvalDraft = ref('');
 const origin = computed(() => location.origin);
 const accessModeLabels = {
   internal: 'settings.access.internal',
@@ -43,13 +46,13 @@ const settingsContext = computed(() => [
   { label: t('script.pages.settingspage.label.44ab85a252'), value: origin.value },
   { label: t('script.pages.settingspage.label.2f81a22de0'), value: accessMode.value, tone: accessModeCode.value === 'offline' ? 'warn' : 'success' },
   { label: t('script.pages.settingspage.label.87b7c08bae'), value: providerRows.value.length },
-  { label: t('script.pages.settingspage.label.68c2cc7f0c'), value: configuredModel.value || t('status.unknown') },
+  { label: t('config.reload.label'), value: store.configReloadStatus?.status || t('status.unknown'), tone: store.configReloadAttention ? 'warn' : 'success' },
 ]);
 const settingsSections = computed(() => [
   { id: 'ui', label: t('settings.nav.ui'), description: t('settings.nav.ui.desc'), status: theme.value },
   { id: 'providers', label: t('settings.nav.providers'), description: t('settings.nav.providers.desc'), status: providerRows.value.length ? formatCount('models', store.providers?.provider_model_count ?? store.controlPlane?.provider_model_count ?? 0) : t('status.missing') },
   { id: 'profile', label: t('settings.nav.profile'), description: t('settings.nav.profile.desc'), status: formatCount('profiles', store.profiles?.length || 0) },
-  { id: 'policy', label: t('settings.nav.policy'), description: t('settings.nav.policy.desc'), status: store.approvalConfig ? t('status.ready') : t('status.unknown') },
+  { id: 'policy', label: t('settings.nav.policy'), description: t('settings.nav.policy.desc'), status: approvalDraftError.value ? t('status.invalid') : store.approvalConfig ? t('status.ready') : t('status.unknown') },
   { id: 'gateway', label: t('settings.nav.gateway'), description: t('settings.nav.gateway.desc'), status: accessMode.value },
   { id: 'receipts', label: t('settings.nav.receipts'), description: t('settings.nav.receipts.desc'), status: settingsReceipt.value ? t('status.ready') : t('status.waiting') },
 ]);
@@ -102,27 +105,35 @@ const approvalPolicyContract = computed(() => ({
   affected_refs: ['approval.config'],
 }));
 
-const theme = computed({
-  get: () => document.documentElement.dataset.theme || 'dark',
-  set: (value: string) => {
-    document.documentElement.dataset.theme = value;
-    localStorage.setItem('cowd-theme', value);
+const uiLocale = computed({
+  get: () => draftLocale.value,
+  set: (value: Locale) => {
+    draftLocale.value = value;
   },
 });
 
-const uiLocale = computed({
-  get: () => locale.value,
-  set: (value: Locale) => setLocale(value),
+const savedApprovalJson = computed(() => JSON.stringify(store.approvalConfig || {}, null, 2));
+const approvalDraftError = computed(() => {
+  try {
+    JSON.parse(approvalDraft.value || '{}');
+    return '';
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
 });
-
-const approvalJson = computed({
-  get: () => JSON.stringify(store.approvalConfig || {}, null, 2),
-  set: () => undefined,
+const approvalDraftParsed = computed(() => {
+  try {
+    return JSON.parse(approvalDraft.value || '{}');
+  } catch {
+    return {};
+  }
 });
 const settingsSectionDirty = computed(() => {
   const section = activeSettingsSection.value;
+  if (section === 'ui') return theme.value !== (document.documentElement.dataset.theme || 'dark') || draftLocale.value !== locale.value;
   if (section === 'providers') return !!defaultModel.value && defaultModel.value !== configuredModel.value;
   if (section === 'profile') return !!profileName.value.trim();
+  if (section === 'policy') return approvalDraft.value.trim() !== savedApprovalJson.value.trim();
   if (section === 'gateway') return !!authResult.value;
   return false;
 });
@@ -161,6 +172,20 @@ function markSettingsRestored(section = activeSettingsSection.value) {
   lastRestoredSection.value = section;
   lastSavedSection.value = '';
 }
+
+watch(
+  () => store.approvalConfig,
+  (value) => {
+    approvalDraft.value = JSON.stringify(value || {}, null, 2);
+  },
+  { deep: true, immediate: true },
+);
+
+watch(locale, (value) => {
+  if (activeSettingsSection.value !== 'ui' || !settingsSectionDirty.value) {
+    draftLocale.value = value;
+  }
+});
 
 async function run(label: string, action: () => Promise<unknown>) {
   settingsError.value = '';
@@ -215,18 +240,13 @@ async function saveDefaultModelGoverned(payload: Record<string, unknown> = {}) {
       body: JSON.stringify({ model }),
     });
     defaultModel.value = model;
-    await store.reloadProviders();
+    await store.refreshRuntimeConfigProjection();
   });
-}
-
-async function saveApprovalFromText(event: Event) {
-  const value = (event.target as HTMLTextAreaElement).value;
-  await saveApprovalGoverned(JSON.parse(value));
 }
 
 async function previewApprovalGoverned(payload: Record<string, unknown> = {}) {
   try {
-    const nextConfig = Object.keys(payload).length ? payload : JSON.parse(approvalJson.value);
+    const nextConfig = Object.keys(payload).length ? payload : JSON.parse(approvalDraft.value || '{}');
     settingsReceipt.value = {
       ok: true,
       endpoint: '/api/approval/config',
@@ -249,21 +269,20 @@ async function previewApprovalGoverned(payload: Record<string, unknown> = {}) {
 
 async function saveApprovalGoverned(payload: Record<string, unknown> = {}) {
   await run('approval-save', async () => {
-    const nextConfig = Object.keys(payload).length ? payload : JSON.parse(approvalJson.value);
+    const nextConfig = Object.keys(payload).length ? payload : JSON.parse(approvalDraft.value || '{}');
     settingsReceipt.value = await api.writeReceipt('/api/approval/config', {
       method: 'PUT',
       body: JSON.stringify(nextConfig),
     });
     store.approvalConfig = settingsReceipt.value?.data || nextConfig;
+    approvalDraft.value = JSON.stringify(store.approvalConfig || nextConfig, null, 2);
   });
 }
 
-async function toggleSoloGoverned() {
-  await run('solo', async () => {
-    settingsReceipt.value = await api.writeReceipt('/api/approval/solo', { method: 'POST' });
-    store.approvalConfig = settingsReceipt.value?.data || store.approvalConfig || {};
-    store.settingsSavedAt = new Date().toLocaleTimeString();
-  });
+function updateSoloDraft(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked;
+  const nextConfig = { ...approvalDraftParsed.value, solo_mode: checked };
+  approvalDraft.value = JSON.stringify(nextConfig, null, 2);
 }
 
 async function switchProfile(profile: string) {
@@ -292,6 +311,9 @@ async function verifyAuth() {
 async function saveCurrentSettingsSection() {
   const section = activeSettingsSection.value;
   if (section === 'ui') {
+    document.documentElement.dataset.theme = theme.value;
+    localStorage.setItem('cowd-theme', theme.value);
+    setLocale(draftLocale.value);
     settingsReceipt.value = {
       ok: true,
       endpoint: 'localStorage:webui.ui',
@@ -315,6 +337,18 @@ async function saveCurrentSettingsSection() {
     return;
   }
   if (section === 'policy') {
+    if (approvalDraftError.value) {
+      settingsError.value = approvalDraftError.value;
+      settingsReceipt.value = {
+        ok: false,
+        endpoint: '/api/approval/config',
+        method: 'PUT',
+        status: 'invalid',
+        error: approvalDraftError.value,
+        retryable: false,
+      };
+      return;
+    }
     await saveApprovalGoverned();
     markSettingsSaved(section);
     return;
@@ -330,12 +364,13 @@ async function saveCurrentSettingsSection() {
 async function restoreCurrentSettingsSection() {
   const section = activeSettingsSection.value;
   if (section === 'ui') {
-    theme.value = localStorage.getItem('cowd-theme') || 'dark';
+    theme.value = document.documentElement.dataset.theme || localStorage.getItem('cowd-theme') || 'dark';
+    draftLocale.value = locale.value;
     markSettingsRestored(section);
     return;
   }
   if (section === 'providers') {
-    await store.reloadProviders();
+    await store.refreshRuntimeConfigProjection();
     defaultModel.value = '';
     markSettingsRestored(section);
     return;
@@ -348,6 +383,7 @@ async function restoreCurrentSettingsSection() {
   }
   if (section === 'policy') {
     store.approvalConfig = await api.approvalConfig();
+    approvalDraft.value = JSON.stringify(store.approvalConfig || {}, null, 2);
     markSettingsRestored(section);
     return;
   }
@@ -372,10 +408,6 @@ function selectSettingsSection(id: string) {
         <h1>{{ t('page.settings.page.text.f3692b8061') }}</h1>
         <p>{{ t('page.settings.page.text.95b0491db6') }}</p>
       </div>
-      <button class="primary-action" type="button" :disabled="busyAction === 'providers'" @click="run('providers', store.reloadProviders)">
-        <RefreshCw :size="15" />
-        {{ t('template.pages.settingspage.13cb300646') }}
-      </button>
     </header>
 
     <p v-if="settingsError" class="settings-alert">{{ settingsError }}</p>
@@ -440,6 +472,10 @@ function selectSettingsSection(id: string) {
           <dd>{{ providerRows.map((provider) => provider.name).join(', ') || t('status.unknown') }}</dd>
           <dt>{{ t('page.settings.page.text.26ab54433f') }}</dt>
           <dd>{{ store.providers?.provider_model_count ?? store.controlPlane?.provider_model_count ?? 0 }}</dd>
+          <dt>{{ t('config.reload.label') }}</dt>
+          <dd>{{ store.configReloadStatus?.status || '-' }} / {{ store.configReloadStatus?.trigger || 'auto' }}</dd>
+          <dt>{{ t('config.reload.restartRequired') }}</dt>
+          <dd>{{ store.configReloadStatus?.restart_required?.required ? (store.configReloadStatus?.restart_required?.fields || []).join(', ') : t('config.reload.no') }}</dd>
         </dl>
         <label>
           {{ t('template.pages.settingspage.5fbae11ede') }}
@@ -499,11 +535,13 @@ function selectSettingsSection(id: string) {
 
       <section v-else-if="activeSettingsSection === 'policy'" class="settings-section" data-section="policy">
         <h2>{{ t('page.settings.page.text.9f388e9984') }}</h2>
-        <label><input type="checkbox" :checked="!!store.approvalConfig?.solo_mode" @change="toggleSoloGoverned" />{{ t('page.settings.page.text.7c3716e92b') }}</label>
-        <textarea :value="approvalJson" spellcheck="false" @change="saveApprovalFromText" />
+        <label><input type="checkbox" :checked="!!approvalDraftParsed.solo_mode" @change="updateSoloDraft" />{{ t('page.settings.page.text.7c3716e92b') }}</label>
+        <p class="panel-note">{{ t('settings.policy.draftHelp') }}</p>
+        <textarea v-model="approvalDraft" spellcheck="false" :aria-invalid="!!approvalDraftError" />
+        <p v-if="approvalDraftError" class="field-error">{{ t('settings.policy.invalidJson', { error: approvalDraftError }) }}</p>
         <GovernedActionPanel
           :contract="approvalPolicyContract"
-          :payload="store.approvalConfig || {}"
+          :payload="approvalDraftParsed"
           :receipt="settingsReceipt"
           @plan="previewApprovalGoverned"
           @dry-run="previewApprovalGoverned"

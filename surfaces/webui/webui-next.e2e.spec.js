@@ -14,14 +14,15 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
   await expect(page.locator('.companion-tabs')).toContainText('Workspace');
   await expect(page.locator('.companion-tabs')).toContainText('Evidence');
   await expect(page.locator('.rail')).not.toContainText('Workspace');
-  await expect(page.locator('.run-panorama')).toBeVisible();
+  await expect(page.locator('.chat-workbench-links')).toBeVisible();
+  await expect(page.locator('.run-panorama')).toHaveCount(0);
   await expect(page.locator('.transcript')).toBeVisible();
   await expect(page.locator('.composer textarea')).toBeVisible();
   await expect(page.locator('.turn-role')).toHaveCount(0);
   await expect(page.locator('.status-strip')).toContainText(/unknown|local|offline|ready/);
   await expect(page.locator('.status-strip button')).not.toHaveText('');
   await page.locator('.mode-switch button').nth(1).click();
-  await expect(page.locator('.clean-counts')).toBeVisible();
+  await expect(page.locator('.composer-stats')).toBeVisible();
   await expect(page.locator('.run-panorama')).toHaveCount(0);
   await expect(page.locator('.companion-panel')).toHaveCount(0);
 });
@@ -64,11 +65,11 @@ test('runtime and context pages expose real workbench controls', async ({ page }
   await page.goto('/index.html#/runtime');
   await expect(page.getByRole('heading', { name: 'Runtime Control', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Control plane' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Reload providers' })).toBeVisible();
-  await page.locator('.section-row').filter({ hasText: 'Runs' }).click();
+  await expect(page.locator('[data-section="overview"]').first()).toContainText('Control plane');
+  await page.goto('/index.html#/runtime?section=runs');
   await expect(page.getByRole('heading', { name: 'Session lease' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Acquire' })).toBeVisible();
-  await page.locator('.section-row').filter({ hasText: 'Timeline' }).click();
+  await page.goto('/index.html#/runtime?section=timeline');
   await expect(page.getByRole('heading', { name: 'Runtime timeline' })).toBeVisible();
 
   await page.goto('/index.html#/context');
@@ -78,21 +79,26 @@ test('runtime and context pages expose real workbench controls', async ({ page }
   await page.locator('.section-row').filter({ hasText: 'Evidence' }).click();
   await expect(page.getByRole('heading', { name: 'Evidence resolve' })).toBeVisible();
   await page.locator('.section-row').filter({ hasText: 'History' }).click();
-  await expect(page.getByRole('heading', { name: 'Recommendation actions' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'History and raw envelope' })).toBeVisible();
 });
 
 test('memory page exposes memory and structured-data kernel controls', async ({ page }) => {
   await page.goto('/index.html#/memory');
   await expect(page.getByRole('heading', { name: 'Memory Graph', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Layer entries' })).toBeVisible();
+  await expect(page.locator('.memory-sections')).toBeVisible();
+  await page.goto('/index.html#/memory?section=recall');
   await expect(page.getByRole('heading', { name: 'Search, recall, packet' })).toBeVisible();
+  await page.goto('/index.html#/memory?section=layers');
   await expect(page.getByRole('button', { name: 'Register memory fact' })).toBeVisible();
+  await page.goto('/index.html#/memory?section=graph');
   await expect(page.getByRole('heading', { name: 'Structured memory graph' })).toBeVisible();
+  await page.goto('/index.html#/memory?section=maintenance');
   await expect(page.getByRole('heading', { name: 'Maintenance' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Scan candidates' })).toBeVisible();
+  await page.goto('/index.html#/memory?section=structured-core');
   await expect(page.getByRole('heading', { name: 'Structured data core' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Plan manufacturing ingest' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Scan candidates' })).toBeVisible();
-  await expect(page.locator('.memory-sections')).toBeVisible();
 });
 
 test('skills agents and tools pages expose lifecycle workbenches', async ({ page }) => {
@@ -146,6 +152,7 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
   await expect(page.getByRole('heading', { name: 'MFG Manufacturing Application' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'MFG operating load' })).toBeVisible();
   await expect(page.locator('.mfg-lanes')).toBeVisible();
+  await page.goto('/index.html#/apps/mfg?section=data-plane');
   await expect(page.locator('[data-section="data-plane"]')).toContainText('Data plane and source packs');
   await expect(page.getByRole('button', { name: 'Plan ingest' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Upsert source pack' })).toBeVisible();
@@ -191,6 +198,8 @@ test('settings page is reachable and theme control is usable', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.locator('.capability-sidebar')).toHaveCount(0);
   await page.getByRole('button', { name: 'Light' }).click();
+  await expect(page.locator('.settings-action-rail')).toContainText('pending changes');
+  await page.getByRole('button', { name: 'Save current section' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 

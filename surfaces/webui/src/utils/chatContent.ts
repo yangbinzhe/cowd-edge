@@ -1,5 +1,46 @@
 export type ToolNoticeFormatter = (toolName: string, outcome: 'completed' | 'failed') => string;
 
+function comparableText(value: string) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function collapseRepeatedParts(parts: string[], separator: string) {
+  const cleaned = parts.map((part) => part.trim()).filter(Boolean);
+  if (cleaned.length < 2) return '';
+  const comparable = cleaned.map(comparableText);
+  for (let unitSize = 1; unitSize <= Math.floor(cleaned.length / 2); unitSize += 1) {
+    if (cleaned.length % unitSize !== 0) continue;
+    const unit = comparable.slice(0, unitSize);
+    let repeated = true;
+    for (let index = unitSize; index < comparable.length; index += 1) {
+      if (comparable[index] !== unit[index % unitSize]) {
+        repeated = false;
+        break;
+      }
+    }
+    if (repeated) return cleaned.slice(0, unitSize).join(separator).trim();
+  }
+  return '';
+}
+
+export function collapseRepeatedText(content: string) {
+  const text = String(content || '').replace(/\r\n/g, '\n').trim();
+  if (!text) return text;
+  if (text.length >= 80) {
+    for (let copies = 2; copies <= 6; copies += 1) {
+      if (text.length % copies !== 0) continue;
+      const size = text.length / copies;
+      const chunk = text.slice(0, size);
+      if (chunk.trim() && chunk.repeat(copies) === text) return chunk.trim();
+    }
+  }
+  const paragraphCollapsed = collapseRepeatedParts(text.split(/\n{2,}/), '\n\n');
+  if (paragraphCollapsed) return paragraphCollapsed;
+  const lineCollapsed = collapseRepeatedParts(text.split('\n'), '\n');
+  if (lineCollapsed && comparableText(lineCollapsed).length >= 60) return lineCollapsed;
+  return text;
+}
+
 function skipJsonSummary(lines: string[], startIndex: number) {
   let index = startIndex;
   let depth = 0;
@@ -39,5 +80,5 @@ export function cleanAssistantContent(content: string, formatToolNotice: ToolNot
     output.push(line);
   }
 
-  return output.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return collapseRepeatedText(output.join('\n').replace(/\n{3,}/g, '\n\n'));
 }

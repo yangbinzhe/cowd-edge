@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Database, GitBranch, Network, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -12,9 +13,13 @@ import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.v
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
+import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 
+const route = useRoute();
+const router = useRouter();
+const store = useAppStore();
 const loading = ref(false);
 const error = ref('');
 const status = ref<any>({});
@@ -111,12 +116,12 @@ const memoryContext = computed(() => [
   { label: t('script.pages.memorypage.label.014bcd654c'), value: linkCount.value },
 ]);
 const memoryWorkflow = computed(() => [
-  { id: 'memory-layers', label: t('script.pages.memorypage.label.4343635cf2'), status: entries.value.length ? 'ready' : 'idle', count: entries.value.length },
-  { id: 'memory-recall', label: t('script.pages.memorypage.label.3f7e1fd914'), status: recallRows.value.length ? 'active' : 'idle', count: recallRows.value.length },
-  { id: 'memory-recall', label: t('script.pages.memorypage.label.83c6d723cb'), status: packet.value?.items?.length ? 'ready' : 'idle', description: query.value },
-  { id: 'memory-graph', label: t('script.pages.memorypage.label.c7fb317725'), status: entityRows.value.length ? 'ready' : 'idle', count: entityRows.value.length },
-  { id: 'memory-maintenance', label: t('script.pages.memorypage.label.94de303bbe'), status: candidateRows.value.length ? 'blocked' : 'ready', count: candidateRows.value.length },
-  { id: 'memory-structured', label: t('script.pages.memorypage.label.550ae25c2e'), status: structuredPlan.value ? 'active' : 'idle', description: factType.value },
+  { id: 'layers', label: t('script.pages.memorypage.label.4343635cf2'), status: entries.value.length ? 'ready' : 'idle', count: entries.value.length },
+  { id: 'recall', label: t('script.pages.memorypage.label.3f7e1fd914'), status: recallRows.value.length ? 'active' : 'idle', count: recallRows.value.length },
+  { id: 'recall', label: t('script.pages.memorypage.label.83c6d723cb'), status: packet.value?.items?.length ? 'ready' : 'idle', description: query.value },
+  { id: 'graph', label: t('script.pages.memorypage.label.c7fb317725'), status: entityRows.value.length ? 'ready' : 'idle', count: entityRows.value.length },
+  { id: 'maintenance', label: t('script.pages.memorypage.label.94de303bbe'), status: candidateRows.value.length ? 'blocked' : 'ready', count: candidateRows.value.length },
+  { id: 'structured-core', label: t('script.pages.memorypage.label.550ae25c2e'), status: structuredPlan.value ? 'active' : 'idle', description: factType.value },
 ]);
 const memoryEvidence = computed(() => [
   ...recallRows.value.slice(0, 4).map((row: any) => ({
@@ -300,6 +305,15 @@ function selectStructuredRow(row: Record<string, unknown>) {
   selectedDetail.value = (row.raw as Record<string, unknown> | undefined) || row;
 }
 
+async function selectMemorySection(sectionId: string) {
+  store.selectSection('memory', sectionId);
+  await router.replace({ query: { ...route.query, section: sectionId } });
+  requestAnimationFrame(() => {
+    const target = document.querySelector<HTMLElement>(`[data-section="${sectionId}"]`);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
 onMounted(refresh);
 </script>
 
@@ -343,15 +357,15 @@ onMounted(refresh);
 
     <section class="memory-workbench">
       <nav class="memory-sections" :aria-label="t('page.memory.page.aria-label.6f075355c0')">
-        <a href="#memory-layers"><Database :size="15" />{{ t('page.memory.page.text.da827dc4ae') }}</a>
-        <a href="#memory-recall"><Search :size="15" />{{ t('page.memory.page.text.58e722778f') }}</a>
-        <a href="#memory-graph"><GitBranch :size="15" />{{ t('page.memory.page.text.c676fc9eca') }}</a>
-        <a href="#memory-maintenance"><ShieldCheck :size="15" />{{ t('page.memory.page.text.44500c4e90') }}</a>
-        <a href="#structured-core"><Network :size="15" />{{ t('page.memory.page.text.23d5f43eb0') }}</a>
+        <button type="button" @click="selectMemorySection('layers')"><Database :size="15" />{{ t('page.memory.page.text.da827dc4ae') }}</button>
+        <button type="button" @click="selectMemorySection('recall')"><Search :size="15" />{{ t('page.memory.page.text.58e722778f') }}</button>
+        <button type="button" @click="selectMemorySection('graph')"><GitBranch :size="15" />{{ t('page.memory.page.text.c676fc9eca') }}</button>
+        <button type="button" @click="selectMemorySection('maintenance')"><ShieldCheck :size="15" />{{ t('page.memory.page.text.44500c4e90') }}</button>
+        <button type="button" @click="selectMemorySection('structured-core')"><Network :size="15" />{{ t('page.memory.page.text.23d5f43eb0') }}</button>
       </nav>
 
       <main class="memory-main">
-        <section id="memory-layers" class="management-panel memory-panel wide">
+        <section id="memory-layers" class="management-panel memory-panel wide" data-section="layers">
           <header>
             <h2>{{ t('page.memory.page.text.59a9b03328') }}</h2>
             <span>{{ formatCount('entries', entries.length) }}</span>
@@ -424,7 +438,7 @@ onMounted(refresh);
           </div>
         </section>
 
-        <section id="memory-recall" class="management-panel memory-panel">
+        <section id="memory-recall" class="management-panel memory-panel" data-section="recall">
           <header>
             <h2>{{ t('page.memory.page.text.74f1596f5e') }}</h2>
             <span>{{ formatCount('matches', recallExplain.total || 0) }}</span>
@@ -436,13 +450,13 @@ onMounted(refresh);
           <div class="button-row">
             <button class="primary-action" type="button" @click="runRecall">{{ t('page.memory.page.text.215fe6c40a') }}</button>
           </div>
-          <DataTable v-if="recallRows.length" :rows="recallRows" :columns="['title', 'layer', 'priority', 'score', 'snippet']" @row-click="selectedDetail = $event" />
+          <DataTable v-if="recallRows.length" searchable copyable :rows="recallRows" :columns="['title', 'layer', 'priority', 'score', 'snippet']" @row-click="selectedDetail = $event" />
           <EmptyState v-else :title="t('page.memory.page.title.7ba084d974')" :detail="t('page.memory.page.detail.31896020e4')" />
-          <DataTable v-if="packetRows.length" :rows="packetRows" :columns="['id', 'kind', 'source', 'score', 'summary']" @row-click="selectedDetail = $event" />
+          <DataTable v-if="packetRows.length" searchable copyable :rows="packetRows" :columns="['id', 'kind', 'source', 'score', 'summary']" @row-click="selectedDetail = $event" />
           <RawPayload :title="t('page.memory.page.title.7ea35b5ba8')" :data="packet" />
         </section>
 
-        <section id="memory-graph" class="management-panel memory-panel">
+        <section id="memory-graph" class="management-panel memory-panel" data-section="graph">
           <header>
             <h2>{{ t('page.memory.page.text.8af20392f9') }}</h2>
             <span>{{ t('common.shownCount', { count: entityRows.length, unit: t('unit.entities') }) }}</span>
@@ -450,12 +464,12 @@ onMounted(refresh);
           <div class="memory-tabs">
             <article>
               <h3>{{ t('page.memory.page.text.4629e42c4f') }}</h3>
-              <DataTable v-if="entityRows.length" :rows="entityRows" @row-click="selectedDetail = $event" />
+              <DataTable v-if="entityRows.length" searchable copyable :rows="entityRows" @row-click="selectedDetail = $event" />
               <EmptyState v-else :title="t('page.memory.page.title.f0919ea2dd')" :detail="t('page.memory.page.detail.86d9c1fa2d')" />
             </article>
             <article>
               <h3>{{ t('page.memory.page.text.bab3ecc1cb') }}</h3>
-              <DataTable v-if="tripleRows.length" :rows="tripleRows" @row-click="selectedDetail = $event" />
+              <DataTable v-if="tripleRows.length" searchable copyable :rows="tripleRows" @row-click="selectedDetail = $event" />
               <EmptyState v-else :title="t('page.memory.page.title.88ac34d434')" :detail="t('page.memory.page.detail.ad98015f0b')" />
             </article>
           </div>
@@ -463,12 +477,12 @@ onMounted(refresh);
             {{ t('template.pages.memorypage.55b9f253bb') }}
             <input v-model="symbolQuery" type="text" @keyup.enter="runRecall" />
           </label>
-          <DataTable v-if="symbolRows.length" :rows="symbolRows" :columns="['symbol', 'target', 'kind', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
+          <DataTable v-if="symbolRows.length" searchable copyable :rows="symbolRows" :columns="['symbol', 'target', 'kind', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
           <RawPayload :title="t('page.memory.page.title.4cf0ff71ef')" :data="symbolLinks" />
           <RawPayload :title="t('page.memory.page.title.c2bbd9a5f2')" :data="{ clusters, runtime, links }" />
         </section>
 
-        <section id="memory-maintenance" class="management-panel memory-panel">
+        <section id="memory-maintenance" class="management-panel memory-panel" data-section="maintenance">
           <header>
             <h2>{{ t('page.memory.page.text.44500c4e90') }}</h2>
             <span>{{ formatCount('candidates', candidateRows.length) }}</span>
@@ -482,8 +496,8 @@ onMounted(refresh);
                 <p>{{ candidate.summary || candidate.description || summarize(candidate) }}</p>
               </div>
               <div class="button-row" v-if="candidate.id">
-                <button class="ghost-action" type="button" @click="markCandidate(candidate.id, 'acknowledged')">{{ t('page.memory.page.text.85c8084579') }}</button>
-                <button class="ghost-action" type="button" @click="markCandidate(candidate.id, 'dismissed')">{{ t('page.memory.page.text.13dc973ada') }}</button>
+                <button class="ghost-action" type="button" @click.stop="markCandidate(candidate.id, 'acknowledged')">{{ t('page.memory.page.text.85c8084579') }}</button>
+                <button class="ghost-action" type="button" @click.stop="markCandidate(candidate.id, 'dismissed')">{{ t('page.memory.page.text.13dc973ada') }}</button>
               </div>
             </article>
           </div>
@@ -492,7 +506,7 @@ onMounted(refresh);
           <RawPayload :title="t('page.memory.page.title.695f0468d1')" :data="performance" />
         </section>
 
-        <section id="structured-core" class="management-panel memory-panel wide">
+        <section id="structured-core" class="management-panel memory-panel wide" data-section="structured-core">
           <header>
             <h2>{{ t('page.memory.page.text.e198d8cb55') }}</h2>
             <span>{{ t('page.memory.page.text.00b20a67e4') }}</span>
@@ -510,7 +524,7 @@ onMounted(refresh);
           </div>
           <button class="primary-action" type="button" @click="planStructuredIngest">{{ t('page.memory.page.text.2ca6e733a6') }}</button>
           <RequestReceipt :receipt="structuredPlan" :title="t('page.memory.page.title.d8382cb203')" />
-          <DataTable v-if="structuredRows.length" :rows="structuredRows" :columns="['id', 'kind', 'status', 'owner', 'summary']" @row-click="selectStructuredRow" />
+          <DataTable v-if="structuredRows.length" searchable copyable :rows="structuredRows" :columns="['id', 'kind', 'status', 'owner', 'summary']" @row-click="selectStructuredRow" />
           <RawPayload :title="t('page.memory.page.title.e9ed3b1dc2')" :data="structured" />
           <RawPayload :title="t('page.memory.page.title.5d5e81382a')" :data="structuredPlan || {}" />
         </section>

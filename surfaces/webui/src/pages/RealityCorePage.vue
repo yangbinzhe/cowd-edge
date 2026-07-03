@@ -9,6 +9,7 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import RawPayload from '../components/workbench/RawPayload.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
+import TimelineList from '../components/workbench/TimelineList.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
@@ -191,6 +192,12 @@ const evidenceRows = computed(() => {
     })
     .slice(0, 120);
 });
+const factFlowTimeline = computed(() => factFlowRows.value.map((row: any, index: number) => ({
+  id: `${row.kind}-${index}`,
+  title: row.kind,
+  status: row.status,
+  detail: `${row.decision} · ${row.target} · ${row.summary}`,
+})));
 const selectedEvidence = computed<EvidenceObject | null>(() => {
   const row: any = selectedDetail.value;
   if (!row) return null;
@@ -349,6 +356,7 @@ onMounted(() => {
           <h2>{{ t('page.reality.core.page.text.608ba31424') }}</h2>
           <span>{{ flow.source || 'growth.promotions' }}</span>
         </header>
+        <TimelineList v-if="factFlowTimeline.length" :items="factFlowTimeline" />
         <DataTable v-if="factFlowRows.length" :rows="factFlowRows" :columns="['kind', 'status', 'decision', 'target', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.reality.core.page.title.615c073377')" :detail="t('page.reality.core.page.detail.2d3cb4ec7e')" />
       </section>

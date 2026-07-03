@@ -1,16 +1,57 @@
 <script setup lang="ts">
 import { t } from '../i18n';
-import { Copy, GitBranch, Pin, Plus, Radio, Search, X } from 'lucide-vue-next';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { Plus, Radio, Search } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
+const SIDEBAR_WIDTH_KEY = 'cowd.webui.sessionSidebarWidth';
+const MIN_SIDEBAR_WIDTH = 220;
+const MAX_SIDEBAR_WIDTH = 420;
+const DEFAULT_SIDEBAR_WIDTH = 280;
+const sidebarWidth = ref(DEFAULT_SIDEBAR_WIDTH);
+let resizeMove: ((event: PointerEvent) => void) | null = null;
+let resizeEnd: (() => void) | null = null;
 
 async function searchSessions() {
   await store.refreshSessions();
 }
 
-async function copySession(sessionId: string) {
-  await navigator.clipboard?.writeText(sessionId);
+function clampSidebarWidth(width: number) {
+  return Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Math.round(width)));
+}
+
+function applySidebarWidth(width: number) {
+  const next = clampSidebarWidth(width);
+  sidebarWidth.value = next;
+  if (typeof document !== 'undefined') {
+    document.documentElement.style.setProperty('--session-sidebar-width', `${next}px`);
+  }
+}
+
+function persistSidebarWidth() {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth.value));
+}
+
+function startResize(event: PointerEvent) {
+  event.preventDefault();
+  const startX = event.clientX;
+  const startWidth = sidebarWidth.value;
+  resizeMove = (moveEvent: PointerEvent) => {
+    applySidebarWidth(startWidth + moveEvent.clientX - startX);
+  };
+  resizeEnd = () => {
+    if (resizeMove) window.removeEventListener('pointermove', resizeMove);
+    if (resizeEnd) window.removeEventListener('pointerup', resizeEnd);
+    document.body.classList.remove('resizing-session-sidebar');
+    persistSidebarWidth();
+    resizeMove = null;
+    resizeEnd = null;
+  };
+  document.body.classList.add('resizing-session-sidebar');
+  window.addEventListener('pointermove', resizeMove);
+  window.addEventListener('pointerup', resizeEnd, { once: true });
 }
 
 async function onScroll(event: Event) {
@@ -20,10 +61,22 @@ async function onScroll(event: Event) {
     else await store.loadMoreSessions();
   }
 }
+
+onMounted(() => {
+  const stored = typeof localStorage !== 'undefined' ? Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)) : 0;
+  applySidebarWidth(Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_SIDEBAR_WIDTH);
+});
+
+onBeforeUnmount(() => {
+  if (resizeMove) window.removeEventListener('pointermove', resizeMove);
+  if (resizeEnd) window.removeEventListener('pointerup', resizeEnd);
+  if (typeof document !== 'undefined') document.body.classList.remove('resizing-session-sidebar');
+});
 </script>
 
 <template>
   <aside class="session-sidebar">
+    <button class="session-sidebar-resizer" type="button" :aria-label="t('session.sidebar.resize')" @pointerdown="startResize" />
     <header class="sidebar-head">
       <button class="primary-action" type="button" @click="store.createSession">
         <Plus :size="16" />
@@ -33,49 +86,34 @@ async function onScroll(event: Event) {
         <Search :size="15" />
         <input v-model="store.sessionQuery" type="search" :placeholder="t('component.session.sidebar.placeholder.e7ed08a804')" @input="searchSessions" />
       </label>
-      <div v-if="store.selectedSessionIds.length" class="session-bulk-bar">
-        <span>{{ t('session.bulk.selected', { count: store.selectedSessionIds.length }) }}</span>
-        <button class="icon-action danger" type="button" :aria-label="t('session.bulk.delete')" @click="store.deleteSelectedSessions"><X :size="14" /></button>
-        <button class="icon-action" type="button" :aria-label="t('session.bulk.clear')" @click="store.clearSessionSelection"><X :size="14" /></button>
-      </div>
     </header>
 
     <div class="session-list" :aria-label="t('component.session.sidebar.aria-label.d05d37d8a1')" @scroll="onScroll">
       <section v-for="group in store.groupedSessions" :key="group.label" class="session-group">
         <header>{{ group.label }}</header>
-        <article
+        <button
           v-for="session in group.items"
           :key="session.id"
           class="session-row"
-          :class="{ active: session.id === store.activeSessionId, selected: store.selectedSessionIds.includes(session.id) }"
+          :class="{ active: session.id === store.activeSessionId }"
+          type="button"
+          @click="store.loadMessages(session.id)"
         >
-          <input
-            type="checkbox"
-            :checked="store.selectedSessionIds.includes(session.id)"
-            :aria-label="t('session.select')"
-            @change="store.toggleSessionSelected(session.id)"
-          />
-          <button type="button" class="session-open" @click="store.loadMessages(session.id)">
+          <span class="session-row-top">
             <span class="session-title">
               <Radio v-if="store.isSessionRunning(session)" :size="11" />
               <i v-else-if="store.isSessionUnread(session)" class="session-unread-dot"></i>
               {{ store.sessionTitle(session) }}
             </span>
-            <span class="session-meta">{{ store.compactTime(session) }} · {{ store.sessionSnippet(session) || session.id }}</span>
-            <span class="session-badges">
-              <small v-if="store.isSessionPinned(session)">{{ t('session.badge.pinned') }}</small>
-              <small v-if="store.isSessionRunning(session)">{{ t('session.badge.running') }}</small>
-              <small v-else-if="store.isSessionUnread(session)">{{ t('session.badge.unread') }}</small>
-              <small v-if="session.parent_session_id || session.branch_count">{{ t('session.badge.branch') }}</small>
-            </span>
-          </button>
-          <span class="session-actions">
-            <button class="icon-action" type="button" :title="store.isSessionPinned(session) ? t('session.unpin') : t('session.pin')" @click="store.toggleSessionPin(session.id)"><Pin :size="13" /></button>
-            <button class="icon-action" type="button" :title="t('session.copyId')" @click="copySession(session.id)"><Copy :size="13" /></button>
-            <button class="icon-action" type="button" :title="t('session.branch')" @click="store.branchSession(session.id)"><GitBranch :size="13" /></button>
-            <button class="icon-action danger" type="button" :title="t('component.session.sidebar.title.2d9ee31bda')" @click="store.deleteSession(session.id)"><X :size="13" /></button>
+            <time class="session-row-time">{{ store.compactTime(session) }}</time>
           </span>
-        </article>
+          <span v-if="store.isSessionPinned(session) || store.isSessionRunning(session) || store.isSessionUnread(session) || session.parent_session_id || session.branch_count" class="session-state-line">
+            <small v-if="store.isSessionPinned(session)">{{ t('session.badge.pinned') }}</small>
+            <small v-if="store.isSessionRunning(session)">{{ t('session.badge.running') }}</small>
+            <small v-else-if="store.isSessionUnread(session)">{{ t('session.badge.unread') }}</small>
+            <small v-if="session.parent_session_id || session.branch_count">{{ t('session.badge.branch') }}</small>
+          </span>
+        </button>
       </section>
       <button v-if="store.sessionRenderHasMore || store.sessionHasMore" class="ghost-action session-load-more" type="button" :disabled="store.sessionLoadingMore" @click="store.sessionRenderHasMore ? store.revealMoreSessions() : store.loadMoreSessions()">
         {{ store.sessionLoadingMore ? t('status.loading') : (store.sessionRenderHasMore ? t('session.renderMore') : t('session.loadMore')) }}

@@ -9,6 +9,7 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import StatusPill from '../components/workbench/StatusPill.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { displayStatus } from '../i18n/domain/status';
@@ -207,8 +208,8 @@ onMounted(refresh);
     <PrimaryContextBar :items="skillContext" density="compact" :max-visible="4" />
     <WorkflowStrip :steps="skillWorkflow" :title="t('page.skills.page.title.f6cccf3371')" density="compact" />
 
-    <section class="skills-console" data-section="catalog">
-      <aside class="skills-catalog">
+    <section class="skills-console">
+      <aside class="skills-catalog" data-section="catalog">
         <header class="skills-toolbar">
           <label class="search-field">
             <Search :size="15" />
@@ -324,13 +325,13 @@ onMounted(refresh);
           </article>
         </section>
 
-        <section class="management-panel">
+        <section class="management-panel" data-section="runs">
           <header>
             <h2>{{ t('page.skills.page.text.2ddf474cdf') }}</h2>
             <span>{{ formatCount('runs', runItems.length) }}</span>
           </header>
           <EvidenceTrace :items="skillEvidence" :title="t('page.skills.page.title.9c2c16a5fe')" />
-          <div class="run-list" data-section="runs">
+          <div class="run-list">
             <article
               v-for="run in runItems.slice(0, 20)"
               :key="run.run_id || run.skill_run_id || run.id"
@@ -348,6 +349,26 @@ onMounted(refresh);
           <RawPayload :title="t('page.skills.page.title.e903040881')" :data="runDetail || {}" />
           <RequestReceipt :receipt="actionResult || runDetail" :title="t('page.skills.page.title.dbff7b9cc4')" />
           <RawPayload :title="t('page.skills.page.title.cd28167d21')" :data="actionResult || { projection, runs }" />
+        </section>
+
+        <section class="management-panel" data-section="governance">
+          <header>
+            <h2>{{ t('script.data.capabilities.label.823619e079') }}</h2>
+            <StatusPill :status="skill.risk || skill.status || 'policy'" />
+          </header>
+          <dl class="detail-list">
+            <dt>{{ t('page.skills.page.text.6ec338f842') }}</dt>
+            <dd>{{ skill.name || '-' }}</dd>
+            <dt>{{ t('page.skills.page.text.64714a76ce') }}</dt>
+            <dd>{{ (skill.tools || []).join(', ') || '-' }}</dd>
+            <dt>{{ t('page.skills.page.text.0b401db7fc') }}</dt>
+            <dd>{{ skill.domain || '-' }}</dd>
+            <dt>{{ t('page.skills.page.text.943ec87bc7') }}</dt>
+            <dd>{{ displayStatus(skill.risk || 'policy') }}</dd>
+          </dl>
+          <EvidenceTrace :items="skillEvidence" :title="t('page.skills.page.title.9c2c16a5fe')" />
+          <RequestReceipt :receipt="actionResult || runDetail" :title="t('page.skills.page.title.dbff7b9cc4')" />
+          <RawPayload :title="t('page.skills.page.title.cd28167d21')" :data="{ projection, skill, actionResult }" />
         </section>
       </main>
     </section>

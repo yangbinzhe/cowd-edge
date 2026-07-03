@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Bot, Boxes, Brain, ChevronDown, CircleDot, FileText, Folder, Hash, Paperclip, RotateCcw, Search, Send, Square, Wrench, X, Zap } from 'lucide-vue-next';
+import { computed, nextTick, ref, watch } from 'vue';
+import { Bot, Boxes, Brain, ChevronDown, CircleDot, Folder, Hash, Paperclip, Search, Send, Square, Wrench, X, Zap } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import TurnEvidenceDrawer from '../components/workbench/TurnEvidenceDrawer.vue';
+import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
@@ -16,19 +16,11 @@ const inlineCommandIndex = ref(0);
 const contextUsage = computed(() => store.contextUsagePercent);
 const modelLabel = computed(() => store.selectedModel || 'Select model');
 const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
-const chatContext = computed(() => [
-  { label: t('script.pages.chatpage.label.cc11b3a28f'), value: store.contextUsageLabel, tone: contextUsage.value && contextUsage.value > 85 ? 'warn' : 'success' },
-  { label: t('script.pages.chatpage.label.4fa8cc860c'), value: String(store.toolCallCount) },
-  { label: t('script.pages.chatpage.label.89c8a2851d'), value: `${store.memoryRecallCount}/${store.memoryEvidenceCount}` },
-]);
-const cleanCounters = computed(() => [
+const composerStats = computed(() => [
   { label: t('page.chat.cleanCounters.tools'), value: store.toolCallCount },
   { label: t('page.chat.cleanCounters.memoryRecall'), value: store.memoryRecallCount },
   { label: t('page.chat.cleanCounters.memoryEvidence'), value: store.memoryEvidenceCount },
 ]);
-const runStatus = computed(() => store.currentRun?.status || 'idle');
-const runIdentity = computed(() => store.currentRun?.run_id || store.currentRun?.turn_id || store.activeSessionId || 'no active run');
-const visibleStages = computed(() => store.runStageSummary.filter((stage: any) => stage.status !== 'missing' || isPanorama.value));
 const filteredCommands = computed(() => {
   const query = commandQuery.value.trim().toLowerCase().replace(/^\//, '');
   if (!query) return store.commands;
@@ -43,12 +35,7 @@ const inlineCommandOptions = computed(() => {
   return rows.slice(0, 8);
 });
 
-function closeOnEscape(event: KeyboardEvent) {
-  if (event.key === 'Escape' && store.activeModal) store.closeModal();
-}
-
-onMounted(() => window.addEventListener('keydown', closeOnEscape));
-onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape));
+useEscapeKey(() => store.closeModal(), () => !!store.activeModal);
 
 watch(() => activeSlash.value?.query, () => {
   inlineCommandIndex.value = 0;
@@ -182,6 +169,31 @@ function turnActivityParts(turn: any) {
   ].filter((item) => item.value > 0);
 }
 
+function numberFrom(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function usageNumber(usage: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const direct = numberFrom(usage[key]);
+    if (direct) return direct;
+  }
+  return 0;
+}
+
+function turnUsageParts(turn: any) {
+  const usage = turn?.token_usage && typeof turn.token_usage === 'object' ? turn.token_usage as Record<string, unknown> : {};
+  const input = usageNumber(usage, ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokens']);
+  const output = usageNumber(usage, ['output_tokens', 'completion_tokens', 'outputTokens', 'completionTokens']);
+  const total = usageNumber(usage, ['total_tokens', 'totalTokens', 'total']) || input + output;
+  return [
+    { key: 'input', label: t('chat.turnUsage.input'), value: input },
+    { key: 'output', label: t('chat.turnUsage.output'), value: output },
+    { key: 'total', label: t('chat.turnUsage.total'), value: total },
+  ].filter((item) => item.value > 0);
+}
+
 async function chooseCommand(command: any) {
   const name = commandName(command);
   if (name === '/model') {
@@ -219,10 +231,6 @@ async function chooseCommand(command: any) {
         </div>
       </div>
     </header>
-    <PrimaryContextBar v-if="isPanorama" :items="chatContext" density="compact" :max-visible="4" />
-    <div v-else class="clean-counts" :aria-label="t('page.chat.page.aria-label.91fba48319')">
-      <span v-for="item in cleanCounters" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</span>
-    </div>
     <nav v-if="isPanorama" class="chat-workbench-links" :aria-label="t('page.chat.page.aria-label.d1fb2b96b2')">
       <RouterLink class="ghost-action" to="/runtime">{{ t('page.chat.page.text.6c7ae3cbf8') }}</RouterLink>
       <RouterLink class="ghost-action" to="/context">{{ t('page.chat.page.text.3b537364be') }}</RouterLink>
@@ -230,33 +238,6 @@ async function chooseCommand(command: any) {
       <RouterLink class="ghost-action" to="/tools">{{ t('page.chat.page.text.41354fa167') }}</RouterLink>
       <RouterLink class="ghost-action" to="/audit">{{ t('page.chat.page.text.e0cabf393b') }}</RouterLink>
     </nav>
-    <section v-if="isPanorama" class="run-panorama" :aria-label="t('page.chat.page.aria-label.62b09f4b3d')">
-      <div class="run-card primary">
-        <span>{{ t('page.chat.page.text.ae6ca51251') }}</span>
-        <strong>{{ displayStatus(runStatus) }}</strong>
-        <small>{{ runIdentity }}</small>
-      </div>
-      <div class="run-stage-grid">
-        <button
-          v-for="stage in visibleStages"
-          :key="stage.id"
-          class="stage-pill"
-          type="button"
-          :data-status="stage.status"
-          @click="stage.id === 'context' ? store.openCompanion('evidence') : store.openCompanion('activity')"
-        >
-          <CircleDot :size="13" />
-          <span>{{ stage.label }}</span>
-          <strong>{{ stage.count }}</strong>
-        </button>
-      </div>
-      <div class="run-actions">
-        <button class="ghost-action" type="button" @click="store.openCompanion('evidence')"><Brain :size="15" />{{ t('page.chat.page.text.848af509ba') }}</button>
-        <button class="ghost-action" type="button" @click="store.openCompanion('workspace')"><FileText :size="15" /> {{ t('component.companion.panel.text.727690de87') }} {{ store.currentRunFiles.length }}</button>
-        <button class="ghost-action" type="button" @click="store.retryLastUserTurn"><RotateCcw :size="15" />{{ t('page.chat.page.text.5699b59e33') }}</button>
-        <button class="danger-action" type="button" @click="stop"><Square :size="15" />{{ t('page.chat.page.text.2090c0732a') }}</button>
-      </div>
-    </section>
 
     <div class="transcript" :aria-label="t('page.chat.page.aria-label.e683294716')">
       <article v-for="turn in store.turns" :key="turn.id" class="turn" :data-role="turn.role">
@@ -268,7 +249,7 @@ async function chooseCommand(command: any) {
         </div>
         <MarkdownBlock :content="turn.content" />
         <section
-          v-if="isPanorama && turn.role === 'assistant' && store.turnActivitySummary(turn).total"
+          v-if="turn.role === 'assistant' && store.turnActivitySummary(turn).total"
           class="turn-activity"
           :data-open="store.isTurnActivityOpen(turn.id)"
         >
@@ -287,6 +268,9 @@ async function chooseCommand(command: any) {
               <p v-if="event.detail">{{ event.detail }}</p>
             </article>
           </div>
+        </section>
+        <section v-if="turnUsageParts(turn).length" class="turn-usage" :data-role="turn.role">
+          <small v-for="item in turnUsageParts(turn)" :key="item.key">{{ item.label }} {{ item.value.toLocaleString() }}</small>
         </section>
       </article>
     </div>
@@ -319,11 +303,16 @@ async function chooseCommand(command: any) {
       </div>
       <div class="composer-bar">
         <div class="composer-context">
+          <span class="composer-context-usage">
+            <span>{{ t('page.chat.context.usage', { value: store.contextUsageLabel }) }}</span>
+            <div class="context-meter"><i :style="{ width: `${contextUsage || 0}%` }" /></div>
+          </span>
+          <span class="composer-stats">
+            <small v-for="item in composerStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</small>
+          </span>
           <button type="button" class="composer-chip" @click="store.openModal('workspace')"><Folder :size="14" /> {{ store.workspaceDir || t('page.chat.page.inline.59c92a9169') }}</button>
           <button type="button" class="composer-chip" @click="store.openModal('model')"><Bot :size="14" /> {{ modelLabel }}</button>
           <button v-if="store.attachments.length" type="button" class="composer-chip" @click="store.openCompanion('workspace')"><Paperclip :size="14" /> {{ formatCount('sources', store.attachments.length) }}</button>
-          <span>{{ store.contextUsageLabel }}</span>
-          <div class="context-meter"><i :style="{ width: `${contextUsage || 0}%` }" /></div>
         </div>
         <div class="composer-actions">
           <button class="icon-action" type="button" :aria-label="t('component.companion.panel.text.727690de87')" @click="store.openCompanion('workspace')"><Paperclip :size="16" /></button>

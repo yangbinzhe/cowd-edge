@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "mysql",
   "name": "MySQL Source Connector",
-  "version": "0.9.438",
+  "version": "0.9.439",
   "kind": "source-connector",
   "entry": "./cowd-edge-mysql-source",
   "transport": "stdio-jsonl",

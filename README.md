@@ -2,7 +2,7 @@
 
 `cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.438`。
+当前版本：`0.9.439`。
 
 ## 1. 定位
 
@@ -107,7 +107,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.438",
+  "version": "0.9.439",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -123,7 +123,7 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.438",
+  "version": "0.9.439",
   "kind": "message-connector",
   "entry": "./cowd-edge-feishu-message",
   "transport": "stdio-jsonl",
@@ -149,7 +149,7 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.438",
+  "version": "0.9.439",
   "kind": "source-connector",
   "entry": "./cowd-edge-feishu-bitable-source",
   "transport": "stdio-jsonl",
@@ -170,7 +170,7 @@ Source connector：
 Gateway 与 sidecar 每行传输一个 JSON frame。生命周期帧在 Surface、Message Connector、Source Connector 之间复用：
 
 ```json
-{"type":"handshake","id":"req-1","protocol":"cowd.surface.v1","gateway_version":"0.9.438"}
+{"type":"handshake","id":"req-1","protocol":"cowd.surface.v1","gateway_version":"0.9.439"}
 {"type":"configure","id":"req-2","surface":"feishu","config":{}}
 {"type":"connect","id":"req-3","surface":"feishu"}
 {"type":"health","id":"req-4","surface":"feishu"}
