@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.419",
+  "version": "0.9.438",
   "kind": "web-surface",
   "entry": null,
   "transport": "stdio-jsonl",

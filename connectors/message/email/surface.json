@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "email",
   "name": "Email Message Connector",
-  "version": "0.9.419",
+  "version": "0.9.438",
   "kind": "message-connector",
   "entry": "./cowd-edge-email-message",
   "transport": "stdio-jsonl",
