@@ -1986,6 +1986,8 @@ export const enUS: MessageCatalog = {
   "settings.state.unsaved": "This section has pending changes",
   "settings.providers.contextWindow": "context {tokens}",
   "settings.providers.contextUnknown": "context unknown",
+  "settings.providers.protocolExplicit": "explicit",
+  "settings.providers.protocolAuto": "auto",
   "apiStateBanner.endpoint": "Endpoint: {endpoint}",
   "settings.nav.aria": "Settings sections",
   "settings.nav.ui": "Appearance and language",

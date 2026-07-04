@@ -156,10 +156,22 @@ function modelOptionContext(model: any) {
   return t('settings.providers.contextWindow', { tokens });
 }
 
+function providerProtocolLabel(item: any) {
+  return item?.effective_protocol || item?.protocol || t('status.unknown');
+}
+
+function providerProtocolSource(item: any) {
+  return item?.protocol_configured ? t('settings.providers.protocolExplicit') : t('settings.providers.protocolAuto');
+}
+
+function providerProtocolSummary(item: any) {
+  return `${providerProtocolLabel(item)} · ${providerProtocolSource(item)}`;
+}
+
 function modelOptionLabel(model: any) {
   const id = model.id || model.name;
   const provider = model.provider || t('status.unknown');
-  return `${id} · ${provider} · ${modelOptionContext(model)}`;
+  return `${id} · ${provider} · ${providerProtocolSummary(model)} · ${modelOptionContext(model)}`;
 }
 
 function markSettingsSaved(section = activeSettingsSection.value) {
@@ -498,7 +510,7 @@ function selectSettingsSection(id: string) {
           <article v-for="provider in providerRows" :key="provider.name" class="profile-row" role="button" tabindex="0" @click="selectedDetail = provider" @keydown.enter.prevent="selectedDetail = provider">
             <div>
               <strong>{{ provider.name }}</strong>
-              <span>{{ provider.protocol || 'openai-compat' }} · {{ formatCount('models', provider.model_count) }} · {{ t('settings.providers.credential') }} {{ provider.credential_present ? t('page.settings.page.inline.aaa6a21074') : t('page.settings.page.inline.c96aea5cbb') }}</span>
+              <span>{{ providerProtocolSummary(provider) }} · {{ formatCount('models', provider.model_count) }} · {{ t('settings.providers.credential') }} {{ provider.credential_present ? t('page.settings.page.inline.aaa6a21074') : t('page.settings.page.inline.c96aea5cbb') }}</span>
             </div>
           </article>
         </div>

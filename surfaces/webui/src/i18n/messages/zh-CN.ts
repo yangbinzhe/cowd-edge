@@ -1986,6 +1986,8 @@ export const zhCN: MessageCatalog = {
   "settings.state.unsaved": "当前分区存在待保存修改",
   "settings.providers.contextWindow": "上下文 {tokens}",
   "settings.providers.contextUnknown": "上下文未知",
+  "settings.providers.protocolExplicit": "显式",
+  "settings.providers.protocolAuto": "自动",
   "apiStateBanner.endpoint": "端点：{endpoint}",
   "settings.nav.aria": "设置分区",
   "settings.nav.ui": "外观与语言",
