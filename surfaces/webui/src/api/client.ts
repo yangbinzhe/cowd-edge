@@ -1,4 +1,12 @@
-import type { ActivityEvent, NavId, SessionSummary, WorkspaceFile } from '../types';
+import type {
+  ActivityEvent,
+  GatewayCapability,
+  GatewayCapabilityContract,
+  GatewayOpenAiTools,
+  NavId,
+  SessionSummary,
+  WorkspaceFile,
+} from '../types';
 
 export interface ApiOffline {
   __offline?: boolean;
@@ -190,6 +198,96 @@ async function endpoint(label: string, path: string, init: RequestInit = {}): Pr
   };
 }
 
+type CapabilityPageId = Exclude<NavId, 'chat' | 'settings'>;
+
+const pageContractDomains: Record<CapabilityPageId, string[]> = {
+  mission: ['mission', 'approval', 'task'],
+  runtime: ['runtime', 'growth', 'task', 'approval'],
+  context: ['context', 'session', 'session.message'],
+  reality: ['reality', 'matrix'],
+  memory: ['memory'],
+  skills: ['skill'],
+  agents: ['agent', 'task'],
+  tools: ['tool', 'slash'],
+  surfaces: ['surface', 'edge'],
+  gateway: ['connector', 'cross_plane', 'resource', 'public', 'profile'],
+  mfg: ['mfg', 'apps'],
+  audit: ['audit', 'harness_eval', 'approval', 'cross_plane'],
+};
+
+const pageContractPrefixes: Record<CapabilityPageId, string[]> = {
+  mission: ['/api/mission', '/api/approval', '/api/runtime/timeline', '/api/reality/flow'],
+  runtime: ['/api/runtime', '/api/growth', '/api/tasks', '/api/approval'],
+  context: ['/api/context', '/api/evidence', '/api/sessions'],
+  reality: ['/api/reality', '/api/matrix'],
+  memory: ['/api/memory', '/api/cowd/structured'],
+  skills: ['/api/skills'],
+  agents: ['/api/agents', '/api/tasks'],
+  tools: ['/api/tools', '/api/slash'],
+  surfaces: ['/api/surfaces', '/api/edges', '/api/cowd/surfaces'],
+  gateway: ['/api/gateway', '/api/connectors', '/api/cross-plane', '/api/platforms', '/api/channels', '/api/resources'],
+  mfg: ['/api/apps/mfg'],
+  audit: ['/api/audit', '/api/usage', '/api/harness-eval', '/api/approval/history', '/api/cross-plane/audit'],
+};
+
+function isGatewayContract(value: GatewayCapabilityContract | undefined | null): value is GatewayCapabilityContract {
+  return Boolean(value && !value.__offline && Array.isArray(value.capabilities) && value.capabilities.length);
+}
+
+function capabilityMatchesPage(capability: GatewayCapability, page: CapabilityPageId) {
+  const domains = pageContractDomains[page] || [];
+  const prefixes = pageContractPrefixes[page] || [];
+  const domain = capability.domain || '';
+  const path = capability.http?.path || '';
+  return domains.includes(domain) || prefixes.some((prefix) => path.startsWith(prefix));
+}
+
+function materializeCapabilityPath(capability: GatewayCapability, sessionId: string) {
+  const path = capability.http?.path || '';
+  if (!path.startsWith('/api/')) return '';
+  if (capability.http?.method !== 'GET') return '';
+  if (path.includes('*') || path.endsWith('/stream') || path.includes('/raw') || path.includes('/download')) return '';
+  const sid = encodeURIComponent(sessionId || 'api-context');
+  let unresolved = false;
+  const nextPath = path.replace(/:([A-Za-z0-9_]+)/g, (full, name) => {
+    const lowered = String(name || '').toLowerCase();
+    if (lowered.includes('session') || path.includes('/sessions/:') || path.includes('/memory/lifecycle/:')) return sid;
+    unresolved = true;
+    return full;
+  });
+  return unresolved ? '' : nextPath;
+}
+
+function capabilityPriority(capability: GatewayCapability) {
+  const criticality = capability.http?.criticality || '';
+  const risk = capability.risk || '';
+  if (criticality === 'p0') return 0;
+  if (criticality === 'p1') return 1;
+  if (risk === 'read') return 2;
+  return 3;
+}
+
+export function capabilityPageEndpointsFromContract(
+  contract: GatewayCapabilityContract | undefined | null,
+  page: CapabilityPageId,
+  sessionId: string,
+) {
+  if (!isGatewayContract(contract)) return [];
+  const seen = new Set<string>();
+  return contract.capabilities
+    .filter((capability) => capability.surface_visibility?.webui !== false)
+    .filter((capability) => capabilityMatchesPage(capability, page))
+    .map((capability) => ({
+      capability,
+      path: materializeCapabilityPath(capability, sessionId),
+    }))
+    .filter((item) => item.path && !seen.has(item.path) && seen.add(item.path))
+    .sort((a, b) => capabilityPriority(a.capability) - capabilityPriority(b.capability)
+      || a.path.localeCompare(b.path))
+    .slice(0, 24)
+    .map(({ capability, path }) => [capability.title || `${capability.http.method} ${path}`, path] as [string, string]);
+}
+
 const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: string) => {
   const sid = encodeURIComponent(sessionId || 'api-context');
   const routes: Record<Exclude<NavId, 'chat' | 'settings'>, Array<[string, string]>> = {
@@ -294,6 +392,32 @@ export const api = {
     kind: 'cowd.webui.manifest',
     status: 'offline',
     static_webui: 'local vite fallback',
+  }),
+  gatewayCapabilityContract: () => read<GatewayCapabilityContract>('/api/gateway/capability-contract', {
+    kind: 'gateway.capability_contract',
+    schema_version: 1,
+    owner: 'gateway',
+    source: 'offline',
+    route_count: 0,
+    capability_count: 0,
+    coverage: {
+      route_count: 0,
+      capability_count: 0,
+      p1_count: 0,
+      ai_visible_count: 0,
+      openapi_path_count: 0,
+      openai_tool_count: 0,
+      route_contract_parity: false,
+    },
+    capabilities: [],
+  }),
+  gatewayOpenApi: () => read('/api/gateway/openapi.json', { openapi: '3.1.0', paths: {} }),
+  gatewayOpenAiTools: () => read<GatewayOpenAiTools>('/api/gateway/openai-tools', {
+    kind: 'gateway.openai_tools',
+    schema_version: 1,
+    source: 'offline',
+    tool_count: 0,
+    tools: [],
   }),
   authVerify: () => read('/api/auth/verify', { authenticated: false, status: 'offline' }),
   sessions: (limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(`/api/sessions?limit=${limit}&offset=${offset}`, { sessions: [] }),
@@ -970,9 +1094,15 @@ export const api = {
     body: JSON.stringify({ profile }),
   }),
   deleteProfile: (id: string) => write(`/api/profiles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  loadCapabilityPage: async (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: string) => Promise.all(
-    pageEndpoints(page, sessionId).map(([label, path]) => endpoint(label, path)),
-  ),
+  loadCapabilityPage: async (
+    page: Exclude<NavId, 'chat' | 'settings'>,
+    sessionId: string,
+    contract?: GatewayCapabilityContract | null,
+  ) => {
+    const derivedEndpoints = capabilityPageEndpointsFromContract(contract, page, sessionId);
+    const routes = derivedEndpoints.length ? derivedEndpoints : pageEndpoints(page, sessionId);
+    return Promise.all(routes.map(([label, path]) => endpoint(label, path)));
+  },
   executeCapabilityAction: (path: string, body: Record<string, unknown> = {}) => write(path, {
     method: 'POST',
     body: JSON.stringify({ source: 'webui', ...body }),

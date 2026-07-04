@@ -2,7 +2,19 @@ import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
 import { api, normalizeActivity, providerModels, type EndpointSnapshot } from '../api/client';
 import { t } from '../i18n';
-import type { ActivityEvent, ChatDisplayMode, ChatTurn, CompanionTab, NavId, RuntimeResourceUpload, SessionAttachment, SessionSummary, WorkspaceFile } from '../types';
+import type {
+  ActivityEvent,
+  ChatDisplayMode,
+  ChatTurn,
+  CompanionTab,
+  GatewayCapabilityContract,
+  GatewayOpenAiTools,
+  NavId,
+  RuntimeResourceUpload,
+  SessionAttachment,
+  SessionSummary,
+  WorkspaceFile,
+} from '../types';
 import { cleanAssistantContent, collapseRepeatedText } from '../utils/chatContent';
 import {
   createWorkspaceRoot,
@@ -235,6 +247,10 @@ export const useAppStore = defineStore('app', () => {
   const sessionViewedCounts = ref<Record<string, number>>(readStoredRecord(VIEWED_SESSION_KEY));
   const sessionRenderLimit = ref(100);
   const actionResults = ref<Record<string, any>>({});
+  const gatewayCapabilityContract = ref<GatewayCapabilityContract | null>(null);
+  const gatewayOpenApi = ref<Record<string, any> | null>(null);
+  const gatewayOpenAiTools = ref<GatewayOpenAiTools | null>(null);
+  const gatewayContractError = ref('');
   const capabilitySnapshots = ref<Record<string, EndpointSnapshot[]>>({});
   const capabilityLoading = ref<Record<string, boolean>>({});
   const capabilityError = ref<Record<string, string>>({});
@@ -657,7 +673,21 @@ export const useAppStore = defineStore('app', () => {
   async function boot() {
     if (booted.value) return;
     busy.value = true;
-    const [manifest, sessionData, config, runtime, providerData, reloadStatus, profileData, commandData, workspace, approvals] = await Promise.all([
+    const [
+      manifest,
+      sessionData,
+      config,
+      runtime,
+      providerData,
+      reloadStatus,
+      profileData,
+      commandData,
+      workspace,
+      approvals,
+      capabilityContract,
+      openApi,
+      openAiTools,
+    ] = await Promise.all([
       api.health(),
       api.sessions(),
       api.settings(),
@@ -668,6 +698,9 @@ export const useAppStore = defineStore('app', () => {
       api.commands(),
       api.workspace(),
       api.approvalConfig(),
+      api.gatewayCapabilityContract(),
+      api.gatewayOpenApi(),
+      api.gatewayOpenAiTools(),
     ]);
     health.value = manifest;
     settings.value = config;
@@ -677,6 +710,10 @@ export const useAppStore = defineStore('app', () => {
     profiles.value = profileData.profiles || [];
     commands.value = commandData.commands || [];
     approvalConfig.value = approvals;
+    gatewayCapabilityContract.value = capabilityContract;
+    gatewayOpenApi.value = openApi;
+    gatewayOpenAiTools.value = openAiTools;
+    gatewayContractError.value = [capabilityContract.__error, openApi.__error, openAiTools.__error].filter(Boolean).join(' · ');
     const reportedModel = runtime.configured_model || config.model || '';
     selectedModel.value = reportedModel && reportedModel !== 'unknown' ? reportedModel : selectedModel.value;
     selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
@@ -1684,11 +1721,25 @@ export const useAppStore = defineStore('app', () => {
     return api.authVerify();
   }
 
+  async function refreshGatewayCapabilityContract() {
+    const [contract, openApi, openAiTools] = await Promise.all([
+      api.gatewayCapabilityContract(),
+      api.gatewayOpenApi(),
+      api.gatewayOpenAiTools(),
+    ]);
+    gatewayCapabilityContract.value = contract;
+    gatewayOpenApi.value = openApi;
+    gatewayOpenAiTools.value = openAiTools;
+    gatewayContractError.value = [contract.__error, openApi.__error, openAiTools.__error].filter(Boolean).join(' · ');
+    return { contract, openApi, openAiTools };
+  }
+
   async function loadCapability(page: Exclude<NavId, 'chat' | 'settings'>) {
     capabilityLoading.value = { ...capabilityLoading.value, [page]: true };
     capabilityError.value = { ...capabilityError.value, [page]: '' };
     try {
-      const snapshots = await api.loadCapabilityPage(page, activeSessionId.value);
+      if (!gatewayCapabilityContract.value) await refreshGatewayCapabilityContract();
+      const snapshots = await api.loadCapabilityPage(page, activeSessionId.value, gatewayCapabilityContract.value);
       capabilitySnapshots.value = { ...capabilitySnapshots.value, [page]: snapshots };
     } catch (error) {
       capabilityError.value = { ...capabilityError.value, [page]: error instanceof Error ? error.message : String(error) };
@@ -1818,6 +1869,10 @@ export const useAppStore = defineStore('app', () => {
     sessionRenderHasMore,
     openTurnActivity,
     actionResults,
+    gatewayCapabilityContract,
+    gatewayOpenApi,
+    gatewayOpenAiTools,
+    gatewayContractError,
     capabilitySnapshots,
     capabilityLoading,
     capabilityError,
@@ -1895,6 +1950,7 @@ export const useAppStore = defineStore('app', () => {
     saveApprovalConfig,
     toggleSolo,
     verifyAuth,
+    refreshGatewayCapabilityContract,
     loadCapability,
     refreshCommands,
     executeCommand,

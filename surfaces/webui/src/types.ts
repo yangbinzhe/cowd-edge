@@ -79,6 +79,91 @@ export interface SessionAttachment {
   status?: string;
 }
 
+export interface GatewayCapabilityHttp {
+  method: string;
+  path: string;
+  handler?: string;
+  source?: string;
+  stability?: string;
+  criticality?: string;
+}
+
+export interface GatewayCapabilityVisibility {
+  webui?: boolean;
+  tui?: boolean;
+  llm?: boolean;
+  edge?: boolean;
+}
+
+export interface GatewayCapabilityAiAffordance {
+  expose_as_tool?: boolean;
+  tool_name?: string | null;
+  when_to_use?: string;
+  cautions?: string[];
+}
+
+export interface GatewayCapability {
+  id: string;
+  domain: string;
+  title: string;
+  description?: string;
+  http: GatewayCapabilityHttp;
+  auth?: string;
+  risk?: string;
+  side_effects?: string[];
+  idempotency?: string;
+  streaming?: string;
+  surface_visibility?: GatewayCapabilityVisibility;
+  ai_affordance?: GatewayCapabilityAiAffordance;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  tests?: string[];
+}
+
+export interface GatewayCapabilityCoverage {
+  route_count: number;
+  capability_count: number;
+  p1_count: number;
+  ai_visible_count: number;
+  openapi_path_count: number;
+  openai_tool_count: number;
+  route_contract_parity: boolean;
+}
+
+export interface GatewayCapabilityContract {
+  kind: string;
+  schema_version: number;
+  owner: string;
+  source: string;
+  route_count: number;
+  capability_count: number;
+  coverage: GatewayCapabilityCoverage;
+  capabilities: GatewayCapability[];
+  __offline?: boolean;
+  __error?: string;
+}
+
+export interface GatewayOpenAiToolFunction {
+  name: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+}
+
+export interface GatewayOpenAiTool {
+  type: string;
+  function: GatewayOpenAiToolFunction;
+}
+
+export interface GatewayOpenAiTools {
+  kind?: string;
+  schema_version?: number;
+  source?: string;
+  tool_count?: number;
+  tools: GatewayOpenAiTool[];
+  __offline?: boolean;
+  __error?: string;
+}
+
 export interface RuntimeResourceEnvelope {
   id: string;
   uri: string;

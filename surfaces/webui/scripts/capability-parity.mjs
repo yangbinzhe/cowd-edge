@@ -147,6 +147,35 @@ const matrixMfgRoutes = [
   read(path.join(backendRoot, 'crates/cowd-cli/src/api_routes/matrix_mfg_routes.rs')),
 ].join('\n');
 const mfgContracts = read(path.join(webuiRoot, 'src/data/mfgWriteContracts.json'));
+const contractConsumptionSources = {
+  client: read(path.join(webuiRoot, 'src/api/client.ts')),
+  store: read(path.join(webuiRoot, 'src/stores/app.ts')),
+  sidebar: read(path.join(webuiRoot, 'src/components/CapabilitySidebar.vue')),
+  gatewayPage: read(path.join(webuiRoot, 'src/pages/GatewayPage.vue')),
+  tests: read(path.join(webuiRoot, 'src/app.test.ts')),
+};
+
+function contractConsumptionFindings() {
+  const findings = [];
+  const required = [
+    { file: 'client', terms: ['/api/gateway/capability-contract', '/api/gateway/openapi.json', '/api/gateway/openai-tools', 'capabilityPageEndpointsFromContract'] },
+    { file: 'store', terms: ['gatewayCapabilityContract', 'gatewayOpenAiTools', 'refreshGatewayCapabilityContract'] },
+    { file: 'sidebar', terms: ['gatewayCapabilityContract', 'capabilityPageEndpointsFromContract', 'component.capability.sidebar.contract'] },
+    { file: 'gatewayPage', terms: ['capabilityContract', 'openApiDocument', 'openAiTools', 'page.gateway.contract'] },
+    { file: 'tests', terms: ['gatewayCapabilityContract', 'gatewayOpenAiTools', 'capabilityPageEndpointsFromContract'] },
+  ];
+  for (const item of required) {
+    const text = contractConsumptionSources[item.file] || '';
+    for (const term of item.terms) {
+      if (!text.includes(term)) findings.push(`gateway contract consumption missing ${item.file}:${term}`);
+    }
+  }
+  const runtimePageEndpointMatches = Array.from(contractConsumptionSources.client.matchAll(/pageEndpoints\s*\(/g));
+  if (runtimePageEndpointMatches.length > 2) {
+    findings.push('pageEndpoints must remain a fallback helper plus one loadCapabilityPage call in src/api/client.ts');
+  }
+  return findings;
+}
 
 const moduleReports = modules.map((module) => {
   const pagePath = path.join(webuiRoot, 'src/pages', module.page);
@@ -273,7 +302,11 @@ const moduleReports = modules.map((module) => {
   };
 });
 
-const blocking = moduleReports.flatMap((module) => module.findings.map((finding) => `${module.id}: ${finding}`));
+const contractFindings = contractConsumptionFindings();
+const blocking = [
+  ...moduleReports.flatMap((module) => module.findings.map((finding) => `${module.id}: ${finding}`)),
+  ...contractFindings,
+];
 
 const report = {
   version,
@@ -292,6 +325,11 @@ const report = {
     client_endpoints: clientEndpoints.length,
     capability_endpoints: capabilityEndpoints.length,
     blocking: blocking.length,
+  },
+  gateway_contract_consumption: {
+    status: contractFindings.length ? 'review' : 'pass',
+    findings: contractFindings,
+    source: '/api/gateway/capability-contract + /api/gateway/openapi.json + /api/gateway/openai-tools',
   },
   modules: moduleReports,
   blocking,

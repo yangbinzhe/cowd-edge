@@ -60,6 +60,39 @@ const sourceSnapshotError = ref('');
 
 const accounts = computed(() => Array.isArray(state.value.accounts?.accounts) ? state.value.accounts.accounts : []);
 const capabilities = computed(() => Array.isArray(state.value.capabilities?.capabilities) ? state.value.capabilities.capabilities : []);
+const capabilityContract = computed(() => state.value.capabilityContract || {});
+const capabilityCoverage = computed(() => capabilityContract.value.coverage || {});
+const openApiDocument = computed(() => state.value.openApi || {});
+const openAiTools = computed(() => state.value.openAiTools || {});
+const openApiPathCount = computed(() => Object.keys(openApiDocument.value.paths || {}).length);
+const contractCapabilities = computed(() => Array.isArray(capabilityContract.value.capabilities) ? capabilityContract.value.capabilities : []);
+const contractOverviewRows = computed(() => [
+  { label: t('page.gateway.contract.routes'), value: capabilityCoverage.value.route_count ?? capabilityContract.value.route_count ?? 0 },
+  { label: t('page.gateway.contract.capabilities'), value: capabilityCoverage.value.capability_count ?? capabilityContract.value.capability_count ?? 0 },
+  { label: t('page.gateway.contract.p1'), value: capabilityCoverage.value.p1_count ?? 0 },
+  { label: t('page.gateway.contract.aiVisible'), value: capabilityCoverage.value.ai_visible_count ?? 0 },
+  { label: t('page.gateway.contract.openapi'), value: capabilityCoverage.value.openapi_path_count ?? openApiPathCount.value },
+  { label: t('page.gateway.contract.tools'), value: openAiTools.value.tool_count ?? capabilityCoverage.value.openai_tool_count ?? openAiTools.value.tools?.length ?? 0 },
+  { label: t('page.gateway.contract.parity'), value: capabilityCoverage.value.route_contract_parity ? 'yes' : 'no' },
+]);
+const gatewayContractRows = computed(() => contractCapabilities.value
+  .filter((item: any) => item.domain === 'connector' || item.domain === 'cross_plane' || item.domain === 'surface' || item.domain === 'edge' || item.http?.path?.startsWith('/api/gateway'))
+  .slice(0, 24)
+  .map((item: any) => ({
+    id: item.id,
+    domain: item.domain,
+    method: item.http?.method || '-',
+    path: item.http?.path || '-',
+    risk: item.risk || '-',
+    visible: item.surface_visibility?.webui === false ? 'hidden' : 'webui',
+  })));
+const openAiToolRows = computed(() => (Array.isArray(openAiTools.value.tools) ? openAiTools.value.tools : [])
+  .slice(0, 18)
+  .map((item: any) => ({
+    name: item.function?.name || '-',
+    description: item.function?.description || '-',
+    parameters: Object.keys(item.function?.parameters?.properties || {}).length,
+  })));
 const resources = computed(() => Array.isArray(state.value.resources?.resources) ? state.value.resources.resources : Array.isArray(state.value.resources?.items) ? state.value.resources.items : []);
 const mcpServers = computed(() => Array.isArray(state.value.mcp?.servers) ? state.value.mcp.servers : []);
 const connectorServices = computed(() => Array.isArray(state.value.connectorServices?.services) ? state.value.connectorServices.services : []);
@@ -576,7 +609,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -596,11 +629,14 @@ async function refresh() {
       api.crossPlaneAdapters(),
       api.crossPlaneExecutions(),
       api.configReloadStatus(),
+      api.gatewayCapabilityContract(),
+      api.gatewayOpenApi(),
+      api.gatewayOpenAiTools(),
     ]);
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -834,6 +870,24 @@ onMounted(refresh);
         <p>{{ t('page.gateway.page.text.5a99daa9a9') }}</p>
         <DataTable searchable copyable row-key="lane" :rows="gatewayAlignmentRows" :columns="['lane', 'owner', 'backend', 'webui', 'tui', 'action']" @row-click="selectedDetail = $event" />
         <GatewayRemediationList :rows="gatewayRemediationRows" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="alignment">
+        <header>
+          <h2>{{ t('page.gateway.contract.title') }}</h2>
+          <StatusPill :status="capabilityContract.__offline ? 'offline' : (capabilityCoverage.route_contract_parity ? 'ready' : 'degraded')" />
+        </header>
+        <p>{{ t('page.gateway.contract.detail') }}</p>
+        <section class="metric-row compact">
+          <article v-for="row in contractOverviewRows" :key="row.label" class="metric-card">
+            <span>{{ row.label }}</span>
+            <strong>{{ row.value }}</strong>
+          </article>
+        </section>
+        <DataTable v-if="gatewayContractRows.length" searchable copyable row-key="id" :rows="gatewayContractRows" :columns="['domain', 'method', 'path', 'risk', 'visible']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('page.gateway.contract.empty')" :detail="t('page.gateway.contract.emptyDetail')" />
+        <DataTable v-if="openAiToolRows.length" searchable copyable row-key="name" :rows="openAiToolRows" :columns="['name', 'description', 'parameters']" @row-click="selectedDetail = $event" />
+        <RawPayload :title="t('page.gateway.contract.raw')" :data="{ contract: capabilityContract, openapi: { openapi: openApiDocument.openapi, path_count: openApiPathCount }, openai_tools: openAiTools }" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="surfaces">

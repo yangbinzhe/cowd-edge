@@ -2,6 +2,7 @@
 import { t } from '../i18n';
 import { computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { capabilityPageEndpointsFromContract } from '../api/client';
 import { buildCapabilitySpecs } from '../data/capabilities';
 import { useAppStore } from '../stores/app';
 import type { NavId } from '../types';
@@ -19,6 +20,24 @@ function capabilityPageId(path: string): Exclude<NavId, 'chat' | 'settings'> {
 const pageId = computed(() => capabilityPageId(route.path));
 const spec = computed(() => buildCapabilitySpecs()[pageId.value]);
 const snapshots = computed(() => store.capabilitySnapshots[pageId.value] || []);
+const contract = computed(() => store.gatewayCapabilityContract);
+const openAiTools = computed(() => store.gatewayOpenAiTools);
+const pageContractEndpoints = computed(() => capabilityPageEndpointsFromContract(contract.value, pageId.value, store.activeSessionId));
+const contractCoverage = computed(() => contract.value?.coverage);
+const contractRows = computed(() => {
+  const coverage = contractCoverage.value;
+  if (!coverage) return [];
+  return [
+    [t('component.capability.sidebar.contract.routes'), String(coverage.route_count || contract.value?.route_count || 0)],
+    [t('component.capability.sidebar.contract.capabilities'), String(coverage.capability_count || contract.value?.capability_count || 0)],
+    [t('component.capability.sidebar.contract.p1'), String(coverage.p1_count || 0)],
+    [t('component.capability.sidebar.contract.ai'), String(coverage.ai_visible_count || 0)],
+    [t('component.capability.sidebar.contract.openapi'), String(coverage.openapi_path_count || 0)],
+    [t('component.capability.sidebar.contract.tools'), String(openAiTools.value?.tool_count || coverage.openai_tool_count || openAiTools.value?.tools?.length || 0)],
+    [t('component.capability.sidebar.contract.page'), String(pageContractEndpoints.value.length)],
+    [t('component.capability.sidebar.contract.parity'), coverage.route_contract_parity ? 'yes' : 'no'],
+  ];
+});
 type CapabilitySection = NonNullable<(typeof spec.value)>['sections'][number];
 
 const activeSection = computed(() => store.activeSectionByPage[pageId.value] || String(route.query.section || ''));
@@ -88,8 +107,20 @@ onMounted(() => {
       <EndpointHealthList :endpoints="snapshots" />
     </section>
 
-    <section v-if="spec" class="sidebar-inspector">
+    <section v-if="spec" class="sidebar-inspector contract-summary">
       <h2>{{ t('component.capability.sidebar.text.10e5b6dbd3') }}</h2>
+      <p v-if="store.gatewayContractError" class="sidebar-warning">
+        {{ t('component.capability.sidebar.contract.degraded') }}: {{ store.gatewayContractError }}
+      </p>
+      <dl>
+        <template v-for="row in contractRows" :key="row[0]">
+          <dt>{{ row[0] }}</dt>
+          <dd>{{ row[1] }}</dd>
+        </template>
+      </dl>
+    </section>
+
+    <section v-if="spec" class="sidebar-inspector">
       <dl>
         <template v-for="item in spec.inspector" :key="item.label">
           <dt>{{ item.label }}</dt>

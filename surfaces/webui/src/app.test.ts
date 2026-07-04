@@ -4,7 +4,7 @@ import { nextTick } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
-import { api } from './api/client';
+import { api, capabilityPageEndpointsFromContract } from './api/client';
 import ChatPage from './pages/ChatPage.vue';
 import AgentsPage from './pages/AgentsPage.vue';
 import AuditPage from './pages/AuditPage.vue';
@@ -390,6 +390,88 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Gateway 证据轨迹');
     expect(wrapper.text()).toContain('Gateway 选中详情');
     expect(wrapper.text()).toContain('Gateway 修复建议');
+  });
+
+  it('derives capability endpoint probes from Gateway Capability Contract safely', () => {
+    const contract: any = {
+      kind: 'gateway.capability_contract',
+      schema_version: 1,
+      owner: 'gateway',
+      source: 'test',
+      route_count: 7,
+      capability_count: 7,
+      coverage: {
+        route_count: 7,
+        capability_count: 7,
+        p1_count: 2,
+        ai_visible_count: 4,
+        openapi_path_count: 6,
+        openai_tool_count: 2,
+        route_contract_parity: true,
+      },
+      capabilities: [
+        { id: 'runtime-status', domain: 'runtime', title: 'Runtime status', http: { method: 'GET', path: '/api/runtime/status', criticality: 'p1' }, risk: 'read', surface_visibility: { webui: true } },
+        { id: 'runtime-post', domain: 'runtime', title: 'Runtime write', http: { method: 'POST', path: '/api/runtime/turns', criticality: 'p1' }, risk: 'write', surface_visibility: { webui: true } },
+        { id: 'hidden', domain: 'runtime', title: 'Hidden runtime', http: { method: 'GET', path: '/api/runtime/hidden' }, risk: 'read', surface_visibility: { webui: false } },
+        { id: 'raw', domain: 'runtime', title: 'Raw runtime', http: { method: 'GET', path: '/api/runtime/raw' }, risk: 'read', surface_visibility: { webui: true } },
+        { id: 'download', domain: 'runtime', title: 'Download runtime', http: { method: 'GET', path: '/api/runtime/download' }, risk: 'read', surface_visibility: { webui: true } },
+        { id: 'session', domain: 'context', title: 'Session context', http: { method: 'GET', path: '/api/sessions/:id/context' }, risk: 'read', surface_visibility: { webui: true } },
+        { id: 'unknown-param', domain: 'runtime', title: 'Unknown param', http: { method: 'GET', path: '/api/runtime/:run_id/detail' }, risk: 'read', surface_visibility: { webui: true } },
+      ],
+    };
+
+    const runtime = capabilityPageEndpointsFromContract(contract, 'runtime', 'session-1');
+    expect(runtime.map((item) => item[1])).toEqual(['/api/runtime/status']);
+    const context = capabilityPageEndpointsFromContract(contract, 'context', 'session-1');
+    expect(context.map((item) => item[1])).toContain('/api/sessions/session-1/context');
+  });
+
+  it('loads Gateway contract projections during WebUI boot', async () => {
+    const calls: string[] = [];
+    vi.mocked(fetch).mockImplementation((url: any) => {
+      const path = String(url);
+      calls.push(path);
+      if (path.includes('/api/gateway/capability-contract')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          kind: 'gateway.capability_contract',
+          schema_version: 1,
+          owner: 'gateway',
+          source: 'test',
+          route_count: 1,
+          capability_count: 1,
+          coverage: {
+            route_count: 1,
+            capability_count: 1,
+            p1_count: 1,
+            ai_visible_count: 1,
+            openapi_path_count: 1,
+            openai_tool_count: 1,
+            route_contract_parity: true,
+          },
+          capabilities: [
+            { id: 'gateway.test', domain: 'gateway', title: 'Gateway test', http: { method: 'GET', path: '/api/gateway/test' }, risk: 'read', surface_visibility: { webui: true } },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      if (path.includes('/api/gateway/openapi.json')) {
+        return Promise.resolve(new Response(JSON.stringify({ openapi: '3.1.0', paths: { '/api/gateway/test': {} } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      if (path.includes('/api/gateway/openai-tools')) {
+        return Promise.resolve(new Response(JSON.stringify({ kind: 'gateway.openai_tools', tool_count: 1, tools: [{ type: 'function', function: { name: 'gateway_test', description: 'test', parameters: { type: 'object', properties: {} } } }] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ sessions: [], commands: [], profiles: [], workspace_files: [] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    });
+    const wrapper = await mountApp('/gateway');
+    await settleAsync();
+    const store = useAppStore();
+    expect(store.gatewayCapabilityContract?.coverage.route_contract_parity).toBe(true);
+    expect(store.gatewayOpenAiTools?.tool_count).toBe(1);
+    expect(calls.some((path) => path.includes('/api/gateway/capability-contract'))).toBe(true);
+    expect(calls.some((path) => path.includes('/api/gateway/openapi.json'))).toBe(true);
+    expect(calls.some((path) => path.includes('/api/gateway/openai-tools'))).toBe(true);
+    expect(wrapper.text()).toContain('Gateway 能力合同');
+    wrapper.unmount();
+    vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
   });
 
   it('renders context workbench evidence and detail surfaces', async () => {
