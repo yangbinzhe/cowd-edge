@@ -595,7 +595,8 @@ export const api = {
   realityBoundaries: () => read('/api/reality/boundaries', { boundaries: [] }),
   growthStatus: () => read('/api/growth/status', {}),
   growthEvents: () => read('/api/growth/events', { events: [], promotions: [] }),
-  providers: () => read('/api/config/providers', { providers: [], models: [] }),
+  providers: () => read('/api/config/providers', { providers: [], models: [], catalog: { providers: [], models: [], profiles: [], sources: [], warnings: [] } }),
+  providerCatalog: () => read('/api/config/provider-catalog', { catalog: { providers: [], models: [], profiles: [], sources: [], warnings: [] } }),
   effectiveConfig: () => read('/api/runtime/config/effective', {}),
   configReloadStatus: () => read('/api/runtime/config/reload/status', {}),
   approvalConfig: () => read('/api/approval/config', {}),
@@ -1137,6 +1138,13 @@ async function readText(path: string, fallback = ''): Promise<string> {
 }
 
 export function providerModels(controlPlane: any, config: any): string[] {
+  const catalogModels = config?.catalog?.models || controlPlane?.components?.provider?.catalog?.models;
+  if (Array.isArray(catalogModels) && catalogModels.length) {
+    return catalogModels
+      .filter((model: any) => model?.status !== 'unavailable')
+      .map((model: any) => model.id || model.name || model.model)
+      .filter((model: any) => typeof model === 'string' && model.trim() && model !== 'unknown');
+  }
   if (Array.isArray(config?.models) && config.models.length) {
     return config.models
       .map((model: any) => model.id || model.name || model)
