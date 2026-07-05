@@ -2,7 +2,10 @@ use std::io;
 use std::sync::Arc;
 
 use chrono::Utc;
-use edge_contract::{message::MessageActionKind, SurfaceFrame};
+use edge_contract::{
+    message::{MessageActionKind, MessageConnectorDescriptor},
+    SurfaceFrame,
+};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
@@ -149,6 +152,7 @@ async fn configure_adapter(
                         "status": "ready",
                         "surface": surface_id,
                         "transport": "edge-message-sidecar",
+                        "descriptor": message_descriptor_payload(surface_id, "ready", None, false),
                     }),
                 }
             }
@@ -213,7 +217,11 @@ async fn connect_adapter(
             spawn_receive_loop(surface_id, adapter, state, stdout).await;
             SurfaceFrame::Ok {
                 id,
-                payload: serde_json::json!({"status": "ready", "surface": surface_id}),
+                payload: serde_json::json!({
+                    "status": "ready",
+                    "surface": surface_id,
+                    "descriptor": message_descriptor_payload(surface_id, "ready", None, false),
+                }),
             }
         }
         Err(error) => {
@@ -274,8 +282,26 @@ async fn health_frame(
             "connected": state.connected,
             "transport": "edge-message-sidecar",
             "last_error": state.last_error,
+            "descriptor": message_descriptor_payload(surface_id, status, state.last_error.as_deref(), false),
         }),
     }
+}
+
+fn message_descriptor_payload(
+    surface_id: &str,
+    status: &str,
+    last_error: Option<&str>,
+    reload_required: bool,
+) -> serde_json::Value {
+    let connector = surface_id.strip_prefix("message:").unwrap_or(surface_id);
+    let mut descriptor = MessageConnectorDescriptor::for_connector(connector, status)
+        .with_reload_required(reload_required);
+    if let Some(last_error) = last_error.filter(|value| !value.trim().is_empty()) {
+        descriptor.degraded_reasons.push(last_error.to_string());
+        descriptor.degraded_reasons.sort();
+        descriptor.degraded_reasons.dedup();
+    }
+    serde_json::to_value(descriptor).unwrap_or_else(|_| serde_json::json!({}))
 }
 
 async fn send_text_frame(
