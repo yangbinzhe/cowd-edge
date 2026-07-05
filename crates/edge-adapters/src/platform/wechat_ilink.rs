@@ -127,7 +127,7 @@ pub struct WeChatQrCredentials {
 fn wechat_account_dir(base: Option<&Path>) -> PathBuf {
     base.map(Path::to_path_buf).unwrap_or_else(|| {
         crate::cowd_dirs::config_home_dir()
-            .join("channels")
+            .join("messages")
             .join("wechat-ilink")
             .join("accounts")
     })

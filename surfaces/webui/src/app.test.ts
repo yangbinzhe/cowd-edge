@@ -1129,9 +1129,12 @@ describe('Cowd Vue WebUI shell', () => {
     await api.matrixSourceSnapshotPlan('pack-1', { resource_ref: 'file://orders.csv', estimated_rows: 2 });
     await api.matrixSourceSnapshotRun('pack-1', { source_read_plan: { adapter_id: 'csv', resource_ref: 'file://orders.csv' } });
     await api.matrixSourceSnapshots('pack-1');
-    await api.channels();
-    await api.channelStatus('webui');
-    await api.channelRepair('webui');
+    await api.messageConnectors();
+    await api.messageConnectorStatus('webui');
+    await api.messageConnectorRepair('webui');
+    await api.messageEndpoints();
+    await api.messageRoutes();
+    await api.messageBindings();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/slash?surface=webui', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/slash/history', expect.any(Object));
@@ -1171,9 +1174,12 @@ describe('Cowd Vue WebUI shell', () => {
       body: JSON.stringify({ source_read_plan: { adapter_id: 'csv', resource_ref: 'file://orders.csv' }, session_id: 'webui-edge' }),
     }));
     expect(fetchMock).toHaveBeenCalledWith('/api/matrix/source-packs/pack-1/snapshots', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/channels', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/channels/webui/status', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/channels/webui/repair', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/message-connectors', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/message-connectors/webui/status', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/message-connectors/webui/repair', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/message-endpoints', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/message-routes', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/message-bindings', expect.any(Object));
   });
 
   it('renders SurfaceHost registry, health, routes, resources, events, and dispatch controls', async () => {

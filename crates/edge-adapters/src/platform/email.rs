@@ -10,7 +10,10 @@ use crate::platform::types::{SendResult, SessionKey};
 use async_trait::async_trait;
 use chrono::Utc;
 use lettre::Transport;
+use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -253,8 +256,9 @@ impl EmailAdapter {
                                 .map(|t| t.to_string())
                                 .unwrap_or_default();
 
-                            // Extract attachment count for metadata
                             let attachment_count = parsed.attachment_count();
+                            let (media_urls, media_types, attachment_names) =
+                                cache_email_attachments(&parsed, &uid.to_string());
 
                             let sender = from.clone();
                             let session_key = SessionKey::new(Platform::Email.name(), &sender);
@@ -269,12 +273,13 @@ impl EmailAdapter {
                                     "subject": subject,
                                     "uid": uid,
                                     "attachments": attachment_count,
+                                    "attachment_names": attachment_names,
                                 }),
                                 message_type: MessageType::Text,
                                 message_id: None,
                                 reply_to_message_id: None,
-                                media_urls: vec![],
-                                media_types: vec![],
+                                media_urls,
+                                media_types,
                             });
                         }
                     }
@@ -305,6 +310,89 @@ impl EmailAdapter {
     /// Update the last poll timestamp.
     async fn update_poll_time(&self) {
         *self.last_poll.write().await = Some(Instant::now());
+    }
+}
+
+fn cache_email_attachments(
+    message: &mail_parser::Message<'_>,
+    uid: &str,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let root = crate::cowd_dirs::config_home_dir()
+        .join("storage")
+        .join("resources")
+        .join("message")
+        .join("email")
+        .join(safe_attachment_segment(uid));
+    if fs::create_dir_all(&root).is_err() {
+        return (Vec::new(), Vec::new(), Vec::new());
+    }
+
+    let mut paths = Vec::new();
+    let mut mimes = Vec::new();
+    let mut names = Vec::new();
+    for (index, attachment) in message.attachments().enumerate() {
+        if attachment.is_message() {
+            continue;
+        }
+        let name = attachment
+            .attachment_name()
+            .map(safe_attachment_name)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| format!("attachment-{index}.bin"));
+        let path = unique_attachment_path(&root, &name, index);
+        if fs::write(&path, attachment.contents()).is_ok() {
+            let mime = attachment
+                .content_type()
+                .map(|content_type| {
+                    let subtype = content_type
+                        .c_subtype
+                        .as_ref()
+                        .map(|value| value.as_ref())
+                        .unwrap_or("octet-stream");
+                    format!("{}/{}", content_type.c_type, subtype)
+                })
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            paths.push(path.to_string_lossy().to_string());
+            mimes.push(mime);
+            names.push(name);
+        }
+    }
+    (paths, mimes, names)
+}
+
+fn unique_attachment_path(root: &Path, name: &str, index: usize) -> std::path::PathBuf {
+    let candidate = root.join(name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    root.join(format!("{index}-{name}"))
+}
+
+fn safe_attachment_name(name: &str) -> String {
+    safe_attachment_segment(
+        Path::new(name)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("attachment.bin"),
+    )
+}
+
+fn safe_attachment_segment(value: &str) -> String {
+    let cleaned = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let cleaned = cleaned.trim_matches('.').trim_matches('_');
+    if cleaned.is_empty() {
+        "attachment".to_string()
+    } else {
+        cleaned.to_string()
     }
 }
 

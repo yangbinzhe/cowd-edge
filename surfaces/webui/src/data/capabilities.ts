@@ -265,6 +265,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('surfaces', t('script.data.capabilities.label.22b4b0c3c3'), t('data.capabilities.string.495209c2b4'), 'table', 'standard', 'gateway.surface'),
       section('alignment', t('capability.section.gateway.alignment.label'), t('capability.section.gateway.alignment.description'), 'governance', 'inspect', 'gateway.alignment'),
       section('connectors', t('script.data.capabilities.label.4b1e9501b9'), t('data.capabilities.string.a28af0b2ae'), 'table', 'standard', 'gateway.connector'),
+      section('message-plane', t('capability.section.gateway.messagePlane.label'), t('capability.section.gateway.messagePlane.description'), 'table', 'inspect', 'gateway.message_plane'),
       section('resources', t('script.data.capabilities.label.87df60de33'), t('data.capabilities.string.c6e170e4d5'), 'table', 'standard', 'gateway.resource'),
       section('executions', t('script.data.capabilities.label.8999e5848a'), t('data.capabilities.string.69f14312f9'), 'timeline', 'standard', 'gateway.execution'),
       section('identities', t('script.data.capabilities.label.42c248d3eb'), t('data.capabilities.string.73c2257e6d'), 'governance', 'inspect', 'gateway.identity'),

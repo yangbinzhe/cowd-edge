@@ -110,7 +110,7 @@ const configReloadRestartFields = computed(() => {
   const fields = configReloadStatus.value?.restart_required?.fields;
   return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
 });
-const channels = computed(() => Array.isArray(state.value.channels?.channels) ? state.value.channels.channels : []);
+const messageConnectorReadiness = computed(() => Array.isArray(state.value.messageConnectors?.connectors) ? state.value.messageConnectors.connectors : []);
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
 const identities = computed(() => Array.isArray(state.value.identities?.identities) ? state.value.identities.identities : []);
 const grants = computed(() => Array.isArray(state.value.grants?.grants) ? state.value.grants.grants : []);
@@ -208,8 +208,8 @@ const surfaceRows = computed(() => surfaces.value.slice(0, 12).map((item: any) =
   routes: Array.isArray(item.routes) ? item.routes.length : Number(item.routes || 0),
   resources: Array.isArray(item.resources) ? item.resources.length : Number(item.resources || 0),
 })));
-const channelRows = computed(() => channels.value.slice(0, 12).map((item: any) => ({
-  channel: item.channel || item.name || '-',
+const messageConnectorReadinessRows = computed(() => messageConnectorReadiness.value.slice(0, 12).map((item: any) => ({
+  connector: item.connector || item.name || '-',
   config: item.configuration_status || '-',
   runtime: item.runtime?.status || 'not-attached',
   enabled: item.enabled === false ? 'no' : 'yes',
@@ -217,6 +217,31 @@ const channelRows = computed(() => channels.value.slice(0, 12).map((item: any) =
   failures: item.runtime?.consecutive_failures ?? 0,
   restarts: item.runtime?.restart_count ?? 0,
   circuit: item.runtime?.circuit_open ? 'open' : 'closed',
+})));
+const messageEndpointRows = computed(() => (state.value.messageEndpoints?.endpoints || []).slice(0, 16).map((item: any) => ({
+  endpoint: item.endpoint_id || '-',
+  connector: item.connector || '-',
+  kind: item.kind || '-',
+  status: item.status || '-',
+  configured: item.configured ? 'yes' : 'no',
+  capabilities: Array.isArray(item.capabilities) ? item.capabilities.length : 0,
+})));
+const messageRouteRows = computed(() => (state.value.messageRoutes?.routes || []).slice(0, 16).map((item: any) => ({
+  route: item.route_id || '-',
+  connector: item.connector || '-',
+  policy: item.policy || '-',
+  status: item.status || '-',
+  configured: item.configured ? 'yes' : 'no',
+  runtime: item.runtime?.status || '-',
+})));
+const messageBindingRows = computed(() => (state.value.messageBindings?.bindings || []).slice(0, 16).map((item: any) => ({
+  binding: item.binding_id || '-',
+  connector: item.connector || '-',
+  endpoint: item.endpoint || '-',
+  status: item.status || item.outbound_status || '-',
+  session: item.runtime_session_id || item.source_session_id || '-',
+  resources: item.resource_count ?? 0,
+  direction: item.direction || '-',
 })));
 const gatewayAlignmentRows = computed(() => [
   {
@@ -609,7 +634,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, channelsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, messageConnectorsData, messageEndpointsData, messageRoutesData, messageBindingsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -621,7 +646,10 @@ async function refresh() {
       api.edgeRegistry(),
       api.surfaceRegistry(),
       api.surfaceHostHealth(),
-      api.channels(),
+      api.messageConnectors(),
+      api.messageEndpoints(),
+      api.messageRoutes(),
+      api.messageBindings(),
       api.crossPlaneSummary(),
       api.crossPlaneIdentities(),
       api.crossPlaneGrants(),
@@ -636,7 +664,7 @@ async function refresh() {
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, channels: channelsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, messageConnectors: messageConnectorsData, messageEndpoints: messageEndpointsData, messageRoutes: messageRoutesData, messageBindings: messageBindingsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -908,9 +936,24 @@ onMounted(refresh);
         </header>
         <DataTable v-if="accountRows.length" searchable copyable :rows="accountRows" :columns="['provider', 'account', 'status', 'scopes']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.bed97233b0')" :detail="t('page.gateway.page.detail.51394d64f1')" />
-        <DataTable v-if="channelRows.length" searchable copyable row-key="channel" :rows="channelRows" :columns="['channel', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="messageConnectorReadinessRows.length" searchable copyable row-key="connector" :rows="messageConnectorReadinessRows" :columns="['connector', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
         <RawPayload :title="t('page.gateway.page.title.a0df395cfc')" :data="state.platforms || {}" />
-        <RawPayload :title="t('page.gateway.page.title.513df4116b')" :data="state.channels || {}" />
+        <RawPayload :title="t('page.gateway.page.title.513df4116b')" :data="state.messageConnectors || {}" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="message-plane">
+        <header>
+          <h2>{{ t('messagePlane.title') }}</h2>
+          <StatusPill :status="messageConnectorReadinessRows.length ? 'ready' : 'degraded'" />
+        </header>
+        <p>{{ t('messagePlane.detail') }}</p>
+        <DataTable v-if="messageEndpointRows.length" searchable copyable row-key="endpoint" :rows="messageEndpointRows" :columns="['endpoint', 'connector', 'kind', 'status', 'configured', 'capabilities']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('messagePlane.endpoints.emptyTitle')" :detail="t('messagePlane.endpoints.emptyDetail')" />
+        <DataTable v-if="messageRouteRows.length" searchable copyable row-key="route" :rows="messageRouteRows" :columns="['route', 'connector', 'policy', 'status', 'configured', 'runtime']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('messagePlane.routes.emptyTitle')" :detail="t('messagePlane.routes.emptyDetail')" />
+        <DataTable v-if="messageBindingRows.length" searchable copyable row-key="binding" :rows="messageBindingRows" :columns="['binding', 'connector', 'endpoint', 'status', 'session', 'resources', 'direction']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('messagePlane.bindings.emptyTitle')" :detail="t('messagePlane.bindings.emptyDetail')" />
+        <RawPayload :title="t('messagePlane.raw')" :data="{ connectors: state.messageConnectors || {}, endpoints: state.messageEndpoints || {}, routes: state.messageRoutes || {}, bindings: state.messageBindings || {} }" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">

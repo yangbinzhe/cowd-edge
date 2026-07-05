@@ -225,7 +225,7 @@ const pageContractPrefixes: Record<CapabilityPageId, string[]> = {
   agents: ['/api/agents', '/api/tasks'],
   tools: ['/api/tools', '/api/slash'],
   surfaces: ['/api/surfaces', '/api/edges', '/api/cowd/surfaces'],
-  gateway: ['/api/gateway', '/api/connectors', '/api/cross-plane', '/api/platforms', '/api/channels', '/api/resources'],
+  gateway: ['/api/gateway', '/api/connectors', '/api/cross-plane', '/api/platforms', '/api/message-connectors', '/api/resources'],
   mfg: ['/api/apps/mfg'],
   audit: ['/api/audit', '/api/usage', '/api/harness-eval', '/api/approval/history', '/api/cross-plane/audit'],
 };
@@ -360,8 +360,8 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['Connector capabilities', '/api/connectors/capabilities'],
       ['MCP servers', '/api/connectors/mcp/servers'],
       ['Platforms', '/api/platforms'],
-      ['WeChat QR', '/api/channels/wechat-ilink/qr'],
-      ['WeChat accounts', '/api/channels/wechat-ilink/accounts'],
+      ['WeChat QR', '/api/message-connectors/wechat-ilink/actions/account.login_qr.start'],
+      ['WeChat accounts', '/api/message-connectors/wechat-ilink/accounts'],
     ],
     mfg: [
       ['App descriptor', '/api/apps/mfg/app'],
@@ -815,14 +815,17 @@ export const api = {
   matrixSourceSnapshots: (id: string) => read(`/api/matrix/source-packs/${encodeURIComponent(id)}/snapshots`, { snapshots: [] }),
   platforms: () => read('/api/platforms', {}),
   platform: (name: string) => read(`/api/platforms/${encodeURIComponent(name)}`, {}),
-  channels: () => read('/api/channels', { kind: 'channel.registry', channels: [] }),
-  channelStatus: (name: string) => read(`/api/channels/${encodeURIComponent(name)}/status`, {}),
-  channelRepair: (name: string) => writeWithReceipt(`/api/channels/${encodeURIComponent(name)}/repair`, { method: 'POST' }),
-  wechatIlinkQrStart: (botType = '3') => writeWithReceipt('/api/channels/wechat-ilink/qr', {
+  messageConnectors: () => read('/api/message-connectors', { kind: 'message.connector.registry', connectors: [] }),
+  messageConnectorStatus: (name: string) => read(`/api/message-connectors/${encodeURIComponent(name)}/status`, {}),
+  messageConnectorRepair: (name: string) => writeWithReceipt(`/api/message-connectors/${encodeURIComponent(name)}/repair`, { method: 'POST' }),
+  messageEndpoints: () => read('/api/message-endpoints', { kind: 'message.endpoint.directory', endpoints: [] }),
+  messageRoutes: () => read('/api/message-routes', { kind: 'message.delivery.routes', routes: [] }),
+  messageBindings: () => read('/api/message-bindings', { kind: 'message.conversation.bindings', bindings: [] }),
+  wechatIlinkQrStart: (botType = '3') => writeWithReceipt('/api/message-connectors/wechat-ilink/actions/account.login_qr.start', {
     method: 'POST',
     body: JSON.stringify({ bot_type: botType }),
   }),
-  wechatIlinkQrPoll: (qrcode: string, baseUrl?: string) => writeWithReceipt('/api/channels/wechat-ilink/qr/poll', {
+  wechatIlinkQrPoll: (qrcode: string, baseUrl?: string) => writeWithReceipt('/api/message-connectors/wechat-ilink/actions/account.login_qr.poll', {
     method: 'POST',
     body: JSON.stringify({ qrcode, base_url: baseUrl }),
   }),

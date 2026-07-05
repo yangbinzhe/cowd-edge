@@ -1661,8 +1661,36 @@ impl PlatformAdapter for FeishuAdapter {
         Ok(resp.data.and_then(|d| d.message_id).unwrap_or_default())
     }
 
-    async fn on_event(&self, _event: &PlatformEvent) -> PlatformResult<Option<InboundMessage>> {
-        Ok(None)
+    async fn on_event(&self, event: &PlatformEvent) -> PlatformResult<Option<InboundMessage>> {
+        match event.event_type.as_str() {
+            "message.processing.complete" | "message.processing.failed" => {
+                let message_id = event
+                    .data
+                    .get("message_id")
+                    .or_else(|| event.data.get("open_message_id"))
+                    .and_then(|value| value.as_str())
+                    .ok_or_else(|| {
+                        PlatformError::ConfigError(
+                            "processing lifecycle event requires message_id".to_string(),
+                        )
+                    })?;
+                let token = self.ensure_token().await?;
+                if event.event_type == "message.processing.complete" {
+                    self.reactions.mark_success(&token, message_id).await?;
+                } else {
+                    self.reactions.mark_failure(&token, message_id).await?;
+                }
+                Ok(None)
+            }
+            "im.message.reaction.created_v1" | "im.message.reaction.deleted_v1" => {
+                Ok(ProcessingReactions::handle_reaction_event(
+                    &event.event_type,
+                    &event.data,
+                    &self.config.bot_open_id,
+                ))
+            }
+            _ => Ok(None),
+        }
     }
 }
 

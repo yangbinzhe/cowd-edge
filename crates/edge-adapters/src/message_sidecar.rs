@@ -2,7 +2,7 @@ use std::io;
 use std::sync::Arc;
 
 use chrono::Utc;
-use edge_contract::SurfaceFrame;
+use edge_contract::{message::MessageActionKind, SurfaceFrame};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
@@ -345,44 +345,89 @@ async fn action_frame(
     state: Arc<Mutex<MessageSidecarState>>,
     stdout: Arc<Mutex<tokio::io::Stdout>>,
 ) -> SurfaceFrame {
-    if matches!(
-        action.as_str(),
-        "message.processing_complete" | "message.processing_failed"
-    ) {
-        return SurfaceFrame::Ok {
-            id,
-            payload: serde_json::json!({
-                "status": "acknowledged",
-                "surface": surface_id,
-                "action": action,
-            }),
-        };
-    }
-    if action != "callback.dispatch" {
+    let Some(kind) = MessageActionKind::parse(&action) else {
         return SurfaceFrame::Error {
             id: Some(id),
             code: format!("{surface_id}_action_unsupported"),
             message: format!("unsupported {surface_id} action `{action}`"),
         };
-    }
+    };
     let adapter = {
         let state = state.lock().await;
         state.adapter.clone()
     };
+    if matches!(
+        kind,
+        MessageActionKind::ProcessingComplete | MessageActionKind::ProcessingFailed
+    ) {
+        return dispatch_lifecycle_action(surface_id, id, action, payload, adapter).await;
+    }
     let Some(adapter) = adapter else {
         return SurfaceFrame::Error {
             id: Some(id),
             code: format!("{surface_id}_not_configured"),
-            message: format!("configure {surface_id} before callback dispatch"),
+            message: format!("configure {surface_id} before action `{action}`"),
         };
     };
 
+    if kind == MessageActionKind::CallbackDispatch {
+        return dispatch_callback_action(surface_id, id, payload, adapter, stdout).await;
+    }
+
+    dispatch_message_action(surface_id, id, kind, payload, adapter).await
+}
+
+async fn dispatch_lifecycle_action(
+    surface_id: &'static str,
+    id: String,
+    action: String,
+    payload: serde_json::Value,
+    adapter: Option<Arc<Mutex<Box<dyn PlatformAdapter>>>>,
+) -> SurfaceFrame {
+    let adapter_payload = if let Some(adapter) = adapter {
+        let event = PlatformEvent {
+            event_type: action.clone(),
+            platform: Platform::parse(surface_id),
+            data: payload.clone(),
+            timestamp: Utc::now(),
+        };
+        match adapter.lock().await.on_event(&event).await {
+            Ok(Some(message)) => serde_json::json!({
+                "status": "received",
+                "message": message.text,
+            }),
+            Ok(None) => serde_json::json!({"status": "acknowledged"}),
+            Err(error) => {
+                return platform_error_frame(surface_id, id, action, error);
+            }
+        }
+    } else {
+        serde_json::json!({"status": "acknowledged", "adapter": "not_configured"})
+    };
+    SurfaceFrame::Ok {
+        id,
+        payload: serde_json::json!({
+            "status": "acknowledged",
+            "surface": surface_id,
+            "action": action,
+            "adapter": adapter_payload,
+        }),
+    }
+}
+
+async fn dispatch_callback_action(
+    surface_id: &'static str,
+    id: String,
+    payload: serde_json::Value,
+    adapter: Arc<Mutex<Box<dyn PlatformAdapter>>>,
+    stdout: Arc<Mutex<tokio::io::Stdout>>,
+) -> SurfaceFrame {
     let event_payload = payload.get("payload").cloned().unwrap_or(payload);
     let event_type = event_payload
         .get("event_type")
         .or_else(|| event_payload.get("type"))
         .and_then(serde_json::Value::as_str)
-        .unwrap_or("callback.dispatch")
+        .unwrap_or(MessageActionKind::CallbackDispatch.as_str())
         .to_string();
     let event = PlatformEvent {
         event_type,
@@ -411,6 +456,266 @@ async fn action_frame(
             code: format!("{surface_id}_callback_failed"),
             message: error.to_string(),
         },
+    }
+}
+
+async fn dispatch_message_action(
+    surface_id: &'static str,
+    id: String,
+    kind: MessageActionKind,
+    payload: serde_json::Value,
+    adapter: Arc<Mutex<Box<dyn PlatformAdapter>>>,
+) -> SurfaceFrame {
+    let action = kind.as_str();
+    let session_key = match session_key_from_action_payload(surface_id, &payload) {
+        Ok(session_key) => session_key,
+        Err(message) => {
+            return SurfaceFrame::Error {
+                id: Some(id),
+                code: format!("{surface_id}_action_payload_invalid"),
+                message,
+            };
+        }
+    };
+    let chat_id = session_key
+        .thread_id
+        .as_deref()
+        .unwrap_or(&session_key.user_id)
+        .to_string();
+    let result = match kind {
+        MessageActionKind::SendText => {
+            let text = match payload_text(&payload) {
+                Some(text) => text,
+                None => {
+                    return SurfaceFrame::Error {
+                        id: Some(id),
+                        code: format!("{surface_id}_action_payload_invalid"),
+                        message: "message.send.text requires text or payload_ref".to_string(),
+                    };
+                }
+            };
+            adapter
+                .lock()
+                .await
+                .send(&OutboundMessage {
+                    session_key,
+                    text,
+                    reply_to: payload_string(&payload, &["reply_to", "reply_to_message_id"]),
+                    metadata: payload
+                        .get("metadata")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null),
+                })
+                .await
+                .map(|result| {
+                    serde_json::json!({
+                        "status": if result.success { "sent" } else { "failed" },
+                        "message_id": result.message_id,
+                        "error": result.error,
+                    })
+                })
+        }
+        MessageActionKind::SendImage => {
+            let payload_ref = match payload_ref(&payload) {
+                Some(value) => value,
+                None => {
+                    return missing_payload_ref(surface_id, id, action);
+                }
+            };
+            let adapter = adapter.lock().await;
+            let result = if is_remote_ref(&payload_ref) {
+                adapter
+                    .send_image(&chat_id, &payload_ref, payload_caption(&payload).as_deref())
+                    .await
+            } else {
+                adapter
+                    .send_image_file(&chat_id, &payload_ref, payload_caption(&payload).as_deref())
+                    .await
+            };
+            result.map(|()| serde_json::json!({"status": "sent"}))
+        }
+        MessageActionKind::SendVoice => {
+            let Some(payload_ref) = payload_ref(&payload) else {
+                return missing_payload_ref(surface_id, id, action);
+            };
+            adapter
+                .lock()
+                .await
+                .send_voice(&chat_id, &payload_ref, payload_caption(&payload).as_deref())
+                .await
+                .map(|()| serde_json::json!({"status": "sent"}))
+        }
+        MessageActionKind::SendDocument => {
+            let Some(payload_ref) = payload_ref(&payload) else {
+                return missing_payload_ref(surface_id, id, action);
+            };
+            adapter
+                .lock()
+                .await
+                .send_document(
+                    &chat_id,
+                    &payload_ref,
+                    payload_string(&payload, &["file_name", "filename", "name"]).as_deref(),
+                    payload_caption(&payload).as_deref(),
+                )
+                .await
+                .map(|()| serde_json::json!({"status": "sent"}))
+        }
+        MessageActionKind::SendVideo => {
+            let Some(payload_ref) = payload_ref(&payload) else {
+                return missing_payload_ref(surface_id, id, action);
+            };
+            adapter
+                .lock()
+                .await
+                .send_video(&chat_id, &payload_ref, payload_caption(&payload).as_deref())
+                .await
+                .map(|()| serde_json::json!({"status": "sent"}))
+        }
+        MessageActionKind::SendCard => {
+            let card_json = payload_string(&payload, &["card_json", "payload_ref"])
+                .or_else(|| payload.get("card").map(serde_json::Value::to_string))
+                .unwrap_or_else(|| payload.to_string());
+            adapter
+                .lock()
+                .await
+                .send_card(&chat_id, &card_json)
+                .await
+                .map(|message_id| serde_json::json!({"status": "sent", "message_id": message_id}))
+        }
+        MessageActionKind::Edit => {
+            let Some(message_id) = payload_string(&payload, &["message_id", "target_message_id"])
+            else {
+                return missing_field(surface_id, id, action, "message_id");
+            };
+            let Some(content) = payload_text(&payload) else {
+                return missing_field(surface_id, id, action, "text");
+            };
+            adapter
+                .lock()
+                .await
+                .edit_message(&chat_id, &message_id, &content)
+                .await
+                .map(|()| serde_json::json!({"status": "edited", "message_id": message_id}))
+        }
+        MessageActionKind::Delete => {
+            let Some(message_id) = payload_string(&payload, &["message_id", "target_message_id"])
+            else {
+                return missing_field(surface_id, id, action, "message_id");
+            };
+            adapter
+                .lock()
+                .await
+                .delete_message(&chat_id, &message_id)
+                .await
+                .map(|()| serde_json::json!({"status": "deleted", "message_id": message_id}))
+        }
+        MessageActionKind::ChatInfo => adapter
+            .lock()
+            .await
+            .get_chat_info(&chat_id)
+            .await
+            .map(|chat| serde_json::json!({"status": "ok", "chat": chat})),
+        MessageActionKind::CallbackDispatch
+        | MessageActionKind::ProcessingComplete
+        | MessageActionKind::ProcessingFailed => unreachable!("handled before message dispatch"),
+    };
+
+    match result {
+        Ok(payload) => SurfaceFrame::Ok { id, payload },
+        Err(error) => platform_error_frame(surface_id, id, action.to_string(), error),
+    }
+}
+
+fn platform_error_frame(
+    surface_id: &'static str,
+    id: String,
+    action: String,
+    error: PlatformError,
+) -> SurfaceFrame {
+    match error {
+        PlatformError::NotImplemented(capability) => SurfaceFrame::Ok {
+            id,
+            payload: serde_json::json!({
+                "status": "not_supported",
+                "surface": surface_id,
+                "action": action,
+                "capability": capability,
+            }),
+        },
+        error => SurfaceFrame::Error {
+            id: Some(id),
+            code: format!("{surface_id}_action_failed"),
+            message: error.to_string(),
+        },
+    }
+}
+
+fn session_key_from_action_payload(
+    surface_id: &str,
+    payload: &serde_json::Value,
+) -> Result<SessionKey, String> {
+    let recipient = payload_string(payload, &["recipient", "chat_id", "to", "target"])
+        .ok_or_else(|| "message action requires recipient/chat_id/to".to_string())?;
+    let thread = payload_string(payload, &["thread", "thread_id"]);
+    Ok(session_key_from_target(
+        surface_id,
+        &recipient,
+        thread.as_deref(),
+    ))
+}
+
+fn payload_string(payload: &serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .filter_map(|key| payload.get(*key))
+        .find_map(|value| {
+            value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        })
+}
+
+fn payload_ref(payload: &serde_json::Value) -> Option<String> {
+    payload_string(
+        payload,
+        &[
+            "payload_ref",
+            "resource",
+            "resource_id",
+            "url",
+            "path",
+            "file_path",
+            "image_url",
+            "image_path",
+            "audio_path",
+            "video_path",
+        ],
+    )
+}
+
+fn payload_text(payload: &serde_json::Value) -> Option<String> {
+    payload_string(payload, &["text", "content", "payload_ref"])
+}
+
+fn payload_caption(payload: &serde_json::Value) -> Option<String> {
+    payload_string(payload, &["caption", "summary"])
+}
+
+fn is_remote_ref(value: &str) -> bool {
+    value.starts_with("http://") || value.starts_with("https://")
+}
+
+fn missing_payload_ref(surface_id: &'static str, id: String, action: &str) -> SurfaceFrame {
+    missing_field(surface_id, id, action, "payload_ref")
+}
+
+fn missing_field(surface_id: &'static str, id: String, action: &str, field: &str) -> SurfaceFrame {
+    SurfaceFrame::Error {
+        id: Some(id),
+        code: format!("{surface_id}_action_payload_invalid"),
+        message: format!("{action} requires {field}"),
     }
 }
 
@@ -533,6 +838,12 @@ pub fn email_adapter(settings: &serde_json::Value) -> PlatformResult<Box<dyn Pla
     )?))
 }
 
+pub fn feishu_adapter(settings: &serde_json::Value) -> PlatformResult<Box<dyn PlatformAdapter>> {
+    Ok(Box::new(crate::platform::feishu::create_feishu_adapter(
+        settings,
+    )?))
+}
+
 pub fn wecom_adapter(settings: &serde_json::Value) -> PlatformResult<Box<dyn PlatformAdapter>> {
     Ok(Box::new(crate::platform::wecom::create_wecom_adapter(
         settings,
@@ -554,6 +865,10 @@ pub fn config_error(message: impl Into<String>) -> PlatformError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use std::sync::{Arc, Mutex as StdMutex};
+
+    use crate::platform::{ChatInfo, SendResult};
 
     #[test]
     fn parses_surface_prefixed_target_with_thread() {
@@ -577,5 +892,134 @@ mod tests {
         assert_eq!(key.platform, "wechat-ilink");
         assert_eq!(key.user_id, "user-1");
         assert_eq!(key.thread_id.as_deref(), Some("thread-1"));
+    }
+
+    #[tokio::test]
+    async fn typed_image_action_dispatches_to_adapter() {
+        let calls = Arc::new(StdMutex::new(Vec::new()));
+        let adapter: Arc<Mutex<Box<dyn PlatformAdapter>>> =
+            Arc::new(Mutex::new(Box::new(FakeAdapter {
+                calls: calls.clone(),
+            })));
+
+        let frame = dispatch_message_action(
+            "feishu",
+            "frame-1".to_string(),
+            MessageActionKind::SendImage,
+            serde_json::json!({
+                "recipient": "chat-1",
+                "payload_ref": "https://example.test/image.png",
+                "caption": "preview"
+            }),
+            adapter,
+        )
+        .await;
+
+        assert_ok_status(frame, "sent");
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            &["send_image:chat-1:https://example.test/image.png:preview"]
+        );
+    }
+
+    #[tokio::test]
+    async fn typed_delete_action_dispatches_to_adapter() {
+        let calls = Arc::new(StdMutex::new(Vec::new()));
+        let adapter: Arc<Mutex<Box<dyn PlatformAdapter>>> =
+            Arc::new(Mutex::new(Box::new(FakeAdapter {
+                calls: calls.clone(),
+            })));
+
+        let frame = dispatch_message_action(
+            "feishu",
+            "frame-2".to_string(),
+            MessageActionKind::Delete,
+            serde_json::json!({
+                "recipient": "chat-1",
+                "message_id": "om_123"
+            }),
+            adapter,
+        )
+        .await;
+
+        assert_ok_status(frame, "deleted");
+        assert_eq!(calls.lock().unwrap().as_slice(), &["delete:chat-1:om_123"]);
+    }
+
+    fn assert_ok_status(frame: SurfaceFrame, expected: &str) {
+        match frame {
+            SurfaceFrame::Ok { payload, .. } => {
+                assert_eq!(payload["status"].as_str(), Some(expected));
+            }
+            other => panic!("expected ok frame, got {other:?}"),
+        }
+    }
+
+    struct FakeAdapter {
+        calls: Arc<StdMutex<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl PlatformAdapter for FakeAdapter {
+        fn platform(&self) -> Platform {
+            Platform::Custom("fake".to_string())
+        }
+
+        fn platform_name(&self) -> &str {
+            "fake"
+        }
+
+        async fn connect(&mut self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        async fn disconnect(&mut self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            true
+        }
+
+        async fn receive(&mut self) -> PlatformResult<Option<InboundMessage>> {
+            Ok(None)
+        }
+
+        async fn send(&self, msg: &OutboundMessage) -> PlatformResult<SendResult> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("send:{}", msg.text));
+            Ok(SendResult::success(Some("msg-1".to_string())))
+        }
+
+        async fn send_image(
+            &self,
+            chat_id: &str,
+            image_url: &str,
+            caption: Option<&str>,
+        ) -> PlatformResult<()> {
+            self.calls.lock().unwrap().push(format!(
+                "send_image:{chat_id}:{image_url}:{}",
+                caption.unwrap_or("")
+            ));
+            Ok(())
+        }
+
+        async fn delete_message(&self, chat_id: &str, message_id: &str) -> PlatformResult<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push(format!("delete:{chat_id}:{message_id}"));
+            Ok(())
+        }
+
+        async fn get_chat_info(&self, chat_id: &str) -> PlatformResult<ChatInfo> {
+            Ok(ChatInfo {
+                chat_id: chat_id.to_string(),
+                name: "fake chat".to_string(),
+                chat_type: "group".to_string(),
+            })
+        }
     }
 }
