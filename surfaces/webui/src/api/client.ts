@@ -5,6 +5,7 @@ import type {
   GatewayOpenAiTools,
   NavId,
   SessionSummary,
+  SessionTurnProjection,
   WorkspaceFile,
 } from '../types';
 
@@ -432,6 +433,19 @@ export const api = {
   compactSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/compact`, { method: 'POST' }),
   cancelSessionTurn: (sessionId: string) => writeWithReceipt(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }),
   sessionStats: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/stats`, {}),
+  sessionTurnProjection: (sessionId: string, fromSeq = 0, limit = 2000) => read<SessionTurnProjection>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/turns?from_seq=${fromSeq}&limit=${limit}`,
+    {
+      kind: 'session.turn_projection',
+      session_id: sessionId,
+      turn_count: 0,
+      turns: [],
+    },
+  ),
+  sessionTurn: (sessionId: string, turnId: string) => read(
+    `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}`,
+    {},
+  ),
   updateSession: (sessionId: string, patch: Record<string, unknown>) => write(`/api/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
