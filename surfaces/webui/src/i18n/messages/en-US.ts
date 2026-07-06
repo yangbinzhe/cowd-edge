@@ -2207,5 +2207,6 @@ export const enUS: MessageCatalog = {
   "page.mission.control.runtimeV2.conflicts": "Conflicts",
   "page.mission.control.runtimeV2.evidence": "Evidence",
   "page.mission.control.runtimeV2.empty": "No running WorkGraph, conflict, or action contract is present in the current projection.",
+  "page.mission.control.scheduler.dispatchMode": "Steward dispatch mode",
   "capability.section.mission.runtimeV2.description": "Inspect WorkGraphs, conflict arbitration, runtime evidence, and model-visible action contracts.",
 };

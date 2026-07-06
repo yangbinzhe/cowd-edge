@@ -2207,5 +2207,6 @@ export const zhCN: MessageCatalog = {
   "page.mission.control.runtimeV2.conflicts": "冲突",
   "page.mission.control.runtimeV2.evidence": "证据",
   "page.mission.control.runtimeV2.empty": "当前投影没有运行中的工作图、冲突或行动合同。",
+  "page.mission.control.scheduler.dispatchMode": "Steward 分发模式",
   "capability.section.mission.runtimeV2.description": "查看工作图、冲突仲裁、运行证据和模型可见行动合同。",
 };

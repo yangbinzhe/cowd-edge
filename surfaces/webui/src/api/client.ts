@@ -545,7 +545,12 @@ export const api = {
   teamMissionEvidence: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/evidence`, { events: [], tasks: [], evidence: [] }),
   agentMissionEvents: (agentId: string) => read(`/api/mission/control/agents/${encodeURIComponent(agentId)}/events`, { events: [], tasks: [] }),
   stewardScheduler: () => read('/api/mission/control/stewards/scheduler', {}),
-  tickStewardScheduler: (config: Record<string, unknown> = { max_session_commands_per_tick: 10, max_team_ticks: 10, allow_background_sessions: true }) => writeWithReceipt('/api/mission/control/stewards/scheduler', {
+  tickStewardScheduler: (config: Record<string, unknown> = {
+    max_session_commands_per_tick: 10,
+    max_team_ticks: 10,
+    allow_background_sessions: true,
+    dispatch_mode: 'mark_claimed_only',
+  }) => writeWithReceipt('/api/mission/control/stewards/scheduler', {
     method: 'POST',
     body: JSON.stringify(config),
   }),

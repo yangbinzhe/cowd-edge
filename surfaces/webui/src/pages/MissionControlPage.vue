@@ -20,6 +20,7 @@ const error = ref('');
 const showFullTrace = ref(true);
 const selectedSessionId = ref('');
 const selectedTeamId = ref('');
+const stewardDispatchMode = ref('mark_claimed_only');
 const teamObjective = ref('Analyze the current task, split roles, execute, and produce an evidence-backed summary');
 const teamHandoffNote = ref(t('page.mission.teamHandoff.default'));
 const routeTarget = ref('');
@@ -118,6 +119,18 @@ const actionContractRows = computed(() => {
   })) : [];
 });
 const missionHealth = computed(() => controlProjection.value?.health?.mission || mission.value?.health_projection || {});
+const controlReadiness = computed(() => controlProjection.value?.control_readiness || mission.value?.control_readiness || {});
+const controlReadinessRows = computed(() => {
+  const rows = controlReadiness.value?.actions || [];
+  return Array.isArray(rows) ? rows.map((row: any) => ({
+    action: row.action || '-',
+    status: row.available ? 'ready' : 'blocked',
+    reason: row.reason || '-',
+    approval: row.requires_approval ? 'required' : 'not_required',
+    targets: row.target_count ?? 0,
+    policy: row.policy_marker || '-',
+  })) : [];
+});
 const evidenceRows = computed(() => {
   if (!showFullTrace.value) return [];
   const runtimeEvents = Array.isArray(timeline.value?.events) ? timeline.value.events : [];
@@ -200,9 +213,10 @@ const stewardPreview = computed(() => {
   };
 });
 const recoveryPreview = computed(() => {
-  const gaps = recoveryReport.value?.gaps || recoveryReport.value?.replay_gaps || recoveryReport.value?.report?.gaps || [];
+  const candidates = recoveryReport.value?.candidates || recoveryReport.value?.report?.candidates || recoveryReport.value?.plan?.candidates || [];
+  const gaps = candidates.length ? candidates : (recoveryReport.value?.gaps || recoveryReport.value?.replay_gaps || recoveryReport.value?.report?.gaps || []);
   const affected = Array.isArray(gaps)
-    ? gaps.slice(0, 8).map((gap: any) => gap.session_id || gap.stream_id || gap.id || gap.kind || 'gap')
+    ? gaps.slice(0, 8).map((gap: any) => gap.session_id || gap.source_stream_id || gap.stream_id || gap.id || gap.kind || 'gap')
     : sessions.value.slice(0, 6).map((session: any) => session.session_id || session.id);
   return {
     affected,
@@ -357,7 +371,12 @@ async function previewStewardship() {
 
 async function tickStewards() {
   if (!schedulerState.value) await previewStewardship();
-  actionResult.value = await api.tickStewardScheduler();
+  actionResult.value = await api.tickStewardScheduler({
+    max_session_commands_per_tick: 10,
+    max_team_ticks: 10,
+    allow_background_sessions: true,
+    dispatch_mode: stewardDispatchMode.value,
+  });
   await refresh();
 }
 
@@ -474,6 +493,21 @@ onMounted(refresh);
             :source="recoveryReport ? 'runtime recovery report' : 'report required'"
           />
         </div>
+        <DataTable
+          v-if="controlReadinessRows.length"
+          searchable
+          copyable
+          row-key="action"
+          :rows="controlReadinessRows"
+          :columns="['action', 'status', 'reason', 'approval', 'targets', 'policy']"
+        />
+        <label class="field-line">
+          {{ t('page.mission.control.scheduler.dispatchMode') }}
+          <select v-model="stewardDispatchMode">
+            <option value="mark_claimed_only">mark_claimed_only</option>
+            <option value="start_runtime_turn">start_runtime_turn</option>
+          </select>
+        </label>
         <div class="button-row">
           <button class="ghost-action" type="button" @click="dispatchSessions">{{ t('page.mission.control.page.text.526c2cd14f') }}</button>
           <button class="ghost-action" type="button" @click="previewStewardship">{{ t('page.mission.control.page.text.673c612f9e') }}</button>
