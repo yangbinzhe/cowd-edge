@@ -82,6 +82,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('teams', t('capability.section.mission.teams.label'), t('capability.section.mission.teams.description'), 'queue', 'standard', 'mission.team'),
       section('agents', t('capability.section.mission.agents.label'), t('capability.section.mission.agents.description'), 'table', 'standard', 'mission.agent'),
       section('routes', t('capability.section.mission.routes.label'), t('capability.section.mission.routes.description'), 'form', 'standard', 'mission.route'),
+      section('runtime-v2', t('page.mission.control.runtimeV2.title'), t('capability.section.mission.runtimeV2.description'), 'table', 'standard', 'mission.runtime_v2'),
       section('inbox', t('capability.section.mission.inbox.label'), t('capability.section.mission.inbox.description'), 'queue', 'standard', 'mission.command'),
       section('approvals', t('capability.section.mission.approvals.label'), t('capability.section.mission.approvals.description'), 'governance', 'inspect', 'mission.approval'),
       section('trace', t('capability.section.mission.trace.label'), t('capability.section.mission.trace.description'), 'timeline', 'standard', 'mission.trace'),

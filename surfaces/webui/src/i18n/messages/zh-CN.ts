@@ -2202,4 +2202,10 @@ export const zhCN: MessageCatalog = {
   "capability.section.audit.approvals.description": "查看人类审批、托管审批和权限门禁记录。",
   "capability.section.audit.crossPlane.label": "跨平面审计",
   "capability.section.audit.crossPlane.description": "查看 Gateway、Runtime、Edge、Reality 的跨平面证据。",
+  "page.mission.control.runtimeV2.title": "Runtime v2 投影",
+  "page.mission.control.runtimeV2.workgraph": "工作图",
+  "page.mission.control.runtimeV2.conflicts": "冲突",
+  "page.mission.control.runtimeV2.evidence": "证据",
+  "page.mission.control.runtimeV2.empty": "当前投影没有运行中的工作图、冲突或行动合同。",
+  "capability.section.mission.runtimeV2.description": "查看工作图、冲突仲裁、运行证据和模型可见行动合同。",
 };

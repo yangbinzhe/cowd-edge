@@ -2202,4 +2202,10 @@ export const enUS: MessageCatalog = {
   "capability.section.audit.approvals.description": "Inspect human approval, steward approval, and permission-gate records.",
   "capability.section.audit.crossPlane.label": "Cross-plane audit",
   "capability.section.audit.crossPlane.description": "Inspect cross-plane evidence across Gateway, Runtime, Edge, and Reality.",
+  "page.mission.control.runtimeV2.title": "Runtime v2 projection",
+  "page.mission.control.runtimeV2.workgraph": "WorkGraph",
+  "page.mission.control.runtimeV2.conflicts": "Conflicts",
+  "page.mission.control.runtimeV2.evidence": "Evidence",
+  "page.mission.control.runtimeV2.empty": "No running WorkGraph, conflict, or action contract is present in the current projection.",
+  "capability.section.mission.runtimeV2.description": "Inspect WorkGraphs, conflict arbitration, runtime evidence, and model-visible action contracts.",
 };

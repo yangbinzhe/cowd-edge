@@ -554,6 +554,7 @@ export const api = {
   applyRuntimeRecovery: () => writeWithReceipt('/api/runtime/events/recover', { method: 'POST' }),
   missionApprovals: () => read('/api/mission/approvals', { approvals: { requests: [], pending_count: 0 } }),
   missionRelations: () => read('/api/mission/relations', { relations: { relations: [], proxies: [] } }),
+  missionConflicts: () => read('/api/mission/conflicts', { conflicts: { receipts: [], count: 0 } }),
   missionSessionDetail: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}`, {}),
   missionSessionInbox: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox`, { commands: [], summary: {} }),
   consumeMissionSessionCommand: (sessionId: string, commandId: string, mode = 'mark_claimed_only') => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(commandId)}/consume`, {

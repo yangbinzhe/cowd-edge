@@ -8,7 +8,7 @@ const gate = process.argv.includes('--gate');
 
 const pages = {
   runtime: { file: 'RuntimePage.vue', sections: ['overview', 'mission', 'runs', 'policy', 'timeline', 'growth'] },
-  mission: { file: 'MissionControlPage.vue', sections: ['overview', 'sessions', 'teams', 'agents', 'routes', 'inbox', 'approvals', 'trace'] },
+  mission: { file: 'MissionControlPage.vue', sections: ['overview', 'sessions', 'teams', 'agents', 'routes', 'runtime-v2', 'inbox', 'approvals', 'trace'] },
   context: { file: 'ContextPage.vue', sections: ['packet', 'budget', 'evidence', 'history'] },
   reality: { file: 'RealityCorePage.vue', sections: ['management', 'core-map', 'overview', 'fact-flow', 'evidence', 'promotions', 'boundaries'] },
   memory: { file: 'MemoryPage.vue', sections: ['layers', 'recall', 'graph', 'maintenance', 'structured-core'] },

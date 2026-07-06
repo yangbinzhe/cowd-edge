@@ -90,6 +90,8 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .clean-counts { min-height: 42px; display: flex; gap: 10px; align-items: center; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--surface); color: var(--text-muted); }
 .clean-counts span { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); padding: 0 10px; font-size: 12px; }
 .clean-counts strong { color: var(--text); }
+.mini-chip { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--text-muted); padding: 0 10px; font-size: 12px; }
+.mini-chip svg { color: var(--text-faint); }
 .run-panorama { display: grid; grid-template-columns: 160px minmax(0, 1fr) auto; gap: 10px; align-items: stretch; padding: 10px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .run-card { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 8px 10px; display: grid; gap: 3px; min-width: 0; }
 .run-card span, .run-card small { color: var(--text-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

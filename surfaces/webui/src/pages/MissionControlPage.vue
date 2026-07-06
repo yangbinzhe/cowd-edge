@@ -2,8 +2,8 @@
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import {
-  CheckCircle2, GitBranch, Inbox, Play, RefreshCw, Route, ShieldCheck, Square,
-  Users,
+  AlertTriangle, CheckCircle2, Database, GitBranch, Inbox, Play, RefreshCw, Route,
+  ShieldCheck, Square, Users, Workflow,
 } from 'lucide-vue-next';
 import { api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
@@ -27,6 +27,7 @@ const routeCommand = ref('Review current evidence and summarize blockers');
 const missionProjection = ref<any>({});
 const approvals = ref<any>({});
 const relations = ref<any>({});
+const conflicts = ref<any>({});
 const sessionDetail = ref<any>({});
 const sessionInbox = ref<any>({});
 const timeline = ref<any>({});
@@ -71,6 +72,52 @@ const events = computed(() => Array.isArray(mission.value?.events) ? mission.val
 const runtimeDigestEvents = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest) ? controlProjection.value.event_digest.latest : []);
 const stewardRows = computed(() => Array.isArray(controlProjection.value?.stewards) ? controlProjection.value.stewards : []);
 const relationCount = computed(() => controlProjection.value?.relations?.relation_count || relations.value?.relations?.relation_count || mission.value?.relation_projection?.relation_count || 0);
+const workgraphProjection = computed(() => controlProjection.value?.workgraphs || mission.value?.workgraph_projection || {});
+const workgraphRows = computed(() => {
+  const rows = workgraphProjection.value?.workgraphs || workgraphProjection.value?.items || [];
+  return Array.isArray(rows) ? rows.slice(0, 12).map((row: any) => ({
+    team: row.team_id || '-',
+    graph: row.workgraph_id || row.id || '-',
+    nodes: row.node_count ?? row.quality?.node_count ?? '-',
+    edges: row.edge_count ?? row.quality?.edge_count ?? '-',
+    ready: Array.isArray(row.ready_node_ids) ? row.ready_node_ids.length : 0,
+    blocked: Array.isArray(row.blocked_node_ids) ? row.blocked_node_ids.length : 0,
+    parallelism: row.max_parallelism || '-',
+  })) : [];
+});
+const conflictProjection = computed(() => controlProjection.value?.conflicts || mission.value?.conflict_projection || conflicts.value?.conflicts || {});
+const conflictItems = computed(() => {
+  const rows = conflictProjection.value?.receipts || conflictProjection.value?.conflicts || [];
+  return Array.isArray(rows) ? rows.slice(0, 12).map((row: any) => ({
+    id: row.conflict_id || row.id || '-',
+    source: row.source || '-',
+    severity: row.severity || '-',
+    decision: row.decision || '-',
+    summary: row.summary || '-',
+  })) : [];
+});
+const evidenceProjection = computed(() => controlProjection.value?.evidence || mission.value?.evidence_projection || {});
+const missionEvidenceRows = computed(() => {
+  const rows = evidenceProjection.value?.latest || evidenceProjection.value?.evidence || [];
+  return Array.isArray(rows) ? rows.slice(0, 12).map((row: any) => ({
+    kind: row.kind || '-',
+    session: row.session_id || '-',
+    team: row.team_id || '-',
+    agent: row.agent_id || '-',
+    summary: row.summary || '-',
+  })) : [];
+});
+const capabilityProjection = computed(() => controlProjection.value?.capabilities || mission.value?.capability_projection || {});
+const actionContractRows = computed(() => {
+  const rows = capabilityProjection.value?.action_contracts || [];
+  return Array.isArray(rows) ? rows.slice(0, 10).map((row: any) => ({
+    action: row.runtime_action || '-',
+    tool: row.tool_action || '-',
+    use: row.when_to_use || '-',
+    projection: Array.isArray(row.expected_projection) ? row.expected_projection.join(', ') : '-',
+  })) : [];
+});
+const missionHealth = computed(() => controlProjection.value?.health?.mission || mission.value?.health_projection || {});
 const evidenceRows = computed(() => {
   if (!showFullTrace.value) return [];
   const runtimeEvents = Array.isArray(timeline.value?.events) ? timeline.value.events : [];
@@ -93,6 +140,12 @@ const evidenceRows = computed(() => {
       kind: event.kind || '-',
       status: event.status || '-',
       summary: event.stream_id || event.actor || '-',
+    })),
+    ...missionEvidenceRows.value.slice(0, 8).map((event: any) => ({
+      source: 'mission-evidence',
+      kind: event.kind,
+      status: event.session,
+      summary: event.summary,
     })),
     ...realityEvents.slice(0, 6).map((event: any) => ({
       source: 'reality',
@@ -163,14 +216,16 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [nextMission, nextApprovals, nextRelations] = await Promise.all([
+    const [nextMission, nextApprovals, nextRelations, nextConflicts] = await Promise.all([
       api.missionControl(),
       api.missionApprovals().catch(() => ({})),
       api.missionRelations().catch(() => ({})),
+      api.missionConflicts().catch(() => ({})),
     ]);
     missionProjection.value = nextMission;
     approvals.value = nextApprovals;
     relations.value = nextRelations;
+    conflicts.value = nextConflicts;
     if (!selectedSessionId.value) selectedSessionId.value = store.activeSessionId || sessions.value[0]?.session_id || sessions.value[0]?.id || '';
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
     await refreshSelectedSession();
@@ -377,6 +432,8 @@ onMounted(refresh);
       <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
       <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
       <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
+      <span><strong>{{ workgraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
+      <span><strong>{{ conflictItems.length }}</strong>{{ t('page.mission.control.runtimeV2.conflicts') }}</span>
       <span><strong>{{ cleanCounters.commands }}</strong>{{ t('unit.commands') }}</span>
     </div>
 
@@ -527,6 +584,43 @@ onMounted(refresh);
         </label>
         <button class="ghost-action" type="button" :disabled="!routeTarget.trim() || !routeCommand.trim()" @click="routeToSession">
           <Route :size="16" />{{ t('page.mission.control.page.text.7dd0114f4f') }}</button>
+      </section>
+
+      <section class="mission-panel governed-wide" data-section="runtime-v2">
+        <header>
+          <h2>{{ t('page.mission.control.runtimeV2.title') }}</h2>
+          <StatusPill :status="missionHealth.status || (conflictItems.length ? 'degraded' : 'ready')" />
+        </header>
+        <div class="button-row">
+          <span class="mini-chip"><Workflow :size="14" />{{ t('page.mission.control.runtimeV2.workgraph') }} {{ workgraphRows.length }}</span>
+          <span class="mini-chip"><AlertTriangle :size="14" />{{ t('page.mission.control.runtimeV2.conflicts') }} {{ conflictItems.length }}</span>
+          <span class="mini-chip"><Database :size="14" />{{ t('page.mission.control.runtimeV2.evidence') }} {{ missionEvidenceRows.length }}</span>
+        </div>
+        <DataTable
+          v-if="workgraphRows.length"
+          searchable
+          copyable
+          row-key="graph"
+          :rows="workgraphRows"
+          :columns="['team', 'graph', 'nodes', 'edges', 'ready', 'blocked', 'parallelism']"
+        />
+        <DataTable
+          v-if="conflictItems.length"
+          searchable
+          copyable
+          row-key="id"
+          :rows="conflictItems"
+          :columns="['id', 'source', 'severity', 'decision', 'summary']"
+        />
+        <DataTable
+          v-if="actionContractRows.length"
+          searchable
+          copyable
+          row-key="action"
+          :rows="actionContractRows"
+          :columns="['action', 'tool', 'use', 'projection']"
+        />
+        <p v-if="!workgraphRows.length && !conflictItems.length && !actionContractRows.length" class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
       </section>
     </div>
 
