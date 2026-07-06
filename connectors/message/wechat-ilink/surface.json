@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "wechat-ilink",
   "name": "WeChat iLink Message Connector",
-  "version": "0.9.439",
+  "version": "0.9.456",
   "kind": "message-connector",
   "entry": "./cowd-edge-wechat-ilink-message",
   "transport": "stdio-jsonl",

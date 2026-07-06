@@ -30,6 +30,12 @@ const timelineSurface = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const evalReportDetail = ref<any>(null);
 const evalActionResult = ref<any>(null);
+const evalLevel = ref<'quick' | 'full' | 'deep-real'>('quick');
+const evalProvider = ref('');
+const evalBudget = ref('low');
+const evalAllowRealModel = ref(false);
+const evolutionActionResult = ref<any>(null);
+const evolutionDraft = ref<any>(null);
 
 function items(collection: any, key: string) {
   return Array.isArray(collection?.[key]) ? collection[key] : Array.isArray(collection) ? collection : [];
@@ -43,6 +49,9 @@ const releaseChecks = computed(() => items(state.value.releaseGate, 'checks'));
 const harnessEvalReports = computed(() => items(state.value.harnessEvalReports, 'reports'));
 const harnessEvalRuns = computed(() => items(state.value.harnessEvalRuns, 'runs'));
 const harnessEvalScenarios = computed(() => items(state.value.harnessEvalScenarios, 'scenarios'));
+const evolutionSignals = computed(() => items(state.value.evolutionSignals, 'signals'));
+const evolutionProposals = computed(() => items(state.value.evolutionProposals, 'proposals'));
+const evolutionSandboxEvals = computed(() => items(state.value.evolutionSandboxEvals, 'evals'));
 const auditRows = computed(() => auditRecords.value.slice(0, 18).map((record: any) => ({
   source: record.source || '-',
   id: record.id || '-',
@@ -156,6 +165,7 @@ const harnessEvalRows = computed(() => harnessEvalReports.value.slice(0, 12).map
   level: report.level,
   status: report.status,
   tokens: report.total_tokens || 0,
+  rounds: report.provider_rounds || 0,
   tools: report.tool_calls || 0,
   scenarios: report.scenario_count || 0,
   elapsed_ms: report.total_elapsed_ms || 0,
@@ -165,6 +175,7 @@ const harnessEvalRunRows = computed(() => harnessEvalRuns.value.slice(0, 8).map(
   level: run.level,
   status: run.status,
   tokens: run.total_tokens || 0,
+  rounds: run.provider_rounds || 0,
   tools: run.tool_calls || 0,
   report: run.report_id || '-',
 })));
@@ -174,6 +185,30 @@ const harnessEvalScenarioRows = computed(() => harnessEvalScenarios.value.slice(
   fake: scenario.fake_provider_gate ? 'yes' : 'no',
   real: scenario.real_provider_gate ? 'yes' : 'no',
   evidence: Array.isArray(scenario.required_evidence) ? scenario.required_evidence.join(', ') : '-',
+})));
+const evolutionSignalRows = computed(() => evolutionSignals.value.slice(0, 10).map((signal: any) => ({
+  id: signal.signal_id,
+  type: signal.signal_type,
+  severity: signal.severity,
+  owner: signal.source?.owner || '-',
+  continue: signal.immediate_task_can_continue ? 'yes' : 'no',
+  summary: signal.summary,
+})));
+const evolutionProposalRows = computed(() => evolutionProposals.value.slice(0, 10).map((proposal: any) => ({
+  id: proposal.proposal_id,
+  kind: proposal.kind,
+  status: proposal.status,
+  risk: proposal.risk?.level || '-',
+  approval: proposal.risk?.approval_required ? 'yes' : 'no',
+  benefit: proposal.expected_benefit,
+})));
+const evolutionSandboxRows = computed(() => evolutionSandboxEvals.value.slice(0, 10).map((item: any) => ({
+  id: item.eval_id,
+  proposal: item.proposal_id,
+  recommendation: item.recommendation,
+  baseline: item.baseline_score,
+  candidate: item.candidate_score,
+  modified: item.mainline_modified ? 'yes' : 'no',
 })));
 const usageChart = computed(() => {
   const byPlatform = state.value.usage?.by_platform || {};
@@ -202,6 +237,7 @@ const auditWorkflow = computed(() => [
   { id: 'approvals', label: t('script.pages.auditpage.label.8cc047ac17'), status: approvalRows.value.length ? 'ready' : 'idle', count: approvalRows.value.length },
   { id: 'cross-plane', label: t('script.pages.auditpage.label.392e6000a4'), status: crossPlaneRows.value.length ? 'ready' : 'idle', count: crossPlaneRows.value.length },
   { id: 'harness-eval', label: t('script.pages.auditpage.label.1a211031f5'), status: state.value.harnessEvalLatest?.report?.status || 'idle', count: harnessEvalReports.value.length },
+  { id: 'evolution', label: t('page.audit.evolution.title'), status: evolutionProposals.value.length ? 'ready' : 'idle', count: evolutionSignals.value.length },
   { id: 'global-timeline', label: t('script.pages.auditpage.label.018514a3d5'), status: globalTimelineRows.value.length ? 'ready' : 'idle', count: globalTimelineRows.value.length },
 ]);
 const auditEvidence = computed(() => [
@@ -227,6 +263,17 @@ const auditEvidence = computed(() => [
     source: 'gateway.cross-plane',
   })),
 ]);
+const evalReport = computed(() => evalReportDetail.value?.detail?.report || evalReportDetail.value?.report || null);
+const evalReportSummary = computed(() => evalReportDetail.value?.detail?.summary || evalReportDetail.value?.summary || null);
+const evalReportGateItems = computed(() => items(evalReport.value?.report_gate, 'items'));
+const evalArtifacts = computed(() => items(evalReportDetail.value?.detail, 'artifacts'));
+const evalArtifactRows = computed(() => evalArtifacts.value.map((path: string, index: number) => ({ index, path })));
+const evalProviderRounds = computed(() => items(evalReport.value?.execution_trace, 'rounds'));
+const evalRunModes = computed(() => [
+  { id: 'quick', label: t('page.audit.harnessEval.mode.quick'), detail: t('page.audit.harnessEval.mode.quickDetail') },
+  { id: 'full', label: t('page.audit.harnessEval.mode.full'), detail: t('page.audit.harnessEval.mode.fullDetail') },
+  { id: 'deep-real', label: t('page.audit.harnessEval.mode.deepReal'), detail: t('page.audit.harnessEval.mode.deepRealDetail') },
+]);
 
 async function refresh() {
   loading.value = true;
@@ -246,6 +293,9 @@ async function refresh() {
       harnessEvalReportsData,
       harnessEvalRunsData,
       harnessEvalScenariosData,
+      evolutionSignalsData,
+      evolutionProposalsData,
+      evolutionSandboxEvalsData,
     ] = await Promise.all([
       api.auditExport(source.value, limit.value, offset.value),
       api.usageSummary(),
@@ -260,6 +310,9 @@ async function refresh() {
       api.harnessEvalReports(),
       api.harnessEvalRuns(),
       api.harnessEvalScenarios(),
+      api.evolutionSignals(),
+      api.evolutionProposals(),
+      api.evolutionSandboxEvals(),
     ]);
     state.value = {
       audit,
@@ -275,6 +328,9 @@ async function refresh() {
       harnessEvalReports: harnessEvalReportsData,
       harnessEvalRuns: harnessEvalRunsData,
       harnessEvalScenarios: harnessEvalScenariosData,
+      evolutionSignals: evolutionSignalsData,
+      evolutionProposals: evolutionProposalsData,
+      evolutionSandboxEvals: evolutionSandboxEvalsData,
     };
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -284,7 +340,22 @@ async function refresh() {
 }
 
 async function runHarnessEvalSmoke() {
+  evalLevel.value = 'quick';
+  evalBudget.value = 'low';
+  evalAllowRealModel.value = false;
   evalActionResult.value = await api.harnessEvalRunSmoke();
+  await refresh();
+}
+
+async function runHarnessEval() {
+  const level = evalLevel.value;
+  evalActionResult.value = await api.harnessEvalStartRun({
+    level,
+    provider: evalProvider.value.trim() || undefined,
+    budget: evalBudget.value.trim() || (level === 'quick' ? 'low' : 'full'),
+    allow_real_model: level === 'deep-real' ? evalAllowRealModel.value : false,
+    objective: `webui requested ${level} harness evaluation`,
+  });
   await refresh();
 }
 
@@ -292,6 +363,62 @@ async function openHarnessEvalReport(row: Record<string, unknown>) {
   const id = String(row.id || '');
   if (!id) return;
   evalReportDetail.value = await api.harnessEvalReport(id);
+}
+
+async function cancelHarnessEvalRun(row: Record<string, unknown>) {
+  const id = String(row.id || row.run_id || '');
+  if (!id) return;
+  evalActionResult.value = await api.harnessEvalCancelRun(id);
+  await refresh();
+}
+
+async function createEvolutionSignal() {
+  evolutionActionResult.value = await api.evolutionCreateSignal({
+    signal_type: 'slow_progress',
+    source: {
+      owner: 'webui.audit',
+      session_id: null,
+      agent_id: null,
+      team_id: null,
+      run_id: null,
+    },
+    evidence_refs: ['webui:audit:evolution'],
+    severity: 'warning',
+    summary: t('page.audit.evolution.signalSummary'),
+    suggested_action: 'create proposal and sandbox evaluation before adoption',
+    immediate_task_can_continue: true,
+  });
+  await refresh();
+}
+
+async function createEvolutionProposal() {
+  evolutionActionResult.value = await api.evolutionCreateProposal([]);
+  await refresh();
+}
+
+async function openEvolutionDraft(row: Record<string, unknown>) {
+  const id = String(row.id || '');
+  if (!id) return;
+  evolutionDraft.value = await api.evolutionSkillDraft(id);
+}
+
+async function runEvolutionSandbox(row: Record<string, unknown>) {
+  const id = String(row.id || row.proposal || '');
+  if (!id) return;
+  evolutionActionResult.value = await api.evolutionSandboxEval(id, {
+    baseline_ref: 'baseline:current',
+    candidate_ref: 'candidate:sandbox',
+    baseline_score: 60,
+    candidate_score: 80,
+  });
+  await refresh();
+}
+
+async function decideEvolutionProposal(row: Record<string, unknown>, decision: 'approved' | 'rejected' | 'archived') {
+  const id = String(row.id || '');
+  if (!id) return;
+  evolutionActionResult.value = await api.evolutionProposalDecision(id, decision);
+  await refresh();
 }
 
 onMounted(refresh);
@@ -450,7 +577,27 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.c2a8e12d35') }}</h2>
           <span>{{ displayStatus(state.harnessEvalLatest?.status || 'reports') }}</span>
         </header>
+        <div class="eval-control-grid">
+          <label v-for="mode in evalRunModes" :key="mode.id" class="eval-mode-option" :class="{ active: evalLevel === mode.id }">
+            <input v-model="evalLevel" type="radio" :value="mode.id" />
+            <strong>{{ mode.label }}</strong>
+            <small>{{ mode.detail }}</small>
+          </label>
+          <label class="field-line">
+            {{ t('page.audit.harnessEval.provider') }}
+            <input v-model="evalProvider" type="text" placeholder="deepseek-v4-flash" />
+          </label>
+          <label class="field-line">
+            {{ t('page.audit.harnessEval.budget') }}
+            <input v-model="evalBudget" type="text" :placeholder="t('page.audit.harnessEval.budgetPlaceholder')" />
+          </label>
+          <label class="field-line inline-check">
+            <input v-model="evalAllowRealModel" type="checkbox" :disabled="evalLevel !== 'deep-real'" />
+            {{ t('page.audit.harnessEval.allowRealModel') }}
+          </label>
+        </div>
         <div class="button-row">
+          <button class="primary-action" type="button" @click="runHarnessEval">{{ t('page.audit.harnessEval.startEval') }}</button>
           <button class="primary-action" type="button" @click="runHarnessEvalSmoke">{{ t('page.audit.page.text.96e9252cbf') }}</button>
           <button class="ghost-action" type="button" @click="refresh">{{ t('page.audit.page.text.95dd535531') }}</button>
         </div>
@@ -461,13 +608,46 @@ onMounted(refresh);
           <dd>{{ displayStatus(state.harnessEvalLatest?.report?.status || state.harnessEvalLatest?.status || 'empty') }}</dd>
           <dt>{{ t('page.audit.page.text.e60fd065c9') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.total_tokens || 0 }}</dd>
+          <dt>{{ t('page.audit.harnessEval.providerRounds') }}</dt>
+          <dd>{{ state.harnessEvalLatest?.report?.provider_rounds || 0 }}</dd>
           <dt>{{ t('page.audit.page.text.a61ad14bd4') }}</dt>
           <dd>{{ state.harnessEvalLatest?.report?.tool_calls || 0 }}</dd>
         </dl>
-        <DataTable v-if="harnessEvalRows.length" searchable copyable :rows="harnessEvalRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'scenarios', 'elapsed_ms']" row-key="id" @row-click="openHarnessEvalReport" />
+        <DataTable v-if="harnessEvalRows.length" searchable copyable :rows="harnessEvalRows" :columns="['id', 'level', 'status', 'tokens', 'rounds', 'tools', 'scenarios', 'elapsed_ms']" row-key="id" @row-click="openHarnessEvalReport" />
         <EmptyState v-else :title="t('page.audit.page.title.6d80665780')" :detail="t('page.audit.page.detail.64a90473e7')" />
         <RequestReceipt v-if="evalActionResult" :receipt="evalActionResult" :title="t('page.audit.page.title.7e07abe625')" />
-        <RawPayload v-if="evalReportDetail" :title="t('page.audit.page.title.052bb3b0c7')" :data="evalReportDetail" />
+        <section v-if="evalReportDetail" class="eval-report-drilldown">
+          <header>
+            <h3>{{ evalReportSummary?.id || 'Harness eval report' }}</h3>
+            <span>{{ displayStatus(evalReport?.report_gate?.status || evalReportSummary?.status || 'unknown') }}</span>
+          </header>
+          <div class="metric-row compact">
+            <article class="metric-card">
+              <span>{{ t('page.audit.harnessEval.providerRounds') }}</span>
+              <strong>{{ evalReport?.execution_trace?.provider_rounds || 0 }}</strong>
+              <small>{{ evalProviderRounds.length }} summaries</small>
+            </article>
+            <article class="metric-card">
+              <span>{{ t('page.audit.harnessEval.tokens') }}</span>
+              <strong>{{ evalReport?.execution_trace?.total_usage?.total_tokens || evalReportSummary?.total_tokens || 0 }}</strong>
+              <small>{{ evalReport?.execution_trace?.total_usage?.usage_source || '-' }}</small>
+            </article>
+            <article class="metric-card">
+              <span>{{ t('page.audit.harnessEval.reportGate') }}</span>
+              <strong>{{ displayStatus(evalReport?.report_gate?.status || 'unknown') }}</strong>
+              <small>{{ formatCount('items', evalReportGateItems.length) }}</small>
+            </article>
+            <article class="metric-card">
+              <span>{{ t('page.audit.harnessEval.artifacts') }}</span>
+              <strong>{{ evalArtifacts.length }}</strong>
+              <small>{{ t('page.audit.harnessEval.packageFiles') }}</small>
+            </article>
+          </div>
+          <DataTable v-if="evalReportGateItems.length" searchable copyable :rows="evalReportGateItems" :columns="['name', 'status', 'required', 'evidence', 'repair_hint']" row-key="name" />
+          <DataTable v-if="evalProviderRounds.length" searchable copyable :rows="evalProviderRounds" :columns="['round_index', 'name', 'model', 'status', 'elapsed_ms', 'text_delta_count', 'tool_use_count', 'request_summary', 'response_summary', 'detail_path']" row-key="detail_path" />
+          <DataTable v-if="evalArtifactRows.length" searchable copyable :rows="evalArtifactRows" :columns="['index', 'path']" row-key="path" />
+          <RawPayload :title="t('page.audit.page.title.052bb3b0c7')" :data="evalReportDetail" />
+        </section>
       </section>
 
       <section class="management-panel gateway-panel" data-section="harness-eval-runs">
@@ -475,7 +655,10 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.4444545e37') }}</h2>
           <span>{{ formatCount('runs', harnessEvalRuns.length) }}</span>
         </header>
-        <DataTable v-if="harnessEvalRunRows.length" searchable copyable :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'tokens', 'tools', 'report']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
+        <DataTable v-if="harnessEvalRunRows.length" searchable copyable :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'tokens', 'rounds', 'tools', 'report']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
+        <div v-if="harnessEvalRunRows.length" class="button-row">
+          <button class="ghost-action" type="button" @click="cancelHarnessEvalRun(harnessEvalRunRows[0])">{{ t('page.audit.harnessEval.cancelLatest') }}</button>
+        </div>
         <EmptyState v-else :title="t('page.audit.page.title.2029dfea2e')" :detail="t('page.audit.page.detail.d6935f4575')" />
       </section>
 
@@ -486,6 +669,46 @@ onMounted(refresh);
         </header>
         <DataTable v-if="harnessEvalScenarioRows.length" searchable copyable :rows="harnessEvalScenarioRows" :columns="['id', 'kind', 'fake', 'real', 'evidence']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, summary: $event.evidence }" />
         <EmptyState v-else :title="t('page.audit.page.title.1d4e669193')" :detail="t('page.audit.page.detail.4976a6366c')" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="evolution">
+        <header>
+          <h2>{{ t('page.audit.evolution.title') }}</h2>
+          <span>{{ t('page.audit.evolution.summary', { signals: evolutionSignals.length, proposals: evolutionProposals.length }) }}</span>
+        </header>
+        <div class="button-row">
+          <button class="primary-action" type="button" @click="createEvolutionSignal">{{ t('page.audit.evolution.createSignal') }}</button>
+          <button class="primary-action" type="button" @click="createEvolutionProposal">{{ t('page.audit.evolution.createProposal') }}</button>
+          <button class="ghost-action" type="button" @click="refresh">{{ t('page.audit.page.text.95dd535531') }}</button>
+        </div>
+        <div class="metric-row compact">
+          <article class="metric-card">
+            <span>{{ t('page.audit.evolution.signals') }}</span>
+            <strong>{{ evolutionSignals.length }}</strong>
+            <small>{{ t('page.audit.evolution.runtimeOwned') }}</small>
+          </article>
+          <article class="metric-card">
+            <span>{{ t('page.audit.evolution.proposals') }}</span>
+            <strong>{{ evolutionProposals.length }}</strong>
+            <small>{{ t('page.audit.evolution.approvalBoundary') }}</small>
+          </article>
+          <article class="metric-card">
+            <span>{{ t('page.audit.evolution.sandbox') }}</span>
+            <strong>{{ evolutionSandboxEvals.length }}</strong>
+            <small>{{ t('page.audit.evolution.noMainlineWrite') }}</small>
+          </article>
+        </div>
+        <DataTable v-if="evolutionSignalRows.length" searchable copyable :rows="evolutionSignalRows" :columns="['id', 'type', 'severity', 'owner', 'continue', 'summary']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.signal', evidence: $event.id, status: $event.severity, summary: $event.summary }" />
+        <DataTable v-if="evolutionProposalRows.length" searchable copyable :rows="evolutionProposalRows" :columns="['id', 'kind', 'status', 'risk', 'approval', 'benefit']" row-key="id" @row-click="openEvolutionDraft" />
+        <div v-if="evolutionProposalRows.length" class="button-row">
+          <button class="ghost-action" type="button" @click="runEvolutionSandbox(evolutionProposalRows[0])">{{ t('page.audit.evolution.runSandbox') }}</button>
+          <button class="ghost-action" type="button" @click="decideEvolutionProposal(evolutionProposalRows[0], 'approved')">{{ t('page.audit.evolution.approve') }}</button>
+          <button class="ghost-action" type="button" @click="decideEvolutionProposal(evolutionProposalRows[0], 'archived')">{{ t('page.audit.evolution.archive') }}</button>
+        </div>
+        <DataTable v-if="evolutionSandboxRows.length" searchable copyable :rows="evolutionSandboxRows" :columns="['id', 'proposal', 'recommendation', 'baseline', 'candidate', 'modified']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.sandbox', evidence: $event.id, status: $event.recommendation }" />
+        <EmptyState v-if="!evolutionSignalRows.length && !evolutionProposalRows.length" :title="t('page.audit.evolution.emptyTitle')" :detail="t('page.audit.evolution.emptyDetail')" />
+        <RequestReceipt v-if="evolutionActionResult" :receipt="evolutionActionResult" :title="t('page.audit.evolution.receipt')" />
+        <RawPayload v-if="evolutionDraft" :title="t('page.audit.evolution.skillDraft')" :data="evolutionDraft" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="approvals">

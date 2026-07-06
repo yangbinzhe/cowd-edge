@@ -322,6 +322,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('harness-eval', t('capability.section.audit.harnessEval.label'), t('capability.section.audit.harnessEval.description'), 'summary', 'standard', 'harness.eval'),
       section('harness-eval-runs', t('capability.section.audit.harnessEvalRuns.label'), t('capability.section.audit.harnessEvalRuns.description'), 'timeline', 'standard', 'harness.eval.run'),
       section('harness-eval-scenarios', t('capability.section.audit.harnessEvalScenarios.label'), t('capability.section.audit.harnessEvalScenarios.description'), 'table', 'standard', 'harness.eval.scenario'),
+      section('evolution', t('capability.section.audit.evolution.label'), t('capability.section.audit.evolution.description'), 'governance', 'inspect', 'runtime.evolution'),
       section('approvals', t('capability.section.audit.approvals.label'), t('capability.section.audit.approvals.description'), 'governance', 'inspect', 'approval.audit'),
       section('cross-plane', t('capability.section.audit.crossPlane.label'), t('capability.section.audit.crossPlane.description'), 'table', 'standard', 'cross-plane.audit'),
     ],

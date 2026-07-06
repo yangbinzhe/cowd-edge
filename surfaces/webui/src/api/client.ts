@@ -36,6 +36,15 @@ export interface ApiReceipt<T = any> {
   retryable?: boolean;
 }
 
+export interface HarnessEvalRunOptions {
+  level?: 'quick' | 'full' | 'deep' | 'deep-real';
+  provider?: string;
+  budget?: string;
+  allow_real_model?: boolean;
+  actor?: string;
+  objective?: string;
+}
+
 export class ApiWriteError extends Error {
   endpoint: string;
   method: string;
@@ -913,17 +922,58 @@ export const api = {
   harnessEvalScenarios: () => read('/api/harness-eval/scenarios', { scenarios: [] }),
   harnessEvalRuns: () => read('/api/harness-eval/runs', { runs: [] }),
   harnessEvalRun: (id: string) => read(`/api/harness-eval/runs/${encodeURIComponent(id)}`, {}),
-  harnessEvalRunSmoke: () => writeWithReceipt('/api/harness-eval/runs', {
+  harnessEvalRunStatus: (id: string) => read(`/api/harness-eval/runs/${encodeURIComponent(id)}`, {}),
+  harnessEvalArtifacts: (id: string) => read(`/api/harness-eval/reports/${encodeURIComponent(id)}/artifacts`, { artifacts: [] }),
+  harnessEvalReportGate: (id: string) => read(`/api/harness-eval/reports/${encodeURIComponent(id)}/gate`, {}),
+  harnessEvalStartRun: (options: HarnessEvalRunOptions = {}) => writeWithReceipt('/api/harness-eval/runs', {
     method: 'POST',
     body: JSON.stringify({
-      level: 'quick',
-      budget: 'low',
+      level: options.level === 'deep-real' ? 'deep' : options.level || 'quick',
+      provider: options.provider || undefined,
+      budget: options.budget || (options.level === 'full' || options.level === 'deep-real' ? 'full' : 'low'),
+      actor: options.actor || 'webui.audit',
+      objective: options.objective || `operator requested harness eval ${options.level || 'quick'}`,
+      allow_real_model: Boolean(options.allow_real_model),
+    }),
+  }),
+  harnessEvalRunSmoke: () => api.harnessEvalStartRun({
+    level: 'quick',
+    budget: 'low',
+    allow_real_model: false,
+    objective: 'operator requested harness eval smoke',
+  }),
+  harnessEvalCancelRun: (id: string) => writeWithReceipt(`/api/harness-eval/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  terminalGateRun: () => writeWithReceipt('/api/harness-eval/runs', {
+    method: 'POST',
+    body: JSON.stringify({
+      level: 'full',
+      budget: 'terminal-gate',
       actor: 'webui.audit',
-      objective: 'operator requested harness eval smoke',
+      objective: 'operator requested terminal gate evaluation',
       allow_real_model: false,
     }),
   }),
-  harnessEvalCancelRun: (id: string) => writeWithReceipt(`/api/harness-eval/runs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  evolutionSignals: () => read('/api/evolution/signals', { signals: [] }),
+  evolutionCreateSignal: (body: Record<string, unknown>) => writeWithReceipt('/api/evolution/signals', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  evolutionProposals: () => read('/api/evolution/proposals', { proposals: [] }),
+  evolutionCreateProposal: (signal_ids: string[] = []) => writeWithReceipt('/api/evolution/proposals', {
+    method: 'POST',
+    body: JSON.stringify({ signal_ids }),
+  }),
+  evolutionProposal: (id: string) => read(`/api/evolution/proposals/${encodeURIComponent(id)}`, {}),
+  evolutionProposalDecision: (id: string, decision: 'approved' | 'rejected' | 'archived') => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision }),
+  }),
+  evolutionSkillDraft: (id: string) => read(`/api/evolution/proposals/${encodeURIComponent(id)}/skill-draft`, {}),
+  evolutionSandboxEval: (id: string, body: Record<string, unknown> = {}) => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/sandbox-eval`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  evolutionSandboxEvals: () => read('/api/evolution/sandbox-evals', { evals: [] }),
   mfgApp: () => read('/api/apps/mfg/app', {}),
   mfgHealth: () => read('/api/apps/mfg/reality/health', {}),
   mfgProductionGovernance: () => read('/api/apps/mfg/production/governance', {}),

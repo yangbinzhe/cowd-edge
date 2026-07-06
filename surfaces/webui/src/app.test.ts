@@ -504,7 +504,12 @@ describe('Cowd Vue WebUI shell', () => {
     await api.harnessEvalScenarios();
     await api.harnessEvalRuns();
     await api.harnessEvalRun('run-1');
+    await api.harnessEvalRunStatus('run-1');
+    await api.harnessEvalStartRun({ level: 'full', budget: 'full', objective: 'test full eval' });
     await api.harnessEvalRunSmoke();
+    await api.harnessEvalArtifacts('report-1');
+    await api.harnessEvalReportGate('report-1');
+    await api.terminalGateRun();
     await api.harnessEvalCancelRun('run-1');
 
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/reports/latest', expect.any(Object));
@@ -513,8 +518,36 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/scenarios', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs/run-1', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs/run-1', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/reports/report-1/artifacts', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/reports/report-1/gate', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs/run-1/cancel', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('calls evolution signal proposal sandbox and skill draft endpoints', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, signals: [], proposals: [], evals: [] }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.evolutionSignals();
+    await api.evolutionCreateSignal({ signal_type: 'slow_progress', summary: 'slow', source: { owner: 'test' }, severity: 'warning', suggested_action: 'review' });
+    await api.evolutionProposals();
+    await api.evolutionCreateProposal(['signal-1']);
+    await api.evolutionProposal('proposal-1');
+    await api.evolutionProposalDecision('proposal-1', 'approved');
+    await api.evolutionSkillDraft('proposal-1');
+    await api.evolutionSandboxEval('proposal-1', { baseline_score: 1, candidate_score: 2 });
+    await api.evolutionSandboxEvals();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/signals', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/signals', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/decision', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/skill-draft', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/sandbox-eval', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/sandbox-evals', expect.any(Object));
   });
 
   it('calls real tool operation endpoints through the backend', async () => {

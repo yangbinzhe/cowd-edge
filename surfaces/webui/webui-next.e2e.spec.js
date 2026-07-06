@@ -134,14 +134,14 @@ test('skills agents and tools pages expose lifecycle workbenches', async ({ page
 test('gateway page exposes connector and cross-plane controls', async ({ page }) => {
   await page.goto('/index.html#/gateway');
   await expect(page.getByRole('heading', { name: 'Surface host' })).toBeVisible();
-  await page.locator('.section-row').filter({ hasText: 'Connectors' }).click();
+  await page.locator('.section-row[data-section-id="connectors"]').click();
   await expect(page.getByRole('heading', { name: 'Platforms and connectors' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Connector capabilities' })).toBeVisible();
-  await page.locator('.section-row').filter({ hasText: 'Resources' }).click();
+  await page.locator('.section-row[data-section-id="resources"]').click();
   await expect(page.getByRole('heading', { name: 'Resources and memory promotion' })).toBeVisible();
-  await page.locator('.section-row').filter({ hasText: 'Identities' }).click();
+  await page.locator('.section-row[data-section-id="identities"]').click();
   await expect(page.getByRole('heading', { name: 'Identities and grants' })).toBeVisible();
-  await page.locator('.section-row').filter({ hasText: 'Executions' }).click();
+  await page.locator('.section-row[data-section-id="executions"]').click();
   await expect(page.getByRole('heading', { name: 'Cross-plane governance' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Action execution' })).toBeVisible();
   await expect(page.locator('.governed-action-panel').filter({ hasText: 'Execute cross-plane action' })).toContainText('Run plan');
@@ -190,7 +190,7 @@ test('audit page exposes usage and release gate governance controls', async ({ p
   await page.goto('/index.html#/audit?section=cross-plane');
   await expect(page.locator('[data-section="cross-plane"]').first()).toContainText('Governance evidence');
   await expect(page.getByRole('button', { name: 'Refresh audit' })).toBeVisible();
-  await expect(page.locator('.metric-card')).toHaveCount(4);
+  await expect(page.locator('.metric-row').first().locator('.metric-card')).toHaveCount(4);
 });
 
 test('settings page is reachable and theme control is usable', async ({ page }) => {

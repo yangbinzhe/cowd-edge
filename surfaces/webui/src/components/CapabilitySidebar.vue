@@ -95,6 +95,7 @@ onMounted(() => {
         :key="section.id"
         class="section-row"
         :class="{ active: activeSection === section.id }"
+        :data-section-id="section.id"
         type="button"
         @click="selectSection(section)"
       >

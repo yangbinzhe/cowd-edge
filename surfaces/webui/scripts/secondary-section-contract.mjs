@@ -18,7 +18,7 @@ const pages = {
   surfaces: { file: 'SurfacePage.vue', sections: ['health', 'registry', 'routes', 'dispatch', 'delivery', 'events'] },
   gateway: { file: 'GatewayPage.vue', sections: ['surfaces', 'alignment', 'connectors', 'message-plane', 'resources', 'executions', 'identities'] },
   mfg: { file: 'MfgPage.vue', sections: ['overview', 'data-plane', 'source-pack', 'entities', 'metrics', 'evidence', 'incident-room', 'actions', 'skills', 'reports'] },
-  audit: { file: 'AuditPage.vue', sections: ['global-timeline', 'logs', 'usage', 'release', 'harness-eval', 'harness-eval-runs', 'harness-eval-scenarios', 'approvals', 'cross-plane'] },
+  audit: { file: 'AuditPage.vue', sections: ['global-timeline', 'logs', 'usage', 'release', 'harness-eval', 'harness-eval-runs', 'harness-eval-scenarios', 'evolution', 'approvals', 'cross-plane'] },
 };
 
 function read(relativePath) {
