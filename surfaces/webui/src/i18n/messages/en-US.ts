@@ -2276,4 +2276,12 @@ export const enUS: MessageCatalog = {
   "page.mission.control.runtimeV2.empty": "No running WorkGraph, conflict, or action contract is present in the current projection.",
   "page.mission.control.scheduler.dispatchMode": "Steward dispatch mode",
   "capability.section.mission.runtimeV2.description": "Inspect WorkGraphs, conflict arbitration, runtime evidence, and model-visible action contracts.",
+  "edge.source.incremental.strategy": "Incremental strategy",
+  "edge.source.incremental.cursor": "Current cursor",
+  "edge.source.incremental.offset": "Current offset",
+  "edge.source.incremental.updatedAtField": "Updated-at field",
+  "edge.source.incremental.cursorField": "Cursor field",
+  "edge.source.incremental.run": "Run incremental",
+  "edge.source.event.fixture": "Event fixture",
+  "edge.source.event.poll": "Poll events",
 };

@@ -2276,4 +2276,12 @@ export const zhCN: MessageCatalog = {
   "page.mission.control.runtimeV2.empty": "当前投影没有运行中的工作图、冲突或行动合同。",
   "page.mission.control.scheduler.dispatchMode": "Steward 分发模式",
   "capability.section.mission.runtimeV2.description": "查看工作图、冲突仲裁、运行证据和模型可见行动合同。",
+  "edge.source.incremental.strategy": "增量策略",
+  "edge.source.incremental.cursor": "当前游标",
+  "edge.source.incremental.offset": "当前偏移",
+  "edge.source.incremental.updatedAtField": "更新时间字段",
+  "edge.source.incremental.cursorField": "游标字段",
+  "edge.source.incremental.run": "运行增量",
+  "edge.source.event.fixture": "事件样例",
+  "edge.source.event.poll": "轮询事件",
 };

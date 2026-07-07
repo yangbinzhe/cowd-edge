@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use edge_contract::SurfaceFrame;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
@@ -18,6 +18,8 @@ struct SourceSidecarState {
     config: Value,
     configured: bool,
     last_error: Option<String>,
+    last_run_at_ms: Option<i64>,
+    watermarks: BTreeMap<String, SourceWatermark>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +78,38 @@ pub(crate) struct SourceRecordBatch {
     pub(crate) truncated: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct SourceWatermark {
+    pub(crate) adapter_id: String,
+    pub(crate) resource_ref: String,
+    #[serde(default)]
+    pub(crate) table: Option<String>,
+    pub(crate) strategy: String,
+    #[serde(default)]
+    pub(crate) cursor: Option<String>,
+    #[serde(default)]
+    pub(crate) offset: Option<usize>,
+    #[serde(default)]
+    pub(crate) high_watermark: Option<String>,
+    #[serde(default)]
+    pub(crate) checksum: Option<String>,
+    pub(crate) updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SourceIncrementalRunRequest {
+    adapter_id: String,
+    resource_ref: String,
+    #[serde(default)]
+    table: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    watermark: Option<SourceWatermark>,
+    #[serde(default)]
+    metadata: Value,
+}
+
 pub async fn run_stdio_source_connector(
     surface_id: &'static str,
     adapter_id: &'static str,
@@ -131,6 +165,8 @@ async fn handle_frame(
                 "source.schema_discovery".to_string(),
                 "source.snapshot".to_string(),
                 "source.incremental".to_string(),
+                "source.state".to_string(),
+                "source.watermark".to_string(),
                 "source.event".to_string(),
                 "source.health".to_string(),
             ],
@@ -169,6 +205,52 @@ async fn handle_frame(
                     "adapter_id": adapter_id,
                     "last_error": state.last_error,
                 }),
+            }
+        }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload: _,
+            ..
+        } if action == "source.state" => {
+            let state = state.lock().await;
+            SurfaceFrame::Ok {
+                id,
+                payload: source_state_payload(surface_id, adapter_id, default_base_url, &state),
+            }
+        }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload,
+            ..
+        } if action == "source.watermark.get" => {
+            let state = state.lock().await;
+            SurfaceFrame::Ok {
+                id,
+                payload: serde_json::json!({
+                    "status": "ok",
+                    "adapter_id": adapter_id,
+                    "watermark": get_watermark_from_state(adapter_id, &payload, &state),
+                }),
+            }
+        }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload,
+            ..
+        } if action == "source.watermark.commit" => {
+            match commit_watermark(payload, adapter_id, state.clone()).await {
+                Ok(payload) => SurfaceFrame::Ok { id, payload },
+                Err(error) => {
+                    state.lock().await.last_error = Some(error.clone());
+                    SurfaceFrame::Error {
+                        id: Some(id),
+                        code: "source_watermark_commit_failed".to_string(),
+                        message: error,
+                    }
+                }
             }
         }
         SurfaceFrame::Action {
@@ -219,6 +301,25 @@ async fn handle_frame(
             action,
             payload,
             ..
+        } if action == "source.incremental.run" || action == "source.incremental_run" => {
+            match run_incremental_source(payload, adapter_id, default_base_url, state.clone()).await
+            {
+                Ok(payload) => SurfaceFrame::Ok { id, payload },
+                Err(error) => {
+                    state.lock().await.last_error = Some(error.clone());
+                    SurfaceFrame::Error {
+                        id: Some(id),
+                        code: "source_incremental_run_failed".to_string(),
+                        message: error,
+                    }
+                }
+            }
+        }
+        SurfaceFrame::Action {
+            id,
+            action,
+            payload,
+            ..
         } if action == "source.incremental_plan" || action == "source.plan_incremental" => {
             match incremental_source_plan(payload, adapter_id) {
                 Ok(payload) => SurfaceFrame::Ok { id, payload },
@@ -255,7 +356,10 @@ async fn handle_frame(
             action,
             payload,
             ..
-        } if action == "source.poll_events" || action == "source.event_poll" => {
+        } if action == "source.event.poll"
+            || action == "source.poll_events"
+            || action == "source.event_poll" =>
+        {
             match poll_source_events(payload, adapter_id, state.clone()).await {
                 Ok(payload) => SurfaceFrame::Ok { id, payload },
                 Err(error) => {
@@ -339,6 +443,111 @@ fn incremental_source_plan(payload: Value, adapter_id: &str) -> Result<Value, St
         return source_db::incremental_plan(payload, adapter_id);
     }
     bitable_incremental_plan(payload, adapter_id)
+}
+
+async fn run_incremental_source(
+    payload: Value,
+    adapter_id: &str,
+    default_base_url: &str,
+    state: Arc<Mutex<SourceSidecarState>>,
+) -> Result<Value, String> {
+    let mut request = incremental_request_from_payload(payload, adapter_id)?;
+    let state_watermark = {
+        let state_guard = state.lock().await;
+        request.watermark.clone().or_else(|| {
+            get_watermark_from_state(
+                adapter_id,
+                &serde_json::to_value(&request).unwrap_or_default(),
+                &state_guard,
+            )
+        })
+    };
+    request.watermark = state_watermark.clone();
+    let mut plan = SourceReadPlan {
+        adapter_id: request.adapter_id.clone(),
+        resource_ref: request.resource_ref.clone(),
+        table: request.table.clone(),
+        fields: Vec::new(),
+        limit: request.limit,
+        offset: state_watermark
+            .as_ref()
+            .and_then(|watermark| watermark.offset),
+        cursor: state_watermark.as_ref().and_then(|watermark| {
+            watermark
+                .cursor
+                .clone()
+                .or_else(|| watermark.high_watermark.clone())
+        }),
+        metadata: request.metadata.clone(),
+    };
+    apply_incremental_watermark_to_plan(&mut plan, state_watermark.as_ref());
+    let batch = read_source_batch(
+        serde_json::json!({ "read_plan": plan }),
+        adapter_id,
+        default_base_url,
+        state.clone(),
+    )
+    .await?;
+    let watermark_after =
+        watermark_after_batch(&batch, state_watermark.as_ref(), &request.metadata);
+    {
+        let mut state_guard = state.lock().await;
+        state_guard.last_run_at_ms = Some(now_ms());
+        state_guard.last_error = None;
+    }
+    let degraded_reason = degraded_reason_for_incremental(&request.metadata, &watermark_after);
+    Ok(serde_json::json!({
+        "status": if degraded_reason.is_some() { "degraded" } else { "ok" },
+        "batch": batch,
+        "watermark_before": state_watermark,
+        "watermark_after": watermark_after,
+        "degraded_reason": degraded_reason,
+    }))
+}
+
+fn incremental_request_from_payload(
+    payload: Value,
+    adapter_id: &str,
+) -> Result<SourceIncrementalRunRequest, String> {
+    let value = payload
+        .get("request")
+        .or_else(|| payload.get("incremental_run"))
+        .cloned()
+        .unwrap_or(payload);
+    let mut request = serde_json::from_value::<SourceIncrementalRunRequest>(value)
+        .map_err(|error| format!("invalid source incremental run request: {error}"))?;
+    if request.adapter_id.trim().is_empty() {
+        request.adapter_id = adapter_id.to_string();
+    }
+    if request.adapter_id != adapter_id {
+        return Err(format!(
+            "adapter mismatch: request `{}` routed to `{adapter_id}`",
+            request.adapter_id
+        ));
+    }
+    Ok(request)
+}
+
+fn apply_incremental_watermark_to_plan(
+    plan: &mut SourceReadPlan,
+    watermark: Option<&SourceWatermark>,
+) {
+    let Some(watermark) = watermark else {
+        return;
+    };
+    if plan.cursor.is_none() {
+        plan.cursor = watermark
+            .cursor
+            .clone()
+            .or_else(|| watermark.high_watermark.clone());
+    }
+    if plan.offset.is_none() {
+        plan.offset = watermark.offset;
+    }
+    if !plan.metadata.is_object() {
+        plan.metadata = Value::Object(Default::default());
+    }
+    plan.metadata["watermark_before"] = serde_json::to_value(watermark).unwrap_or(Value::Null);
 }
 
 fn source_plan_from_payload(payload: Value, adapter_id: &str) -> Result<SourceReadPlan, String> {
@@ -618,7 +827,24 @@ async fn poll_source_events(
     if events.is_empty() {
         events = events_from_value(&config)?;
     }
-    Ok(normalized_events_payload(adapter_id, events))
+    if events.is_empty() {
+        return Ok(serde_json::json!({
+            "status": "degraded",
+            "adapter_id": adapter_id,
+            "event_count": 0,
+            "events": [],
+            "source_events": [],
+            "degraded_reason": "requires_external_event_source",
+        }));
+    }
+    let mut payload = normalized_events_payload(adapter_id, events);
+    if let Some(object) = payload.as_object_mut() {
+        object.insert(
+            "watermark_after".to_string(),
+            serde_json::to_value(event_watermark(adapter_id, object)).unwrap_or(Value::Null),
+        );
+    }
+    Ok(payload)
 }
 
 fn normalize_source_events(payload: Value, adapter_id: &str) -> Result<Value, String> {
@@ -669,8 +895,260 @@ fn normalized_events_payload(adapter_id: &str, events: Vec<Value>) -> Value {
         "status": "ok",
         "adapter_id": adapter_id,
         "event_count": normalized.len(),
+        "events": normalized,
         "source_events": normalized,
     })
+}
+
+fn source_state_payload(
+    surface_id: &str,
+    adapter_id: &str,
+    default_base_url: &str,
+    state: &SourceSidecarState,
+) -> Value {
+    let has_event_fixture = !events_from_value(&state.config)
+        .unwrap_or_default()
+        .is_empty();
+    let supports_real_events = state
+        .config
+        .get("event_poll_url")
+        .and_then(Value::as_str)
+        .is_some();
+    serde_json::json!({
+        "status": "ok",
+        "state": {
+            "adapter_id": adapter_id,
+            "surface_id": surface_id,
+            "status": if state.configured { "ready" } else { "config_missing" },
+            "capabilities": [
+                "source.schema_discovery",
+                "source.snapshot",
+                "source.incremental",
+                "source.watermark",
+                "source.event.poll"
+            ],
+            "last_run_at_ms": state.last_run_at_ms,
+            "last_error": state.last_error,
+            "degraded_reason": if !supports_real_events && !has_event_fixture {
+                Some("requires_external_event_source")
+            } else {
+                None
+            },
+            "watermarks": state.watermarks.values().cloned().collect::<Vec<_>>(),
+            "configured": state.configured,
+            "supports_real_event_poll": supports_real_events,
+            "default_base_url": default_base_url,
+        }
+    })
+}
+
+fn get_watermark_from_state(
+    adapter_id: &str,
+    payload: &Value,
+    state: &SourceSidecarState,
+) -> Option<SourceWatermark> {
+    payload
+        .get("watermark")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<SourceWatermark>(value).ok())
+        .or_else(|| {
+            let resource_ref = payload
+                .get("resource_ref")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    payload
+                        .get("request")
+                        .and_then(|request| request.get("resource_ref"))
+                        .and_then(Value::as_str)
+                })
+                .unwrap_or("");
+            let table = payload.get("table").and_then(Value::as_str).or_else(|| {
+                payload
+                    .get("request")
+                    .and_then(|request| request.get("table"))
+                    .and_then(Value::as_str)
+            });
+            let probe = SourceWatermark {
+                adapter_id: adapter_id.to_string(),
+                resource_ref: sanitize_resource_ref(resource_ref),
+                table: table.map(ToString::to_string),
+                strategy: "offset".to_string(),
+                cursor: None,
+                offset: Some(0),
+                high_watermark: None,
+                checksum: None,
+                updated_at_ms: now_ms(),
+            };
+            state.watermarks.get(&watermark_key(&probe)).cloned()
+        })
+}
+
+async fn commit_watermark(
+    payload: Value,
+    adapter_id: &str,
+    state: Arc<Mutex<SourceSidecarState>>,
+) -> Result<Value, String> {
+    let mut watermark = payload
+        .get("watermark")
+        .cloned()
+        .or_else(|| payload.get("watermark_after").cloned())
+        .ok_or_else(|| "source.watermark.commit requires watermark".to_string())
+        .and_then(|value| {
+            serde_json::from_value::<SourceWatermark>(value)
+                .map_err(|error| format!("invalid source watermark: {error}"))
+        })?;
+    if watermark.adapter_id.trim().is_empty() {
+        watermark.adapter_id = adapter_id.to_string();
+    }
+    if watermark.adapter_id != adapter_id {
+        return Err(format!(
+            "adapter mismatch: watermark `{}` routed to `{adapter_id}`",
+            watermark.adapter_id
+        ));
+    }
+    watermark.updated_at_ms = now_ms();
+    let mut state = state.lock().await;
+    state
+        .watermarks
+        .insert(watermark_key(&watermark), watermark.clone());
+    Ok(serde_json::json!({
+        "status": "ok",
+        "adapter_id": adapter_id,
+        "watermark": watermark,
+    }))
+}
+
+fn watermark_after_batch(
+    batch: &SourceRecordBatch,
+    before: Option<&SourceWatermark>,
+    metadata: &Value,
+) -> SourceWatermark {
+    let strategy = metadata
+        .get("updated_at_field")
+        .and_then(Value::as_str)
+        .map(|_| "updated_at_field")
+        .or_else(|| {
+            metadata
+                .get("cursor_field")
+                .and_then(Value::as_str)
+                .map(|_| "cursor_field")
+        })
+        .unwrap_or("offset");
+    let high_watermark = match strategy {
+        "updated_at_field" => metadata
+            .get("updated_at_field")
+            .and_then(Value::as_str)
+            .and_then(|field| max_string_field(&batch.rows, field)),
+        "cursor_field" => metadata
+            .get("cursor_field")
+            .and_then(Value::as_str)
+            .and_then(|field| max_string_field(&batch.rows, field)),
+        _ => None,
+    };
+    let cursor = match strategy {
+        "cursor_field" => high_watermark.clone(),
+        _ => batch
+            .cursor
+            .next_offset
+            .map(|offset| offset.to_string())
+            .or_else(|| before.and_then(|watermark| watermark.cursor.clone())),
+    };
+    SourceWatermark {
+        adapter_id: batch.adapter_id.clone(),
+        resource_ref: batch.resource_ref.clone(),
+        table: batch.table.clone(),
+        strategy: strategy.to_string(),
+        cursor,
+        offset: Some(
+            batch
+                .cursor
+                .next_offset
+                .unwrap_or(batch.cursor.offset.saturating_add(batch.rows.len())),
+        ),
+        high_watermark,
+        checksum: Some(batch.checksum.clone()),
+        updated_at_ms: now_ms(),
+    }
+}
+
+fn event_watermark(adapter_id: &str, object: &Map<String, Value>) -> SourceWatermark {
+    SourceWatermark {
+        adapter_id: adapter_id.to_string(),
+        resource_ref: object
+            .get("events")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|event| event.get("resource_ref"))
+            .and_then(Value::as_str)
+            .unwrap_or("event://source")
+            .to_string(),
+        table: object
+            .get("events")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .and_then(|event| event.get("table"))
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        strategy: "event_count".to_string(),
+        cursor: object
+            .get("event_count")
+            .and_then(Value::as_u64)
+            .map(|value| value.to_string()),
+        offset: object
+            .get("event_count")
+            .and_then(Value::as_u64)
+            .map(|value| value as usize),
+        high_watermark: None,
+        checksum: Some(checksum_rows(
+            object
+                .get("events")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]),
+        )),
+        updated_at_ms: now_ms(),
+    }
+}
+
+fn degraded_reason_for_incremental(
+    metadata: &Value,
+    watermark: &SourceWatermark,
+) -> Option<String> {
+    if watermark.strategy == "offset"
+        && metadata.get("updated_at_field").is_none()
+        && metadata.get("cursor_field").is_none()
+    {
+        Some("degraded_incremental_offset_only".to_string())
+    } else {
+        None
+    }
+}
+
+fn max_string_field(rows: &[Value], field: &str) -> Option<String> {
+    rows.iter()
+        .filter_map(Value::as_object)
+        .filter_map(|object| object.get(field))
+        .filter_map(|value| {
+            value
+                .as_str()
+                .map(ToString::to_string)
+                .or_else(|| value.as_i64().map(|number| number.to_string()))
+                .or_else(|| value.as_u64().map(|number| number.to_string()))
+        })
+        .max()
+}
+
+fn watermark_key(watermark: &SourceWatermark) -> String {
+    format!(
+        "{}|{}|{}",
+        watermark.adapter_id,
+        watermark.resource_ref,
+        watermark.table.as_deref().unwrap_or("")
+    )
+}
+
+fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
 }
 
 fn normalize_source_event(adapter_id: &str, event: &Value) -> Value {
@@ -1035,6 +1513,88 @@ mod tests {
         );
 
         assert_eq!(batch.resource_ref, "postgres://***:***@localhost/db");
+    }
+
+    #[tokio::test]
+    async fn source_incremental_run_fixture_updates_watermark_without_committing() {
+        let state = Arc::new(Mutex::new(SourceSidecarState {
+            configured: true,
+            ..SourceSidecarState::default()
+        }));
+        let payload = serde_json::json!({
+            "request": {
+                "adapter_id": "feishu_bitable",
+                "resource_ref": "bitable://app/orders",
+                "table": "orders",
+                "limit": 10,
+                "metadata": {
+                    "rows": [
+                        {"order_id": "O-1", "updated_at": "2026-07-08T01:00:00Z"},
+                        {"order_id": "O-2", "updated_at": "2026-07-08T02:00:00Z"}
+                    ],
+                    "updated_at_field": "updated_at"
+                }
+            }
+        });
+        let result = run_incremental_source(
+            payload,
+            "feishu_bitable",
+            "https://open.feishu.cn",
+            state.clone(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result["status"], "ok");
+        assert_eq!(result["batch"]["rows"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            result["watermark_after"]["high_watermark"],
+            "2026-07-08T02:00:00Z"
+        );
+        assert!(state.lock().await.watermarks.is_empty());
+        commit_watermark(
+            serde_json::json!({"watermark": result["watermark_after"].clone()}),
+            "feishu_bitable",
+            state.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(state.lock().await.watermarks.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn source_event_poll_fixture_returns_event_batch() {
+        let state = Arc::new(Mutex::new(SourceSidecarState::default()));
+        let payload = poll_source_events(
+            serde_json::json!({
+                "events": [{
+                    "event_id": "evt-1",
+                    "event_type": "record.changed",
+                    "operation": "upsert",
+                    "resource_ref": "bitable://app/orders",
+                    "table": "orders"
+                }]
+            }),
+            "feishu_bitable",
+            state,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(payload["status"], "ok");
+        assert_eq!(payload["event_count"], 1);
+        assert_eq!(payload["watermark_after"]["strategy"], "event_count");
+    }
+
+    #[tokio::test]
+    async fn source_event_poll_without_event_source_returns_degraded() {
+        let state = Arc::new(Mutex::new(SourceSidecarState::default()));
+        let payload = poll_source_events(Value::Null, "feishu_bitable", state)
+            .await
+            .unwrap();
+
+        assert_eq!(payload["status"], "degraded");
+        assert_eq!(payload["degraded_reason"], "requires_external_event_source");
     }
 }
 

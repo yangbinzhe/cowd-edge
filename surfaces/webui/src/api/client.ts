@@ -860,6 +860,20 @@ export const api = {
     body: JSON.stringify({ ...body, session_id: body.session_id || 'webui-edge' }),
   }),
   matrixSourceSnapshots: (id: string) => read(`/api/matrix/source-packs/${encodeURIComponent(id)}/snapshots`, { snapshots: [] }),
+  connectorSources: () => read('/api/connectors/sources', { kind: 'connector.source_adapters', adapters: [] }),
+  connectorSourceState: (adapterId: string) => read(`/api/connectors/sources/${encodeURIComponent(adapterId)}/state`, { state: {} }),
+  connectorSourceRunIncremental: (adapterId: string, body: Record<string, unknown>) => writeWithReceipt(`/api/connectors/sources/${encodeURIComponent(adapterId)}/run-incremental`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  connectorSourcePollEvents: (adapterId: string, body: Record<string, unknown>) => writeWithReceipt(`/api/connectors/sources/${encodeURIComponent(adapterId)}/poll-events`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  connectorSourceCommitWatermark: (adapterId: string, watermark: Record<string, unknown>) => writeWithReceipt(`/api/connectors/sources/${encodeURIComponent(adapterId)}/commit-watermark`, {
+    method: 'POST',
+    body: JSON.stringify({ watermark }),
+  }),
   platforms: () => read('/api/platforms', {}),
   platform: (name: string) => read(`/api/platforms/${encodeURIComponent(name)}`, {}),
   messageConnectors: () => read('/api/message-connectors', { kind: 'message.connector.registry', connectors: [] }),

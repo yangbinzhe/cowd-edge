@@ -40,6 +40,21 @@ const sourceSnapshotAdapterId = ref('csv');
 const sourceSnapshotResourceRef = ref('file:///tmp/cowd-edge-supply-orders.csv');
 const sourceSnapshotTable = ref('orders');
 const sourceSnapshotLimit = ref(100);
+const sourceIncrementalStrategy = ref('offset');
+const sourceIncrementalCursor = ref('');
+const sourceIncrementalOffset = ref(0);
+const sourceUpdatedAtField = ref('');
+const sourceCursorField = ref('');
+const sourceEventText = ref(JSON.stringify([
+  {
+    event_id: 'evt-1001',
+    event_type: 'record.changed',
+    operation: 'upsert',
+    resource_ref: 'bitable://app/table',
+    table: 'orders',
+    rows: [{ order_id: 'O-2001', qty: 8 }],
+  },
+], null, 2));
 const sourceSnapshotRowsText = ref(JSON.stringify([
   {
     order_id: 'O-1001',
@@ -105,6 +120,7 @@ const edgeSurfaces = computed(() => Array.isArray(edgeRegistry.value.surfaces) ?
 const edgeMessageConnectors = computed(() => Array.isArray(edgeRegistry.value.message_connectors) ? edgeRegistry.value.message_connectors : []);
 const edgeSourceConnectors = computed(() => Array.isArray(edgeRegistry.value.source_connectors) ? edgeRegistry.value.source_connectors : []);
 const edgeAutomationConnectors = computed(() => Array.isArray(edgeRegistry.value.automation_connectors) ? edgeRegistry.value.automation_connectors : []);
+const connectorSourceAdapters = computed(() => Array.isArray(state.value.connectorSources?.adapters) ? state.value.connectorSources.adapters : []);
 const configReloadStatus = computed(() => state.value.configReload || {});
 const configReloadRestartFields = computed(() => {
   const fields = configReloadStatus.value?.restart_required?.fields;
@@ -150,6 +166,45 @@ const sourceConnectorRows = computed(() => edgeSourceConnectors.value.map((item:
   schema: item.supports_schema_discovery ? 'yes' : 'no',
   runtime: item.runtime?.status || 'declared',
 })));
+const sourceRuntimeRows = computed(() => connectorSourceAdapters.value.map((item: any) => {
+  const manifest = item.manifest || item;
+  const runtime = item.runtime_state || item.state || {};
+  return {
+    adapter: manifest.adapter_id || item.adapter_id || runtime.adapter_id || '-',
+    name: manifest.display_name || manifest.name || '-',
+    family: manifest.family || '-',
+    status: runtime.status || 'declared',
+    watermarks: Array.isArray(runtime.watermarks) ? runtime.watermarks.length : 0,
+    last_run: runtime.last_run_at_ms || '-',
+    degraded: runtime.degraded_reason || runtime.last_error || '-',
+  };
+}));
+const sourceWatermarkRows = computed(() => connectorSourceAdapters.value
+  .flatMap((item: any) => {
+    const runtime = item.runtime_state || item.state || {};
+    return (Array.isArray(runtime.watermarks) ? runtime.watermarks : []).map((watermark: any) => ({
+      adapter: watermark.adapter_id || runtime.adapter_id || '-',
+      resource: watermark.resource_ref || '-',
+      table: watermark.table || '-',
+      strategy: watermark.strategy || '-',
+      cursor: watermark.cursor || watermark.high_watermark || watermark.offset || '-',
+      checksum: watermark.checksum || '-',
+    }));
+  }));
+const sourceIncrementalWatermark = computed(() => {
+  const adapter = sourceSnapshotAdapterId.value.trim() || 'csv';
+  if (!sourceIncrementalCursor.value && !sourceIncrementalOffset.value) return undefined;
+  return {
+    adapter_id: adapter,
+    resource_ref: sourceSnapshotResourceRef.value.trim(),
+    table: sourceSnapshotTable.value.trim() || undefined,
+    strategy: sourceIncrementalStrategy.value,
+    cursor: sourceIncrementalCursor.value || undefined,
+    offset: sourceIncrementalOffset.value || undefined,
+    high_watermark: sourceIncrementalStrategy.value === 'updated_at_field' ? sourceIncrementalCursor.value || undefined : undefined,
+    updated_at_ms: Date.now(),
+  };
+});
 const sourceSnapshotReadPlan = computed(() => ({
   adapter_id: sourceSnapshotAdapterId.value.trim() || 'csv',
   resource_ref: sourceSnapshotResourceRef.value.trim(),
@@ -158,6 +213,8 @@ const sourceSnapshotReadPlan = computed(() => ({
   metadata: {
     source: 'webui-edge',
     intent: 'matrix-source-snapshot',
+    updated_at_field: sourceUpdatedAtField.value || undefined,
+    cursor_field: sourceCursorField.value || undefined,
   },
 }));
 const accountRows = computed(() => accounts.value.map((item: any) => ({
@@ -624,6 +681,39 @@ async function runEdgeSourceSnapshotReadPlan() {
   selectedDetail.value = sourceSnapshotResult.value;
 }
 
+async function runEdgeSourceIncremental() {
+  sourceSnapshotError.value = '';
+  sourceSnapshotResult.value = await api.connectorSourceRunIncremental(sourceSnapshotAdapterId.value.trim() || 'csv', {
+    resource_ref: sourceSnapshotResourceRef.value.trim(),
+    table: sourceSnapshotTable.value.trim() || undefined,
+    limit: Number(sourceSnapshotLimit.value) || 100,
+    watermark: sourceIncrementalWatermark.value,
+    metadata: {
+      source: 'webui-edge',
+      strategy: sourceIncrementalStrategy.value,
+      updated_at_field: sourceUpdatedAtField.value || undefined,
+      cursor_field: sourceCursorField.value || undefined,
+      rows: sourceSnapshotAdapterId.value.trim() === 'csv' ? undefined : undefined,
+    },
+  });
+  selectedDetail.value = sourceSnapshotResult.value;
+  await refresh();
+}
+
+async function pollEdgeSourceEvents() {
+  sourceSnapshotError.value = '';
+  let events: unknown[] = [];
+  try {
+    const parsed = JSON.parse(sourceEventText.value || '[]');
+    events = Array.isArray(parsed) ? parsed : [parsed];
+  } catch (err) {
+    sourceSnapshotError.value = err instanceof Error ? err.message : String(err);
+    return;
+  }
+  sourceSnapshotResult.value = await api.connectorSourcePollEvents(sourceSnapshotAdapterId.value.trim() || 'feishu_bitable', { events });
+  selectedDetail.value = sourceSnapshotResult.value;
+}
+
 async function loadEdgeSourceSnapshots() {
   sourceSnapshotError.value = '';
   sourceSnapshotResult.value = await api.matrixSourceSnapshots(sourceSnapshotPackId.value);
@@ -634,7 +724,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, edge, surfacesData, surfaceHealth, messageConnectorsData, messageEndpointsData, messageRoutesData, messageBindingsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, connectorSources, edge, surfacesData, surfaceHealth, messageConnectorsData, messageEndpointsData, messageRoutesData, messageBindingsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -643,6 +733,7 @@ async function refresh() {
       api.connectorResources(),
       api.connectorMcpServers(),
       api.connectorServices(),
+      api.connectorSources(),
       api.edgeRegistry(),
       api.surfaceRegistry(),
       api.surfaceHostHealth(),
@@ -664,7 +755,7 @@ async function refresh() {
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, messageConnectors: messageConnectorsData, messageEndpoints: messageEndpointsData, messageRoutes: messageRoutesData, messageBindings: messageBindingsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorSources, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, messageConnectors: messageConnectorsData, messageEndpoints: messageEndpointsData, messageRoutes: messageRoutesData, messageBindings: messageBindingsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -966,7 +1057,9 @@ onMounted(refresh);
         <EmptyState v-else :title="t('edge.message.empty.title')" :detail="t('edge.message.empty.detail')" />
         <DataTable v-if="sourceConnectorRows.length" searchable copyable row-key="id" :rows="sourceConnectorRows" :columns="['id', 'name', 'adapter', 'family', 'mode', 'sidecar', 'snapshot', 'incremental', 'schema', 'runtime']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('edge.source.empty.title')" :detail="t('edge.source.empty.detail')" />
-        <RawPayload :title="t('edge.connectors.raw')" :data="{ message_connectors: edgeMessageConnectors, source_connectors: edgeSourceConnectors, automation_connectors: edgeAutomationConnectors }" />
+        <DataTable v-if="sourceRuntimeRows.length" searchable copyable row-key="adapter" :rows="sourceRuntimeRows" :columns="['adapter', 'name', 'family', 'status', 'watermarks', 'last_run', 'degraded']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="sourceWatermarkRows.length" searchable copyable row-key="resource" :rows="sourceWatermarkRows" :columns="['adapter', 'resource', 'table', 'strategy', 'cursor', 'checksum']" @row-click="selectedDetail = $event" />
+        <RawPayload :title="t('edge.connectors.raw')" :data="{ message_connectors: edgeMessageConnectors, source_connectors: edgeSourceConnectors, source_runtime: state.connectorSources, automation_connectors: edgeAutomationConnectors }" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">
@@ -1007,9 +1100,41 @@ onMounted(refresh);
             <input v-model.number="sourceSnapshotLimit" type="number" min="1" max="1000" />
           </label>
         </div>
+        <div class="memory-form-row">
+          <label class="field-line">
+            {{ t('edge.source.incremental.strategy') }}
+            <select v-model="sourceIncrementalStrategy">
+              <option value="offset">offset</option>
+              <option value="updated_at_field">updated_at_field</option>
+              <option value="cursor_field">cursor_field</option>
+            </select>
+          </label>
+          <label class="field-line">
+            {{ t('edge.source.incremental.cursor') }}
+            <input v-model="sourceIncrementalCursor" type="text" />
+          </label>
+          <label class="field-line">
+            {{ t('edge.source.incremental.offset') }}
+            <input v-model.number="sourceIncrementalOffset" type="number" min="0" />
+          </label>
+        </div>
+        <div class="memory-form-row">
+          <label class="field-line">
+            {{ t('edge.source.incremental.updatedAtField') }}
+            <input v-model="sourceUpdatedAtField" type="text" placeholder="updated_at" />
+          </label>
+          <label class="field-line">
+            {{ t('edge.source.incremental.cursorField') }}
+            <input v-model="sourceCursorField" type="text" placeholder="id" />
+          </label>
+        </div>
         <label class="field-line">
           {{ t('edge.snapshot.field.rows') }}
           <textarea v-model="sourceSnapshotRowsText" rows="6" />
+        </label>
+        <label class="field-line">
+          {{ t('edge.source.event.fixture') }}
+          <textarea v-model="sourceEventText" rows="5" />
         </label>
         <p v-if="sourceSnapshotError" class="field-error">{{ sourceSnapshotError }}</p>
         <div class="button-row">
@@ -1017,6 +1142,8 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="planEdgeSourceSnapshot">{{ t('edge.snapshot.action.plan') }}</button>
           <button class="primary-action" type="button" @click="runEdgeSourceSnapshotRows">{{ t('edge.snapshot.action.runRows') }}</button>
           <button class="ghost-action" type="button" @click="runEdgeSourceSnapshotReadPlan">{{ t('edge.snapshot.action.runReadPlan') }}</button>
+          <button class="primary-action" type="button" @click="runEdgeSourceIncremental">{{ t('edge.source.incremental.run') }}</button>
+          <button class="ghost-action" type="button" @click="pollEdgeSourceEvents">{{ t('edge.source.event.poll') }}</button>
           <button class="ghost-action" type="button" @click="loadEdgeSourceSnapshots">{{ t('edge.snapshot.action.list') }}</button>
         </div>
         <RequestReceipt :receipt="sourceSnapshotResult" :title="t('edge.snapshot.receipt')" />

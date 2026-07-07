@@ -49,6 +49,12 @@ struct TableRef {
     table: String,
 }
 
+#[derive(Debug, Clone)]
+struct IncrementalStrategy {
+    field: String,
+    value: String,
+}
+
 pub(crate) async fn read_database_batch(
     mut plan: SourceReadPlan,
     config: Value,
@@ -118,25 +124,35 @@ pub(crate) fn incremental_plan(payload: Value, adapter_id: &str) -> Result<Value
     let mut plan = plan_from_payload(payload, adapter_id)?;
     let limit = plan.limit.unwrap_or(100).clamp(1, 1000);
     let current = plan.offset.unwrap_or(0);
-    let next_offset = current.saturating_add(limit);
-    plan.offset = Some(next_offset);
-    let cursor_field = plan
+    let cursor_field = plan.metadata.get("cursor_field").and_then(Value::as_str);
+    let updated_at_field = plan
         .metadata
-        .get("cursor_field")
-        .or_else(|| plan.metadata.get("updated_at_field"))
-        .and_then(Value::as_str)
-        .map(str::to_string);
+        .get("updated_at_field")
+        .and_then(Value::as_str);
+    let mode = if updated_at_field.is_some() {
+        "updated_at_field"
+    } else if cursor_field.is_some() {
+        "cursor_field"
+    } else {
+        "offset"
+    };
+    let next_offset = current.saturating_add(limit);
+    if mode == "offset" {
+        plan.offset = Some(next_offset);
+    }
     Ok(serde_json::json!({
         "status": "ok",
         "adapter_id": adapter_id,
         "incremental_plan": {
-            "mode": if cursor_field.is_some() { "cursor_hint" } else { "offset" },
+            "mode": mode,
+            "updated_at_field": updated_at_field,
             "cursor_field": cursor_field,
             "current_offset": current,
             "next_offset": next_offset,
             "next_read_plan": plan,
+            "degraded_reason": if mode == "offset" { Some("degraded_incremental_offset_only") } else { None },
             "notes": [
-                "database incremental execution is represented as a bounded next read plan",
+                "updated_at_field and cursor_field are executed as bounded incremental WHERE clauses",
                 "true CDC/event streaming should be supplied by an external source event connector"
             ]
         }
@@ -178,8 +194,9 @@ async fn read_postgres_batch(
         .map_err(|error| format!("postgres connect failed: {error}"))?;
     let schema = postgres_table_schema(&pool, &table).await?;
     let fields = selected_fields(&schema, requested_fields)?;
-    let sql = format!(
-        "SELECT {} FROM {} LIMIT $1 OFFSET $2",
+    let strategy = incremental_strategy(&plan, &schema)?;
+    let mut sql = format!(
+        "SELECT {} FROM {}",
         fields
             .iter()
             .map(|field| quote_pg_ident(field))
@@ -187,9 +204,22 @@ async fn read_postgres_batch(
             .join(", "),
         quote_pg_table(&table)
     );
-    let rows = sqlx::query(&sql)
-        .bind(limit as i64)
-        .bind(offset as i64)
+    if let Some(strategy) = strategy.as_ref() {
+        sql.push_str(&format!(
+            " WHERE {} > $1 ORDER BY {} ASC LIMIT $2",
+            quote_pg_ident(&strategy.field),
+            quote_pg_ident(&strategy.field),
+        ));
+    } else {
+        sql.push_str(" LIMIT $1 OFFSET $2");
+    }
+    let mut query = sqlx::query(&sql);
+    if let Some(strategy) = strategy {
+        query = query.bind(strategy.value).bind(limit as i64);
+    } else {
+        query = query.bind(limit as i64).bind(offset as i64);
+    }
+    let rows = query
         .fetch_all(&pool)
         .await
         .map_err(|error| format!("postgres read failed: {error}"))?;
@@ -219,8 +249,9 @@ async fn read_mysql_batch(
         .map_err(|error| format!("mysql/mariadb connect failed: {error}"))?;
     let schema = mysql_table_schema(&pool, &table).await?;
     let fields = selected_fields(&schema, requested_fields)?;
-    let sql = format!(
-        "SELECT {} FROM {} LIMIT ? OFFSET ?",
+    let strategy = incremental_strategy(&plan, &schema)?;
+    let mut sql = format!(
+        "SELECT {} FROM {}",
         fields
             .iter()
             .map(|field| quote_mysql_ident(field))
@@ -228,9 +259,22 @@ async fn read_mysql_batch(
             .join(", "),
         quote_mysql_table(&table)
     );
-    let rows = sqlx::query(&sql)
-        .bind(limit as i64)
-        .bind(offset as i64)
+    if let Some(strategy) = strategy.as_ref() {
+        sql.push_str(&format!(
+            " WHERE {} > ? ORDER BY {} ASC LIMIT ?",
+            quote_mysql_ident(&strategy.field),
+            quote_mysql_ident(&strategy.field),
+        ));
+    } else {
+        sql.push_str(" LIMIT ? OFFSET ?");
+    }
+    let mut query = sqlx::query(&sql);
+    if let Some(strategy) = strategy {
+        query = query.bind(strategy.value).bind(limit as i64);
+    } else {
+        query = query.bind(limit as i64).bind(offset as i64);
+    }
+    let rows = query
         .fetch_all(&pool)
         .await
         .map_err(|error| format!("mysql/mariadb read failed: {error}"))?;
@@ -478,6 +522,60 @@ fn selected_fields(
         }
     }
     Ok(requested_fields)
+}
+
+fn incremental_strategy(
+    plan: &SourceReadPlan,
+    schema: &SourceTableSchema,
+) -> Result<Option<IncrementalStrategy>, String> {
+    let candidate = plan
+        .metadata
+        .get("updated_at_field")
+        .and_then(Value::as_str)
+        .map(|field| ("updated_at_field", field))
+        .or_else(|| {
+            plan.metadata
+                .get("cursor_field")
+                .and_then(Value::as_str)
+                .map(|field| ("cursor_field", field))
+        });
+    let Some((mode, field)) = candidate else {
+        return Ok(None);
+    };
+    validate_identifier(field)?;
+    let available = schema
+        .fields
+        .iter()
+        .any(|schema_field| schema_field.name == field);
+    if !available {
+        return Err(format!(
+            "{mode} `{field}` is not present in source table `{}`",
+            schema.table_name
+        ));
+    }
+    let value = plan
+        .cursor
+        .as_deref()
+        .or_else(|| {
+            plan.metadata
+                .get("watermark_before")
+                .and_then(|watermark| watermark.get("high_watermark"))
+                .and_then(Value::as_str)
+        })
+        .or_else(|| {
+            plan.metadata
+                .get("watermark_before")
+                .and_then(|watermark| watermark.get("cursor"))
+                .and_then(Value::as_str)
+        })
+        .unwrap_or("");
+    if value.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(IncrementalStrategy {
+        field: field.to_string(),
+        value: value.to_string(),
+    }))
 }
 
 fn record_batch_from_database_rows(
@@ -973,5 +1071,84 @@ mod tests {
         assert_eq!(plan.adapter_id, "postgres");
         assert!(plan.resource_ref.is_empty());
         assert_eq!(plan.table.as_deref(), Some("orders"));
+    }
+
+    #[test]
+    fn database_incremental_plan_uses_updated_at_or_cursor() {
+        let updated_at = incremental_plan(
+            serde_json::json!({
+                "adapter_id": "postgres",
+                "resource_ref": "postgres://user:secret@localhost/db",
+                "table": "orders",
+                "limit": 20,
+                "metadata": {"updated_at_field": "updated_at"}
+            }),
+            "postgres",
+        )
+        .unwrap();
+        assert_eq!(updated_at["incremental_plan"]["mode"], "updated_at_field");
+        assert!(updated_at["incremental_plan"]["degraded_reason"].is_null());
+
+        let cursor = incremental_plan(
+            serde_json::json!({
+                "adapter_id": "postgres",
+                "resource_ref": "postgres://user:secret@localhost/db",
+                "table": "orders",
+                "metadata": {"cursor_field": "id"}
+            }),
+            "postgres",
+        )
+        .unwrap();
+        assert_eq!(cursor["incremental_plan"]["mode"], "cursor_field");
+
+        let offset = incremental_plan(
+            serde_json::json!({
+                "adapter_id": "postgres",
+                "resource_ref": "postgres://user:secret@localhost/db",
+                "table": "orders",
+                "limit": 10,
+                "offset": 5,
+                "metadata": {}
+            }),
+            "postgres",
+        )
+        .unwrap();
+        assert_eq!(offset["incremental_plan"]["mode"], "offset");
+        assert_eq!(
+            offset["incremental_plan"]["degraded_reason"],
+            "degraded_incremental_offset_only"
+        );
+        assert_eq!(offset["incremental_plan"]["next_read_plan"]["offset"], 15);
+    }
+
+    #[test]
+    fn incremental_strategy_requires_declared_schema_field() {
+        let schema = SourceTableSchema {
+            table_name: "orders".to_string(),
+            fields: vec![SourceFieldSchema {
+                name: "updated_at".to_string(),
+                data_type: "timestamp".to_string(),
+                nullable: false,
+            }],
+            primary_key: Vec::new(),
+        };
+        let plan = SourceReadPlan {
+            adapter_id: "postgres".to_string(),
+            resource_ref: "postgres://localhost/db".to_string(),
+            table: Some("orders".to_string()),
+            fields: Vec::new(),
+            limit: Some(10),
+            offset: None,
+            cursor: Some("2026-07-08T00:00:00Z".to_string()),
+            metadata: serde_json::json!({"updated_at_field": "updated_at"}),
+        };
+        assert_eq!(
+            incremental_strategy(&plan, &schema).unwrap().unwrap().field,
+            "updated_at"
+        );
+
+        let mut invalid = plan.clone();
+        invalid.metadata = serde_json::json!({"updated_at_field": "missing"});
+        assert!(incremental_strategy(&invalid, &schema).is_err());
     }
 }
