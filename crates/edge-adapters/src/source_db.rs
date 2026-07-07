@@ -51,8 +51,10 @@ struct TableRef {
 
 #[derive(Debug, Clone)]
 struct IncrementalStrategy {
+    mode: String,
     field: String,
     value: String,
+    data_type: String,
 }
 
 pub(crate) async fn read_database_batch(
@@ -205,8 +207,9 @@ async fn read_postgres_batch(
         quote_pg_table(&table)
     );
     if let Some(strategy) = strategy.as_ref() {
+        let placeholder = postgres_incremental_placeholder(strategy);
         sql.push_str(&format!(
-            " WHERE {} > $1 ORDER BY {} ASC LIMIT $2",
+            " WHERE {} > {placeholder} ORDER BY {} ASC LIMIT $2",
             quote_pg_ident(&strategy.field),
             quote_pg_ident(&strategy.field),
         ));
@@ -543,16 +546,16 @@ fn incremental_strategy(
         return Ok(None);
     };
     validate_identifier(field)?;
-    let available = schema
+    let field_schema = schema
         .fields
         .iter()
-        .any(|schema_field| schema_field.name == field);
-    if !available {
+        .find(|schema_field| schema_field.name == field);
+    let Some(field_schema) = field_schema else {
         return Err(format!(
             "{mode} `{field}` is not present in source table `{}`",
             schema.table_name
         ));
-    }
+    };
     let value = plan
         .cursor
         .as_deref()
@@ -573,9 +576,25 @@ fn incremental_strategy(
         return Ok(None);
     }
     Ok(Some(IncrementalStrategy {
+        mode: mode.to_string(),
         field: field.to_string(),
         value: value.to_string(),
+        data_type: field_schema.data_type.clone(),
     }))
+}
+
+fn postgres_incremental_placeholder(strategy: &IncrementalStrategy) -> &'static str {
+    let data_type = strategy.data_type.to_ascii_lowercase();
+    if strategy.mode == "updated_at_field" || data_type.contains("timestamp") || data_type == "date"
+    {
+        "$1::timestamptz"
+    } else if data_type.contains("int") || data_type == "bigserial" || data_type == "serial" {
+        "$1::bigint"
+    } else if data_type == "uuid" {
+        "$1::uuid"
+    } else {
+        "$1"
+    }
 }
 
 fn record_batch_from_database_rows(
