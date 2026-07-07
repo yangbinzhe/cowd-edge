@@ -652,6 +652,10 @@ export const api = {
     const suffix = sessionId ? `/${encodeURIComponent(sessionId)}` : '';
     return read(`/api/memory/context-envelope${suffix}?limit=${limit}`, {});
   },
+  memoryKnowledge: () => read('/api/memory/knowledge', {}),
+  memoryKnowledgeNamespaces: () => read('/api/memory/knowledge/namespaces', { namespace_tree: [] }),
+  memoryKnowledgeConflicts: () => read('/api/memory/knowledge/conflicts', { conflict_projection: { conflicts: [] } }),
+  memoryKnowledgeMaintenance: () => read('/api/memory/knowledge/maintenance', { maintenance_candidates: [], recall_quality: {} }),
   memoryStats: () => read('/api/memory/stats', {}),
   memoryLayers: () => read('/api/memory/layers', { layers: [] }),
   memoryLayer: (layer: string) => read(`/api/memory/${encodeURIComponent(layer)}`, { entries: [] }),

@@ -44,6 +44,10 @@ const maintenanceScan = ref<any>(null);
 const performance = ref<any>({});
 const runtime = ref<any>({});
 const contextEnvelope = ref<any>({});
+const knowledge = ref<any>({});
+const knowledgeNamespaces = ref<any>({});
+const knowledgeConflicts = ref<any>({});
+const knowledgeMaintenance = ref<any>({});
 const structured = ref<any>({});
 const structuredPlan = ref<any>(null);
 const actionResult = ref<any>(null);
@@ -107,7 +111,19 @@ const structuredRows = computed(() => {
     })),
   ];
 });
-const candidateRows = computed(() => Array.isArray(maintenance.value?.candidates) ? maintenance.value.candidates : []);
+const candidateRows = computed(() => [
+  ...(Array.isArray(maintenance.value?.candidates) ? maintenance.value.candidates : []),
+  ...(Array.isArray(knowledgeMaintenance.value?.maintenance_candidates) ? knowledgeMaintenance.value.maintenance_candidates : []),
+]);
+const namespaceRows = computed(() => Array.isArray(knowledgeNamespaces.value?.namespace_tree) ? knowledgeNamespaces.value.namespace_tree : []);
+const knowledgeConflictRows = computed(() => {
+  const projection = knowledgeConflicts.value?.conflict_projection || knowledge.value?.projection?.conflict_projection || {};
+  return Array.isArray(projection.conflicts) ? projection.conflicts : [];
+});
+const knowledgeMaintenanceRows = computed(() => Array.isArray(knowledgeMaintenance.value?.maintenance_candidates) ? knowledgeMaintenance.value.maintenance_candidates : []);
+const activationPolicyRows = computed(() => Array.isArray(knowledgeNamespaces.value?.activation_policy_distribution) ? knowledgeNamespaces.value.activation_policy_distribution : []);
+const governanceRows = computed(() => Array.isArray(knowledgeNamespaces.value?.governance_distribution) ? knowledgeNamespaces.value.governance_distribution : []);
+const recallQuality = computed(() => knowledgeMaintenance.value?.recall_quality || knowledge.value?.projection?.recall_quality || {});
 const linkCount = computed(() => Number(links.value?.total || links.value?.links?.length || 0));
 const healthLevel = computed(() => status.value?.kernel_health?.degraded ? 'degraded' : (status.value?.status || 'unknown'));
 const memoryContext = computed(() => [
@@ -121,6 +137,7 @@ const memoryWorkflow = computed(() => [
   { id: 'layers', label: t('script.pages.memorypage.label.4343635cf2'), status: entries.value.length ? 'ready' : 'idle', count: entries.value.length },
   { id: 'recall', label: t('script.pages.memorypage.label.3f7e1fd914'), status: recallRows.value.length ? 'active' : 'idle', count: recallRows.value.length },
   { id: 'context-envelope', label: t('memory.contextEnvelope.label'), status: contextEnvelope.value?.status || 'idle', description: contextEnvelope.value?.latest_envelope_id || contextEnvelope.value?.degraded_reason || '-' },
+  { id: 'knowledge-governance', label: t('memory.knowledgeGovernance.label'), status: knowledge.value?.capability_status || 'idle', count: namespaceRows.value.length },
   { id: 'recall', label: t('script.pages.memorypage.label.83c6d723cb'), status: packet.value?.items?.length ? 'ready' : 'idle', description: query.value },
   { id: 'graph', label: t('script.pages.memorypage.label.c7fb317725'), status: entityRows.value.length ? 'ready' : 'idle', count: entityRows.value.length },
   { id: 'maintenance', label: t('script.pages.memorypage.label.94de303bbe'), status: candidateRows.value.length ? 'blocked' : 'ready', count: candidateRows.value.length },
@@ -202,6 +219,10 @@ async function refresh() {
       nextPerformance,
       nextRuntime,
       nextContextEnvelope,
+      nextKnowledge,
+      nextKnowledgeNamespaces,
+      nextKnowledgeConflicts,
+      nextKnowledgeMaintenance,
       sources,
       facts,
       evidence,
@@ -218,6 +239,10 @@ async function refresh() {
       api.memoryPerformance(),
       api.memoryRuntime(),
       api.memoryContextEnvelope('', 20),
+      api.memoryKnowledge(),
+      api.memoryKnowledgeNamespaces(),
+      api.memoryKnowledgeConflicts(),
+      api.memoryKnowledgeMaintenance(),
       api.structuredSources(),
       api.structuredFacts(),
       api.structuredEvidence(),
@@ -234,6 +259,10 @@ async function refresh() {
     performance.value = nextPerformance;
     runtime.value = nextRuntime;
     contextEnvelope.value = nextContextEnvelope;
+    knowledge.value = nextKnowledge;
+    knowledgeNamespaces.value = nextKnowledgeNamespaces;
+    knowledgeConflicts.value = nextKnowledgeConflicts;
+    knowledgeMaintenance.value = nextKnowledgeMaintenance;
     structured.value = { sources, facts, evidence, watermarks };
     await loadLayer();
     await runRecall();
@@ -384,6 +413,7 @@ onMounted(refresh);
         <button type="button" @click="selectMemorySection('layers')"><Database :size="15" />{{ t('page.memory.page.text.da827dc4ae') }}</button>
         <button type="button" @click="selectMemorySection('recall')"><Search :size="15" />{{ t('page.memory.page.text.58e722778f') }}</button>
         <button type="button" @click="selectMemorySection('context-envelope')"><Network :size="15" />{{ t('memory.contextEnvelope.label') }}</button>
+        <button type="button" @click="selectMemorySection('knowledge-governance')"><ShieldCheck :size="15" />{{ t('memory.knowledgeGovernance.label') }}</button>
         <button type="button" @click="selectMemorySection('graph')"><GitBranch :size="15" />{{ t('page.memory.page.text.c676fc9eca') }}</button>
         <button type="button" @click="selectMemorySection('maintenance')"><ShieldCheck :size="15" />{{ t('page.memory.page.text.44500c4e90') }}</button>
         <button type="button" @click="selectMemorySection('structured-core')"><Network :size="15" />{{ t('page.memory.page.text.23d5f43eb0') }}</button>
@@ -511,6 +541,46 @@ onMounted(refresh);
           <DataTable v-if="contextEnvelopeRows.length" searchable copyable :rows="contextEnvelopeRows" :columns="['envelope_id', 'session_id', 'profile', 'pressure_bp', 'selected', 'omitted']" @row-click="selectedDetail = $event" />
           <EmptyState v-else :title="t('memory.contextEnvelope.noEnvelope')" :detail="contextEnvelope.degraded_reason || t('memory.contextEnvelope.emptyDetail')" />
           <RawPayload :title="t('memory.contextEnvelope.raw')" :data="contextEnvelope" />
+        </section>
+
+        <section id="memory-knowledge-governance" class="management-panel memory-panel wide" data-section="knowledge-governance">
+          <header>
+            <h2>{{ t('memory.knowledgeGovernance.label') }}</h2>
+            <span>{{ knowledge.projection_mode || '-' }}</span>
+          </header>
+          <div class="metric-row compact">
+            <article class="metric-card">
+              <span>{{ t('memory.knowledgeGovernance.namespaces') }}</span>
+              <strong>{{ namespaceRows.length }}</strong>
+              <small>{{ t('memory.knowledgeGovernance.activePacks', { count: knowledge.projection?.health?.active_pack_count || 0 }) }}</small>
+            </article>
+            <article class="metric-card" data-tone="warn">
+              <span>{{ t('memory.knowledgeGovernance.conflicts') }}</span>
+              <strong>{{ knowledgeConflicts.conflict_projection?.unresolved || 0 }}</strong>
+              <small>{{ t('memory.knowledgeGovernance.totalConflicts', { count: knowledgeConflicts.conflict_projection?.total || 0 }) }}</small>
+            </article>
+            <article class="metric-card" data-tone="info">
+              <span>{{ t('memory.knowledgeGovernance.maintenance') }}</span>
+              <strong>{{ knowledgeMaintenanceRows.length }}</strong>
+              <small>{{ t('memory.knowledgeGovernance.precision', { value: Math.round(Number(recallQuality.precision_estimate ?? 1) * 100) }) }}</small>
+            </article>
+          </div>
+          <div class="memory-tabs">
+            <article>
+              <h3>{{ t('memory.knowledgeGovernance.namespaces') }}</h3>
+              <DataTable v-if="namespaceRows.length" searchable copyable :rows="namespaceRows" :columns="['namespace', 'level', 'corpus_count', 'pack_count', 'active_pack_count']" @row-click="selectedDetail = $event" />
+              <EmptyState v-else :title="t('memory.knowledgeGovernance.emptyNamespaces')" :detail="knowledge.degraded_reason || '-'" />
+            </article>
+            <article>
+              <h3>{{ t('memory.knowledgeGovernance.policyDistribution') }}</h3>
+              <DataTable v-if="activationPolicyRows.length || governanceRows.length" copyable :rows="[...activationPolicyRows.map((row: any) => ({ kind: 'activation', ...row })), ...governanceRows.map((row: any) => ({ kind: 'governance', ...row }))]" :columns="['kind', 'key', 'count']" @row-click="selectedDetail = $event" />
+              <EmptyState v-else :title="t('memory.knowledgeGovernance.emptyPolicy')" :detail="t('memory.knowledgeGovernance.emptyPolicyDetail')" />
+            </article>
+          </div>
+          <DataTable v-if="knowledgeConflictRows.length" searchable copyable :rows="knowledgeConflictRows" :columns="['id', 'type', 'pack_id', 'decision', 'summary']" @row-click="selectedDetail = $event" />
+          <DataTable v-if="knowledgeMaintenanceRows.length" searchable copyable :rows="knowledgeMaintenanceRows" :columns="['id', 'kind', 'severity', 'status', 'reason']" @row-click="selectedDetail = $event" />
+          <RawPayload :title="t('memory.knowledgeGovernance.recallQuality')" :data="recallQuality" />
+          <RawPayload :title="t('memory.knowledgeGovernance.raw')" :data="knowledge" />
         </section>
 
         <section id="memory-graph" class="management-panel memory-panel" data-section="graph">

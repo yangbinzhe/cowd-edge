@@ -11,7 +11,7 @@ const pages = {
   mission: { file: 'MissionControlPage.vue', sections: ['overview', 'sessions', 'teams', 'agents', 'routes', 'runtime-v2', 'inbox', 'approvals', 'trace'] },
   context: { file: 'ContextPage.vue', sections: ['packet', 'budget', 'evidence', 'history'] },
   reality: { file: 'RealityCorePage.vue', sections: ['management', 'core-map', 'overview', 'fact-flow', 'context-runtime', 'evidence', 'promotions', 'boundaries'] },
-  memory: { file: 'MemoryPage.vue', sections: ['layers', 'recall', 'graph', 'context-envelope', 'maintenance', 'structured-core'] },
+  memory: { file: 'MemoryPage.vue', sections: ['layers', 'recall', 'graph', 'context-envelope', 'knowledge-governance', 'maintenance', 'structured-core'] },
   skills: { file: 'SkillsPage.vue', sections: ['catalog', 'projection', 'files', 'runs', 'governance'] },
   agents: { file: 'AgentsPage.vue', sections: ['catalog', 'discovery', 'tasks', 'reviews', 'graph', 'runs'] },
   tools: { file: 'ToolsPage.vue', sections: ['registry', 'operations', 'mutations', 'checkpoints', 'cache', 'ledger', 'risk'] },

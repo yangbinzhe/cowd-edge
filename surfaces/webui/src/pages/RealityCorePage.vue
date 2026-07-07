@@ -168,6 +168,39 @@ const boundaryRows = computed(() => {
   }));
 });
 const contextRuntime = computed(() => status.value?.context_runtime || {});
+const knowledgeRecallQuality = computed(() => status.value?.engines?.knowledge_fabric?.recall_quality || {});
+const knowledgeRecallRows = computed(() => {
+  const quality = knowledgeRecallQuality.value;
+  const warnings = Array.isArray(quality.cross_project_contamination_warnings)
+    ? quality.cross_project_contamination_warnings
+    : [];
+  return [
+    {
+      metric: t('memory.knowledgeGovernance.precision', { value: Math.round(Number(quality.precision_estimate ?? 1) * 100) }),
+      status: warnings.length ? 'warn' : 'ready',
+      value: Math.round(Number(quality.precision_estimate ?? 1) * 100),
+      detail: quality.policy || '-',
+    },
+    {
+      metric: t('memory.knowledgeGovernance.conflicts'),
+      status: Array.isArray(quality.conflict_warnings) && quality.conflict_warnings.length ? 'warn' : 'ready',
+      value: Array.isArray(quality.conflict_warnings) ? quality.conflict_warnings.length : 0,
+      detail: Array.isArray(quality.conflict_warnings) ? quality.conflict_warnings.join(', ') || '-' : '-',
+    },
+    {
+      metric: 'cross_project_contamination_warnings',
+      status: warnings.length ? 'warn' : 'ready',
+      value: warnings.length,
+      detail: warnings.join(', ') || '-',
+    },
+    {
+      metric: 'omitted_high_value_count',
+      status: Number(quality.omitted_high_value_count || 0) ? 'warn' : 'ready',
+      value: quality.omitted_high_value_count || 0,
+      detail: t('reality.knowledgeRecall.omittedHighValueDetail'),
+    },
+  ];
+});
 const contextRuntimeRows = computed(() => {
   const runtime = contextRuntime.value;
   const omission = runtime.omission_summary || {};
@@ -401,7 +434,9 @@ onMounted(() => {
           </article>
         </div>
         <DataTable v-if="contextRuntimeRows.length" :rows="contextRuntimeRows" :columns="['metric', 'status', 'value', 'detail']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="knowledgeRecallRows.length" :rows="knowledgeRecallRows" :columns="['metric', 'status', 'value', 'detail']" @row-click="selectedDetail = $event" />
         <RawPayload :title="t('memory.contextEnvelope.raw')" :data="contextRuntime" />
+        <RawPayload :title="t('memory.knowledgeGovernance.recallQuality')" :data="knowledgeRecallQuality" />
       </section>
 
       <section class="management-panel reality-panel wide" data-section="fact-flow">
