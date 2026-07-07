@@ -1909,6 +1909,8 @@ export const enUS: MessageCatalog = {
   "template.pages.surfacepage.7b6ca4df85": "Retry failed",
   "template.pages.surfacepage.ffb9f9eb33": "Move to DLQ",
   "template.pages.surfacepage.a89fd9f7cf": "Replay inbound",
+  "template.pages.surfacepage.archiveDlq": "Archive DLQ",
+  "template.pages.surfacepage.purgeArchivedEvents": "Purge archived events",
   "template.pages.toolspage.201fed4a91": "Safe tool",
   "template.pages.toolspage.7fcfe24327": "Safe execute",
   "template.pages.toolspage.f41a6f7d28": "Intent prompt",

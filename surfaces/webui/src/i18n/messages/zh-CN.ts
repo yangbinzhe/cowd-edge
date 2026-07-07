@@ -1909,6 +1909,8 @@ export const zhCN: MessageCatalog = {
   "template.pages.surfacepage.7b6ca4df85": "重试失败项",
   "template.pages.surfacepage.ffb9f9eb33": "移至死信队列",
   "template.pages.surfacepage.a89fd9f7cf": "重放入站消息",
+  "template.pages.surfacepage.archiveDlq": "归档死信",
+  "template.pages.surfacepage.purgeArchivedEvents": "清理归档事件",
   "template.pages.toolspage.201fed4a91": "安全工具",
   "template.pages.toolspage.7fcfe24327": "安全执行",
   "template.pages.toolspage.f41a6f7d28": "意图提示词",

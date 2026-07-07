@@ -805,6 +805,15 @@ export const api = {
   surfaceEvents: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/events`, { events: [] }),
   surfaceInbox: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/inbox`, { inbox: [], snapshot: {} }),
   surfaceOutbox: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/outbox`, { outbox: [], dead_letters: [] }),
+  surfaceMessages: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/messages`, { kind: 'surface.messages', snapshot: {} }),
+  surfaceArchiveMessages: (id: string, limit = 100, olderThanMs?: number) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/messages/archive`, {
+    method: 'POST',
+    body: JSON.stringify({ limit, older_than_ms: olderThanMs }),
+  }),
+  surfacePurgeArchivedMessages: (id: string, limit = 100, olderThanMs?: number) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/messages/purge-archived-events`, {
+    method: 'POST',
+    body: JSON.stringify({ limit, older_than_ms: olderThanMs }),
+  }),
   surfaceDeliveries: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/deliveries`, { deliveries: [] }),
   surfaceReplayInbox: (id: string, messageId: string) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/inbox/${encodeURIComponent(messageId)}/replay`, { method: 'POST' }),
   surfaceRetryOutbox: (id: string, deliveryId: string) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/outbox/${encodeURIComponent(deliveryId)}/retry`, { method: 'POST' }),

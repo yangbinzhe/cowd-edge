@@ -98,13 +98,18 @@ const activeOutboxItems = computed(() => {
   return outboxItems.value.filter((item: any) => isActiveOutboxStatus(item.status));
 });
 const deliveryItems = computed(() => {
-  const deliveries = state.value.deliveries?.deliveries || state.value.inbox?.snapshot?.deliveries || [];
+  const deliveries = state.value.messages?.snapshot?.deliveries || state.value.deliveries?.deliveries || state.value.inbox?.snapshot?.deliveries || [];
   return Array.isArray(deliveries) ? deliveries : [];
 });
 const deadLetterItems = computed(() => {
-  const letters = state.value.outbox?.dead_letters || state.value.inbox?.snapshot?.dead_letters || [];
+  const letters = state.value.messages?.snapshot?.dead_letters || state.value.outbox?.dead_letters || state.value.inbox?.snapshot?.dead_letters || [];
   return Array.isArray(letters) ? letters : [];
 });
+const archivedOutboxItems = computed(() => {
+  const archived = state.value.messages?.snapshot?.archived_outbox || [];
+  return Array.isArray(archived) ? archived : [];
+});
+const messageRoot = computed(() => state.value.messages?.message_root || state.value.messages?.snapshot?.message_root || '-');
 const supervisorEventItems = computed(() => {
   const events = state.value.status?.events || state.value.events?.supervisor_events || [];
   return Array.isArray(events) ? events : [];
@@ -304,7 +309,7 @@ const surfaceDiagnosticRows = computed(() => {
 async function loadSurface(id = selectedSurface.value) {
   if (!id) return;
   selectedSurface.value = id;
-  const [detail, routes, resources, status, health, events, inbox, outbox, deliveries] = await Promise.all([
+  const [detail, routes, resources, status, health, events, inbox, outbox, messages, deliveries] = await Promise.all([
     api.surfaceDetail(id),
     api.surfaceRoutes(id),
     api.surfaceResources(id),
@@ -313,9 +318,10 @@ async function loadSurface(id = selectedSurface.value) {
     api.surfaceEvents(id),
     api.surfaceInbox(id),
     api.surfaceOutbox(id),
+    api.surfaceMessages(id),
     api.surfaceDeliveries(id),
   ]);
-  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events, inbox, outbox, deliveries };
+  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events, inbox, outbox, messages, deliveries };
 }
 
 async function refresh() {
@@ -396,6 +402,20 @@ async function deadLetterDelivery() {
   await loadSurface(selectedSurface.value);
 }
 
+async function archiveDeadLetters() {
+  if (!selectedSurface.value || !deadLetterItems.value.length) return;
+  actionResult.value = await api.surfaceArchiveMessages(selectedSurface.value, 100);
+  selectedDetail.value = actionResult.value;
+  await loadSurface(selectedSurface.value);
+}
+
+async function purgeArchivedEvents() {
+  if (!selectedSurface.value || !archivedOutboxItems.value.length) return;
+  actionResult.value = await api.surfacePurgeArchivedMessages(selectedSurface.value, 100);
+  selectedDetail.value = actionResult.value;
+  await loadSurface(selectedSurface.value);
+}
+
 async function replayInbound() {
   const messageId = replayCandidate.value?.message_id || replayCandidate.value?.id;
   if (!selectedSurface.value || !messageId) return;
@@ -453,7 +473,7 @@ onMounted(refresh);
       <article class="metric-card" :data-tone="deadLetterItems.length ? 'warn' : 'success'">
         <span>{{ t('page.surface.page.text.c215d81d09') }}</span>
         <strong>{{ activeInboxItems.length + activeOutboxItems.length }}</strong>
-        <small>{{ t('page.surface.summary.deliveryQueue', { total: outboxRows.length, dlq: deadLetterItems.length }) }}</small>
+        <small>{{ t('page.surface.summary.deliveryQueue', { total: outboxRows.length, dlq: deadLetterItems.length }) }} · archived {{ archivedOutboxItems.length }}</small>
       </article>
       <article class="metric-card" :data-tone="edgeSurfaces.length || edgeMessageConnectors.length || edgeSourceConnectors.length ? 'success' : 'warn'">
         <span>{{ t('edge.metric.total') }}</span>
@@ -583,8 +603,9 @@ onMounted(refresh);
       <section class="management-panel gateway-panel wide" data-section="delivery">
         <header>
           <h2>{{ t('page.surface.page.text.c215d81d09') }}</h2>
-          <span>{{ activeInboxItems.length + activeOutboxItems.length }} active · {{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ</span>
+          <span>{{ activeInboxItems.length + activeOutboxItems.length }} active · {{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ · {{ archivedOutboxItems.length }} archived</span>
         </header>
+        <p class="muted-line">message root: {{ messageRoot }}</p>
         <div class="button-row">
           <button class="ghost-action" type="button" :disabled="!retryCandidate" @click="retryDelivery">
             <RotateCcw :size="15" />
@@ -597,6 +618,14 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!replayCandidate" @click="replayInbound">
             <Play :size="15" />
             {{ t('template.pages.surfacepage.a89fd9f7cf') }}
+          </button>
+          <button class="ghost-action" type="button" :disabled="!deadLetterItems.length" @click="archiveDeadLetters">
+            <Square :size="15" />
+            {{ t('template.pages.surfacepage.archiveDlq') }}
+          </button>
+          <button class="ghost-action" type="button" :disabled="!archivedOutboxItems.length" @click="purgeArchivedEvents">
+            <Square :size="15" />
+            {{ t('template.pages.surfacepage.purgeArchivedEvents') }}
           </button>
         </div>
         <DataTable v-if="inboxRows.length" searchable copyable row-key="message_id" :rows="inboxRows" :columns="['message_id', 'status', 'thread', 'sender', 'session', 'turn', 'error']" @row-click="selectedDetail = $event" />
