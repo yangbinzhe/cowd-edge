@@ -43,6 +43,7 @@ const lifecycle = ref<any>({});
 const maintenanceScan = ref<any>(null);
 const performance = ref<any>({});
 const runtime = ref<any>({});
+const contextEnvelope = ref<any>({});
 const structured = ref<any>({});
 const structuredPlan = ref<any>(null);
 const actionResult = ref<any>(null);
@@ -112,12 +113,14 @@ const healthLevel = computed(() => status.value?.kernel_health?.degraded ? 'degr
 const memoryContext = computed(() => [
   { label: t('script.pages.memorypage.label.c1f65ddb75'), value: 'Reality Core / Memory' },
   { label: t('script.pages.memorypage.label.3703cd2168'), value: healthLevel.value, tone: healthLevel.value === 'ready' ? 'success' : 'warn' },
+  { label: t('memory.contextEnvelope.label'), value: contextEnvelope.value?.status || status.value?.context_envelope_projection?.status || 'unknown', tone: (contextEnvelope.value?.status || status.value?.context_envelope_projection?.status) === 'ready' ? 'success' : 'warn' },
   { label: t('script.pages.memorypage.label.4343635cf2'), value: selectedLayer.value },
   { label: t('script.pages.memorypage.label.014bcd654c'), value: linkCount.value },
 ]);
 const memoryWorkflow = computed(() => [
   { id: 'layers', label: t('script.pages.memorypage.label.4343635cf2'), status: entries.value.length ? 'ready' : 'idle', count: entries.value.length },
   { id: 'recall', label: t('script.pages.memorypage.label.3f7e1fd914'), status: recallRows.value.length ? 'active' : 'idle', count: recallRows.value.length },
+  { id: 'context-envelope', label: t('memory.contextEnvelope.label'), status: contextEnvelope.value?.status || 'idle', description: contextEnvelope.value?.latest_envelope_id || contextEnvelope.value?.degraded_reason || '-' },
   { id: 'recall', label: t('script.pages.memorypage.label.83c6d723cb'), status: packet.value?.items?.length ? 'ready' : 'idle', description: query.value },
   { id: 'graph', label: t('script.pages.memorypage.label.c7fb317725'), status: entityRows.value.length ? 'ready' : 'idle', count: entityRows.value.length },
   { id: 'maintenance', label: t('script.pages.memorypage.label.94de303bbe'), status: candidateRows.value.length ? 'blocked' : 'ready', count: candidateRows.value.length },
@@ -169,6 +172,19 @@ const selectedEvidence = computed<EvidenceObject | null>(() => {
     raw: row,
   };
 });
+const contextEnvelopeRows = computed(() => (Array.isArray(contextEnvelope.value?.summaries) ? contextEnvelope.value.summaries : []).map((item: any) => ({
+  envelope_id: item.envelope_id || '-',
+  session_id: item.session_id || '-',
+  profile: item.profile || '-',
+  pressure_bp: item.pressure_bp ?? '-',
+  selected: item.selected_count ?? 0,
+  omitted: item.omitted_count ?? 0,
+})));
+const contextEnvelopeStatus = computed(() => contextEnvelope.value?.status || status.value?.context_envelope_projection?.status || 'unknown');
+const contextEnvelopeRatio = computed(() => {
+  const ratio = Number(contextEnvelope.value?.used_ratio ?? status.value?.context_envelope_projection?.used_ratio ?? 0);
+  return `${Math.round(ratio * 100)}%`;
+});
 
 async function refresh() {
   loading.value = true;
@@ -185,6 +201,7 @@ async function refresh() {
       nextMaintenance,
       nextPerformance,
       nextRuntime,
+      nextContextEnvelope,
       sources,
       facts,
       evidence,
@@ -200,6 +217,7 @@ async function refresh() {
       api.memoryMaintenance(),
       api.memoryPerformance(),
       api.memoryRuntime(),
+      api.memoryContextEnvelope('', 20),
       api.structuredSources(),
       api.structuredFacts(),
       api.structuredEvidence(),
@@ -215,6 +233,7 @@ async function refresh() {
     maintenance.value = nextMaintenance;
     performance.value = nextPerformance;
     runtime.value = nextRuntime;
+    contextEnvelope.value = nextContextEnvelope;
     structured.value = { sources, facts, evidence, watermarks };
     await loadLayer();
     await runRecall();
@@ -334,7 +353,7 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="memoryContext" density="compact" :max-visible="4" />
+    <PrimaryContextBar :items="memoryContext" density="compact" :max-visible="5" />
     <WorkflowStrip :steps="memoryWorkflow" :title="t('page.memory.page.title.965180676a')" density="compact" />
 
     <section class="metric-row memory-overview">
@@ -353,12 +372,18 @@ onMounted(refresh);
         <strong>{{ linkCount }}</strong>
         <small>{{ t('page.memory.summary.indexedVectors', { count: stats.vector_count || 0 }) }}</small>
       </article>
+      <article class="metric-card" :data-tone="contextEnvelopeStatus === 'ready' ? 'success' : 'warn'">
+        <span>{{ t('memory.contextEnvelope.label') }}</span>
+        <strong>{{ displayStatus(contextEnvelopeStatus) }}</strong>
+        <small>{{ t('memory.contextEnvelope.used', { value: contextEnvelopeRatio }) }}</small>
+      </article>
     </section>
 
     <section class="memory-workbench">
       <nav class="memory-sections" :aria-label="t('page.memory.page.aria-label.6f075355c0')">
         <button type="button" @click="selectMemorySection('layers')"><Database :size="15" />{{ t('page.memory.page.text.da827dc4ae') }}</button>
         <button type="button" @click="selectMemorySection('recall')"><Search :size="15" />{{ t('page.memory.page.text.58e722778f') }}</button>
+        <button type="button" @click="selectMemorySection('context-envelope')"><Network :size="15" />{{ t('memory.contextEnvelope.label') }}</button>
         <button type="button" @click="selectMemorySection('graph')"><GitBranch :size="15" />{{ t('page.memory.page.text.c676fc9eca') }}</button>
         <button type="button" @click="selectMemorySection('maintenance')"><ShieldCheck :size="15" />{{ t('page.memory.page.text.44500c4e90') }}</button>
         <button type="button" @click="selectMemorySection('structured-core')"><Network :size="15" />{{ t('page.memory.page.text.23d5f43eb0') }}</button>
@@ -454,6 +479,38 @@ onMounted(refresh);
           <EmptyState v-else :title="t('page.memory.page.title.7ba084d974')" :detail="t('page.memory.page.detail.31896020e4')" />
           <DataTable v-if="packetRows.length" searchable copyable :rows="packetRows" :columns="['id', 'kind', 'source', 'score', 'summary']" @row-click="selectedDetail = $event" />
           <RawPayload :title="t('page.memory.page.title.7ea35b5ba8')" :data="packet" />
+        </section>
+
+        <section id="memory-context-envelope" class="management-panel memory-panel wide" data-section="context-envelope">
+          <header>
+            <h2>{{ t('memory.contextEnvelope.label') }}</h2>
+            <span>{{ contextEnvelope.latest_envelope_id || t('memory.contextEnvelope.noEnvelope') }}</span>
+          </header>
+          <div class="metric-row compact">
+            <article class="metric-card">
+              <span>{{ t('memory.contextEnvelope.status') }}</span>
+              <strong>{{ displayStatus(contextEnvelopeStatus) }}</strong>
+              <small>{{ contextEnvelope.degraded_reason || contextEnvelope.restore_pointer || '-' }}</small>
+            </article>
+            <article class="metric-card" data-tone="info">
+              <span>{{ t('memory.contextEnvelope.budget') }}</span>
+              <strong>{{ contextEnvelope.used_tokens || 0 }}/{{ contextEnvelope.token_budget || 0 }}</strong>
+              <small>{{ t('memory.contextEnvelope.used', { value: contextEnvelopeRatio }) }}</small>
+            </article>
+            <article class="metric-card" data-tone="warn">
+              <span>{{ t('memory.contextEnvelope.compression') }}</span>
+              <strong>{{ displayStatus(contextEnvelope.compression_status || '-') }}</strong>
+              <small>{{ t('memory.contextEnvelope.threshold', { value: Math.round(Number(contextEnvelope.compression_threshold || 0.7) * 100) }) }}</small>
+            </article>
+            <article class="metric-card" data-tone="success">
+              <span>{{ t('memory.contextEnvelope.recallQuality') }}</span>
+              <strong>{{ displayStatus(contextEnvelope.recall_quality_status || '-') }}</strong>
+              <small>{{ contextEnvelope.selected_count || 0 }} / {{ contextEnvelope.omitted_count || 0 }}</small>
+            </article>
+          </div>
+          <DataTable v-if="contextEnvelopeRows.length" searchable copyable :rows="contextEnvelopeRows" :columns="['envelope_id', 'session_id', 'profile', 'pressure_bp', 'selected', 'omitted']" @row-click="selectedDetail = $event" />
+          <EmptyState v-else :title="t('memory.contextEnvelope.noEnvelope')" :detail="contextEnvelope.degraded_reason || t('memory.contextEnvelope.emptyDetail')" />
+          <RawPayload :title="t('memory.contextEnvelope.raw')" :data="contextEnvelope" />
         </section>
 
         <section id="memory-graph" class="management-panel memory-panel" data-section="graph">

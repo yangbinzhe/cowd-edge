@@ -99,6 +99,7 @@ const sectionTabs = [
   { id: 'overview', label: t('script.pages.realitycorepage.label.0efc2e6be4') },
   { id: 'memory', label: t('script.pages.realitycorepage.label.89c8a2851d') },
   { id: 'matrix', label: t('script.pages.realitycorepage.label.58947ebc8f') },
+  { id: 'context-runtime', label: t('reality.contextRuntime.label') },
   { id: 'fact-flow', label: t('script.pages.realitycorepage.label.33f62e7cc6') },
   { id: 'evidence', label: t('script.pages.realitycorepage.label.7ea014de7b') },
   { id: 'audit', label: t('script.pages.realitycorepage.label.fa1703dd78') },
@@ -112,6 +113,7 @@ const realityContext = computed(() => [
 const realityWorkflow = computed(() => [
   { id: 'overview', label: t('script.pages.realitycorepage.label.7f5d63aa39'), status: engineRows.value.length ? 'ready' : 'idle', count: engineRows.value.length },
   { id: 'core-map', label: t('script.pages.realitycorepage.label.e6cb603ee1'), status: coreRows.value.length ? 'ready' : 'idle', count: coreRows.value.length },
+  { id: 'context-runtime', label: t('reality.contextRuntime.label'), status: status.value?.context_runtime?.envelope_status || 'idle', description: status.value?.context_runtime?.latest_envelope_id || status.value?.context_runtime?.degraded_reason || '-' },
   { id: 'fact-flow', label: t('script.pages.realitycorepage.label.33f62e7cc6'), status: factFlowRows.value.length ? 'active' : 'idle', count: factFlowRows.value.length },
   { id: 'evidence', label: t('script.pages.realitycorepage.label.7ea014de7b'), status: evidenceRows.value.length ? 'ready' : 'idle', count: evidenceRows.value.length },
   { id: 'promotions', label: t('script.pages.realitycorepage.label.550ae25c2e'), status: promotionRows.value.length ? 'done' : 'idle', count: promotionRows.value.length },
@@ -164,6 +166,31 @@ const boundaryRows = computed(() => {
     count: boundary.count ?? 0,
     meaning: boundary.meaning || '-',
   }));
+});
+const contextRuntime = computed(() => status.value?.context_runtime || {});
+const contextRuntimeRows = computed(() => {
+  const runtime = contextRuntime.value;
+  const omission = runtime.omission_summary || {};
+  return [
+    {
+      metric: t('reality.contextRuntime.envelopeStatus'),
+      status: runtime.envelope_status || '-',
+      value: runtime.latest_envelope_id || '-',
+      detail: runtime.latest_session_id || runtime.degraded_reason || '-',
+    },
+    {
+      metric: t('reality.contextRuntime.compression'),
+      status: runtime.compression_status || '-',
+      value: runtime.latest_checkpoint || '-',
+      detail: `used ${Math.round(Number(runtime.used_ratio || 0) * 100)}%`,
+    },
+    {
+      metric: t('reality.contextRuntime.recallQuality'),
+      status: runtime.recall_quality_status || '-',
+      value: `${omission.selected_count || 0}/${omission.omitted_count || 0}`,
+      detail: Array.isArray(omission.reasons) ? omission.reasons.join(', ') || '-' : '-',
+    },
+  ];
 });
 const managementRows = computed(() => {
   const rows = staticProjection.value?.management || fallbackManagement;
@@ -349,6 +376,32 @@ onMounted(() => {
         </header>
         <DataTable v-if="engineRows.length" :rows="engineRows" :columns="['engine', 'status', 'service', 'operation', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.reality.core.page.title.552e99583f')" :detail="t('page.reality.core.page.detail.e82982ba71')" />
+      </section>
+
+      <section class="management-panel reality-panel wide" data-section="context-runtime">
+        <header>
+          <h2>{{ t('reality.contextRuntime.label') }}</h2>
+          <span>{{ contextRuntime.latest_envelope_id || t('memory.contextEnvelope.noEnvelope') }}</span>
+        </header>
+        <div class="metric-row compact">
+          <article class="metric-card" :data-tone="contextRuntime.envelope_status === 'ready' ? 'success' : 'warn'">
+            <span>{{ t('reality.contextRuntime.envelopeStatus') }}</span>
+            <strong>{{ displayStatus(contextRuntime.envelope_status || '-') }}</strong>
+            <small>{{ contextRuntime.latest_session_id || contextRuntime.degraded_reason || '-' }}</small>
+          </article>
+          <article class="metric-card" data-tone="warn">
+            <span>{{ t('reality.contextRuntime.compression') }}</span>
+            <strong>{{ displayStatus(contextRuntime.compression_status || '-') }}</strong>
+            <small>{{ t('memory.contextEnvelope.used', { value: `${Math.round(Number(contextRuntime.used_ratio || 0) * 100)}%` }) }}</small>
+          </article>
+          <article class="metric-card" data-tone="info">
+            <span>{{ t('reality.contextRuntime.recallQuality') }}</span>
+            <strong>{{ displayStatus(contextRuntime.recall_quality_status || '-') }}</strong>
+            <small>{{ contextRuntime.omission_summary?.selected_count || 0 }} / {{ contextRuntime.omission_summary?.omitted_count || 0 }}</small>
+          </article>
+        </div>
+        <DataTable v-if="contextRuntimeRows.length" :rows="contextRuntimeRows" :columns="['metric', 'status', 'value', 'detail']" @row-click="selectedDetail = $event" />
+        <RawPayload :title="t('memory.contextEnvelope.raw')" :data="contextRuntime" />
       </section>
 
       <section class="management-panel reality-panel wide" data-section="fact-flow">

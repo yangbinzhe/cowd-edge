@@ -648,6 +648,10 @@ export const api = {
   }),
   resolveEvidence: (ref: string) => read(`/api/evidence/resolve?ref=${encodeURIComponent(ref)}`, {}),
   memoryStatus: () => read('/api/memory/status', {}),
+  memoryContextEnvelope: (sessionId = '', limit = 20) => {
+    const suffix = sessionId ? `/${encodeURIComponent(sessionId)}` : '';
+    return read(`/api/memory/context-envelope${suffix}?limit=${limit}`, {});
+  },
   memoryStats: () => read('/api/memory/stats', {}),
   memoryLayers: () => read('/api/memory/layers', { layers: [] }),
   memoryLayer: (layer: string) => read(`/api/memory/${encodeURIComponent(layer)}`, { entries: [] }),
