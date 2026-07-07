@@ -178,7 +178,12 @@ const harnessEvalRunRows = computed(() => harnessEvalRuns.value.slice(0, 8).map(
   rounds: run.provider_rounds || 0,
   tools: run.tool_calls || 0,
   report: run.report_id || '-',
+  finished: run.finished_at_ms ? 'yes' : 'no',
+  message: run.message || '-',
 })));
+const cancellableHarnessEvalRuns = computed(() => harnessEvalRunRows.value.filter((run) => (
+  ['queued', 'running', 'cancel_requested'].includes(String(run.status))
+)));
 const harnessEvalScenarioRows = computed(() => harnessEvalScenarios.value.slice(0, 8).map((scenario: any) => ({
   id: scenario.id,
   kind: scenario.kind,
@@ -655,9 +660,9 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.4444545e37') }}</h2>
           <span>{{ formatCount('runs', harnessEvalRuns.length) }}</span>
         </header>
-        <DataTable v-if="harnessEvalRunRows.length" searchable copyable :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'tokens', 'rounds', 'tools', 'report']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
-        <div v-if="harnessEvalRunRows.length" class="button-row">
-          <button class="ghost-action" type="button" @click="cancelHarnessEvalRun(harnessEvalRunRows[0])">{{ t('page.audit.harnessEval.cancelLatest') }}</button>
+        <DataTable v-if="harnessEvalRunRows.length" searchable copyable :rows="harnessEvalRunRows" :columns="['id', 'level', 'status', 'finished', 'tokens', 'rounds', 'tools', 'report', 'message']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'harness-eval', evidence: $event.id, status: $event.status }" />
+        <div v-if="cancellableHarnessEvalRuns.length" class="button-row">
+          <button class="ghost-action" type="button" @click="cancelHarnessEvalRun(cancellableHarnessEvalRuns[0])">{{ t('page.audit.harnessEval.cancelLatest') }}</button>
         </div>
         <EmptyState v-else :title="t('page.audit.page.title.2029dfea2e')" :detail="t('page.audit.page.detail.d6935f4575')" />
       </section>

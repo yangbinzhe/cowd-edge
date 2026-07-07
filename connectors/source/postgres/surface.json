@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "postgres",
   "name": "PostgreSQL Source Connector",
-  "version": "0.9.456",
+  "version": "0.9.457",
   "kind": "source-connector",
   "entry": "./cowd-edge-postgres-source",
   "transport": "stdio-jsonl",

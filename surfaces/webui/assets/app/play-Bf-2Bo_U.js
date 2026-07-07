@@ -1,4 +1,4 @@
-import{c as o}from"./index.dev-CHDl-pg8.js";/**
+import{c as o}from"./index.dev-BI21pg70.js";/**
  * @license lucide-vue-next v0.468.0 - ISC
  *
  * This source code is licensed under the ISC license.
