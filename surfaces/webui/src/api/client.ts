@@ -1033,7 +1033,7 @@ export const api = {
     body: JSON.stringify({}),
   }),
   evolutionAdoptions: () => read('/api/evolution/adoptions', { adoptions: [] }),
-  evolutionAdoptionRollback: (id: string) => writeWithReceipt(`/api/evolution/adoptions/${encodeURIComponent(id)}/rollback`, {
+  evolutionVersionRollback: (versionId: string) => writeWithReceipt(`/api/evolution/versions/${encodeURIComponent(versionId)}/rollback`, {
     method: 'POST',
     body: JSON.stringify({}),
   }),
