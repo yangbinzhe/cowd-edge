@@ -536,6 +536,9 @@ describe('Cowd Vue WebUI shell', () => {
     await api.evolutionProposal('proposal-1');
     await api.evolutionProposalDecision('proposal-1', 'approved');
     await api.evolutionSkillDraft('proposal-1');
+    await api.evolutionCandidates();
+    await api.evolutionCreateCandidate('proposal-1', { baseline_ref: 'baseline:main', candidate_ref: 'candidate:sandbox' });
+    await api.evolutionCandidateDecision('candidate-1', 'approved_for_adoption');
     await api.evolutionSandboxEval('proposal-1', { baseline_score: 1, candidate_score: 2 });
     await api.evolutionSandboxEvals();
 
@@ -546,6 +549,9 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/decision', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/skill-draft', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/candidates', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/decision', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/sandbox-eval', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/sandbox-evals', expect.any(Object));
   });

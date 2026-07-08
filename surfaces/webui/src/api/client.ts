@@ -175,7 +175,7 @@ async function writeWithReceipt<T>(path: string, init: RequestInit = {}): Promis
 function countPayload(data: any): number {
   if (Array.isArray(data)) return data.length;
   if (!data || typeof data !== 'object') return data ? 1 : 0;
-  for (const key of ['sessions', 'messages', 'events', 'timeline', 'tools', 'skills', 'runs', 'tasks', 'entries', 'files', 'profiles', 'accounts', 'resources', 'facts', 'incidents', 'playbooks', 'cases', 'executions']) {
+  for (const key of ['sessions', 'messages', 'events', 'timeline', 'tools', 'skills', 'runs', 'tasks', 'entries', 'files', 'profiles', 'accounts', 'resources', 'facts', 'incidents', 'playbooks', 'cases', 'executions', 'candidates']) {
     if (Array.isArray(data[key])) return data[key].length;
   }
   if (typeof data.count === 'number') return data.count;
@@ -1000,6 +1000,15 @@ export const api = {
     body: JSON.stringify({ decision }),
   }),
   evolutionSkillDraft: (id: string) => read(`/api/evolution/proposals/${encodeURIComponent(id)}/skill-draft`, {}),
+  evolutionCandidates: () => read('/api/evolution/candidates', { candidates: [] }),
+  evolutionCreateCandidate: (id: string, body: Record<string, unknown> = {}) => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/candidates`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  evolutionCandidateDecision: (id: string, status: 'sandbox_ready' | 'evaluated' | 'approved_for_adoption' | 'rejected' | 'archived') => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ status }),
+  }),
   evolutionSandboxEval: (id: string, body: Record<string, unknown> = {}) => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/sandbox-eval`, {
     method: 'POST',
     body: JSON.stringify(body),

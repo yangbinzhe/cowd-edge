@@ -51,6 +51,7 @@ const harnessEvalRuns = computed(() => items(state.value.harnessEvalRuns, 'runs'
 const harnessEvalScenarios = computed(() => items(state.value.harnessEvalScenarios, 'scenarios'));
 const evolutionSignals = computed(() => items(state.value.evolutionSignals, 'signals'));
 const evolutionProposals = computed(() => items(state.value.evolutionProposals, 'proposals'));
+const evolutionCandidates = computed(() => items(state.value.evolutionCandidates, 'candidates'));
 const evolutionSandboxEvals = computed(() => items(state.value.evolutionSandboxEvals, 'evals'));
 const auditRows = computed(() => auditRecords.value.slice(0, 18).map((record: any) => ({
   source: record.source || '-',
@@ -207,6 +208,16 @@ const evolutionProposalRows = computed(() => evolutionProposals.value.slice(0, 1
   approval: proposal.risk?.approval_required ? 'yes' : 'no',
   benefit: proposal.expected_benefit,
 })));
+const evolutionCandidateRows = computed(() => evolutionCandidates.value.slice(0, 10).map((candidate: any) => ({
+  id: candidate.candidate_id,
+  proposal: candidate.proposal_id,
+  kind: candidate.kind,
+  status: candidate.status,
+  baseline: candidate.baseline_ref,
+  candidate: candidate.candidate_ref,
+  gates: Array.isArray(candidate.adoption_gate) ? candidate.adoption_gate.length : 0,
+  modified: candidate.mainline_modified ? 'yes' : 'no',
+})));
 const evolutionSandboxRows = computed(() => evolutionSandboxEvals.value.slice(0, 10).map((item: any) => ({
   id: item.eval_id,
   proposal: item.proposal_id,
@@ -300,6 +311,7 @@ async function refresh() {
       harnessEvalScenariosData,
       evolutionSignalsData,
       evolutionProposalsData,
+      evolutionCandidatesData,
       evolutionSandboxEvalsData,
     ] = await Promise.all([
       api.auditExport(source.value, limit.value, offset.value),
@@ -317,6 +329,7 @@ async function refresh() {
       api.harnessEvalScenarios(),
       api.evolutionSignals(),
       api.evolutionProposals(),
+      api.evolutionCandidates(),
       api.evolutionSandboxEvals(),
     ]);
     state.value = {
@@ -335,6 +348,7 @@ async function refresh() {
       harnessEvalScenarios: harnessEvalScenariosData,
       evolutionSignals: evolutionSignalsData,
       evolutionProposals: evolutionProposalsData,
+      evolutionCandidates: evolutionCandidatesData,
       evolutionSandboxEvals: evolutionSandboxEvalsData,
     };
   } catch (err) {
@@ -423,6 +437,23 @@ async function decideEvolutionProposal(row: Record<string, unknown>, decision: '
   const id = String(row.id || '');
   if (!id) return;
   evolutionActionResult.value = await api.evolutionProposalDecision(id, decision);
+  await refresh();
+}
+
+async function createEvolutionCandidate(row: Record<string, unknown>) {
+  const id = String(row.id || row.proposal || '');
+  if (!id) return;
+  evolutionActionResult.value = await api.evolutionCreateCandidate(id, {
+    baseline_ref: 'baseline:current',
+    candidate_ref: 'candidate:sandbox',
+  });
+  await refresh();
+}
+
+async function decideEvolutionCandidate(row: Record<string, unknown>, status: 'approved_for_adoption' | 'rejected' | 'archived') {
+  const id = String(row.id || '');
+  if (!id) return;
+  evolutionActionResult.value = await api.evolutionCandidateDecision(id, status);
   await refresh();
 }
 
@@ -679,7 +710,7 @@ onMounted(refresh);
       <section class="management-panel gateway-panel wide" data-section="evolution">
         <header>
           <h2>{{ t('page.audit.evolution.title') }}</h2>
-          <span>{{ t('page.audit.evolution.summary', { signals: evolutionSignals.length, proposals: evolutionProposals.length }) }}</span>
+          <span>{{ t('page.audit.evolution.summary', { signals: evolutionSignals.length, proposals: evolutionProposals.length, candidates: evolutionCandidates.length }) }}</span>
         </header>
         <div class="button-row">
           <button class="primary-action" type="button" @click="createEvolutionSignal">{{ t('page.audit.evolution.createSignal') }}</button>
@@ -698,6 +729,11 @@ onMounted(refresh);
             <small>{{ t('page.audit.evolution.approvalBoundary') }}</small>
           </article>
           <article class="metric-card">
+            <span>{{ t('page.audit.evolution.candidates') }}</span>
+            <strong>{{ evolutionCandidates.length }}</strong>
+            <small>{{ t('page.audit.evolution.adoptionGate') }}</small>
+          </article>
+          <article class="metric-card">
             <span>{{ t('page.audit.evolution.sandbox') }}</span>
             <strong>{{ evolutionSandboxEvals.length }}</strong>
             <small>{{ t('page.audit.evolution.noMainlineWrite') }}</small>
@@ -706,12 +742,18 @@ onMounted(refresh);
         <DataTable v-if="evolutionSignalRows.length" searchable copyable :rows="evolutionSignalRows" :columns="['id', 'type', 'severity', 'owner', 'continue', 'summary']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.signal', evidence: $event.id, status: $event.severity, summary: $event.summary }" />
         <DataTable v-if="evolutionProposalRows.length" searchable copyable :rows="evolutionProposalRows" :columns="['id', 'kind', 'status', 'risk', 'approval', 'benefit']" row-key="id" @row-click="openEvolutionDraft" />
         <div v-if="evolutionProposalRows.length" class="button-row">
+          <button class="ghost-action" type="button" @click="createEvolutionCandidate(evolutionProposalRows[0])">{{ t('page.audit.evolution.createCandidate') }}</button>
           <button class="ghost-action" type="button" @click="runEvolutionSandbox(evolutionProposalRows[0])">{{ t('page.audit.evolution.runSandbox') }}</button>
           <button class="ghost-action" type="button" @click="decideEvolutionProposal(evolutionProposalRows[0], 'approved')">{{ t('page.audit.evolution.approve') }}</button>
           <button class="ghost-action" type="button" @click="decideEvolutionProposal(evolutionProposalRows[0], 'archived')">{{ t('page.audit.evolution.archive') }}</button>
         </div>
+        <DataTable v-if="evolutionCandidateRows.length" searchable copyable :rows="evolutionCandidateRows" :columns="['id', 'proposal', 'kind', 'status', 'baseline', 'candidate', 'gates', 'modified']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.candidate', evidence: $event.id, status: $event.status }" />
+        <div v-if="evolutionCandidateRows.length" class="button-row">
+          <button class="ghost-action" type="button" @click="decideEvolutionCandidate(evolutionCandidateRows[0], 'approved_for_adoption')">{{ t('page.audit.evolution.adoptCandidate') }}</button>
+          <button class="ghost-action" type="button" @click="decideEvolutionCandidate(evolutionCandidateRows[0], 'archived')">{{ t('page.audit.evolution.archive') }}</button>
+        </div>
         <DataTable v-if="evolutionSandboxRows.length" searchable copyable :rows="evolutionSandboxRows" :columns="['id', 'proposal', 'recommendation', 'baseline', 'candidate', 'modified']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.sandbox', evidence: $event.id, status: $event.recommendation }" />
-        <EmptyState v-if="!evolutionSignalRows.length && !evolutionProposalRows.length" :title="t('page.audit.evolution.emptyTitle')" :detail="t('page.audit.evolution.emptyDetail')" />
+        <EmptyState v-if="!evolutionSignalRows.length && !evolutionProposalRows.length && !evolutionCandidateRows.length" :title="t('page.audit.evolution.emptyTitle')" :detail="t('page.audit.evolution.emptyDetail')" />
         <RequestReceipt v-if="evolutionActionResult" :receipt="evolutionActionResult" :title="t('page.audit.evolution.receipt')" />
         <RawPayload v-if="evolutionDraft" :title="t('page.audit.evolution.skillDraft')" :data="evolutionDraft" />
       </section>
