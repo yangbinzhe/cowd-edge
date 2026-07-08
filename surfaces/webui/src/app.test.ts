@@ -525,34 +525,60 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs/run-1/cancel', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('calls evolution signal proposal sandbox and skill draft endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, signals: [], proposals: [], evals: [] }), { status: 200 })));
+  it('calls evolution diagnosis candidate sandbox adoption and skill draft endpoints', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, signals: [], diagnoses: [], proposals: [], candidates: [], evals: [] }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
     await api.evolutionSignals();
     await api.evolutionCreateSignal({ signal_type: 'slow_progress', summary: 'slow', source: { owner: 'test' }, severity: 'warning', suggested_action: 'review' });
+    await api.evolutionDiagnoses();
+    await api.evolutionCreateDiagnosis(['signal-1']);
+    await api.evolutionMissionsSummary();
+    await api.evolutionMissionDetail('mission-1');
     await api.evolutionProposals();
     await api.evolutionCreateProposal(['signal-1']);
     await api.evolutionProposal('proposal-1');
+    await api.evolutionChain('proposal-1');
     await api.evolutionProposalDecision('proposal-1', 'approved');
     await api.evolutionSkillDraft('proposal-1');
     await api.evolutionCandidates();
+    await api.evolutionCandidateDetail('candidate-1');
     await api.evolutionCreateCandidate('proposal-1', { baseline_ref: 'baseline:main', candidate_ref: 'candidate:sandbox' });
-    await api.evolutionCandidateDecision('candidate-1', 'approved_for_adoption');
-    await api.evolutionSandboxEval('proposal-1', { baseline_score: 1, candidate_score: 2 });
+    await api.evolutionCandidateSandboxRun('candidate-1');
+    await api.evolutionCandidateArtifacts('candidate-1');
+    await api.evolutionCandidateEvaluate('candidate-1');
+    await api.evolutionCandidateComparison('candidate-1');
+    await api.evolutionCandidatePromote('candidate-1');
+    await api.evolutionCandidateDecision('candidate-1', 'archived');
+    await api.evolutionAdoptions();
+    await api.evolutionAdoptionRollback('version-1');
+    await api.evolutionMemory();
     await api.evolutionSandboxEvals();
 
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/signals', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/signals', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/diagnoses', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/diagnoses', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/missions/summary', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/missions/mission-1/detail', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/chain/proposal-1', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/decision', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/skill-draft', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/candidates', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/run', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/artifacts', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/evaluate', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/comparison', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/promote', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/decision', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/sandbox-eval', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/adoptions', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/adoptions/version-1/rollback', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/memory', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/sandbox-evals', expect.any(Object));
   });
 

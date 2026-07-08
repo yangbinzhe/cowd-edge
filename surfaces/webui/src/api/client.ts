@@ -989,18 +989,27 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
+  evolutionDiagnoses: () => read('/api/evolution/diagnoses', { diagnoses: [] }),
+  evolutionCreateDiagnosis: (signal_ids: string[] = []) => writeWithReceipt('/api/evolution/diagnoses', {
+    method: 'POST',
+    body: JSON.stringify({ signal_ids }),
+  }),
+  evolutionMissionsSummary: () => read('/api/evolution/missions/summary', { missions: [] }),
+  evolutionMissionDetail: (id: string) => read(`/api/evolution/missions/${encodeURIComponent(id)}/detail`, {}),
   evolutionProposals: () => read('/api/evolution/proposals', { proposals: [] }),
   evolutionCreateProposal: (signal_ids: string[] = []) => writeWithReceipt('/api/evolution/proposals', {
     method: 'POST',
     body: JSON.stringify({ signal_ids }),
   }),
   evolutionProposal: (id: string) => read(`/api/evolution/proposals/${encodeURIComponent(id)}`, {}),
+  evolutionChain: (id: string) => read(`/api/evolution/chain/${encodeURIComponent(id)}`, {}),
   evolutionProposalDecision: (id: string, decision: 'approved' | 'rejected' | 'archived') => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/decision`, {
     method: 'POST',
     body: JSON.stringify({ decision }),
   }),
   evolutionSkillDraft: (id: string) => read(`/api/evolution/proposals/${encodeURIComponent(id)}/skill-draft`, {}),
   evolutionCandidates: () => read('/api/evolution/candidates', { candidates: [] }),
+  evolutionCandidateDetail: (id: string) => read(`/api/evolution/candidates/${encodeURIComponent(id)}`, {}),
   evolutionCreateCandidate: (id: string, body: Record<string, unknown> = {}) => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/candidates`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -1009,10 +1018,26 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ status }),
   }),
-  evolutionSandboxEval: (id: string, body: Record<string, unknown> = {}) => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/sandbox-eval`, {
+  evolutionCandidateSandboxRun: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/run`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify({}),
   }),
+  evolutionCandidateArtifacts: (id: string) => read(`/api/evolution/candidates/${encodeURIComponent(id)}/artifacts`, { artifacts: [] }),
+  evolutionCandidateEvaluate: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/evaluate`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }),
+  evolutionCandidateComparison: (id: string) => read(`/api/evolution/candidates/${encodeURIComponent(id)}/comparison`, { comparisons: [] }),
+  evolutionCandidatePromote: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/promote`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }),
+  evolutionAdoptions: () => read('/api/evolution/adoptions', { adoptions: [] }),
+  evolutionAdoptionRollback: (id: string) => writeWithReceipt(`/api/evolution/adoptions/${encodeURIComponent(id)}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }),
+  evolutionMemory: () => read('/api/evolution/memory', { records: [] }),
   evolutionSandboxEvals: () => read('/api/evolution/sandbox-evals', { evals: [] }),
   mfgApp: () => read('/api/apps/mfg/app', {}),
   mfgHealth: () => read('/api/apps/mfg/reality/health', {}),
