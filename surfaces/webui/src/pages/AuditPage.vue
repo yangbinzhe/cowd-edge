@@ -55,6 +55,7 @@ const evolutionMissions = computed(() => items(state.value.evolutionMissions, 'm
 const evolutionProposals = computed(() => items(state.value.evolutionProposals, 'proposals'));
 const evolutionCandidates = computed(() => items(state.value.evolutionCandidates, 'candidates'));
 const evolutionSandboxEvals = computed(() => items(state.value.evolutionSandboxEvals, 'evals'));
+const evolutionActiveCapabilities = computed(() => items(state.value.evolutionActiveCapabilities, 'capabilities'));
 const auditRows = computed(() => auditRecords.value.slice(0, 18).map((record: any) => ({
   source: record.source || '-',
   id: record.id || '-',
@@ -251,6 +252,16 @@ const evolutionSandboxRows = computed(() => evolutionSandboxEvals.value.slice(0,
   regressions: item.regression_count ?? '-',
   modified: item.mainline_modified ? 'yes' : 'no',
 })));
+const evolutionActiveCapabilityRows = computed(() => evolutionActiveCapabilities.value.slice(0, 12).map((item: any) => ({
+  version: item.version_id,
+  candidate: item.candidate_id,
+  kind: item.kind,
+  adapter: item.adapter,
+  owner: item.owner,
+  status: item.status,
+  scope: Array.isArray(item.enabled_scope) ? item.enabled_scope.join(', ') : '-',
+  effects: Array.isArray(item.policy_effects) ? item.policy_effects.length : 0,
+})));
 const usageChart = computed(() => {
   const byPlatform = state.value.usage?.by_platform || {};
   const points = Object.entries(byPlatform).map(([name, value]: [string, any]) => ({
@@ -340,6 +351,7 @@ async function refresh() {
       evolutionProposalsData,
       evolutionCandidatesData,
       evolutionSandboxEvalsData,
+      evolutionActiveCapabilitiesData,
     ] = await Promise.all([
       api.auditExport(source.value, limit.value, offset.value),
       api.usageSummary(),
@@ -360,6 +372,7 @@ async function refresh() {
       api.evolutionProposals(),
       api.evolutionCandidates(),
       api.evolutionSandboxEvals(),
+      api.evolutionActiveCapabilities(),
     ]);
     state.value = {
       audit,
@@ -381,6 +394,7 @@ async function refresh() {
       evolutionProposals: evolutionProposalsData,
       evolutionCandidates: evolutionCandidatesData,
       evolutionSandboxEvals: evolutionSandboxEvalsData,
+      evolutionActiveCapabilities: evolutionActiveCapabilitiesData,
     };
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -791,6 +805,11 @@ onMounted(refresh);
             <strong>{{ evolutionSandboxEvals.length }}</strong>
             <small>{{ t('page.audit.evolution.noMainlineWrite') }}</small>
           </article>
+          <article class="metric-card" data-tone="success">
+            <span>{{ t('page.audit.evolution.activeCapabilities') }}</span>
+            <strong>{{ state.evolutionActiveCapabilities?.active_count || 0 }}</strong>
+            <small>{{ t('page.audit.evolution.runtimeInstalled') }}</small>
+          </article>
         </div>
         <DataTable v-if="evolutionSignalRows.length" searchable copyable :rows="evolutionSignalRows" :columns="['id', 'type', 'severity', 'owner', 'continue', 'summary']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.signal', evidence: $event.id, status: $event.severity, summary: $event.summary }" />
         <DataTable v-if="evolutionDiagnosisRows.length" searchable copyable :rows="evolutionDiagnosisRows" :columns="['id', 'cause', 'owner', 'recurrence', 'candidate', 'gates', 'impact']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.diagnosis', evidence: $event.id, status: $event.cause, summary: $event.impact }" />
@@ -810,6 +829,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="decideEvolutionCandidate(evolutionCandidateRows[0], 'archived')">{{ t('page.audit.evolution.archive') }}</button>
         </div>
         <DataTable v-if="evolutionSandboxRows.length" searchable copyable :rows="evolutionSandboxRows" :columns="['id', 'candidate_id', 'proposal', 'recommendation', 'baseline', 'candidate', 'delta', 'regressions', 'modified']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.sandbox', evidence: $event.id, status: $event.recommendation }" />
+        <DataTable v-if="evolutionActiveCapabilityRows.length" searchable copyable :rows="evolutionActiveCapabilityRows" :columns="['version', 'candidate', 'kind', 'adapter', 'owner', 'status', 'scope', 'effects']" row-key="version" @row-click="selectedDetail = { ...$event, source: 'evolution.active_capability', evidence: $event.version, status: $event.status, summary: $event.kind }" />
         <EmptyState v-if="!evolutionSignalRows.length && !evolutionDiagnosisRows.length && !evolutionProposalRows.length && !evolutionCandidateRows.length" :title="t('page.audit.evolution.emptyTitle')" :detail="t('page.audit.evolution.emptyDetail')" />
         <RequestReceipt v-if="evolutionActionResult" :receipt="evolutionActionResult" :title="t('page.audit.evolution.receipt')" />
         <RawPayload v-if="evolutionDraft" :title="t('page.audit.evolution.skillDraft')" :data="evolutionDraft" />

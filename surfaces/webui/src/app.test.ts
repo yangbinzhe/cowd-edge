@@ -551,6 +551,7 @@ describe('Cowd Vue WebUI shell', () => {
     await api.evolutionCandidatePromote('candidate-1');
     await api.evolutionCandidateDecision('candidate-1', 'archived');
     await api.evolutionAdoptions();
+    await api.evolutionActiveCapabilities();
     await api.evolutionVersionRollback('version-1');
     await api.evolutionMemory();
     await api.evolutionSandboxEvals();
@@ -577,6 +578,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/promote', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/decision', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/adoptions', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/active-capabilities', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/versions/version-1/rollback', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/memory', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/sandbox-evals', expect.any(Object));
