@@ -40,6 +40,37 @@ const contextItems = computed(() => {
 });
 const realityStages = computed(() => (Array.isArray(store.currentRealityFlow?.stages) ? store.currentRealityFlow.stages : []).slice(0, 12));
 const timelineEvents = computed(() => (Array.isArray(store.currentTimeline?.events) ? store.currentTimeline.events : []).slice(0, 14));
+const runtimeInputItems = computed(() => {
+  const seen = new Set<string>();
+  const rows = [
+    ...(Array.isArray(store.turnInbox?.items) ? store.turnInbox.items : []),
+    ...(Array.isArray(store.sessionInputProjection?.inputs) ? store.sessionInputProjection.inputs : []),
+  ];
+  return rows.filter((item: any) => {
+    const id = String(item?.input_id || item?.id || '');
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).slice(0, 12);
+});
+
+function runtimeInputId(item: any) {
+  return String(item?.input_id || item?.id || '');
+}
+
+function runtimeInputDetail(item: any) {
+  const decision = item?.decision ? displayStatus(item.decision) : displayStatus('unknown');
+  const checkpoint = item?.checkpoint ? ` · ${item.checkpoint}` : '';
+  return `${decision}${checkpoint}`;
+}
+
+async function cancelRuntimeInput(item: any) {
+  await store.cancelSessionInput(runtimeInputId(item));
+}
+
+async function queueRuntimeInput(item: any) {
+  await store.reclassifySessionInput(runtimeInputId(item), 'enqueue_next_step');
+}
 
 async function uploadFiles(files: FileList | null) {
   if (!files?.length) return;
@@ -265,6 +296,35 @@ onBeforeUnmount(() => {
           <span>{{ displayStatus(stage.status) }}</span>
           <small>{{ stage.count }}</small>
         </article>
+      </div>
+
+      <div class="panel-title compact">
+        <h2>{{ t('chat.input.panel.title') }}</h2>
+        <span>{{ formatCount('items', runtimeInputItems.length) }}</span>
+      </div>
+      <dl class="detail-list evidence-summary">
+        <dt>{{ t('chat.input.panel.activeTurn') }}</dt>
+        <dd>{{ store.sessionInputProjection?.active_turn_id || store.turnInbox?.turn_id || '-' }}</dd>
+        <dt>{{ t('chat.input.panel.pending') }}</dt>
+        <dd>{{ store.sessionInputProjection?.pending_count ?? store.turnInbox?.pending_count ?? 0 }}</dd>
+        <dt>{{ t('chat.input.panel.queuedNext') }}</dt>
+        <dd>{{ store.sessionInputProjection?.queued_next_count ?? 0 }}</dd>
+        <dt>{{ t('chat.input.panel.consumed') }}</dt>
+        <dd>{{ store.sessionInputProjection?.consumed_count ?? store.turnInbox?.consumed_count ?? 0 }}</dd>
+      </dl>
+      <div class="evidence-list">
+        <article v-for="item in runtimeInputItems" :key="runtimeInputId(item)" class="evidence-item runtime-input-item">
+          <strong>{{ item.content_preview || runtimeInputId(item) }}</strong>
+          <p>{{ runtimeInputDetail(item) }}</p>
+          <div class="inline-actions">
+            <button class="ghost-action" type="button" @click="queueRuntimeInput(item)">{{ t('chat.input.action.queue') }}</button>
+            <button class="danger-action" type="button" @click="cancelRuntimeInput(item)">{{ t('chat.input.action.cancel') }}</button>
+          </div>
+        </article>
+        <div v-if="!runtimeInputItems.length" class="empty-state">
+          <strong>{{ t('chat.input.panel.emptyTitle') }}</strong>
+          <p>{{ t('chat.input.panel.emptyBody') }}</p>
+        </div>
       </div>
 
       <div class="panel-title compact">

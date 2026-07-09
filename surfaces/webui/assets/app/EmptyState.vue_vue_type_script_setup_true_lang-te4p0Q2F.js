@@ -1,1 +1,0 @@
-import{d as o,o as e,a,b as n,t as s,j as c}from"./index.dev-BI21pg70.js";const i={class:"empty-state"},l={key:0},p=o({__name:"EmptyState",props:{title:{},detail:{}},setup(t){return(r,d)=>(e(),a("div",i,[n("strong",null,s(t.title),1),t.detail?(e(),a("p",l,s(t.detail),1)):c("",!0)]))}});export{p as _};

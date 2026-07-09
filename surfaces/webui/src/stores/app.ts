@@ -205,6 +205,8 @@ export const useAppStore = defineStore('app', () => {
   const currentContextEnvelope = ref<any>(null);
   const currentRealityFlow = ref<any>({});
   const currentTimeline = ref<any>({});
+  const sessionInputProjection = ref<any>(null);
+  const turnInbox = ref<any>(null);
   const selectedTurnEvidence = ref<Record<string, any> | null>(null);
   const selectedActivity = ref<Record<string, unknown> | null>(null);
   const liveToolCount = ref(0);
@@ -931,11 +933,32 @@ export const useAppStore = defineStore('app', () => {
         .filter((item) => item.resource_id || item.uri?.startsWith('resource://'))
         .map((item) => item.resource_id || item.uri || item.ref_id)
         .filter((value): value is string => Boolean(value));
-      await api.sendMessage(activeSessionId.value, contentWithAttachments, resourceIds);
+      const idempotencyKey = `webui:${activeSessionId.value}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+      const receipt: any = await api.sendMessage(activeSessionId.value, contentWithAttachments, resourceIds, idempotencyKey);
       if (resourceIds.length) {
         attachments.value = attachments.value.filter((item) => !resourceIds.includes(item.resource_id || item.uri || item.ref_id));
       }
-      await loadMessages(activeSessionId.value);
+      if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
+      if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
+      if (receipt?.mode === 'attached_to_active_turn') {
+        currentRun.value = {
+          ...(currentRun.value || {}),
+          run_id: receipt.run_id || currentRun.value?.run_id || '',
+          turn_id: receipt.input?.active_turn_id || currentRun.value?.turn_id || '',
+          status: 'running',
+          latest_input_receipt: receipt.input,
+        };
+        recordLiveActivity('runtime', 'Input attached', receipt.input?.reason?.summary || receipt.input?.decision || '', 'running');
+      } else {
+        currentRun.value = {
+          ...(currentRun.value || {}),
+          run_id: receipt?.run_id || currentRun.value?.run_id || '',
+          turn_id: receipt?.turn?.turn_id || currentRun.value?.turn_id || '',
+          status: receipt?.status || 'running',
+          turn_receipt: receipt?.turn || null,
+        };
+        recordLiveActivity('runtime', 'Turn accepted', receipt?.turn?.turn_id || receipt?.run_id || '', 'running');
+      }
       await loadActivity();
       if (chatDisplayMode.value === 'panorama') await refreshChatProjection(activeSessionId.value, content);
     } catch (error) {
@@ -998,6 +1021,16 @@ export const useAppStore = defineStore('app', () => {
     if (!currentContextEnvelope.value || context?.identity || context?.envelope) currentContextEnvelope.value = context.envelope || context;
   }
 
+  async function refreshSessionInputs(sessionId = activeSessionId.value) {
+    if (!sessionId) return;
+    const [projection, inbox] = await Promise.all([
+      api.sessionInputs(sessionId).catch(() => null),
+      api.turnInbox(sessionId).catch(() => null),
+    ]);
+    if (projection) sessionInputProjection.value = projection;
+    if (inbox) turnInbox.value = inbox;
+  }
+
   function resetCurrentRun(prompt = '') {
     currentRun.value = {
       run_id: '',
@@ -1009,6 +1042,8 @@ export const useAppStore = defineStore('app', () => {
     currentContextEnvelope.value = null;
     currentRealityFlow.value = {};
     currentTimeline.value = {};
+    sessionInputProjection.value = null;
+    turnInbox.value = null;
     liveToolCount.value = 0;
     liveMemoryRecallCount.value = 0;
     liveMemoryEvidenceCount.value = 0;
@@ -1087,6 +1122,48 @@ export const useAppStore = defineStore('app', () => {
       return;
     }
 
+    if (type === 'SessionInputReceived') {
+      companionTab.value = 'activity';
+      currentRun.value = {
+        ...(currentRun.value || {}),
+        status: 'running',
+        latest_input_receipt: event.receipt || event.input,
+      };
+      recordLiveActivity(
+        'runtime',
+        'Input received',
+        event.receipt?.reason?.summary || event.receipt?.decision || event.input?.decision || '',
+        'running',
+      );
+      return;
+    }
+
+    if (type === 'SessionInputProjection') {
+      sessionInputProjection.value = event.projection || event.input_projection || event;
+      return;
+    }
+
+    if (type === 'TurnInboxUpdated') {
+      turnInbox.value = event.inbox || event.turn_inbox || event;
+      recordLiveActivity('context', 'Turn inbox updated', `${turnInbox.value?.pending_count || 0} pending`, 'running');
+      return;
+    }
+
+    if (type === 'TurnInputCheckpointConsumed') {
+      turnInbox.value = {
+        ...(turnInbox.value || {}),
+        last_checkpoint: event.checkpoint,
+        last_consumed: event.consumed || [],
+      };
+      recordLiveActivity(
+        'context',
+        'Input checkpoint consumed',
+        `${event.checkpoint || ''} ${(event.consumed || []).length} item(s)`,
+        'complete',
+      );
+      return;
+    }
+
     if (type === 'ContextEnvelope') {
       const envelope = event.envelope || event;
       currentContextEnvelope.value = envelope;
@@ -1116,6 +1193,15 @@ export const useAppStore = defineStore('app', () => {
       currentRun.value = { ...(currentRun.value || {}), status: 'complete', completed_at_ms: Date.now(), iterations: event.iterations };
       completeAssistantTurn(event.response || event.text || '');
       recordLiveActivity('runtime', 'Turn complete', event.iterations ? `${event.iterations} iterations` : '', 'complete');
+      if (activeSessionId.value) {
+        loadMessages(activeSessionId.value).catch(() => undefined);
+        api.sessionInputProjection(activeSessionId.value).then((value: any) => {
+          sessionInputProjection.value = value;
+        }).catch(() => undefined);
+        api.turnInbox(activeSessionId.value).then((value: any) => {
+          turnInbox.value = value;
+        }).catch(() => undefined);
+      }
       if (chatDisplayMode.value === 'panorama') refreshChatProjection(activeSessionId.value).catch(() => undefined);
       return;
     }
@@ -1215,6 +1301,24 @@ export const useAppStore = defineStore('app', () => {
       detail: receipt.error || receipt.payload_summary || activeSessionId.value,
       status: receipt.ok ? 'complete' : 'error',
     });
+    return receipt;
+  }
+
+  async function cancelSessionInput(inputId: string, reason = 'cancelled from webui') {
+    if (!activeSessionId.value || !inputId) return null;
+    const receipt = await api.cancelSessionInput(activeSessionId.value, inputId, reason);
+    if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
+    if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
+    recordLiveActivity('runtime', t('chat.input.cancelled'), inputId, receipt?.input ? 'complete' : 'error');
+    return receipt;
+  }
+
+  async function reclassifySessionInput(inputId: string, decision = 'enqueue_next_step', reason = 'manual webui override') {
+    if (!activeSessionId.value || !inputId) return null;
+    const receipt = await api.reclassifySessionInput(activeSessionId.value, inputId, decision, reason);
+    if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
+    if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
+    recordLiveActivity('runtime', t('chat.input.reclassified'), `${inputId} -> ${decision}`, receipt?.input ? 'complete' : 'error');
     return receipt;
   }
 
@@ -1821,6 +1925,8 @@ export const useAppStore = defineStore('app', () => {
     currentContextEnvelope,
     currentRealityFlow,
     currentTimeline,
+    sessionInputProjection,
+    turnInbox,
     selectedTurnEvidence,
     selectedActivity,
     toolCallCount,
@@ -1906,6 +2012,7 @@ export const useAppStore = defineStore('app', () => {
     toggleTurnActivity,
     turnActivitySummary,
     refreshChatProjection,
+    refreshSessionInputs,
     loadWorkspace,
     loadWorkspaceTreeDir,
     toggleWorkspaceTreeDir,
@@ -1934,6 +2041,8 @@ export const useAppStore = defineStore('app', () => {
     closeCompanion,
     toggleCompanion,
     stopCurrentTurn,
+    cancelSessionInput,
+    reclassifySessionInput,
     retryLastUserTurn,
     setChatDisplayMode,
     selectSection,

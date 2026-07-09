@@ -460,9 +460,27 @@ export const api = {
     body: JSON.stringify(patch),
   }),
   messages: (sessionId: string) => read<{ messages: any[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=50`, { messages: [] }),
-  sendMessage: (sessionId: string, content: string, resourceIds: string[] = []) => write(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
+  sendMessage: (sessionId: string, content: string, resourceIds: string[] = [], idempotencyKey?: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content, resource_ids: resourceIds }),
+    body: JSON.stringify({ content, resource_ids: resourceIds, idempotency_key: idempotencyKey }),
+  }),
+  sessionInputs: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/inputs`, {}),
+  sessionInputProjection: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/input-projection`, {}),
+  turnInbox: (sessionId: string, turnId?: string) => {
+    const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : '';
+    return read(`/api/sessions/${encodeURIComponent(sessionId)}/turn-inbox${query}`, {});
+  },
+  turnInboxByTurn: (sessionId: string, turnId: string) => read(
+    `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/inbox`,
+    {},
+  ),
+  cancelSessionInput: (sessionId: string, inputId: string, reason = '') => write(`/api/sessions/${encodeURIComponent(sessionId)}/inputs/${encodeURIComponent(inputId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  }),
+  reclassifySessionInput: (sessionId: string, inputId: string, decision: string, reason = '') => write(`/api/sessions/${encodeURIComponent(sessionId)}/inputs/${encodeURIComponent(inputId)}/reclassify`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
   }),
   workspace: () => read('/api/workspace', {
     workspace_root: '',

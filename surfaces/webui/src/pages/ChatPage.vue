@@ -16,6 +16,7 @@ const inlineCommandIndex = ref(0);
 const contextUsage = computed(() => store.contextUsagePercent);
 const modelLabel = computed(() => store.selectedModel || 'Select model');
 const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
+const turnRunning = computed(() => ['queued', 'running', 'cancel_requested'].includes(String(store.currentRun?.status || '')));
 const composerStats = computed(() => [
   { label: t('page.chat.cleanCounters.tools'), value: store.toolCallCount },
   { label: t('page.chat.cleanCounters.memoryRecall'), value: store.memoryRecallCount },
@@ -317,8 +318,8 @@ async function chooseCommand(command: any) {
         <div class="composer-actions">
           <button class="icon-action" type="button" :aria-label="t('component.companion.panel.text.727690de87')" @click="store.openCompanion('workspace')"><Paperclip :size="16" /></button>
           <button class="ghost-action" type="button" @click="store.openModal('commands')"><Zap :size="15" />{{ t('page.chat.page.text.01bed7d85c') }}</button>
-          <button v-if="sending" class="primary-action" type="button" @click="stop"><Square :size="15" />{{ t('page.chat.page.text.2090c0732a') }}</button>
-          <button v-else class="primary-action" type="button" :disabled="!draft.trim()" @click="submit"><Send :size="15" />{{ t('page.chat.page.text.aeee9b2149') }}</button>
+          <button v-if="turnRunning" class="icon-action" type="button" :aria-label="t('page.chat.page.text.2090c0732a')" @click="stop"><Square :size="15" /></button>
+          <button class="primary-action" type="button" :disabled="!draft.trim() || sending" @click="submit"><Send :size="15" />{{ t('page.chat.page.text.aeee9b2149') }}</button>
         </div>
       </div>
     </footer>
