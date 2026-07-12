@@ -167,6 +167,15 @@ function compactTime(session: SessionSummary) {
 export const useAppStore = defineStore('app', () => {
   let sessionStream: EventSource | null = null;
   let executionProjectionStream: EventSource | null = null;
+  let executionProjectionStreamId = '';
+  let executionProjectionScope: 'summary' | 'full' = 'summary';
+  type ExecutionProjectionOwner = 'chat' | 'mission' | 'agents' | 'context';
+  type ExecutionProjectionSubscription = {
+    executionId: string;
+    detailScope: 'summary' | 'full';
+    updatedAt: number;
+  };
+  const executionProjectionOwners = new Map<ExecutionProjectionOwner, ExecutionProjectionSubscription>();
   let sessionStreamId = '';
   const sessionStreamCursors = new Map<string, number>();
   const sessionStreamRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -927,7 +936,7 @@ export const useAppStore = defineStore('app', () => {
           execution_id: executionId,
           status: 'running',
         };
-        connectExecutionProjection(executionId);
+        connectExecutionProjection(executionId, chatDisplayMode.value === 'clean' ? 'summary' : 'full', 'chat');
       }
       if (receipt?.mode === 'attached_to_active_turn') {
         currentRun.value = {
@@ -1085,44 +1094,70 @@ export const useAppStore = defineStore('app', () => {
     sessionStreamRecoveryTimers.set(sessionId, timer);
   }
 
-  async function loadExecutionProjection(executionId: string, full = false) {
+  async function loadExecutionProjection(executionId: string, detailScope: 'summary' | 'full') {
     if (!executionId.trim()) return;
-    const projection = await api.executionProjection(executionId, full ? 'full' : 'summary');
-    if (projection.__offline) return;
+    const projection = await api.executionProjection(executionId, detailScope);
+    if (projection.__state && projection.__state !== 'ready') return;
     currentExecutionProjection.value = projection;
     executionProjectionCursor.value = Number(projection.cursor || 0);
   }
 
-  function applyExecutionProjectionDelta(delta: ExecutionProjectionDelta) {
+  function applyExecutionProjectionDelta(delta: ExecutionProjectionDelta, detailScope: 'summary' | 'full') {
     if (!currentExecutionProjection.value
       || currentExecutionProjection.value.execution_id !== delta.execution_id
       || executionProjectionCursor.value !== delta.base_cursor
       || delta.target_cursor < delta.base_cursor) {
-      void loadExecutionProjection(delta.execution_id, chatDisplayMode.value !== 'clean');
+      void loadExecutionProjection(delta.execution_id, detailScope);
       return;
     }
     executionProjectionCursor.value = delta.target_cursor;
     // Delta payloads only advance durable facts. Refreshing the canonical
     // snapshot avoids UI-side lifecycle inference from textual event names.
-    if (delta.events.length) void loadExecutionProjection(delta.execution_id, chatDisplayMode.value !== 'clean');
+    if (delta.events.length) void loadExecutionProjection(delta.execution_id, detailScope);
   }
 
-  function connectExecutionProjection(executionId: string) {
-    if (!executionId.trim()) return;
+  function desiredExecutionProjectionSubscription() {
+    const priorities: Record<ExecutionProjectionOwner, number> = {
+      mission: 4,
+      agents: 3,
+      context: 2,
+      chat: 1,
+    };
+    const subscriptions = Array.from(executionProjectionOwners.entries());
+    subscriptions.sort(([leftOwner, left], [rightOwner, right]) => (
+      priorities[rightOwner] - priorities[leftOwner] || right.updatedAt - left.updatedAt
+    ));
+    return subscriptions[0]?.[1] || null;
+  }
+
+  function reconnectExecutionProjection() {
+    const desired = desiredExecutionProjectionSubscription();
+    if (!desired) {
+      executionProjectionStream?.close();
+      executionProjectionStream = null;
+      executionProjectionStreamId = '';
+      return;
+    }
+    const { executionId, detailScope } = desired;
+    if (executionProjectionStreamId === executionId && executionProjectionScope === detailScope && executionProjectionStream) return;
     executionProjectionStream?.close();
-    void loadExecutionProjection(executionId, chatDisplayMode.value !== 'clean');
+    executionProjectionStream = null;
+    executionProjectionStreamId = executionId;
+    executionProjectionScope = detailScope;
+    if (currentExecutionProjection.value?.execution_id !== executionId) executionProjectionCursor.value = 0;
+    void loadExecutionProjection(executionId, detailScope);
     if (typeof EventSource === 'undefined') return;
     const cursor = executionProjectionCursor.value;
-    executionProjectionStream = new EventSource(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${cursor}&detail_scope=${chatDisplayMode.value === 'clean' ? 'summary' : 'full'}`);
+    executionProjectionStream = new EventSource(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${cursor}&detail_scope=${detailScope}`);
     executionProjectionStream.addEventListener('projection_delta', (event) => {
       try {
-        applyExecutionProjectionDelta(JSON.parse((event as MessageEvent).data) as ExecutionProjectionDelta);
+        applyExecutionProjectionDelta(JSON.parse((event as MessageEvent).data) as ExecutionProjectionDelta, detailScope);
       } catch {
-        void loadExecutionProjection(executionId, chatDisplayMode.value !== 'clean');
+        void loadExecutionProjection(executionId, detailScope);
       }
     });
     executionProjectionStream.addEventListener('projection_resync', () => {
-      void loadExecutionProjection(executionId, chatDisplayMode.value !== 'clean');
+      void loadExecutionProjection(executionId, detailScope);
     });
     executionProjectionStream.onerror = () => {
       executionProjectionStream?.close();
@@ -1130,9 +1165,15 @@ export const useAppStore = defineStore('app', () => {
     };
   }
 
-  function disconnectExecutionProjection() {
-    executionProjectionStream?.close();
-    executionProjectionStream = null;
+  function connectExecutionProjection(executionId: string, detailScope: 'summary' | 'full', owner: ExecutionProjectionOwner) {
+    if (!executionId.trim()) return;
+    executionProjectionOwners.set(owner, { executionId, detailScope, updatedAt: Date.now() });
+    reconnectExecutionProjection();
+  }
+
+  function disconnectExecutionProjection(owner: ExecutionProjectionOwner) {
+    executionProjectionOwners.delete(owner);
+    reconnectExecutionProjection();
   }
 
   async function executeExecutionProjectionCommand(command: string, payload: Record<string, unknown> = {}) {
@@ -1144,7 +1185,7 @@ export const useAppStore = defineStore('app', () => {
       command,
       payload,
     });
-    if (result?.status === 'accepted') await loadExecutionProjection(projection.execution_id, chatDisplayMode.value !== 'clean');
+    if (result?.status === 'accepted') await loadExecutionProjection(projection.execution_id, executionProjectionScope);
     return result;
   }
 
@@ -1272,7 +1313,7 @@ export const useAppStore = defineStore('app', () => {
       const executionId = event.summary?.graph_id || event.graph_id || event.execution_id || '';
       if (executionId) {
         currentRun.value = { ...(currentRun.value || {}), execution_id: executionId };
-        connectExecutionProjection(executionId);
+        connectExecutionProjection(executionId, chatDisplayMode.value === 'clean' ? 'summary' : 'full', 'chat');
       }
       recordLiveActivity('runtime', 'Execution graph available', executionId || event.summary?.status || '', 'running');
       return;
@@ -1418,6 +1459,8 @@ export const useAppStore = defineStore('app', () => {
 
   function setChatDisplayMode(mode: ChatDisplayMode) {
     chatDisplayMode.value = mode;
+    const executionId = String(currentRun.value?.execution_id || currentExecutionProjection.value?.execution_id || '').trim();
+    if (executionId) connectExecutionProjection(executionId, mode === 'clean' ? 'summary' : 'full', 'chat');
     if (mode === 'panorama' && activeSessionId.value) {
       refreshChatProjection(activeSessionId.value).catch(() => undefined);
       loadActivity().catch(() => undefined);

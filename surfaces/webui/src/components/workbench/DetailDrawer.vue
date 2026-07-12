@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
+import { computed } from 'vue';
 import { X } from 'lucide-vue-next';
 import { useEscapeKey } from '../../composables/useEscapeKey';
 import RawPayload from './RawPayload.vue';
@@ -10,6 +11,18 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ close: [] }>();
+
+const fields = computed(() => Object.entries(props.row || {}).map(([key, value]) => ({
+  key,
+  value: summarize(value),
+})));
+
+function summarize(value: unknown) {
+  if (value === null || value === undefined || value === '') return '-';
+  if (Array.isArray(value)) return t('objectInspector.array', { count: value.length });
+  if (typeof value === 'object') return t('objectInspector.object', { count: Object.keys(value as Record<string, unknown>).length });
+  return String(value);
+}
 
 useEscapeKey(() => emit('close'), () => !!props.row);
 </script>
@@ -22,9 +35,9 @@ useEscapeKey(() => emit('close'), () => !!props.row);
     </header>
     <p v-if="!row" class="empty-note">{{ t('component.workbench.detail.drawer.text.0b9f27e4c1') }}</p>
     <dl v-else class="detail-list">
-      <template v-for="(value, key) in row" :key="String(key)">
-        <dt>{{ key }}</dt>
-        <dd>{{ typeof value === 'object' ? JSON.stringify(value) : value }}</dd>
+      <template v-for="field in fields" :key="field.key">
+        <dt>{{ field.key }}</dt>
+        <dd>{{ field.value }}</dd>
       </template>
     </dl>
     <RawPayload v-if="row" :title="t('component.workbench.detail.drawer.title.selectedPayload')" :data="row" />

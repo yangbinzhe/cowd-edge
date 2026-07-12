@@ -4,14 +4,12 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { FileText, Languages, RefreshCw, Search } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import { api } from '../api/client';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { displayStatus } from '../i18n/domain/status';
 
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
@@ -205,8 +203,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="skillContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="skillWorkflow" :title="t('page.skills.page.title.f6cccf3371')" density="compact" />
 
     <section class="skills-console">
       <aside class="skills-catalog" data-section="catalog">
@@ -321,7 +317,7 @@ onMounted(refresh);
               <strong>{{ t('page.skills.translate.result') }}</strong>
             </header>
             <div v-if="translatedMarkdown" class="markdown-body" v-html="markdown.render(translatedMarkdown)"></div>
-            <RawPayload :title="t('page.skills.translate.receipt')" :data="translateResult" />
+            <ObjectInspectorDrawer :title="t('page.skills.translate.receipt')" :data="translateResult" />
           </article>
         </section>
 
@@ -346,9 +342,9 @@ onMounted(refresh);
             </article>
           </div>
           <DetailDrawer :title="t('page.skills.page.title.14b2c03b91')" :row="selectedDetail || skill" @close="selectedDetail = null" />
-          <RawPayload :title="t('page.skills.page.title.e903040881')" :data="runDetail || {}" />
+          <ObjectInspectorDrawer :title="t('page.skills.page.title.e903040881')" :data="runDetail || {}" />
           <RequestReceipt :receipt="actionResult || runDetail" :title="t('page.skills.page.title.dbff7b9cc4')" />
-          <RawPayload :title="t('page.skills.page.title.cd28167d21')" :data="actionResult || { projection, runs }" />
+          <ObjectInspectorDrawer :title="t('page.skills.page.title.cd28167d21')" :data="actionResult || { projection, runs }" />
         </section>
 
         <section class="management-panel" data-section="governance">
@@ -368,7 +364,7 @@ onMounted(refresh);
           </dl>
           <EvidenceTrace :items="skillEvidence" :title="t('page.skills.page.title.9c2c16a5fe')" />
           <RequestReceipt :receipt="actionResult || runDetail" :title="t('page.skills.page.title.dbff7b9cc4')" />
-          <RawPayload :title="t('page.skills.page.title.cd28167d21')" :data="{ projection, skill, actionResult }" />
+          <ObjectInspectorDrawer :title="t('page.skills.page.title.cd28167d21')" :data="{ projection, skill, actionResult }" />
         </section>
       </main>
     </section>

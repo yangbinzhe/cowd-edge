@@ -6,13 +6,11 @@ import { Database, GitBranch, Network, RefreshCw, Search, ShieldCheck } from 'lu
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
@@ -28,8 +26,8 @@ const layers = ref<any>({});
 const selectedLayer = ref('L2');
 const layerEntries = ref<any>({});
 const selectedEntryId = ref('');
-const query = ref('manufacturing quality anomaly');
-const symbolQuery = ref('mfg.manufacturing.line_a');
+const query = ref('');
+const symbolQuery = ref('');
 const searchResult = ref<any>({});
 const recallExplain = ref<any>({});
 const packet = ref<any>({});
@@ -53,16 +51,16 @@ const structuredPlan = ref<any>(null);
 const actionResult = ref<any>(null);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 
-const entryTitle = ref('Manufacturing quality signal');
-const entryContent = ref('Manufacturing line A reported repeated torque deviation on station 3 with batch QA-2026-0616.');
-const entryTags = ref('manufacturing,quality,webui');
-const entryPriority = ref('high');
-const sourceRef = ref('service://mfg/manufacturing/webui-line-a');
-const factType = ref('manufacturing_quality_event');
+const entryTitle = ref('');
+const entryContent = ref('');
+const entryTags = ref('');
+const entryPriority = ref('normal');
+const sourceRef = ref('');
+const factType = ref('');
 
 const layerItems = computed(() => Array.isArray(layers.value?.layers) ? layers.value.layers : []);
 const entries = computed(() => Array.isArray(layerEntries.value?.entries) ? layerEntries.value.entries : []);
-const selectedEntry = computed(() => entries.value.find((entry: any) => entry.id === selectedEntryId.value) || entries.value[0] || null);
+const selectedEntry = computed(() => entries.value.find((entry: any) => entry.id === selectedEntryId.value) || null);
 const recallRows = computed(() => (Array.isArray(recallExplain.value?.results) ? recallExplain.value.results : []).map((item: any) => ({
   title: item.title || item.id,
   layer: item.source_layer || item.layer,
@@ -275,15 +273,17 @@ async function refresh() {
 
 async function loadLayer() {
   layerEntries.value = await api.memoryLayer(selectedLayer.value);
-  selectedEntryId.value = entries.value[0]?.id || '';
+  if (!entries.value.some((entry: any) => entry.id === selectedEntryId.value)) selectedEntryId.value = '';
 }
 
 async function runRecall() {
+  const recallQuery = query.value.trim();
+  const symbol = symbolQuery.value.trim();
   const [search, explain, nextPacket, nextSymbolLinks] = await Promise.all([
-    api.memorySearch(query.value),
-    api.memoryRecallExplain(query.value, 12),
-    api.memoryPacket(query.value, 12, 2000),
-    api.memorySymbolLinks(symbolQuery.value),
+    recallQuery ? api.memorySearch(recallQuery) : Promise.resolve({ results: [] }),
+    recallQuery ? api.memoryRecallExplain(recallQuery, 12) : Promise.resolve({ results: [], total: 0 }),
+    recallQuery ? api.memoryPacket(recallQuery, 12, 2000) : Promise.resolve({ items: [] }),
+    symbol ? api.memorySymbolLinks(symbol) : Promise.resolve({ links: [] }),
   ]);
   searchResult.value = search;
   recallExplain.value = explain;
@@ -334,12 +334,13 @@ async function markCandidate(id: string, nextStatus: string) {
 }
 
 async function planStructuredIngest() {
+  if (!sourceRef.value.trim() || !factType.value.trim()) {
+    error.value = t('page.memory.error.structuredInputRequired');
+    return;
+  }
   structuredPlan.value = await api.structuredIngestPlan({
     source_ref: sourceRef.value,
     fact_type: factType.value,
-    estimated_rows: 128,
-    raw_checksum: 'sha256:memory-webui-v0.9.229',
-    metric_ids: ['torque_deviation_rate', 'station_quality_escape'],
   });
 }
 
@@ -382,8 +383,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="memoryContext" density="compact" :max-visible="5" />
-    <WorkflowStrip :steps="memoryWorkflow" :title="t('page.memory.page.title.965180676a')" density="compact" />
 
     <section class="metric-row memory-overview">
       <article class="metric-card">
@@ -488,7 +487,7 @@ onMounted(refresh);
                 <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="deleteEntry">{{ t('page.memory.page.text.a81ea49866') }}</button>
               </div>
               <RequestReceipt :receipt="actionResult" :title="t('page.memory.page.title.6f17a86ac0')" />
-              <RawPayload :title="t('page.memory.page.title.d8ff01b6d7')" :data="lifecycle" />
+              <ObjectInspectorDrawer :title="t('page.memory.page.title.d8ff01b6d7')" :data="lifecycle" />
             </article>
           </div>
         </section>
@@ -508,7 +507,7 @@ onMounted(refresh);
           <DataTable v-if="recallRows.length" searchable copyable :rows="recallRows" :columns="['title', 'layer', 'priority', 'score', 'snippet']" @row-click="selectedDetail = $event" />
           <EmptyState v-else :title="t('page.memory.page.title.7ba084d974')" :detail="t('page.memory.page.detail.31896020e4')" />
           <DataTable v-if="packetRows.length" searchable copyable :rows="packetRows" :columns="['id', 'kind', 'source', 'score', 'summary']" @row-click="selectedDetail = $event" />
-          <RawPayload :title="t('page.memory.page.title.7ea35b5ba8')" :data="packet" />
+          <ObjectInspectorDrawer :title="t('page.memory.page.title.7ea35b5ba8')" :data="packet" />
         </section>
 
         <section id="memory-context-envelope" class="management-panel memory-panel wide" data-section="context-envelope">
@@ -540,7 +539,7 @@ onMounted(refresh);
           </div>
           <DataTable v-if="contextEnvelopeRows.length" searchable copyable :rows="contextEnvelopeRows" :columns="['envelope_id', 'session_id', 'profile', 'pressure_bp', 'selected', 'omitted']" @row-click="selectedDetail = $event" />
           <EmptyState v-else :title="t('memory.contextEnvelope.noEnvelope')" :detail="contextEnvelope.degraded_reason || t('memory.contextEnvelope.emptyDetail')" />
-          <RawPayload :title="t('memory.contextEnvelope.raw')" :data="contextEnvelope" />
+          <ObjectInspectorDrawer :title="t('memory.contextEnvelope.raw')" :data="contextEnvelope" />
         </section>
 
         <section id="memory-knowledge-governance" class="management-panel memory-panel wide" data-section="knowledge-governance">
@@ -579,8 +578,8 @@ onMounted(refresh);
           </div>
           <DataTable v-if="knowledgeConflictRows.length" searchable copyable :rows="knowledgeConflictRows" :columns="['id', 'type', 'pack_id', 'decision', 'summary']" @row-click="selectedDetail = $event" />
           <DataTable v-if="knowledgeMaintenanceRows.length" searchable copyable :rows="knowledgeMaintenanceRows" :columns="['id', 'kind', 'severity', 'status', 'reason']" @row-click="selectedDetail = $event" />
-          <RawPayload :title="t('memory.knowledgeGovernance.recallQuality')" :data="recallQuality" />
-          <RawPayload :title="t('memory.knowledgeGovernance.raw')" :data="knowledge" />
+          <ObjectInspectorDrawer :title="t('memory.knowledgeGovernance.recallQuality')" :data="recallQuality" />
+          <ObjectInspectorDrawer :title="t('memory.knowledgeGovernance.raw')" :data="knowledge" />
         </section>
 
         <section id="memory-graph" class="management-panel memory-panel" data-section="graph">
@@ -605,8 +604,8 @@ onMounted(refresh);
             <input v-model="symbolQuery" type="text" @keyup.enter="runRecall" />
           </label>
           <DataTable v-if="symbolRows.length" searchable copyable :rows="symbolRows" :columns="['symbol', 'target', 'kind', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
-          <RawPayload :title="t('page.memory.page.title.4cf0ff71ef')" :data="symbolLinks" />
-          <RawPayload :title="t('page.memory.page.title.c2bbd9a5f2')" :data="{ clusters, runtime, links }" />
+          <ObjectInspectorDrawer :title="t('page.memory.page.title.4cf0ff71ef')" :data="symbolLinks" />
+          <ObjectInspectorDrawer :title="t('page.memory.page.title.c2bbd9a5f2')" :data="{ clusters, runtime, links }" />
         </section>
 
         <section id="memory-maintenance" class="management-panel memory-panel" data-section="maintenance">
@@ -630,7 +629,7 @@ onMounted(refresh);
           </div>
           <EmptyState v-if="!candidateRows.length" :title="t('page.memory.page.title.e6a5608e97')" :detail="t('page.memory.page.detail.44a5990796')" />
           <RequestReceipt :receipt="actionResult" :title="t('page.memory.page.title.40ab8261c6')" />
-          <RawPayload :title="t('page.memory.page.title.695f0468d1')" :data="performance" />
+          <ObjectInspectorDrawer :title="t('page.memory.page.title.695f0468d1')" :data="performance" />
         </section>
 
         <section id="structured-core" class="management-panel memory-panel wide" data-section="structured-core">
@@ -652,8 +651,8 @@ onMounted(refresh);
           <button class="primary-action" type="button" @click="planStructuredIngest">{{ t('page.memory.page.text.2ca6e733a6') }}</button>
           <RequestReceipt :receipt="structuredPlan" :title="t('page.memory.page.title.d8382cb203')" />
           <DataTable v-if="structuredRows.length" searchable copyable :rows="structuredRows" :columns="['id', 'kind', 'status', 'owner', 'summary']" @row-click="selectStructuredRow" />
-          <RawPayload :title="t('page.memory.page.title.e9ed3b1dc2')" :data="structured" />
-          <RawPayload :title="t('page.memory.page.title.5d5e81382a')" :data="structuredPlan || {}" />
+          <ObjectInspectorDrawer :title="t('page.memory.page.title.e9ed3b1dc2')" :data="structured" />
+          <ObjectInspectorDrawer :title="t('page.memory.page.title.5d5e81382a')" :data="structuredPlan || {}" />
         </section>
 
         <section class="management-panel memory-panel">
@@ -664,7 +663,7 @@ onMounted(refresh);
           <EvidenceTrace :items="memoryEvidence" :title="t('page.memory.page.title.24852d9c53')" />
           <EvidenceObjectDetail :title="t('page.memory.page.title.33cead0976')" :evidence="selectedEvidence" @close="selectedDetail = null" />
           <RequestReceipt :receipt="actionResult || structuredPlan" :title="t('page.memory.page.title.c115b0f74c')" />
-          <RawPayload :title="t('page.memory.page.title.ef470a2336')" :data="actionResult || searchResult" />
+          <ObjectInspectorDrawer :title="t('page.memory.page.title.ef470a2336')" :data="actionResult || searchResult" />
         </section>
       </main>
     </section>

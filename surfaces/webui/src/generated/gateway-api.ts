@@ -10269,12 +10269,18 @@ export interface components {
         };
         ExecutionGraphProjection: {
             commit_cursor: number;
+            edges: components["schemas"]["ExecutionEdgeProjection"][];
             graph_id: string;
             nodes: components["schemas"]["ExecutionNodeProjection"][];
             objective: string;
             parent_execution?: components["schemas"]["ExecutionParentBinding"] | null;
             revision: number;
             terminal_result_ref?: string | null;
+        };
+        ExecutionEdgeProjection: {
+            from: string;
+            kind: "depends_on" | "verifies" | "produces";
+            to: string;
         };
         ExecutionNodeProjection: {
             evidence_refs: string[];

@@ -5,14 +5,12 @@ import { Activity, Play, RefreshCw, RotateCcw, Send, ShieldCheck, Square, Wrench
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import SurfaceDiagnosticPlaybook from '../components/workbench/SurfaceDiagnosticPlaybook.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { displayStatus } from '../i18n/domain/status';
 
 const loading = ref(false);
@@ -42,11 +40,6 @@ function isActiveInboxStatus(status: unknown) {
 
 function isActiveOutboxStatus(status: unknown) {
   return ['queued', 'sending', 'retry_scheduled'].includes(String(status || '').toLowerCase());
-}
-
-function workflowStatus(status: unknown, fallback: 'idle' | 'ready' = 'ready') {
-  const value = String(status || '').toLowerCase();
-  return ['idle', 'ready', 'active', 'blocked', 'done', 'degraded', 'error', 'offline', 'running'].includes(value) ? value : fallback;
 }
 
 const surfaces = computed(() => registrySurfaces(state.value.registry));
@@ -114,8 +107,6 @@ const supervisorEventItems = computed(() => {
   const events = state.value.status?.events || state.value.events?.supervisor_events || [];
   return Array.isArray(events) ? events : [];
 });
-const totalRoutes = computed(() => valueCount(host.value.route_count) || surfaces.value.reduce((count: number, surface: any) => count + valueCount(surface.routes), 0));
-const totalResources = computed(() => valueCount(host.value.resource_count) || surfaces.value.reduce((count: number, surface: any) => count + valueCount(surface.resources), 0));
 const externalSurfaces = computed(() => valueCount(host.value.external_surface_count) || surfaces.value.filter((surface: any) => surface.lifecycle !== 'builtin' && surface.kind !== 'builtin').length);
 const degradedSurfaces = computed(() => valueCount(host.value.degraded_count) + valueCount(host.value.failed_count) + valueCount(host.value.circuit_open_count));
 
@@ -198,26 +189,24 @@ const deliveryRows = computed(() => deliveryItems.value.slice(0, 16).map((item: 
   message_id: item.message_id || '-',
   at: item.created_at_ms || '-',
 })));
+function belongsToSelectedSurface(item: any) {
+  const owner = item.surface_id || item.surface || item.surface_name;
+  return !owner || String(owner) === selectedSurface.value;
+}
+const messageEndpointRows = computed(() => (state.value.messageEndpoints?.endpoints || [])
+  .filter(belongsToSelectedSurface)
+  .slice(0, 16)
+  .map((item: any) => ({ endpoint: item.endpoint_id || '-', connector: item.connector || '-', kind: item.kind || '-', status: item.status || '-', configured: item.configured ? 'yes' : 'no' })));
+const messageRouteRows = computed(() => (state.value.messageRoutes?.routes || [])
+  .filter(belongsToSelectedSurface)
+  .slice(0, 16)
+  .map((item: any) => ({ route: item.route_id || '-', connector: item.connector || '-', policy: item.policy || '-', status: item.status || '-', runtime: item.runtime?.status || '-' })));
+const messageBindingRows = computed(() => (state.value.messageBindings?.bindings || [])
+  .filter(belongsToSelectedSurface)
+  .slice(0, 16)
+  .map((item: any) => ({ binding: item.binding_id || '-', connector: item.connector || '-', endpoint: item.endpoint || '-', status: item.status || item.outbound_status || '-', session: item.runtime_session_id || item.source_session_id || '-', direction: item.direction || '-' })));
 const retryCandidate = computed(() => outboxItems.value.find((item: any) => ['failed', 'retry_scheduled', 'dead_letter'].includes(String(item.status || ''))));
 const replayCandidate = computed(() => inboxItems.value[0]);
-const surfaceContext = computed(() => [
-  { label: t('script.pages.surfacepage.label.9a976fc228'), value: selectedSurface.value },
-  { label: t('script.pages.surfacepage.label.22b4b0c3c3'), value: surfaces.value.length, tone: surfaces.value.length ? 'success' : 'warn' },
-  { label: t('script.pages.surfacepage.label.20c7c5522f'), value: host.value.ready_count ?? '-', tone: degradedSurfaces.value ? 'warn' : 'success' },
-  { label: t('script.pages.surfacepage.label.13c27ff80a'), value: degradedSurfaces.value, tone: degradedSurfaces.value ? 'warn' : 'success' },
-  { label: t('config.reload.label'), value: configReloadStatus.value?.status || 'unknown', tone: configReloadStatus.value?.restart_required?.required ? 'warn' : 'success' },
-  { label: t('script.pages.surfacepage.label.87df60de33'), value: totalResources.value },
-]);
-const surfaceWorkflow = computed(() => [
-  { id: 'registry', label: t('script.pages.surfacepage.label.1fd6a805da'), status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
-  { id: 'supervisor', label: t('script.pages.surfacepage.label.2cd4fa195e'), status: workflowStatus(selectedRuntime.value.status, selectedRuntime.value.status ? 'ready' : 'idle'), description: selectedSurface.value },
-  { id: 'health', label: t('script.pages.surfacepage.label.3703cd2168'), status: state.value.selectedHealth?.status === 'error' ? 'blocked' : workflowStatus(selectedRuntime.value.status, 'ready'), description: selectedSurface.value },
-  { id: 'routes', label: t('script.pages.surfacepage.label.03730e5840'), status: routeRows.value.length ? 'ready' : 'idle', count: routeRows.value.length },
-  { id: 'routes', label: t('script.pages.surfacepage.label.87df60de33'), status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
-  { id: 'dispatch', label: t('script.pages.surfacepage.label.840e1b364a'), status: actionResult.value ? 'active' : 'idle' },
-  { id: 'delivery', label: t('script.pages.surfacepage.label.1467a52d3b'), status: deadLetterItems.value.length ? 'blocked' : (activeInboxItems.value.length || activeOutboxItems.value.length) ? 'active' : outboxRows.value.length ? 'ready' : 'idle', count: activeInboxItems.value.length + activeOutboxItems.value.length },
-  { id: 'events', label: t('script.pages.surfacepage.label.c5497bca58'), status: eventRows.value.length ? 'ready' : 'idle', count: eventRows.value.length },
-]);
 const surfaceEvidence = computed(() => [
   ...routeRows.value.slice(0, 4).map((row: any) => ({
     id: String(row.path || ''),
@@ -309,7 +298,7 @@ const surfaceDiagnosticRows = computed(() => {
 async function loadSurface(id = selectedSurface.value) {
   if (!id) return;
   selectedSurface.value = id;
-  const [detail, routes, resources, status, health, events, inbox, outbox, messages, deliveries] = await Promise.all([
+  const [detail, routes, resources, status, health, events, inbox, outbox, messages, deliveries, messageEndpoints, messageRoutes, messageBindings] = await Promise.all([
     api.surfaceDetail(id),
     api.surfaceRoutes(id),
     api.surfaceResources(id),
@@ -320,8 +309,11 @@ async function loadSurface(id = selectedSurface.value) {
     api.surfaceOutbox(id),
     api.surfaceMessages(id),
     api.surfaceDeliveries(id),
+    api.messageEndpoints(),
+    api.messageRoutes(),
+    api.messageBindings(),
   ]);
-  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events, inbox, outbox, messages, deliveries };
+  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events, inbox, outbox, messages, deliveries, messageEndpoints, messageRoutes, messageBindings };
 }
 
 async function refresh() {
@@ -441,8 +433,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="surfaceContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="surfaceWorkflow" :title="t('page.surface.page.title.30a83906c7')" density="compact" :max-visible="4" />
 
     <section class="metric-row tools-metrics" data-section="health">
       <article class="metric-card" data-tone="success">
@@ -450,35 +440,15 @@ onMounted(refresh);
         <strong>{{ surfaces.length }}</strong>
         <small>{{ externalSurfaces }} external</small>
       </article>
-      <article class="metric-card" data-tone="info">
-        <span>{{ t('page.surface.page.text.e3d84f3df6') }}</span>
-        <strong>{{ totalRoutes }}</strong>
-        <small>{{ t('page.surface.page.text.af128ab236') }}</small>
-      </article>
-      <article class="metric-card" data-tone="warn">
-        <span>{{ t('page.surface.page.text.df4e5009f8') }}</span>
-        <strong>{{ totalResources }}</strong>
-        <small>{{ t('page.surface.page.text.cb8966e990') }}</small>
-      </article>
       <article class="metric-card">
         <span>{{ t('page.surface.page.text.713ff0b8f0') }}</span>
         <strong>{{ displayStatus(host.status || state.health?.status || 'unknown') }}</strong>
         <small>{{ t('page.surface.page.text.e2665719ee') }}</small>
       </article>
-      <article class="metric-card" :data-tone="degradedSurfaces ? 'warn' : 'success'">
-        <span>{{ t('page.surface.page.text.b1a738a813') }}</span>
-        <strong>{{ degradedSurfaces }}</strong>
-        <small>{{ t('page.surface.summary.circuitOpen', { count: host.circuit_open_count || 0 }) }}</small>
-      </article>
       <article class="metric-card" :data-tone="deadLetterItems.length ? 'warn' : 'success'">
         <span>{{ t('page.surface.page.text.c215d81d09') }}</span>
         <strong>{{ activeInboxItems.length + activeOutboxItems.length }}</strong>
         <small>{{ t('page.surface.summary.deliveryQueue', { total: outboxRows.length, dlq: deadLetterItems.length }) }} · archived {{ archivedOutboxItems.length }}</small>
-      </article>
-      <article class="metric-card" :data-tone="edgeSurfaces.length || edgeMessageConnectors.length || edgeSourceConnectors.length ? 'success' : 'warn'">
-        <span>{{ t('edge.metric.total') }}</span>
-        <strong>{{ edgeSurfaces.length + edgeMessageConnectors.length + edgeSourceConnectors.length + edgeAutomationConnectors.length }}</strong>
-        <small>{{ t('edge.metric.breakdown', { surfaces: edgeSurfaces.length, message: edgeMessageConnectors.length, source: edgeSourceConnectors.length }) }}</small>
       </article>
       <article class="metric-card" :data-tone="configReloadStatus.restart_required?.required ? 'warn' : (configReloadStatus.status === 'invalid' ? 'danger' : 'success')">
         <span>{{ t('config.reload.label') }}</span>
@@ -495,13 +465,13 @@ onMounted(refresh);
         </header>
         <p>{{ t('edge.surface.partition.detail') }}</p>
         <DataTable searchable copyable :rows="edgePartitionRows" :columns="['domain', 'count', 'purpose', 'endpoint']" @row-click="selectedDetail = $event" />
-        <RawPayload :title="t('edge.gateway.raw')" :data="state.edge?.health || {}" />
+        <ObjectInspectorDrawer :title="t('edge.gateway.raw')" :data="state.edge?.health || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="registry">
         <header>
           <h2>{{ t('page.surface.page.text.d0eb56ac2a') }}</h2>
-          <StatusPill :status="state.registry?.__offline ? 'offline' : 'ready'" />
+          <StatusPill :status="state.registry?.__state || 'ready'" />
         </header>
         <DataTable v-if="surfaceRows.length" searchable copyable row-key="id" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.surface.page.title.9e87656d55')" :detail="t('page.surface.page.detail.7941de7927')" />
@@ -543,8 +513,8 @@ onMounted(refresh);
           </button>
         </div>
         <DataTable v-if="runtimeRows.length" searchable copyable row-key="surface" :rows="runtimeRows" :columns="['surface', 'status', 'active', 'pid', 'failures', 'restarts', 'circuit', 'last_seen', 'next_retry']" @row-click="selectedDetail = $event" />
-        <RawPayload :title="t('page.surface.page.title.8f45531e08')" :data="state.selectedHealth || {}" />
-        <RawPayload :title="t('page.surface.page.title.640ad216d7')" :data="state.status || selectedRuntime || {}" />
+        <ObjectInspectorDrawer :title="t('page.surface.page.title.8f45531e08')" :data="state.selectedHealth || {}" />
+        <ObjectInspectorDrawer :title="t('page.surface.page.title.640ad216d7')" :data="state.status || selectedRuntime || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="routes">
@@ -632,6 +602,9 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.surface.page.title.6e2d0aef09')" :detail="t('page.surface.page.detail.d4f6163244')" />
         <DataTable v-if="outboxRows.length" searchable copyable row-key="delivery_id" :rows="outboxRows" :columns="['delivery_id', 'status', 'recipient', 'attempts', 'next_retry', 'error']" @row-click="selectedDetail = $event" />
         <DataTable v-if="deliveryRows.length" searchable copyable :rows="deliveryRows" :columns="['kind', 'status', 'delivery_id', 'message_id', 'at']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="messageEndpointRows.length" searchable copyable row-key="endpoint" :rows="messageEndpointRows" :columns="['endpoint', 'connector', 'kind', 'status', 'configured']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="messageRouteRows.length" searchable copyable row-key="route" :rows="messageRouteRows" :columns="['route', 'connector', 'policy', 'status', 'runtime']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="messageBindingRows.length" searchable copyable row-key="binding" :rows="messageBindingRows" :columns="['binding', 'connector', 'endpoint', 'status', 'session', 'direction']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="events">
@@ -650,8 +623,8 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.b6890edcf9') }}</h2>
           <span>{{ selectedSurface }}</span>
         </header>
-        <RawPayload :title="t('page.surface.page.title.db287fe009')" :data="selected || {}" />
-        <RawPayload :title="t('page.surface.page.title.5119090a59')" :data="state.health || {}" />
+        <ObjectInspectorDrawer :title="t('page.surface.page.title.db287fe009')" :data="selected || {}" />
+        <ObjectInspectorDrawer :title="t('page.surface.page.title.5119090a59')" :data="state.health || {}" />
         <DetailDrawer :title="t('page.surface.page.title.61e43d53c8')" :row="selectedDetail || selected" @close="selectedDetail = null" />
       </section>
     </section>

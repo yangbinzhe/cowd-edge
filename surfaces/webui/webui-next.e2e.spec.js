@@ -53,7 +53,7 @@ test('tools page exposes current-page management without duplicated primary navi
   await page.locator('.section-row').filter({ hasText: 'Mutations' }).click();
   await expect(page.getByRole('heading', { name: 'Mutation transactions' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Preview mutation' })).toBeVisible();
-  await expect(page.locator('.raw-payload').first()).toBeVisible();
+  await expect(page.locator('.object-inspector').first()).toBeVisible();
   await page.locator('.section-row').filter({ hasText: 'Risk' }).click();
   await expect(page.locator('.section-row.active')).toContainText('Risk');
   await expect(page).toHaveURL(/section=risk/);
@@ -133,7 +133,7 @@ test('skills agents and tools pages expose lifecycle workbenches', async ({ page
 
 test('gateway page exposes connector and cross-plane controls', async ({ page }) => {
   await page.goto('/index.html#/gateway');
-  await expect(page.getByRole('heading', { name: 'Surface host' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Gateway Capability Contract' })).toBeVisible();
   await page.locator('.section-row[data-section-id="connectors"]').click();
   await expect(page.getByRole('heading', { name: 'Platforms and connectors' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Connector capabilities' })).toBeVisible();

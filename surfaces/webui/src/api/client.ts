@@ -1,5 +1,7 @@
 import type {
   ActivityEvent,
+  ApiReadState,
+  ApiReadStatus,
   GatewayCapability,
   GatewayCapabilityContract,
   GatewayOpenAiTools,
@@ -11,17 +13,12 @@ import type {
   WorkspaceFile,
 } from '../types';
 
-export interface ApiOffline {
-  __offline?: boolean;
-  __error?: string;
-}
-
-export interface EndpointSnapshot extends ApiOffline {
+export interface EndpointSnapshot extends ApiReadState {
   id: string;
   label: string;
   path: string;
   method: string;
-  status: 'ready' | 'empty' | 'offline' | 'error';
+  status: 'ready' | 'empty' | ApiReadStatus;
   count: number;
   data: any;
 }
@@ -99,17 +96,68 @@ async function parseResponse(response: Response, path = '') {
   }
 }
 
-async function read<T>(path: string, fallback: T, init: RequestInit = {}): Promise<T & ApiOffline> {
+class ApiReadError extends Error {
+  constructor(
+    message: string,
+    readonly state: ApiReadStatus,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'ApiReadError';
+  }
+}
+
+interface CachedRead {
+  data: unknown;
+  refreshedAt: string;
+}
+
+const lastSuccessfulReads = new Map<string, CachedRead>();
+
+function readStatusFor(response: Response): ApiReadStatus {
+  if (response.status === 401 || response.status === 403) return 'forbidden';
+  if (response.status === 404) return 'not_found';
+  if (response.status >= 500) return 'server_error';
+  return 'error';
+}
+
+function withReadState<T>(data: T, state: ApiReadState): T & ApiReadState {
+  if (Array.isArray(data)) return Object.assign([...data], state) as T & ApiReadState;
+  if (data && typeof data === 'object') return { ...(data as object), ...state } as T & ApiReadState;
+  return { value: data, ...state } as T & ApiReadState;
+}
+
+async function read<T>(path: string, fallback: T, init: RequestInit = {}): Promise<T & ApiReadState> {
   try {
     const response = await fetch(path, { ...init, headers: headers(init) });
-    if (!response.ok) throw new Error(await response.text());
-    return await parseResponse(response, path) as T;
+    if (!response.ok) {
+      throw new ApiReadError(await response.text() || `${response.status} ${response.statusText}`, readStatusFor(response), response.status);
+    }
+    try {
+      const parsed = await parseResponse(response, path) as T;
+      const refreshedAt = new Date().toISOString();
+      lastSuccessfulReads.set(path, { data: parsed, refreshedAt });
+      return withReadState(parsed, {
+        __state: 'ready',
+        __refreshed_at: refreshedAt,
+        __last_success_at: refreshedAt,
+      });
+    } catch (error) {
+      throw new ApiReadError(error instanceof Error ? error.message : String(error), 'invalid_response', response.status);
+    }
   } catch (error) {
-    return {
-      ...(fallback as any),
-      __offline: true,
-      __error: error instanceof Error ? error.message : String(error),
-    };
+    const readError = error instanceof ApiReadError
+      ? error
+      : new ApiReadError(error instanceof Error ? error.message : String(error), 'offline');
+    const cached = lastSuccessfulReads.get(path);
+    const mayRetainCachedProjection = cached && (readError.state === 'offline' || readError.state === 'server_error');
+    return withReadState((mayRetainCachedProjection ? cached.data : fallback) as T, {
+      __state: mayRetainCachedProjection ? 'stale' : readError.state,
+      __error: readError.message,
+      __http_status: readError.status,
+      __refreshed_at: new Date().toISOString(),
+      __last_success_at: cached?.refreshedAt,
+    });
   }
 }
 
@@ -186,7 +234,7 @@ function countPayload(data: any): number {
 }
 
 function endpointStatus(data: any): EndpointSnapshot['status'] {
-  if (data?.__offline) return 'offline';
+  if (data?.__state && data.__state !== 'ready') return data.__state;
   if (data?.error) return 'error';
   return countPayload(data) > 0 ? 'ready' : 'empty';
 }
@@ -194,7 +242,7 @@ function endpointStatus(data: any): EndpointSnapshot['status'] {
 async function endpoint(label: string, path: string, init: RequestInit = {}): Promise<EndpointSnapshot> {
   const method = init.method || 'GET';
   const data = method === 'GET' ? await read(path, {}) : await write(path, init).catch((error) => ({
-    __offline: true,
+    __state: 'error',
     __error: error instanceof Error ? error.message : String(error),
   }));
   return {
@@ -205,7 +253,7 @@ async function endpoint(label: string, path: string, init: RequestInit = {}): Pr
     status: endpointStatus(data),
     count: countPayload(data),
     data,
-    __offline: data?.__offline,
+    __state: data?.__state,
     __error: data?.__error,
   };
 }
@@ -243,7 +291,7 @@ const pageContractPrefixes: Record<CapabilityPageId, string[]> = {
 };
 
 function isGatewayContract(value: GatewayCapabilityContract | undefined | null): value is GatewayCapabilityContract {
-  return Boolean(value && !value.__offline && Array.isArray(value.capabilities) && value.capabilities.length);
+  return Boolean(value && (!value.__state || value.__state === 'ready') && Array.isArray(value.capabilities) && value.capabilities.length);
 }
 
 function capabilityMatchesPage(capability: GatewayCapability, page: CapabilityPageId) {
@@ -1232,6 +1280,10 @@ export const api = {
     body: JSON.stringify({ command, args }),
   }),
   profiles: () => read('/api/profiles', { profiles: [], active_profile: '', runtime_profile: '' }),
+  updateRuntimeConfig: (body: Record<string, unknown>) => write('/api/config', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  }),
   createProfile: (name: string) => write('/api/profiles', {
     method: 'POST',
     body: JSON.stringify({ name }),

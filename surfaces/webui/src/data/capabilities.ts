@@ -54,8 +54,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
     t('data.capabilities.string.004510a45b'),
     [
       section('overview', t('script.data.capabilities.label.0efc2e6be4'), t('data.capabilities.string.f0a3e31e80'), 'summary', 'compact', 'runtime.status'),
-      section('mission', t('capability.section.runtime.mission.label'), t('capability.section.runtime.mission.description'), 'table', 'standard', 'runtime.mission'),
-      section('execution-projection', t('runtime.execution.title'), t('runtime.execution.emptyDetail'), 'graph', 'inspect', 'runtime.execution_projection'),
+      section('mission-link', t('runtime.missionLink.title'), t('runtime.missionLink.detail'), 'detail', 'compact', 'runtime.mission'),
       section('runs', t('script.data.capabilities.label.fcde5c325d'), t('data.capabilities.string.2aa35b8983'), 'table', 'standard', 'runtime.run'),
       section('policy', t('script.data.capabilities.label.bb9cf14180'), t('data.capabilities.string.2742c73c25'), 'governance', 'inspect', 'runtime.policy'),
       section('timeline', t('script.data.capabilities.label.018514a3d5'), t('data.capabilities.string.932915f166'), 'timeline', 'standard', 'runtime.event'),
@@ -269,10 +268,8 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
     t('data.capabilities.string.b472992685'),
     t('data.capabilities.string.63d299d528'),
     [
-      section('surfaces', t('script.data.capabilities.label.22b4b0c3c3'), t('data.capabilities.string.495209c2b4'), 'table', 'standard', 'gateway.surface'),
       section('alignment', t('capability.section.gateway.alignment.label'), t('capability.section.gateway.alignment.description'), 'governance', 'inspect', 'gateway.alignment'),
       section('connectors', t('script.data.capabilities.label.4b1e9501b9'), t('data.capabilities.string.a28af0b2ae'), 'table', 'standard', 'gateway.connector'),
-      section('message-plane', t('capability.section.gateway.messagePlane.label'), t('capability.section.gateway.messagePlane.description'), 'table', 'inspect', 'gateway.message_plane'),
       section('resources', t('script.data.capabilities.label.87df60de33'), t('data.capabilities.string.c6e170e4d5'), 'table', 'standard', 'gateway.resource'),
       section('executions', t('script.data.capabilities.label.8999e5848a'), t('data.capabilities.string.69f14312f9'), 'timeline', 'standard', 'gateway.execution'),
       section('identities', t('script.data.capabilities.label.42c248d3eb'), t('data.capabilities.string.73c2257e6d'), 'governance', 'inspect', 'gateway.identity'),

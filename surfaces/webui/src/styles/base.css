@@ -378,6 +378,22 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .mission-action-preview header span[data-risk="high"] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 42%, var(--border)); }
 .mission-action-preview header span[data-risk="medium"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 42%, var(--border)); }
 .mission-action-preview header span[data-risk="low"] { color: var(--success); border-color: color-mix(in srgb, var(--success) 36%, var(--border)); }
+.execution-graph-canvas { min-height: 360px; margin: 12px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.execution-graph-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.execution-graph-canvas[data-empty="true"] { display: grid; place-items: center; min-height: 140px; }
+.execution-graph-canvas .vue-flow { min-height: 360px; background: var(--bg); }
+.execution-graph-canvas .vue-flow__node { min-width: 160px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; }
+.execution-graph-canvas .execution-graph-node.status-running { border-color: var(--info); }
+.execution-graph-canvas .execution-graph-node.status-completed { border-color: var(--success); }
+.execution-graph-canvas .execution-graph-node.status-failed,
+.execution-graph-canvas .execution-graph-node.status-blocked { border-color: var(--danger); }
+.execution-graph-canvas .execution-graph-node.status-waiting_approval,
+.execution-graph-canvas .execution-graph-node.status-waiting_input { border-color: var(--warn); }
+.execution-graph-canvas .execution-graph-node.selected { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.execution-graph-controls { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--surface) 92%, transparent); }
+.execution-graph-controls button { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); cursor: pointer; font: inherit; }
+.execution-graph-controls button:hover { border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .execution-graph-canvas .vue-flow__edge-path { transition: none !important; animation: none !important; } }
 .trace-panel { margin: 0 24px 18px; }
 .trace-panel .evidence-list { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
@@ -392,6 +408,19 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .raw-payload-toolbar { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border); }
 .raw-payload-toolbar .ghost-action { min-height: 28px; font-size: 12px; }
 .raw-payload-body { margin: 0; max-height: 260px; overflow: auto; border-top: 1px solid var(--border); color: var(--text-muted); padding: 10px; font-family: var(--font-mono); font-size: 11px; line-height: 1.55; white-space: pre-wrap; }
+.object-inspector { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 10px; }
+.object-inspector > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.object-inspector h3 { margin: 0; font-size: 13px; color: var(--text); }
+.object-inspector p { margin: 3px 0 0; color: var(--text-faint); font-size: 12px; }
+.object-inspector-summary { margin: 10px 0 0; }
+.object-inspector-summary dt, .object-inspector-summary dd { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.object-inspector-backdrop { z-index: calc(var(--z-modal) + 1); }
+.object-inspector-modal { width: min(760px, calc(100vw - 32px)); }
+.object-inspector-modal header p { margin: 3px 0 0; color: var(--text-faint); font-size: 12px; }
+.object-inspector-detail { margin: 0; }
+.object-inspector-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--border); }
+.object-inspector-tabs button { min-height: 34px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-muted); padding: 0 9px; white-space: nowrap; }
+.object-inspector-tabs button.active { border-bottom-color: var(--accent); color: var(--text); }
 .data-table-shell { min-width: 0; overflow: auto; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); }
 .data-table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 8px; }
 .data-table-toolbar .search-field { min-width: min(320px, 100%); margin: 0; }
@@ -403,6 +432,8 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .data-table th button { border: 0; padding: 0; background: transparent; color: var(--text-muted); font: inherit; font-weight: 650; display: inline-flex; align-items: center; gap: 5px; }
 .data-table td { max-width: 280px; color: var(--text-muted); }
 .data-table-select, .data-table-actions { width: 1%; white-space: nowrap; }
+.data-table-checkbox { display: inline-grid; width: 28px; height: 28px; place-items: center; cursor: pointer; }
+.data-table-checkbox input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .data-table-actions-cell { display: flex; align-items: center; gap: 5px; justify-content: flex-end; }
 .data-table td span { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
 .data-table td code { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 5px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); font-family: var(--font-mono); font-size: 11px; }
@@ -721,6 +752,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .chat-workbench-links .ghost-action, .raw-payload-toolbar .ghost-action { min-height: 44px; }
   .data-table { min-width: 720px; }
   .data-table th button { min-width: 44px; }
+  .data-table-checkbox { width: 44px; height: 44px; margin: -10px; }
   .chat-page .run-panorama { display: none; }
   .clean-counts, .run-actions { align-items: stretch; flex-direction: column; }
   .clean-counts { height: auto; padding: 10px 14px; }

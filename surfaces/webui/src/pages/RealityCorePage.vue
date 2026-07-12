@@ -6,12 +6,10 @@ import { ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import TimelineList from '../components/workbench/TimelineList.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
@@ -322,8 +320,6 @@ onMounted(() => {
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="realityContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="realityWorkflow" :title="t('page.reality.core.page.title.a62035dbcf')" density="compact" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card">
@@ -368,7 +364,7 @@ onMounted(() => {
         <Search :size="15" />
         {{ t('page.reality.core.action.loadFactFlow') }}
       </button>
-      <StatusPill :status="status.reality_core?.status || (status.__offline ? 'offline' : 'ready')" />
+      <StatusPill :status="status.reality_core?.status || status.__state || 'ready'" />
     </section>
 
     <section class="reality-grid">
@@ -435,8 +431,8 @@ onMounted(() => {
         </div>
         <DataTable v-if="contextRuntimeRows.length" :rows="contextRuntimeRows" :columns="['metric', 'status', 'value', 'detail']" @row-click="selectedDetail = $event" />
         <DataTable v-if="knowledgeRecallRows.length" :rows="knowledgeRecallRows" :columns="['metric', 'status', 'value', 'detail']" @row-click="selectedDetail = $event" />
-        <RawPayload :title="t('memory.contextEnvelope.raw')" :data="contextRuntime" />
-        <RawPayload :title="t('memory.knowledgeGovernance.recallQuality')" :data="knowledgeRecallQuality" />
+        <ObjectInspectorDrawer :title="t('memory.contextEnvelope.raw')" :data="contextRuntime" />
+        <ObjectInspectorDrawer :title="t('memory.knowledgeGovernance.recallQuality')" :data="knowledgeRecallQuality" />
       </section>
 
       <section class="management-panel reality-panel wide" data-section="fact-flow">
@@ -482,7 +478,7 @@ onMounted(() => {
           <span>{{ t('page.reality.core.page.text.388c716ffc') }}</span>
         </header>
         <EvidenceObjectDetail :title="t('page.reality.core.page.title.a231752f0c')" :evidence="selectedEvidence" @close="selectedDetail = null" />
-        <RawPayload :title="t('page.reality.core.page.title.b0bbf3767e')" :data="status" />
+        <ObjectInspectorDrawer :title="t('page.reality.core.page.title.b0bbf3767e')" :data="status" />
       </section>
     </section>
   </section>

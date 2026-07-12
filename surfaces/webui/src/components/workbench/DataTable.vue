@@ -167,12 +167,14 @@ function fullCell(value: unknown) {
       <thead>
         <tr>
           <th v-if="selectable" class="data-table-select">
-            <input
-              type="checkbox"
-              :aria-label="t('component.workbench.data.table.selectAll')"
-              :checked="allVisibleSelected"
-              @change="toggleAll"
-            />
+            <label class="data-table-checkbox">
+              <input
+                type="checkbox"
+                :aria-label="t('component.workbench.data.table.selectAll')"
+                :checked="allVisibleSelected"
+                @change="toggleAll"
+              />
+            </label>
           </th>
           <th v-for="column in visibleColumns" :key="column">
             <button type="button" @click="toggleSort(column)">
@@ -204,12 +206,14 @@ function fullCell(value: unknown) {
           @keydown="handleRowKeydown($event, row, index)"
         >
           <td v-if="selectable" class="data-table-select" @click.stop>
-            <input
-              type="checkbox"
-              :aria-label="t('component.workbench.data.table.selectRow')"
-              :checked="selectedKeys.has(keyFor(row, index))"
-              @change="toggleRow(row, index)"
-            />
+            <label class="data-table-checkbox">
+              <input
+                type="checkbox"
+                :aria-label="t('component.workbench.data.table.selectRow')"
+                :checked="selectedKeys.has(keyFor(row, index))"
+                @change="toggleRow(row, index)"
+              />
+            </label>
           </td>
           <td v-for="column in visibleColumns" :key="column" :data-kind="cellKind(column, row[column])" :title="fullCell(row[column])">
             <StatusPill v-if="cellKind(column, row[column]) === 'status'" :status="String(row[column] || 'empty')" />

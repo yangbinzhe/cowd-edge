@@ -5,13 +5,10 @@ import { RefreshCw } from 'lucide-vue-next';
 import { api } from '../api/client';
 import { useAppStore } from '../stores/app';
 import DataTable from '../components/workbench/DataTable.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
-import ApiStateBanner from '../components/workbench/ApiStateBanner.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import mfgWriteContracts from '../data/mfgWriteContracts.json';
 import { displayStatus } from '../i18n/domain/status';
 
@@ -21,31 +18,33 @@ const loading = ref(false);
 const error = ref('');
 const state = ref<any>({});
 const result = ref<any>(null);
-const incidentTitle = ref('Line A torque deviation threatens QA-2026-0616 shipment');
+const incidentTitle = ref('');
 const selectedIncidentId = ref('');
 const selectedSkillId = ref('');
 const selectedSkillRunId = ref('');
 const selectedActionId = ref('');
 const selectedCaseId = ref('');
-const selectedPlaybookId = ref('webui-playbook');
-const cockpitProfileId = ref('webui-manufacturing');
-const cockpitOwnerRef = ref('user:webui-operator');
+const selectedPlaybookId = ref('');
+const cockpitProfileId = ref('');
+const cockpitOwnerRef = ref('');
 const cockpitReportId = ref('');
-const sourcePackId = ref('webui-server-manufacturing');
-const selectedMetricId = ref('torque_deviation_rate');
+const sourcePackId = ref('');
+const selectedMetricId = ref('');
+const selectedAttentionId = ref('');
 const selectedEntityId = ref('');
 const relationTargetId = ref('');
+const relationType = ref('');
 const evidenceId = ref('');
 const qualityGateId = ref('');
 const computeJobId = ref('');
 const connectorRunId = ref('');
 const factPayload = ref('');
+const playbookPayload = ref('');
 const dataPlaneResult = ref<any>(null);
 const sourcePackResult = ref<any>(null);
 const entityResult = ref<any>(null);
 const metricResult = ref<any>(null);
 const evidenceResult = ref<any>(null);
-const mfgLiveQuarantine = true;
 const contractsById = computed(() => Object.fromEntries((mfgWriteContracts as any[]).map((contract) => [contract.id, contract])));
 
 function items(collection: any, key: string) {
@@ -75,7 +74,7 @@ const skillRuns = computed(() => room.value?.skill_runs || room.value?.skills ||
 const contractSummary = computed(() => ({
   count: (mfgWriteContracts as any[]).length,
   domains: Array.from(new Set((mfgWriteContracts as any[]).map((contract) => displayContractDomain(contract.domain)))).join('、'),
-  quarantined: (mfgWriteContracts as any[]).filter((contract) => String(contract.live_policy || '').includes('quarantined')).length,
+  governed: (mfgWriteContracts as any[]).filter((contract) => Boolean(contract.live_policy)).length,
 }));
 
 const contractDomainKeys: Record<string, string> = {
@@ -91,95 +90,21 @@ const contractDomainKeys: Record<string, string> = {
 function displayContractDomain(domain: string) {
   return t(contractDomainKeys[domain] || 'mfg.contract.domain.unknown', { domain });
 }
-const decisionTraceRows = computed(() => {
-  const traceRows = items(state.value?.decisionTrace, 'rows');
-  if (traceRows.length) return traceRows;
-  const firstMetric = metrics.value[0] || {};
-  const firstEntity = entities.value[0] || {};
-  const firstAttention = attention.value[0] || {};
-  const firstIncident = incidents.value[0] || {};
-  const firstAction = recommendedActions.value[0] || {};
-  const reportRef = cockpitReportId.value || result.value?.report?.report?.report_id || result.value?.report_id || '';
-  return [
-    {
-      stage: 'source',
-      ref: `source-pack://${sourcePackId.value}`,
-      domain: 'Matrix data plane',
-      signal: state.value?.dataPlane?.status || state.value?.dataPlane?.mode || 'configured',
-      next: 'validate source pack / ingest plan',
-    },
-    {
-      stage: 'fact',
-      ref: state.value?.health?.fact_count ? `${state.value.health.fact_count} structured facts` : 'manufacturing_quality_event',
-      domain: 'cowd structured core',
-      signal: state.value?.health?.schema_version || 'schema pending',
-      next: 'bind facts to entities and metrics',
-    },
-    {
-      stage: 'entity',
-      ref: firstEntity.entity_id || selectedEntityId.value || 'entity pending',
-      domain: firstEntity.entity_type || 'Matrix entity graph',
-      signal: firstEntity.canonical_key || firstEntity.display_name || 'resolution pending',
-      next: 'trace relations and impact paths',
-    },
-    {
-      stage: 'metric',
-      ref: firstMetric.metric_id || selectedMetricId.value || 'metric pending',
-      domain: 'Matrix metric engine',
-      signal: firstMetric.status || firstMetric.name || 'lineage pending',
-      next: 'materialize snapshot / attention plan',
-    },
-    {
-      stage: 'attention',
-      ref: firstAttention.attention_id || 'attention pending',
-      domain: 'Matrix attention',
-      signal: firstAttention.severity || firstAttention.reason || 'hot queue pending',
-      next: 'build evidence packet',
-    },
-    {
-      stage: 'evidence',
-      ref: evidenceId.value || evidenceResult.value?.packet?.packet_id || 'evidence pending',
-      domain: 'cowd context evidence',
-      signal: qualityGateId.value || evidenceResult.value?.quality_gate?.status || 'quality gate pending',
-      next: 'open incident room',
-    },
-    {
-      stage: 'incident',
-      ref: firstIncident.incident_id || selectedIncidentId.value || 'incident pending',
-      domain: 'MFG application',
-      signal: firstIncident.status || firstIncident.title || 'analysis pending',
-      next: 'plan skills and actions',
-    },
-    {
-      stage: 'action',
-      ref: firstAction.action_id || selectedActionId.value || 'action pending',
-      domain: 'MFG + cross-plane',
-      signal: firstAction.title || result.value?.execution?.status || 'dry-run pending',
-      next: 'receipt / feedback / report',
-    },
-    {
-      stage: 'report',
-      ref: reportRef || cockpitProfileId.value,
-      domain: 'MFG cockpit',
-      signal: cockpitReportId.value ? 'delivery trackable' : 'profile ready',
-      next: 'delivery state / retry governance',
-    },
-  ];
-});
+const decisionTraceRows = computed(() => items(state.value?.decisionTrace, 'rows'));
 const mfgContext = computed(() => [
   { label: t('script.pages.mfgpage.label.b291beb879'), value: 'MFG', tone: 'success' },
   { label: t('script.pages.mfgpage.label.0a5e7a0583'), value: 'mfg -> reality' },
   { label: t('script.pages.mfgpage.label.e730d6f3dc'), value: sourcePackId.value },
-  { label: t('script.pages.mfgpage.label.08c257849b'), value: selectedIncidentId.value || incidents.value[0]?.incident_id || 'pending', tone: incidents.value.length ? 'warn' : 'default' },
+  { label: t('script.pages.mfgpage.label.08c257849b'), value: selectedIncidentId.value || t('status.notDeclared'), tone: selectedIncidentId.value ? 'warn' : 'default' },
 ]);
 const mfgWorkflow = computed(() => [
   { id: 'data-plane', label: t('script.pages.mfgpage.label.6da13addb0'), status: sourcePackResult.value ? 'done' : 'idle', description: sourcePackId.value },
   { id: 'data-plane', label: t('script.pages.mfgpage.label.e0930077f2'), status: dataPlaneResult.value ? 'done' : 'idle', count: state.value?.health?.fact_count || 0 },
   { id: 'entities', label: t('script.pages.mfgpage.label.c7fb317725'), status: entities.value.length ? 'ready' : 'idle', count: entities.value.length },
   { id: 'metrics', label: t('script.pages.mfgpage.label.b2bb7604c8'), status: metrics.value.length ? 'ready' : 'idle', count: metrics.value.length },
-  { id: 'evidence', label: t('script.pages.mfgpage.label.7ea014de7b'), status: evidenceResult.value ? 'active' : 'idle', description: evidenceId.value || 'pending' },
+  { id: 'evidence', label: t('script.pages.mfgpage.label.7ea014de7b'), status: evidenceResult.value ? 'active' : 'idle', description: evidenceId.value || t('status.notDeclared') },
   { id: 'incident-room', label: t('script.pages.mfgpage.label.08c257849b'), status: incidents.value.length ? 'blocked' : 'idle', count: incidents.value.length },
-  { id: 'actions', label: t('script.pages.mfgpage.label.97c89a4d66'), status: result.value?.execution ? 'active' : 'idle', description: selectedActionId.value || 'dry-run' },
+  { id: 'actions', label: t('script.pages.mfgpage.label.97c89a4d66'), status: result.value?.execution ? 'active' : 'idle', description: selectedActionId.value || t('status.notDeclared') },
   { id: 'reports', label: t('script.pages.mfgpage.label.ee45c30326'), status: cockpitReportId.value ? 'done' : 'idle', description: cockpitProfileId.value },
 ]);
 const mfgLanes = computed(() => [
@@ -221,130 +146,70 @@ function scrollToMfgSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-const mfgEvidence = computed(() => [
-  {
-    id: sourcePackId.value,
-    kind: 'mfg.source-pack',
-    status: sourcePackResult.value?.status || state.value?.dataPlane?.status || 'ready',
-    summary: `source-pack://${sourcePackId.value}`,
-    source: 'mfg.reality.data-plane',
-  },
-  {
-    id: selectedEntityId.value || entities.value[0]?.entity_id || 'entity-pending',
-    kind: 'mfg.entity',
-    status: entities.value.length ? 'ready' : 'idle',
-    summary: entities.value[0]?.display_name || selectedEntityId.value || 'entity graph pending',
-    source: 'mfg.reality.entities',
-  },
-  {
-    id: selectedMetricId.value,
-    kind: 'mfg.metric',
-    status: metrics.value.length ? 'ready' : 'idle',
-    summary: metrics.value[0]?.name || selectedMetricId.value,
-    source: 'mfg.reality.metrics',
-  },
-  {
-    id: evidenceId.value || evidenceResult.value?.packet_id || 'evidence-pending',
-    kind: 'mfg.evidence',
-    status: evidenceResult.value?.status || (evidenceResult.value ? 'active' : 'idle'),
-    summary: evidenceResult.value?.summary || evidenceId.value || 'evidence packet pending',
-    source: 'mfg.reality.evidence',
-  },
-  {
-    id: selectedIncidentId.value || incidents.value[0]?.incident_id || 'incident-pending',
-    kind: 'mfg.incident',
-    status: incidents.value[0]?.status || (incidents.value.length ? 'blocked' : 'idle'),
-    summary: incidents.value[0]?.title || incidentTitle.value,
-    source: 'mfg.incident-room',
-  },
-  {
-    id: selectedActionId.value || result.value?.execution?.execution_id || 'action-pending',
-    kind: 'mfg.action',
-    status: result.value?.execution?.status || (result.value ? 'active' : 'idle'),
-    summary: selectedActionId.value || result.value?.summary || 'governed action pending',
-    source: 'mfg.cross-plane',
-  },
-  {
-    id: cockpitReportId.value || cockpitProfileId.value,
-    kind: 'mfg.report',
-    status: cockpitReportId.value ? 'ready' : 'idle',
-    summary: cockpitReportId.value || cockpitProfileId.value,
-    source: 'mfg.cockpit',
-  },
-]);
-
-function quarantineReceipt(action: string, endpoint: string, payload: Record<string, unknown> = {}) {
-  return {
-    ok: false,
-    endpoint,
-    method: 'POST',
-    status: 'quarantined',
-    error: t('page.mfg.quarantine.message', { action }),
-    payload_summary: JSON.stringify(payload).slice(0, 280),
-    retryable: false,
-  };
-}
+const mfgEvidence = computed(() => {
+  const records: Array<Record<string, unknown>> = [];
+  if (sourcePackResult.value) records.push({ id: sourcePackResult.value?.source_pack?.source_pack_id || sourcePackId.value, kind: 'mfg.source-pack', status: sourcePackResult.value?.status || 'recorded', summary: sourcePackResult.value?.summary || sourcePackId.value, source: 'mfg.reality.data-plane' });
+  if (entityResult.value) records.push({ id: entityResult.value?.entity?.entity_id || selectedEntityId.value, kind: 'mfg.entity', status: entityResult.value?.status || 'recorded', summary: entityResult.value?.entity?.display_name || selectedEntityId.value, source: 'mfg.reality.entities' });
+  if (metricResult.value) records.push({ id: metricResult.value?.job?.job_id || selectedMetricId.value, kind: 'mfg.metric', status: metricResult.value?.status || 'recorded', summary: metricResult.value?.summary || selectedMetricId.value, source: 'mfg.reality.metrics' });
+  if (evidenceResult.value) records.push({ id: evidenceResult.value?.packet?.packet_id || evidenceResult.value?.evidence_packet?.packet_id || evidenceId.value, kind: 'mfg.evidence', status: evidenceResult.value?.status || 'recorded', summary: evidenceResult.value?.summary || evidenceId.value, source: 'mfg.reality.evidence' });
+  if (result.value) records.push({ id: result.value?.execution?.execution_id || result.value?.incident?.incident_id || cockpitReportId.value || selectedActionId.value, kind: 'mfg.governed-action', status: result.value?.execution?.status || result.value?.status || 'recorded', summary: result.value?.summary || result.value?.incident?.title || selectedActionId.value, source: 'mfg.workbench' });
+  return records.filter((item) => item.id || item.summary);
+});
 
 function contract(id: string) {
-  return contractsById.value[id] || (mfgWriteContracts as any[])[0];
+  return contractsById.value[id];
 }
 
-function defaultFact() {
-  return {
-    source_ref: `source-pack://${sourcePackId.value}`,
-    fact_type: 'manufacturing_quality_event',
-    entity_ref: selectedEntityId.value || 'line:A',
-    metric_id: selectedMetricId.value || 'torque_deviation_rate',
-    observed_at: new Date().toISOString(),
-    measures: {
-      deviation_rate: 0.12,
-      affected_units: 8,
-    },
-  };
-}
-
-function parseFactPayloadOrDefault() {
-  if (!factPayload.value.trim()) return [defaultFact()];
+function parseFactPayload() {
+  if (!factPayload.value.trim()) return [];
   try {
     const parsed = JSON.parse(factPayload.value);
     return Array.isArray(parsed) ? parsed : [parsed];
   } catch {
-    return [defaultFact()];
+    return [];
   }
 }
 
 function sourcePackGovernedPayload() {
-  return defaultSourcePack();
+  return { source_pack_id: sourcePackId.value || undefined };
 }
 
 function factGovernedPayload() {
-  return { facts: parseFactPayloadOrDefault() };
+  return { facts: parseFactPayload() };
 }
 
 function entityGovernedPayload() {
   return {
     entity_id: selectedEntityId.value || undefined,
-    entity_type: 'manufacturing_line',
-    canonical_key: 'line:A',
-    display_name: 'Line A',
-    source_keys: [{ source_system: sourcePackId.value, source_key: 'line:A', source_ref: `source-pack://${sourcePackId.value}` }],
+    entity_type: undefined,
+    canonical_key: selectedEntityId.value || undefined,
+    display_name: selectedEntityId.value || undefined,
+    source_keys: [],
   };
 }
 
 function metricGovernedPayload() {
   return {
     job_id: computeJobId.value || undefined,
-    metric_ids: [selectedMetricId.value || 'torque_deviation_rate'],
+    metric_ids: selectedMetricId.value ? [selectedMetricId.value] : [],
     entity_scope: selectedEntityId.value || undefined,
-    trigger_fact_type: 'manufacturing_quality_event',
+    trigger_fact_type: undefined,
   };
 }
 
 function evidenceGovernedPayload() {
   return {
     evidence_id: evidenceId.value || undefined,
-    attention_id: attention.value[0]?.attention_id,
+    attention_id: selectedAttentionId.value || undefined,
     problem_statement: incidentTitle.value,
+  };
+}
+
+function relationGovernedPayload() {
+  return {
+    from_entity_id: selectedEntityId.value || undefined,
+    to_entity_id: relationTargetId.value || undefined,
+    relation_type: relationType.value || undefined,
   };
 }
 
@@ -366,33 +231,64 @@ function reportGovernedPayload() {
   };
 }
 
-async function planFactIngest() {
+function requiredValue(value: unknown, field: string) {
+  const normalized = String(value || '').trim();
+  if (normalized) return normalized;
+  error.value = t('page.mfg.error.requiredField', { field });
+  return null;
+}
+
+function sourcePackIdFor(payload: Record<string, unknown> = {}) {
+  return requiredValue(payload.source_pack_id || sourcePackId.value, t('page.mfg.field.sourcePackId'));
+}
+
+function governedPayload(payload: Record<string, unknown>, fallback: () => Record<string, unknown>) {
+  // Direct DOM listeners may supply a MouseEvent as their first argument.
+  // Gateway payloads must never include browser event internals.
+  return payload && !('isTrusted' in payload) && !('currentTarget' in payload) ? payload : fallback();
+}
+
+async function planFactIngest(payload: Record<string, unknown> = factGovernedPayload()) {
+  const facts = Array.isArray(payload.facts) ? payload.facts : [];
+  if (!facts.length) {
+    error.value = t('page.mfg.error.factPayloadRequired');
+    return;
+  }
   try {
     dataPlaneResult.value = await api.structuredIngestPlan({
       source: 'mfg.governed_action',
-      session_id: 'webui-mfg',
-      ...factGovernedPayload(),
+      session_id: store.activeSessionId || undefined,
+      ...payload,
     });
   } catch (err) {
-    result.value = quarantineReceipt(t('page.mfg.quarantine.factIngestPlan'), '/api/cowd/structured/ingest-plan', factGovernedPayload());
     error.value = err instanceof Error ? err.message : String(err);
   }
 }
 
-async function dryRunFactIngest() {
+async function dryRunFactIngest(payload: Record<string, unknown> = factGovernedPayload()) {
+  if (!Array.isArray(payload.facts) || !payload.facts.length) {
+    error.value = t('page.mfg.error.factPayloadRequired');
+    return;
+  }
   dataPlaneResult.value = await api.structuredIngestPlan({
     source: 'mfg.governed_action.dry_run',
-    session_id: 'webui-mfg',
-    ...factGovernedPayload(),
+    session_id: store.activeSessionId || undefined,
+    ...payload,
   });
 }
 
-async function planEntityGovernance() {
-  await resolveEntitySourceKey();
+async function planEntityGovernance(payload: Record<string, unknown> = entityGovernedPayload()) {
+  await resolveEntitySourceKey(payload);
 }
 
-async function dryRunEntityGovernance() {
-  entityResult.value = await api.mfgEntityMatchCandidate(selectedEntityId.value || 'line:A', relationTargetId.value || selectedEntityId.value || 'line:A');
+async function dryRunEntityGovernance(payload: Record<string, unknown> = entityGovernedPayload()) {
+  const left = String(payload.entity_id || selectedEntityId.value || '').trim();
+  const right = String(payload.match_entity_id || relationTargetId.value || '').trim();
+  if (!left || !right) {
+    error.value = t('page.mfg.error.entityPairRequired');
+    return;
+  }
+  entityResult.value = await api.mfgEntityMatchCandidate(left, right);
 }
 
 async function planEvidenceGovernance() {
@@ -407,29 +303,28 @@ async function dryRunEvidenceGovernance() {
 
 async function planIncidentGovernance() {
   if (selectedIncidentId.value) await planSkills();
-  else result.value = quarantineReceipt(t('page.mfg.quarantine.incidentPlan'), '/api/apps/mfg/incidents/:id/skills/plan', incidentGovernedPayload());
 }
 
 async function dryRunIncidentGovernance() {
   if (selectedIncidentId.value) await recommendPlaybooks();
-  else result.value = quarantineReceipt(t('page.mfg.quarantine.incidentDryRun'), '/api/apps/mfg/incidents/:id/playbooks/recommend', incidentGovernedPayload());
 }
 
 async function planActionGovernance() {
   if (selectedIncidentId.value) await analyzeIncident();
-  else result.value = quarantineReceipt(t('page.mfg.quarantine.actionPlan'), '/api/apps/mfg/analyses/:analysis_id/actions/:action_id/execute', incidentGovernedPayload());
 }
 
 async function dryRunActionGovernance() {
   await executeAction();
 }
 
-async function planReportGovernance() {
-  result.value = await api.mfgReportDeliveryState(cockpitReportId.value || 'pending-report');
+async function planReportGovernance(payload: Record<string, unknown> = reportGovernedPayload()) {
+  const reportId = requiredValue(payload.report_id || cockpitReportId.value, t('page.mfg.field.reportId'));
+  if (!reportId) return;
+  result.value = await api.mfgReportDeliveryState(reportId);
 }
 
-async function dryRunReportGovernance() {
-  result.value = quarantineReceipt(t('page.mfg.quarantine.cockpitReportDryRun'), '/api/apps/mfg/cockpit/profiles/:id/projection', reportGovernedPayload());
+async function dryRunReportGovernance(payload: Record<string, unknown> = reportGovernedPayload()) {
+  await planReportGovernance(payload);
 }
 
 async function refresh() {
@@ -467,17 +362,6 @@ async function refresh() {
       decisionTrace,
       room: state.value?.room,
     };
-    const firstIncident = items(incidentsData, 'items')[0]?.incident_id;
-    if (!selectedIncidentId.value && firstIncident) {
-      selectedIncidentId.value = firstIncident;
-      await openIncidentRoom();
-    }
-    const firstSkill = items(skillsData, 'items')[0]?.skill_id;
-    if (!selectedSkillId.value && firstSkill) selectedSkillId.value = firstSkill;
-    const firstMetric = items(metricsData, 'metrics')[0]?.metric_id;
-    if (!selectedMetricId.value && firstMetric) selectedMetricId.value = firstMetric;
-    const firstEntity = items(entitiesData, 'entities')[0]?.entity_id;
-    if (!selectedEntityId.value && firstEntity) selectedEntityId.value = firstEntity;
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -485,86 +369,48 @@ async function refresh() {
   }
 }
 
-async function planDataPlaneIngest() {
+async function planDataPlaneIngest(payload: Record<string, unknown> = {}) {
+  const packId = sourcePackIdFor(payload);
+  if (!packId) return;
   dataPlaneResult.value = await api.mfgDataPlaneIngestPlan({
-    source_ref: `source-pack://${sourcePackId.value}`,
-    fact_type: 'manufacturing_quality_event',
-    partition_ref: 'line:A',
-    high_watermark: new Date().toISOString(),
-    estimated_rows: 128,
-    raw_checksum: 'sha256:webui-mfg-ingest-plan',
-    metric_ids: [selectedMetricId.value || 'torque_deviation_rate'],
+    ...payload,
+    source_ref: payload.source_ref || `source-pack://${packId}`,
+    metric_ids: Array.isArray(payload.metric_ids) ? payload.metric_ids : (selectedMetricId.value ? [selectedMetricId.value] : []),
   });
 }
 
-function defaultSourcePack() {
-  return {
-    source_pack_id: sourcePackId.value,
-    source_name: 'WebUI Server Manufacturing Pack',
-    owner: 'webui-operator',
-    access_mode: 'managed',
-    refresh_mode: 'incremental',
-    entity_mappings: [{
-      source_entity: 'line',
-      matrix_entity_type: 'manufacturing_line',
-      source_key_field: 'line_id',
-    }],
-    fact_mappings: [{
-      source_table: 'quality_events',
-      fact_type: 'manufacturing_quality_event',
-      metric_key: selectedMetricId.value || 'torque_deviation_rate',
-      entity_ref_fields: ['line_id', 'station_id'],
-      measure_fields: ['deviation_rate', 'affected_units'],
-      dedup_key: 'batch_id',
-      delta_signature: 'updated_at',
-    }],
-    reconciliation_rules: ['canonical_key=line_id'],
-    quality_rules: ['deviation_rate must be >= 0'],
-    freshness_sla: 'PT1H',
-    security_policy: 'internal',
-    metadata: { source: 'webui' },
-  };
-}
-
-async function upsertSourcePack() {
-  if (mfgLiveQuarantine) {
-    sourcePackResult.value = quarantineReceipt(t('page.mfg.quarantine.sourcePackUpsert'), '/api/apps/mfg/reality/source-packs/upsert', defaultSourcePack());
-    return;
-  }
-  sourcePackResult.value = await api.mfgSourcePackUpsert(defaultSourcePack());
+async function upsertSourcePack(payload: Record<string, unknown> = sourcePackGovernedPayload()) {
+  payload = governedPayload(payload, sourcePackGovernedPayload);
+  const packId = sourcePackIdFor(payload);
+  if (!packId) return;
+  sourcePackResult.value = await api.mfgSourcePackUpsert({ ...payload, source_pack_id: packId });
+  sourcePackId.value = packId;
   await refresh();
 }
 
-async function validateSourcePack() {
-  sourcePackResult.value = await api.mfgSourcePackValidate(sourcePackId.value);
+async function validateSourcePack(payload: Record<string, unknown> = {}) {
+  const packId = sourcePackIdFor(payload);
+  if (!packId) return;
+  sourcePackResult.value = await api.mfgSourcePackValidate(packId);
 }
 
-async function sourcePackDeltaPlan() {
-  sourcePackResult.value = await api.mfgSourcePackDeltaPlan(sourcePackId.value);
+async function sourcePackDeltaPlan(payload: Record<string, unknown> = {}) {
+  const packId = sourcePackIdFor(payload);
+  if (!packId) return;
+  sourcePackResult.value = await api.mfgSourcePackDeltaPlan(packId);
 }
 
-async function planConnectorRun() {
-  sourcePackResult.value = await api.mfgSourcePackConnectorPlan(sourcePackId.value, {
-    source_pack_id: sourcePackId.value,
-    mode: 'dry_run',
-    requested_capability: 'service.read',
-  });
+async function planConnectorRun(payload: Record<string, unknown> = {}) {
+  const packId = sourcePackIdFor(payload);
+  if (!packId) return;
+  sourcePackResult.value = await api.mfgSourcePackConnectorPlan(packId, { ...payload, source_pack_id: packId, mode: payload.mode || 'dry_run' });
   connectorRunId.value = sourcePackResult.value?.run?.run_id || connectorRunId.value;
 }
 
-async function executeConnectorRun() {
-  if (mfgLiveQuarantine) {
-    sourcePackResult.value = quarantineReceipt(t('page.mfg.quarantine.connectorRun'), `/api/apps/mfg/reality/source-packs/${sourcePackId.value}/connector-runs/run`, {
-      source_pack_id: sourcePackId.value,
-      mode: 'dry_run',
-    });
-    return;
-  }
-  sourcePackResult.value = await api.mfgSourcePackConnectorRun(sourcePackId.value, {
-    source_pack_id: sourcePackId.value,
-    mode: 'dry_run',
-    requested_capability: 'service.read',
-  });
+async function executeConnectorRun(payload: Record<string, unknown> = {}) {
+  const packId = sourcePackIdFor(payload);
+  if (!packId) return;
+  sourcePackResult.value = await api.mfgSourcePackConnectorRun(packId, { ...payload, source_pack_id: packId, mode: payload.mode || 'dry_run' });
   connectorRunId.value = sourcePackResult.value?.run?.run_id || connectorRunId.value;
 }
 
@@ -573,22 +419,14 @@ async function getConnectorRun() {
   sourcePackResult.value = await api.mfgConnectorRun(connectorRunId.value);
 }
 
-async function upsertEntity() {
-  if (mfgLiveQuarantine) {
-    entityResult.value = quarantineReceipt(t('page.mfg.quarantine.entityUpsert'), '/api/apps/mfg/reality/entities/upsert', {
-      entity_id: selectedEntityId.value || 'new',
-      entity_type: 'manufacturing_line',
-    });
-    return;
-  }
+async function upsertEntity(payload: Record<string, unknown> = entityGovernedPayload()) {
+  const entityId = requiredValue(payload.entity_id || selectedEntityId.value, t('template.pages.mfgpage.acf9148cce'));
+  if (!entityId) return;
   entityResult.value = await api.mfgEntityUpsert({
-    entity_id: selectedEntityId.value || undefined,
-    entity_type: 'manufacturing_line',
-    canonical_key: 'line:A',
-    display_name: 'Line A',
-    source_keys: [{ source_system: sourcePackId.value, source_key: 'line:A', source_ref: `source-pack://${sourcePackId.value}` }],
-    attributes: { plant: 'webui-demo' },
-    confidence: 0.98,
+    ...payload,
+    entity_id: entityId,
+    canonical_key: payload.canonical_key || entityId,
+    display_name: payload.display_name || entityId,
   });
   selectedEntityId.value = entityResult.value?.entity?.entity_id || selectedEntityId.value;
   await refresh();
@@ -604,25 +442,22 @@ async function inspectEntity() {
   entityResult.value = { entity, relations, impact };
 }
 
-async function resolveEntitySourceKey() {
-  entityResult.value = await api.mfgEntityResolveSourceKey(sourcePackId.value, 'line:A');
+async function resolveEntitySourceKey(payload: Record<string, unknown> = entityGovernedPayload()) {
+  const sourceSystem = sourcePackIdFor(payload);
+  const sourceKey = requiredValue(payload.source_key || payload.entity_id || selectedEntityId.value, t('template.pages.mfgpage.acf9148cce'));
+  if (!sourceSystem || !sourceKey) return;
+  entityResult.value = await api.mfgEntityResolveSourceKey(sourceSystem, sourceKey);
 }
 
 async function upsertRelation() {
-  if (!selectedEntityId.value || !relationTargetId.value) return;
-  if (mfgLiveQuarantine) {
-    entityResult.value = quarantineReceipt(t('page.mfg.quarantine.relationUpsert'), '/api/apps/mfg/reality/relations/upsert', {
-      from_entity_id: selectedEntityId.value,
-      to_entity_id: relationTargetId.value,
-    });
+  if (!selectedEntityId.value || !relationTargetId.value || !relationType.value.trim()) {
+    error.value = t('page.mfg.error.relationRequired');
     return;
   }
   entityResult.value = await api.mfgRelationUpsert({
-    relation_type: 'feeds',
+    relation_type: relationType.value.trim(),
     from_entity_id: selectedEntityId.value,
     to_entity_id: relationTargetId.value,
-    attributes: { source: 'webui' },
-    confidence: 0.9,
   });
   await inspectEntity();
 }
@@ -637,38 +472,28 @@ async function inspectMetric() {
 }
 
 async function materializeMetricSnapshot() {
-  metricResult.value = await api.mfgMetricSnapshotMaterialize([selectedMetricId.value || 'torque_deviation_rate'], selectedEntityId.value || undefined);
+  if (!selectedMetricId.value) return;
+  metricResult.value = await api.mfgMetricSnapshotMaterialize([selectedMetricId.value], selectedEntityId.value || undefined);
 }
 
-async function planMetricAttention() {
+async function planMetricAttention(payload: Record<string, unknown> = metricGovernedPayload()) {
   metricResult.value = await api.mfgAttentionPlan({
-    trigger_fact_type: 'manufacturing_quality_event',
-    entity_scope: selectedEntityId.value || undefined,
-    period: 'latest',
-    limit: 10,
+    ...payload,
+    entity_scope: payload.entity_scope || selectedEntityId.value || undefined,
   });
 }
 
-async function planComputeJob() {
+async function planComputeJob(payload: Record<string, unknown> = metricGovernedPayload()) {
   metricResult.value = await api.mfgComputeJobPlan({
-    trigger_fact_type: 'manufacturing_quality_event',
-    trigger_fact_refs: [],
-    entity_scope: selectedEntityId.value || undefined,
-    period: 'latest',
-    metric_ids: [selectedMetricId.value || 'torque_deviation_rate'],
-    priority: 0.8,
+    ...payload,
+    entity_scope: payload.entity_scope || selectedEntityId.value || undefined,
+    metric_ids: Array.isArray(payload.metric_ids) ? payload.metric_ids : (selectedMetricId.value ? [selectedMetricId.value] : []),
   });
   computeJobId.value = metricResult.value?.job?.job_id || metricResult.value?.plan?.job?.job_id || computeJobId.value;
 }
 
 async function runComputeJob() {
   if (!computeJobId.value) return;
-  if (mfgLiveQuarantine) {
-    metricResult.value = quarantineReceipt(t('page.mfg.quarantine.computeJobRun'), `/api/apps/mfg/reality/compute/jobs/${computeJobId.value}/run`, {
-      job_id: computeJobId.value,
-    });
-    return;
-  }
   metricResult.value = await api.mfgComputeJobRun(computeJobId.value);
 }
 
@@ -678,8 +503,12 @@ async function recomputeMetrics() {
 }
 
 async function buildEvidencePacket() {
+  if (!selectedAttentionId.value) {
+    error.value = t('page.mfg.error.attentionRequired');
+    return;
+  }
   evidenceResult.value = await api.mfgEvidenceBuild({
-    attention_id: attention.value[0]?.attention_id,
+    attention_id: selectedAttentionId.value,
     problem_statement: incidentTitle.value,
   });
   evidenceId.value = evidenceResult.value?.packet?.packet_id || evidenceResult.value?.evidence_packet?.packet_id || evidenceId.value;
@@ -706,13 +535,6 @@ async function inspectQualityGate() {
 }
 
 async function initializeManufacturingKernel() {
-  if (mfgLiveQuarantine) {
-    result.value = {
-      domain: quarantineReceipt(t('page.mfg.quarantine.domainSeed'), '/api/apps/mfg/domain/server-manufacturing/seed'),
-      ontology: quarantineReceipt(t('page.mfg.quarantine.ontologySeed'), '/api/apps/mfg/ontology/server-manufacturing/seed'),
-    };
-    return;
-  }
   result.value = {
     domain: await api.mfgSeedDomain(),
     ontology: await api.mfgSeedOntology(),
@@ -738,18 +560,17 @@ async function ingestManufacturingFacts() {
     error.value = t('page.mfg.error.factPayloadFieldsRequired');
     return;
   }
-  if (mfgLiveQuarantine) {
-    result.value = quarantineReceipt(t('page.mfg.quarantine.manufacturingFactIngest'), '/api/apps/mfg/reality/facts/ingest', { facts });
-    return;
-  }
   result.value = await api.mfgIngestFact(facts as Record<string, unknown>[]);
   await refresh();
 }
 
-async function createIncident() {
+async function createIncident(payload: Record<string, unknown> = incidentGovernedPayload()) {
+  const title = requiredValue(payload.title || incidentTitle.value, t('template.pages.mfgpage.1d3f813051'));
+  if (!title) return;
   result.value = await api.mfgCreateIncident({
-    title: incidentTitle.value,
-    session_id: store.activeSessionId || 'webui-mfg',
+    ...payload,
+    title,
+    session_id: payload.session_id || store.activeSessionId || undefined,
   });
   selectedIncidentId.value = result.value?.incident?.incident_id || selectedIncidentId.value;
   await openIncidentRoom();
@@ -760,7 +581,6 @@ async function openIncidentRoom() {
   if (!selectedIncidentId.value) return;
   const nextRoom = await api.mfgIncidentRoom(selectedIncidentId.value);
   state.value = { ...(state.value || {}), room: nextRoom };
-  selectedActionId.value = (nextRoom as any).analysis?.recommended_actions?.[0]?.action_id || selectedActionId.value;
 }
 
 async function analyzeIncident() {
@@ -797,19 +617,23 @@ async function inspectPlaybook() {
 }
 
 async function upsertPlaybook() {
-  result.value = await api.mfgPlaybookUpsert({
-    playbook_id: selectedPlaybookId.value,
-    title: t('script.pages.mfgpage.title.eccb702859'),
-    domain: 'server_manufacturing',
-    steps: ['confirm metric lineage', 'open incident room', 'plan governed action'],
-    risk: 'medium',
-  });
+  if (!selectedPlaybookId.value || !playbookPayload.value.trim()) {
+    error.value = t('page.mfg.error.playbookPayloadRequired');
+    return;
+  }
+  try {
+    const payload = JSON.parse(playbookPayload.value);
+    if (!payload || Array.isArray(payload) || typeof payload !== 'object') throw new Error(t('page.mfg.error.playbookPayloadRequired'));
+    result.value = await api.mfgPlaybookUpsert({ ...payload, playbook_id: selectedPlaybookId.value });
+    await openIncidentRoom();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  }
 }
 
 async function planSkills() {
   if (!selectedIncidentId.value) return;
   result.value = await api.mfgPlanSkills(selectedIncidentId.value, 3);
-  selectedSkillId.value = result.value?.plan?.selected_skills?.[0]?.skill_id || selectedSkillId.value;
   await openIncidentRoom();
 }
 
@@ -837,15 +661,8 @@ async function executeAction() {
 }
 
 async function bridgeExecution() {
-  const executionId = result.value?.execution?.execution_id || room.value?.executions?.[0]?.execution_id;
+  const executionId = result.value?.execution?.execution_id;
   if (!executionId) return;
-  if (mfgLiveQuarantine) {
-    result.value = quarantineReceipt(t('page.mfg.quarantine.crossPlaneExecutionBridge'), `/api/apps/mfg/executions/${executionId}/cross-plane/execute`, {
-      mode: 'dry_run',
-      requested_capability: 'channel.chat.send_text',
-    });
-    return;
-  }
   result.value = await api.mfgExecutionBridge(executionId, {
     mode: 'dry_run',
     actor_principal: 'webui-operator',
@@ -855,21 +672,18 @@ async function bridgeExecution() {
   await openIncidentRoom();
 }
 
-async function generateReport() {
+async function generateReport(payload: Record<string, unknown> = reportGovernedPayload()) {
+  const profileId = requiredValue(payload.profile_id || cockpitProfileId.value, t('page.mfg.field.profileId'));
+  const ownerRef = requiredValue(payload.owner_ref || cockpitOwnerRef.value, t('page.mfg.field.ownerRef'));
+  if (!profileId || !ownerRef) return;
   const profile = await api.mfgUpsertProfile({
-    profile_id: cockpitProfileId.value,
-    owner_ref: cockpitOwnerRef.value,
-    display_name: 'WebUI Manufacturing Cockpit',
-    focus_refs: ['line:A', 'station:torque-03'],
-    focus_metric_ids: ['torque_deviation_rate', 'station_quality_escape'],
-    thresholds: { torque_deviation_rate: 0.08, station_quality_escape: 0 },
-    cadence: 'daily',
+    ...payload,
+    profile_id: profileId,
+    owner_ref: ownerRef,
   });
-  const report = await api.mfgGenerateReport(cockpitProfileId.value, {
-    report_id: cockpitReportId.value || undefined,
-    cadence: 'daily',
-    delivery_ref: 'channel://chat/user/webui-operator',
-    note: 'generated from WebUI MFG workbench',
+  const report = await api.mfgGenerateReport(profileId, {
+    ...payload,
+    report_id: payload.report_id || cockpitReportId.value || undefined,
   });
   cockpitReportId.value = report?.report?.report_id || cockpitReportId.value;
   result.value = { profile, report };
@@ -878,13 +692,6 @@ async function generateReport() {
 
 async function retryReportDelivery() {
   if (!cockpitReportId.value) return;
-  if (mfgLiveQuarantine) {
-    result.value = quarantineReceipt(t('page.mfg.quarantine.reportDeliveryRetry'), `/api/apps/mfg/cockpit/reports/${cockpitReportId.value}/delivery/retry`, {
-      mode: 'dry_run',
-      report_id: cockpitReportId.value,
-    });
-    return;
-  }
   result.value = await api.mfgRetryReportDelivery(cockpitReportId.value, {
     mode: 'dry_run',
     force: true,
@@ -912,16 +719,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <ApiStateBanner
-      v-if="mfgLiveQuarantine"
-      status="degraded"
-      :title="t('page.mfg.page.title.c04f860563')"
-      :detail="t('page.mfg.page.detail.0ce99abd6b')"
-      endpoint="/api/apps/mfg/*"
-    />
-    <PrimaryContextBar :items="mfgContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="mfgWorkflow" :title="t('page.mfg.page.title.19a9d42267')" density="compact" />
-
     <section class="mfg-lanes" :aria-label="t('page.mfg.page.aria-label.916bf99d57')">
       <button v-for="lane in mfgLanes" :key="lane.id" class="mfg-lane" type="button" :data-status="lane.health" @click="scrollToMfgSection(lane.target)">
         <span>{{ lane.title }}</span>
@@ -984,7 +781,7 @@ onMounted(refresh);
           <dt>{{ t('page.mfg.page.text.0dbeba2a7e') }}</dt>
           <dd>{{ contractSummary.domains }}</dd>
           <dt>{{ t('page.mfg.page.text.fc11dc83ab') }}</dt>
-          <dd>{{ contractSummary.quarantined }}</dd>
+          <dd>{{ contractSummary.governed }}</dd>
           <dt>{{ t('page.mfg.page.text.456ba8b299') }}</dt>
           <dd>{{ t('page.mfg.page.text.c5ede2d774') }}</dd>
         </dl>
@@ -1021,14 +818,14 @@ onMounted(refresh);
           <input v-model="sourcePackId" type="text" />
         </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="planDataPlaneIngest">{{ t('page.mfg.page.text.dad35a136a') }}</button>
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgSourcePackUpsert" type="button" @click="upsertSourcePack">{{ t('page.mfg.page.text.db1dd806a8') }}</button>
-          <button class="ghost-action" type="button" @click="validateSourcePack">{{ t('page.mfg.page.text.ddbca47834') }}</button>
+          <button class="ghost-action" type="button" @click="() => planDataPlaneIngest()">{{ t('page.mfg.page.text.dad35a136a') }}</button>
+          <button class="primary-action mfg-governed-action" data-mfg-risk="mfgSourcePackUpsert" type="button" @click="() => upsertSourcePack()">{{ t('page.mfg.page.text.db1dd806a8') }}</button>
+          <button class="ghost-action" type="button" @click="() => validateSourcePack()">{{ t('page.mfg.page.text.ddbca47834') }}</button>
         </div>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="sourcePackDeltaPlan">{{ t('page.mfg.page.text.37ccf61a79') }}</button>
-          <button class="ghost-action" type="button" @click="planConnectorRun">{{ t('page.mfg.page.text.3679544938') }}</button>
-          <button class="ghost-action mfg-live-quarantined" type="button" @click="executeConnectorRun">{{ t('page.mfg.page.text.7af7a76287') }}</button>
+          <button class="ghost-action" type="button" @click="() => sourcePackDeltaPlan()">{{ t('page.mfg.page.text.37ccf61a79') }}</button>
+          <button class="ghost-action" type="button" @click="() => planConnectorRun()">{{ t('page.mfg.page.text.3679544938') }}</button>
+          <button class="ghost-action mfg-governed-action" type="button" @click="() => executeConnectorRun()">{{ t('page.mfg.page.text.7af7a76287') }}</button>
         </div>
         <label class="field-line">
           {{ t('template.pages.mfgpage.d5328ab27f') }}
@@ -1051,7 +848,7 @@ onMounted(refresh);
           @dry-run="planConnectorRun"
           @live="executeConnectorRun"
         />
-        <RawPayload :title="t('page.mfg.page.title.dae0c08c0d')" :data="{ data_plane: dataPlaneResult, source_pack: sourcePackResult }" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.dae0c08c0d')" :data="{ data_plane: dataPlaneResult, source_pack: sourcePackResult }" />
       </article>
 
       <article class="management-panel" data-section="source-pack">
@@ -1062,9 +859,9 @@ onMounted(refresh);
         <p class="panel-note">{{ t('page.mfg.page.text.2edd1bcb34') }}</p>
         <textarea v-model="factPayload" class="json-input" rows="8" placeholder='[{"fact_type":"...","source_ref":"source-pack://..."}]' />
         <div class="button-row">
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgSeedDomain" type="button" @click="initializeManufacturingKernel">{{ t('page.mfg.page.text.f584acc284') }}</button>
-          <span class="sr-only mfg-live-quarantined" data-mfg-risk="mfgSeedOntology">{{ t('page.mfg.page.text.9e762a9515') }}</span>
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgIngestFact" type="button" @click="ingestManufacturingFacts">{{ t('page.mfg.page.text.9131c47a17') }}</button>
+          <button class="ghost-action mfg-governed-action" data-mfg-risk="mfgSeedDomain" type="button" @click="initializeManufacturingKernel">{{ t('page.mfg.page.text.f584acc284') }}</button>
+          <span class="sr-only mfg-governed-action" data-mfg-risk="mfgSeedOntology">{{ t('page.mfg.page.text.9e762a9515') }}</span>
+          <button class="primary-action mfg-governed-action" data-mfg-risk="mfgIngestFact" type="button" @click="ingestManufacturingFacts">{{ t('page.mfg.page.text.9131c47a17') }}</button>
         </div>
         <GovernedActionPanel
           :contract="contract('fact-ingest')"
@@ -1074,8 +871,8 @@ onMounted(refresh);
           @dry-run="dryRunFactIngest"
           @live="ingestManufacturingFacts"
         />
-        <DataTable v-if="metrics.length" searchable copyable :rows="metrics.slice(0, 8)" :columns="['metric_id', 'name', 'unit', 'status']" row-key="metric_id" />
-        <RawPayload :title="t('page.mfg.page.title.cd2cc28173')" :data="{ metrics: state?.metrics, attention: state?.attention, changes: state?.changes }" />
+        <DataTable v-if="metrics.length" searchable copyable :rows="metrics.slice(0, 8)" :columns="['metric_id', 'name', 'unit', 'status']" row-key="metric_id" @row-click="selectedMetricId = $event.metric_id || ''" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.cd2cc28173')" :data="{ metrics: state?.metrics, attention: state?.attention, changes: state?.changes }" />
       </article>
 
       <article id="entities" class="management-panel" data-section="entities">
@@ -1091,13 +888,17 @@ onMounted(refresh);
           {{ t('template.pages.mfgpage.aea84c643c') }}
           <input v-model="relationTargetId" type="text" />
         </label>
+        <label class="field-line">
+          {{ t('page.mfg.field.relationType') }}
+          <input v-model="relationType" type="text" />
+        </label>
         <div class="button-row">
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgEntityUpsert" type="button" @click="upsertEntity">{{ t('page.mfg.page.text.f0c04ec37f') }}</button>
+          <button class="primary-action mfg-governed-action" data-mfg-risk="mfgEntityUpsert" type="button" @click="() => upsertEntity()">{{ t('page.mfg.page.text.f0c04ec37f') }}</button>
           <button class="ghost-action" type="button" :disabled="!selectedEntityId" @click="inspectEntity">{{ t('page.mfg.page.text.80543724ec') }}</button>
-          <button class="ghost-action" type="button" @click="resolveEntitySourceKey">{{ t('page.mfg.page.text.72e19f1838') }}</button>
+          <button class="ghost-action" type="button" @click="() => resolveEntitySourceKey()">{{ t('page.mfg.page.text.72e19f1838') }}</button>
         </div>
-        <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgRelationUpsert" type="button" :disabled="!selectedEntityId || !relationTargetId" @click="upsertRelation">{{ t('page.mfg.page.text.e91fcaef8f') }}</button>
-        <DataTable v-if="entities.length" searchable copyable :rows="entities.slice(0, 8)" :columns="['entity_id', 'entity_type', 'canonical_key', 'display_name']" row-key="entity_id" />
+        <button class="ghost-action mfg-governed-action" data-mfg-risk="mfgRelationUpsert" type="button" :disabled="!selectedEntityId || !relationTargetId || !relationType" @click="upsertRelation">{{ t('page.mfg.page.text.e91fcaef8f') }}</button>
+        <DataTable v-if="entities.length" searchable copyable :rows="entities.slice(0, 8)" :columns="['entity_id', 'entity_type', 'canonical_key', 'display_name']" row-key="entity_id" @row-click="selectedEntityId = $event.entity_id || ''" />
         <RequestReceipt :receipt="entityResult" :title="t('page.mfg.page.title.d69adeadb8')" />
         <GovernedActionPanel
           :contract="contract('entity-upsert')"
@@ -1109,13 +910,13 @@ onMounted(refresh);
         />
         <GovernedActionPanel
           :contract="contract('relation-upsert')"
-          :payload="{ from_entity_id: selectedEntityId, to_entity_id: relationTargetId, relation_type: 'feeds' }"
+          :payload="relationGovernedPayload()"
           :receipt="entityResult"
           @plan="inspectEntity"
           @dry-run="inspectEntity"
           @live="upsertRelation"
         />
-        <RawPayload :title="t('page.mfg.page.title.7634a13f8b')" :data="entityResult || {}" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.7634a13f8b')" :data="entityResult || {}" />
       </article>
 
       <article class="management-panel" data-section="metrics">
@@ -1134,11 +935,11 @@ onMounted(refresh);
         <div class="button-row">
           <button class="ghost-action" type="button" @click="inspectMetric">{{ t('page.mfg.page.text.057509672b') }}</button>
           <button class="ghost-action" type="button" @click="materializeMetricSnapshot">{{ t('page.mfg.page.text.4573da14a4') }}</button>
-          <button class="ghost-action" type="button" @click="planMetricAttention">{{ t('page.mfg.page.text.5f72680451') }}</button>
+          <button class="ghost-action" type="button" @click="() => planMetricAttention()">{{ t('page.mfg.page.text.5f72680451') }}</button>
         </div>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="planComputeJob">{{ t('page.mfg.page.text.5d254efbc9') }}</button>
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgComputeJobRun" type="button" :disabled="!computeJobId" @click="runComputeJob">{{ t('page.mfg.page.text.d67e6249c5') }}</button>
+          <button class="primary-action" type="button" @click="() => planComputeJob()">{{ t('page.mfg.page.text.5d254efbc9') }}</button>
+          <button class="ghost-action mfg-governed-action" data-mfg-risk="mfgComputeJobRun" type="button" :disabled="!computeJobId" @click="runComputeJob">{{ t('page.mfg.page.text.d67e6249c5') }}</button>
           <button class="ghost-action" type="button" @click="recomputeMetrics">{{ t('page.mfg.page.text.891d6b15bd') }}</button>
         </div>
         <RequestReceipt :receipt="metricResult" :title="t('page.mfg.page.title.0d0bf08469')" />
@@ -1150,7 +951,7 @@ onMounted(refresh);
           @dry-run="planMetricAttention"
           @live="runComputeJob"
         />
-        <RawPayload :title="t('page.mfg.page.title.f5626928d6')" :data="metricResult || {}" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.f5626928d6')" :data="metricResult || {}" />
       </article>
 
       <article class="management-panel" data-section="evidence">
@@ -1161,6 +962,13 @@ onMounted(refresh);
         <label class="field-line">
           {{ t('page.mfg.field.evidencePacketId') }}
           <input v-model="evidenceId" type="text" @keydown.enter.prevent="inspectEvidence" />
+        </label>
+        <label class="field-line">
+          {{ t('page.mfg.field.attentionId') }}
+          <select v-model="selectedAttentionId">
+            <option value="">{{ t('page.mfg.page.text.8505a31972') }}</option>
+            <option v-for="item in attention" :key="item.attention_id" :value="item.attention_id">{{ item.summary || item.attention_id }}</option>
+          </select>
         </label>
         <label class="field-line">
           {{ t('page.mfg.field.qualityGateId') }}
@@ -1180,7 +988,7 @@ onMounted(refresh);
           @dry-run="dryRunEvidenceGovernance"
           @live="buildEvidencePacket"
         />
-        <RawPayload :title="t('page.mfg.page.title.63c40635e0')" :data="evidenceResult || {}" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.63c40635e0')" :data="evidenceResult || {}" />
       </article>
 
       <article id="incident-room" class="management-panel" data-section="incident-room">
@@ -1193,7 +1001,7 @@ onMounted(refresh);
           <textarea v-model="incidentTitle" rows="3" />
         </label>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="createIncident">{{ t('page.mfg.page.text.f9045b3b92') }}</button>
+          <button class="primary-action" type="button" @click="() => createIncident()">{{ t('page.mfg.page.text.f9045b3b92') }}</button>
           <button class="ghost-action" type="button" :disabled="!selectedIncidentId" @click="openIncidentRoom">{{ t('page.mfg.page.text.2b601a8397') }}</button>
         </div>
         <label class="field-line">
@@ -1205,7 +1013,7 @@ onMounted(refresh);
             </option>
           </select>
         </label>
-        <DataTable v-if="incidents.length" searchable copyable :rows="incidents.slice(0, 8)" :columns="['incident_id', 'title', 'severity', 'status']" row-key="incident_id" />
+        <DataTable v-if="incidents.length" searchable copyable :rows="incidents.slice(0, 8)" :columns="['incident_id', 'title', 'severity', 'status']" row-key="incident_id" @row-click="selectedIncidentId = $event.incident_id || ''; openIncidentRoom()" />
         <GovernedActionPanel
           :contract="contract('incident-create-analyze')"
           :payload="incidentGovernedPayload()"
@@ -1214,7 +1022,7 @@ onMounted(refresh);
           @dry-run="dryRunIncidentGovernance"
           @live="createIncident"
         />
-        <RawPayload :title="t('page.mfg.page.title.22adafc937')" :data="{ room, entities: entities.slice(0, 8), attention: attention.slice(0, 8) }" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.22adafc937')" :data="{ room, entities: entities.slice(0, 8), attention: attention.slice(0, 8) }" />
       </article>
 
       <article class="management-panel" data-section="actions">
@@ -1237,6 +1045,10 @@ onMounted(refresh);
             <input v-model="selectedPlaybookId" type="text" />
           </label>
         </div>
+        <label class="field-line">
+          {{ t('page.mfg.field.playbookPayload') }}
+          <textarea v-model="playbookPayload" class="json-input" rows="5" :placeholder="t('page.mfg.placeholder.playbookPayload')" />
+        </label>
         <div class="button-row">
           <button class="ghost-action" type="button" @click="searchCases">{{ t('page.mfg.page.text.fd83a8d0a9') }}</button>
           <button class="ghost-action" type="button" :disabled="!selectedCaseId" @click="inspectCase">{{ t('page.mfg.page.text.f859139b7e') }}</button>
@@ -1253,8 +1065,8 @@ onMounted(refresh);
           </select>
         </label>
         <div class="button-row">
-          <button class="primary-action mfg-live-quarantined" data-mfg-risk="mfgExecuteAction" type="button" :disabled="!selectedActionId" @click="executeAction">{{ t('page.mfg.page.text.f283d38d0f') }}</button>
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgExecutionBridge" type="button" @click="bridgeExecution">{{ t('page.mfg.page.text.87bb6b109d') }}</button>
+          <button class="primary-action mfg-governed-action" data-mfg-risk="mfgExecuteAction" type="button" :disabled="!selectedActionId" @click="executeAction">{{ t('page.mfg.page.text.f283d38d0f') }}</button>
+          <button class="ghost-action mfg-governed-action" data-mfg-risk="mfgExecutionBridge" type="button" @click="bridgeExecution">{{ t('page.mfg.page.text.87bb6b109d') }}</button>
         </div>
         <GovernedActionPanel
           :contract="contract('action-execute-bridge')"
@@ -1265,7 +1077,7 @@ onMounted(refresh);
           @live="bridgeExecution"
         />
         <RequestReceipt :receipt="result" :title="t('page.mfg.page.title.61ddf695b3')" />
-        <RawPayload :title="t('page.mfg.page.title.cfe2ae18f1')" :data="{ analysis, executions: room?.executions, playbooks: room?.playbooks, case_id: selectedCaseId, playbook_id: selectedPlaybookId }" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.cfe2ae18f1')" :data="{ analysis, executions: room?.executions, playbooks: room?.playbooks, case_id: selectedCaseId, playbook_id: selectedPlaybookId }" />
       </article>
 
       <article class="management-panel" data-section="skills">
@@ -1293,7 +1105,7 @@ onMounted(refresh);
         <button class="ghost-action" type="button" :disabled="!selectedSkillRunId" @click="inspectSkillRun">{{ t('page.mfg.page.text.5e038b547e') }}</button>
         <DataTable v-if="skills.length" searchable copyable :rows="skills.slice(0, 8)" :columns="['skill_id', 'name', 'risk', 'status']" row-key="skill_id" />
         <DataTable v-if="skillRuns.length" searchable copyable :rows="skillRuns.slice(0, 8)" row-key="run_id" />
-        <RawPayload :title="t('page.mfg.page.title.8b3d8aa5ff')" :data="{ skills: state?.skills, skill_runs: skillRuns, result }" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.8b3d8aa5ff')" :data="{ skills: state?.skills, skill_runs: skillRuns, result }" />
       </article>
 
       <article id="reports" class="management-panel" data-section="reports">
@@ -1314,8 +1126,8 @@ onMounted(refresh);
           <input v-model="cockpitReportId" type="text" :placeholder="t('page.mfg.page.placeholder.47e472c3f8')" />
         </label>
         <div class="button-row">
-          <button class="primary-action" type="button" @click="generateReport">{{ t('page.mfg.page.text.2170372da3') }}</button>
-          <button class="ghost-action mfg-live-quarantined" data-mfg-risk="mfgRetryReportDelivery" type="button" :disabled="!cockpitReportId" @click="retryReportDelivery">{{ t('page.mfg.page.text.acc563d64d') }}</button>
+          <button class="primary-action" type="button" @click="() => generateReport()">{{ t('page.mfg.page.text.2170372da3') }}</button>
+          <button class="ghost-action mfg-governed-action" data-mfg-risk="mfgRetryReportDelivery" type="button" :disabled="!cockpitReportId" @click="retryReportDelivery">{{ t('page.mfg.page.text.acc563d64d') }}</button>
         </div>
         <GovernedActionPanel
           :contract="contract('cockpit-report-generate')"
@@ -1334,7 +1146,7 @@ onMounted(refresh);
           @live="retryReportDelivery"
         />
         <RequestReceipt :receipt="result" :title="t('page.mfg.page.title.1b6b271f1d')" />
-        <RawPayload :title="t('page.mfg.page.title.5535fc9315')" :data="result || {}" />
+        <ObjectInspectorDrawer :title="t('page.mfg.page.title.5535fc9315')" :data="result || {}" />
       </article>
     </section>
   </section>

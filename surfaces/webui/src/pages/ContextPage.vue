@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Check, RefreshCw, Search } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -58,7 +56,7 @@ const recommendationRows = computed(() => {
   }));
 });
 const envelopeId = computed(() => envelope.value?.envelope_id || envelope.value?.envelope?.id || historyRows.value[0]?.envelope || '');
-const contextStatus = computed(() => envelope.value?.__offline ? 'blocked' : itemRows.value.length ? 'ready' : 'idle');
+const contextStatus = computed(() => envelope.value?.__state && envelope.value.__state !== 'ready' ? 'blocked' : itemRows.value.length ? 'ready' : 'idle');
 const contextBar = computed(() => [
   { label: t('script.pages.contextpage.label.f7f1997c6c'), value: sessionId.value },
   { label: t('script.pages.contextpage.label.ff4fc0276e'), value: profile.value },
@@ -68,7 +66,7 @@ const contextBar = computed(() => [
 const contextWorkflow = computed(() => [
   { id: 'packet', label: t('script.pages.contextpage.label.83c6d723cb'), status: contextStatus.value, count: itemRows.value.length },
   { id: 'budget', label: t('script.pages.contextpage.label.7aeba4cd15'), status: envelope.value?.budget ? 'ready' : 'idle', description: envelope.value?.budget?.total || t('store.app.string.18eb606335') },
-  { id: 'evidence', label: t('script.pages.contextpage.label.7ea014de7b'), status: evidence.value?.__offline ? 'blocked' : evidence.value?.kind ? 'ready' : 'idle', description: evidenceRef.value },
+  { id: 'evidence', label: t('script.pages.contextpage.label.7ea014de7b'), status: evidence.value?.__state && evidence.value.__state !== 'ready' ? 'blocked' : evidence.value?.kind ? 'ready' : 'idle', description: evidenceRef.value },
   { id: 'history', label: t('script.pages.contextpage.label.90ccd64974'), status: historyRows.value.length ? 'ready' : 'idle', count: historyRows.value.length },
 ]);
 const contextEvidence = computed(() => [
@@ -79,7 +77,7 @@ const contextEvidence = computed(() => [
     summary: String(row.text || '-'),
     source: String(row.source || row.authority || 'context'),
   })),
-  ...(evidence.value && !evidence.value.__offline ? [{
+  ...(evidence.value && evidence.value.__state === 'ready' ? [{
     id: evidenceRef.value,
     kind: evidence.value.kind || 'resolved evidence',
     status: evidence.value.status || 'ready',
@@ -116,7 +114,7 @@ async function refresh() {
     history.value = nextHistory;
     recommendations.value = nextRecommendations;
     const executionId = nextTimeline?.execution_graph_summary?.latest?.graph_id;
-    if (executionId) store.connectExecutionProjection(String(executionId));
+    if (executionId) store.connectExecutionProjection(String(executionId), 'summary', 'context');
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -135,6 +133,7 @@ async function acknowledgeRecommendation() {
 }
 
 onMounted(refresh);
+onUnmounted(() => store.disconnectExecutionProjection('context'));
 </script>
 
 <template>
@@ -154,8 +153,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="contextBar" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="contextWorkflow" :title="t('page.context.page.title.eaa4662226')" density="compact" />
 
     <section class="metric-row" data-section="budget">
       <article class="metric-card">
@@ -179,7 +176,7 @@ onMounted(refresh);
       <section class="management-panel context-panel wide" data-section="packet">
         <header>
           <h2>{{ t('page.context.page.text.00bcbce604') }}</h2>
-          <StatusPill :status="envelope.__offline ? 'offline' : 'ready'" />
+          <StatusPill :status="envelope.__state || 'ready'" />
         </header>
         <div class="context-builder-row">
           <label class="field-line">
@@ -216,7 +213,7 @@ onMounted(refresh);
         </label>
         <button class="ghost-action" type="button" @click="resolveEvidence">{{ t('page.context.page.text.7dc8932461') }}</button>
         <RequestReceipt :receipt="evidence" :title="t('page.context.page.title.e3b3e3081c')" />
-        <RawPayload :title="t('page.context.page.title.5f71074cfb')" :data="evidence" />
+        <ObjectInspectorDrawer :title="t('page.context.page.title.5f71074cfb')" :data="evidence" />
       </section>
 
       <section class="management-panel context-panel" data-section="budget">
@@ -246,8 +243,8 @@ onMounted(refresh);
         <DataTable v-if="historyRows.length" searchable copyable :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.fae4d2126c')" :detail="t('page.context.page.detail.56aba34430')" />
         <DetailDrawer :title="t('page.context.page.title.66cb55e17d')" :row="selectedDetail" @close="selectedDetail = null" />
-        <RawPayload :title="t('page.context.page.title.b8176568a4')" :data="executionProjection || envelope" />
-        <RawPayload :title="t('page.context.page.title.49b5f508d1')" :data="actionResult || recommendations" />
+        <ObjectInspectorDrawer :title="t('page.context.page.title.b8176568a4')" :data="executionProjection || envelope" />
+        <ObjectInspectorDrawer :title="t('page.context.page.title.49b5f508d1')" :data="actionResult || recommendations" />
       </section>
     </section>
   </section>

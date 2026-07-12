@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { displayStatus } from '../../i18n/domain/status';
 
-defineProps<{ status: string }>();
+withDefaults(defineProps<{ status?: string }>(), {
+  status: 'unknown',
+});
 </script>
 
 <template>

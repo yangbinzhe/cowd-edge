@@ -128,8 +128,12 @@ const pageRequirements = [
 
 for (const file of files) {
   const text = fs.readFileSync(file, 'utf8');
+  const relative = path.relative(webuiRoot, file);
+  if (relative.startsWith('src/pages/') && /<RawPayload\b/.test(text)) {
+    failures.push(`${relative}: page renders RawPayload directly; use ObjectInspectorDrawer instead`);
+  }
   const pageEvidence = renderablePageEvidence(text);
-  const regex = /<RawPayload\b[^>]*\/?>/g;
+  const regex = /<ObjectInspectorDrawer\b[^>]*\/?>/g;
   let match;
   while ((match = regex.exec(text))) {
     const tag = match[0];
@@ -142,17 +146,17 @@ for (const file of files) {
     const allowedByTitle = title && allowTitleTerms.some((term) => normalizedTitle.includes(term));
     const hasManagementCompanion = /DataTable|DetailPanel|RequestReceipt|GovernedActionPanel|EndpointHealthList|TimelineList/.test(beforeEvidence);
     const entry = {
-      file: path.relative(webuiRoot, file),
+      file: relative,
       line,
       title: title || null,
       nearest_section: nearestSection || null,
       status: allowedByTitle || hasManagementCompanion ? 'pass' : 'review',
-      evidence_role: title ? 'named detail/debug payload' : 'unnamed fallback payload',
+      evidence_role: title ? 'named object inspector' : 'unnamed object inspector',
     };
     entries.push(entry);
-    if (!title) failures.push(`${entry.file}:${line} RawPayload missing title`);
+    if (!title) failures.push(`${entry.file}:${line} ObjectInspectorDrawer missing title`);
     if (!allowedByTitle && !hasManagementCompanion) {
-      failures.push(`${entry.file}:${line} RawPayload lacks evidence/debug title or nearby management component`);
+      failures.push(`${entry.file}:${line} ObjectInspectorDrawer lacks a diagnostic title or nearby management component`);
     }
   }
 }
@@ -174,7 +178,7 @@ const report = {
   version,
   generated_at: new Date().toISOString(),
   status: failures.length ? 'fail' : 'pass',
-  policy: 'Raw JSON is allowed only as named evidence, debug, detail, payload, result, or audit drill-down; primary management views must use structured UI.',
+  policy: 'Primary management pages use ObjectInspectorDrawer for concise field summaries. Raw JSON is available only inside an explicit inspector, evidence, or diagnostic detail component.',
   page_requirements: pageRequirements,
   totals: {
     raw_payload_instances: entries.length,

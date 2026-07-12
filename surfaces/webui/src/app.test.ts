@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { createPinia } from 'pinia';
+import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -168,12 +168,11 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.composer-stats').text()).toContain('记忆证据');
   });
 
-  it('renders Surface workflow as a compact high-signal strip', async () => {
+  it('renders Surface operations without the obsolete generic workflow strip', async () => {
     const wrapper = await mountApp('/surfaces');
     await settle();
-    const workflowSteps = wrapper.findAll('.workflow-strip .workflow-step');
-    expect(workflowSteps.length).toBeLessThanOrEqual(5);
-    expect(wrapper.text()).toContain('更多');
+    expect(wrapper.find('.workflow-strip').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Surface 宿主');
   });
 
   it('opens a Chat turn evidence drawer from current session projections', async () => {
@@ -362,7 +361,7 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/tools');
     await settle();
     expect(wrapper.text()).toContain('工具注册表');
-    expect(wrapper.text()).toContain('工具操作流');
+    expect(wrapper.find('.workflow-strip').exists()).toBe(false);
     expect(wrapper.findAll('.metric-card').length).toBe(4);
     expect(wrapper.find('.capability-sidebar').exists()).toBe(true);
     expect(wrapper.find('.session-sidebar').exists()).toBe(false);
@@ -478,7 +477,7 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/context');
     await settle();
     expect(wrapper.text()).toContain('上下文构建');
-    expect(wrapper.text()).toContain('上下文组装流');
+    expect(wrapper.find('.workflow-strip').exists()).toBe(false);
     expect(wrapper.text()).toContain('上下文证据链');
     expect(wrapper.text()).toContain('上下文选中详情');
   });
@@ -487,7 +486,7 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/audit');
     await settle();
     expect(wrapper.text()).toContain('审计与治理');
-    expect(wrapper.text()).toContain('证据流');
+    expect(wrapper.find('.workflow-strip').exists()).toBe(false);
     expect(wrapper.text()).toContain('全局时间线');
     expect(wrapper.text()).toContain('Harness 评测');
     expect(wrapper.text()).toContain('审计证据链');
@@ -584,6 +583,43 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/sandbox-evals', expect.any(Object));
   });
 
+  it('requires an explicit non-first evolution proposal before creating a candidate', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(path);
+      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
+      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
+      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
+      if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
+      if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
+      if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
+      if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
+      if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
+      if (url === '/api/evolution/proposals') return Promise.resolve(new Response(JSON.stringify({ proposals: [
+        { proposal_id: 'proposal-1', kind: 'tool', status: 'draft' },
+        { proposal_id: 'proposal-2', kind: 'runtime', status: 'draft' },
+      ] })));
+      if (url === '/api/evolution/candidates') return Promise.resolve(new Response(JSON.stringify({ candidates: [] })));
+      if (url === '/api/evolution/proposals/proposal-2/skill-draft') return Promise.resolve(new Response(JSON.stringify({ id: 'proposal-2' })));
+      if (url === '/api/evolution/proposals/proposal-2/candidates') return Promise.resolve(new Response(JSON.stringify({ candidate_id: 'candidate-2' }), { status: 201 }));
+      if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ status: 'accepted' }), { status: 202 }));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = await mountApp('/audit');
+    await settleAsync();
+    await settleAsync();
+    const createCandidate = wrapper.findAll('button').find((button) => button.text() === '生成候选');
+    expect(createCandidate?.attributes('disabled')).toBeDefined();
+    await wrapper.findAll('tbody tr').find((row) => row.text().includes('proposal-2'))?.trigger('click');
+    await settleAsync();
+    expect(createCandidate?.attributes('disabled')).toBeUndefined();
+    await createCandidate?.trigger('click');
+    await settleAsync();
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-2/candidates', expect.objectContaining({ method: 'POST' }));
+  });
+
   it('calls real tool operation endpoints through the backend', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, checkpoints: [] }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
@@ -609,15 +645,65 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/tools/context-fanout/plan', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('marks HTML API fallback as offline instead of successful data', async () => {
+  it('marks HTML API fallback as an invalid response instead of successful data', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response('<!doctype html><html></html>', {
       status: 200,
       headers: { 'content-type': 'text/html' },
     })));
     vi.stubGlobal('fetch', fetchMock);
     const manifest = await api.health();
-    expect(manifest.__offline).toBe(true);
+    expect(manifest.__state).toBe('invalid_response');
     expect(manifest.__error).toContain('Expected JSON');
+  });
+
+  it('keeps authorization, missing-resource, and server failures distinct', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('denied', { status: 403 }))
+      .mockResolvedValueOnce(new Response('missing', { status: 404 }))
+      .mockResolvedValueOnce(new Response('unavailable', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await api.providers()).__state).toBe('forbidden');
+    expect((await api.providerCatalog()).__state).toBe('not_found');
+    expect((await api.effectiveConfig()).__state).toBe('server_error');
+  });
+
+  it('keeps the last successful projection as explicitly stale only for transient read failures', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ready', revision: 7 }), { status: 200 }))
+      .mockRejectedValueOnce(new Error('network unavailable'));
+    vi.stubGlobal('fetch', fetchMock);
+    const current = await api.health();
+    const stale = await api.health();
+    expect(current.__state).toBe('ready');
+    expect(stale.__state).toBe('stale');
+    expect(stale.revision).toBe(7);
+    expect(stale.__last_success_at).toBeTruthy();
+  });
+
+  it('upgrades and restores the execution stream by explicit subscriber ownership', async () => {
+    const urls: string[] = [];
+    const closed: string[] = [];
+    class FakeEventSource {
+      constructor(readonly url: string) { urls.push(url); }
+      addEventListener() {}
+      close() { closed.push(this.url); }
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ execution_id: 'exec-1', cursor: 0 }), { status: 200 }))));
+    setActivePinia(createPinia());
+    const store = useAppStore();
+    store.connectExecutionProjection('exec-1', 'summary', 'chat');
+    store.connectExecutionProjection('exec-1', 'full', 'mission');
+    store.disconnectExecutionProjection('mission');
+    expect(urls).toEqual([
+      '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=summary',
+      '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=full',
+      '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=summary',
+    ]);
+    expect(closed).toHaveLength(2);
+    store.disconnectExecutionProjection('chat');
+    vi.unstubAllGlobals();
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
   });
 
   it('uploads files as multipart form data without fake success', async () => {
@@ -887,7 +973,7 @@ describe('Cowd Vue WebUI shell', () => {
     const domains = new Set((mfgWriteContracts as any[]).map((contract) => contract.domain));
     expect(domains).toEqual(new Set(['Cockpit', 'Data Plane', 'Entities', 'Evidence', 'Facts', 'Incidents', 'Metrics']));
     expect(wrapper.findAll('.governed-action-panel').length).toBeGreaterThanOrEqual(7);
-    expect(wrapper.text()).toContain('MFG 价值流');
+    expect(wrapper.text()).toContain('现实输入');
     expect(wrapper.text()).toContain('现实核心投影');
     expect(wrapper.text()).toContain('/api/apps/mfg/reality/*');
     expect(wrapper.text()).toContain('现实核心管理事实、记忆、矩阵');
@@ -902,6 +988,14 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Matrix 将结构化制造信号转化为事实');
     expect(wrapper.text()).toContain('cowd structured core');
     expect(wrapper.text()).toContain('MFG + cross-plane');
+    const dataPlane = wrapper.get('[data-section="data-plane"]');
+    await dataPlane.get('input').setValue('source-pack-real');
+    await dataPlane.get('button[data-mfg-risk="mfgSourcePackUpsert"]').trigger('click');
+    await settleAsync();
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/upsert', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ source_pack: { source_pack_id: 'source-pack-real' }, session_id: 'webui-mfg' }),
+    }));
   });
 
   it('loads audit, usage, and release gate from real governance endpoints', async () => {
@@ -1000,9 +1094,9 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('成长闭环');
-    expect(wrapper.text()).toContain('任务控制');
-    expect(wrapper.text()).toContain('Mission A');
-    expect(wrapper.text()).toContain('运行时流程');
+    expect(wrapper.text()).toContain('Mission 控制台');
+    expect(wrapper.get('a[href="#/mission"]').text()).toContain('打开 Mission Control');
+    expect(wrapper.find('.workflow-strip').exists()).toBe(false);
     expect(wrapper.text()).toContain('risk_gate');
     expect(wrapper.text()).toContain('memory');
     expect(wrapper.text()).toContain('运行时选中证据');
@@ -1011,7 +1105,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('证据下钻载荷');
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/status', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/events', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control', expect.any(Object));
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/mission/control', expect.any(Object));
   });
 
   it('renders Reality Core evidence object detail from flow rows', async () => {
@@ -1288,7 +1382,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Surface 宿主');
     expect(wrapper.text()).toContain('Surface 注册表');
     expect(wrapper.text()).toContain('Surface 诊断手册');
-    expect(wrapper.text()).toContain('Surface 生命周期');
+    expect(wrapper.find('.workflow-strip').exists()).toBe(false);
     expect(wrapper.text()).toContain('WebUI');
     expect(wrapper.text()).toContain('路由');
     expect(wrapper.text()).toContain('资源');
@@ -1329,7 +1423,7 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('技能控制台');
-    expect(wrapper.text()).toContain('技能生命周期');
+    expect(wrapper.find('.workflow-strip').exists()).toBe(false);
     expect(wrapper.text()).toContain('运行技能动作');
     expect(wrapper.text()).toContain('技能证据链');
     expect(wrapper.text()).toContain('技能选中详情');
@@ -1381,6 +1475,10 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Line A fact');
     expect(wrapper.text()).toContain('结构化数据核心');
     expect(wrapper.text()).toContain('记忆选中证据');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/memory/recall/explain?q=manufacturing%20quality%20anomaly&limit=12', expect.any(Object));
+    await wrapper.get('.search-field input').setValue('manufacturing quality anomaly');
+    await wrapper.get('.search-field input').trigger('keyup.enter');
+    await settleAsync();
     await wrapper.findAll('tbody tr').find((row) => row.text().includes('Line A fact'))?.trigger('click');
     await settleAsync();
     expect(wrapper.text()).toContain('证据下钻载荷');

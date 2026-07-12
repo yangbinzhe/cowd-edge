@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../../i18n';
 import { computed, ref } from 'vue';
+import { Download } from 'lucide-vue-next';
 
 const props = withDefaults(defineProps<{
   data: unknown;
@@ -31,6 +32,16 @@ async function copyPayload() {
   copied.value = true;
   window.setTimeout(() => { copied.value = false; }, 1200);
 }
+
+function downloadPayload() {
+  const blob = new Blob([json.value], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'cowd-inspector-payload.json';
+  link.click();
+  URL.revokeObjectURL(url);
+}
 </script>
 
 <template>
@@ -45,6 +56,9 @@ async function copyPayload() {
       </button>
       <button class="ghost-action" type="button" @click="copyPayload">
         {{ copied ? t('common.copied') : t('rawPayload.copyJson') }}
+      </button>
+      <button class="icon-action" type="button" :aria-label="t('rawPayload.download')" :title="t('rawPayload.download')" @click="downloadPayload">
+        <Download :size="15" />
       </button>
     </div>
     <pre class="raw-payload-body">{{ visibleJson }}{{ clipped && !expanded ? '\n...' : '' }}</pre>

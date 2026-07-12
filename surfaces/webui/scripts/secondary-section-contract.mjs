@@ -7,7 +7,7 @@ const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const gate = process.argv.includes('--gate');
 
 const pages = {
-  runtime: { file: 'RuntimePage.vue', sections: ['overview', 'mission', 'execution-projection', 'runs', 'policy', 'timeline', 'growth'] },
+  runtime: { file: 'RuntimePage.vue', sections: ['overview', 'mission-link', 'runs', 'policy', 'timeline', 'growth'] },
   mission: { file: 'MissionControlPage.vue', sections: ['overview', 'sessions', 'teams', 'agents', 'routes', 'runtime-v2', 'relations', 'approvals', 'trace'] },
   context: { file: 'ContextPage.vue', sections: ['packet', 'budget', 'evidence', 'history'] },
   reality: { file: 'RealityCorePage.vue', sections: ['management', 'core-map', 'overview', 'fact-flow', 'context-runtime', 'evidence', 'promotions', 'boundaries'] },
@@ -16,7 +16,7 @@ const pages = {
   agents: { file: 'AgentsPage.vue', sections: ['catalog', 'discovery', 'tasks', 'reviews', 'graph', 'runs'] },
   tools: { file: 'ToolsPage.vue', sections: ['registry', 'operations', 'mutations', 'checkpoints', 'cache', 'ledger', 'risk'] },
   surfaces: { file: 'SurfacePage.vue', sections: ['health', 'registry', 'routes', 'dispatch', 'delivery', 'events'] },
-  gateway: { file: 'GatewayPage.vue', sections: ['surfaces', 'alignment', 'connectors', 'message-plane', 'resources', 'executions', 'identities'] },
+  gateway: { file: 'GatewayPage.vue', sections: ['alignment', 'connectors', 'resources', 'executions', 'identities'] },
   mfg: { file: 'MfgPage.vue', sections: ['overview', 'data-plane', 'source-pack', 'entities', 'metrics', 'evidence', 'incident-room', 'actions', 'skills', 'reports'] },
   audit: { file: 'AuditPage.vue', sections: ['global-timeline', 'logs', 'usage', 'release', 'harness-eval', 'harness-eval-runs', 'harness-eval-scenarios', 'evolution', 'approvals', 'cross-plane'] },
 };

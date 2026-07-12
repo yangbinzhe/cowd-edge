@@ -250,7 +250,7 @@ async function chooseCommand(command: any) {
         </div>
         <MarkdownBlock :content="turn.content" />
         <section
-          v-if="turn.role === 'assistant' && store.turnActivitySummary(turn).total"
+          v-if="isPanorama && turn.role === 'assistant' && store.turnActivitySummary(turn).total"
           class="turn-activity"
           :data-open="store.isTurnActivityOpen(turn.id)"
         >
@@ -270,7 +270,7 @@ async function chooseCommand(command: any) {
             </article>
           </div>
         </section>
-        <section v-if="turnUsageParts(turn).length" class="turn-usage" :data-role="turn.role">
+        <section v-if="isPanorama && turnUsageParts(turn).length" class="turn-usage" :data-role="turn.role">
           <small v-for="item in turnUsageParts(turn)" :key="item.key">{{ item.label }} {{ item.value.toLocaleString() }}</small>
         </section>
       </article>

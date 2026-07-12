@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   AlertTriangle, CheckCircle2, Database, RefreshCw, Route,
   ShieldCheck, Square, Users, Workflow,
 } from 'lucide-vue-next';
 import { api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DataTable from '../components/workbench/DataTable.vue';
 import MissionActionPreview from '../components/workbench/MissionActionPreview.vue';
+import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
 import { useAppStore } from '../stores/app';
 import { displayStatus } from '../i18n/domain/status';
 
@@ -20,9 +21,9 @@ const error = ref('');
 const showFullTrace = ref(true);
 const selectedSessionId = ref('');
 const selectedTeamId = ref('');
-const teamObjective = ref('Analyze the current task, split roles, execute, and produce an evidence-backed summary');
+const teamObjective = ref(t('page.mission.control.team.objectiveDefault'));
 const routeTarget = ref('');
-const routeCommand = ref('Review current evidence and summarize blockers');
+const routeCommand = ref(t('page.mission.control.route.commandDefault'));
 const missionProjection = ref<any>({});
 const approvals = ref<any>({});
 const relations = ref<any>({});
@@ -33,11 +34,20 @@ const realityFlow = ref<any>({});
 const actionResult = ref<any>(null);
 const recoveryReport = ref<any>(null);
 const teamRunDetail = ref<any>({});
+const selectedExecutionNode = ref<any>(null);
 const controlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
 
 const mission = computed(() => controlProjection.value?.mission || missionProjection.value?.mission || {});
 const sessions = computed(() => Array.isArray(mission.value?.sessions) ? mission.value.sessions : []);
-const activeSession = computed(() => selectedSessionId.value || store.activeSessionId || sessions.value[0]?.session_id || sessions.value[0]?.id || '');
+const missionSessionIds = computed(() => new Set(sessions.value
+  .map((session: any) => String(session.session_id || session.id || '').trim())
+  .filter(Boolean)));
+const declaredActiveSessionId = computed(() => String(mission.value?.active_session_id || '').trim());
+const activeSession = computed(() => {
+  if (selectedSessionId.value && missionSessionIds.value.has(selectedSessionId.value)) return selectedSessionId.value;
+  if (declaredActiveSessionId.value && missionSessionIds.value.has(declaredActiveSessionId.value)) return declaredActiveSessionId.value;
+  return '';
+});
 const selectedSession = computed(() => sessions.value.find((session: any) => (session.session_id || session.id) === activeSession.value) || {});
 const approvalProjection = computed(() => controlProjection.value?.approvals || mission.value?.approval_projection || approvals.value?.approvals || approvals.value || {});
 const approvalItems = computed(() => {
@@ -172,6 +182,8 @@ const cleanCounters = computed(() => ({
   handoffs: relationCount.value,
 }));
 const executionProjection = computed(() => store.currentExecutionProjection);
+const executionGraph = computed(() => executionProjection.value?.graph || null);
+const executionCommandRows = computed(() => executionProjection.value?.available_commands || []);
 const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
   id: node.node_id || '-',
   kind: node.kind || '-',
@@ -243,10 +255,13 @@ async function refresh() {
     approvals.value = nextApprovals;
     relations.value = nextRelations;
     conflicts.value = nextConflicts;
-    if (!selectedSessionId.value) selectedSessionId.value = store.activeSessionId || sessions.value[0]?.session_id || sessions.value[0]?.id || '';
+    if (!selectedSessionId.value && declaredActiveSessionId.value && missionSessionIds.value.has(declaredActiveSessionId.value)) {
+      selectedSessionId.value = declaredActiveSessionId.value;
+    }
+    if (selectedSessionId.value && !missionSessionIds.value.has(selectedSessionId.value)) selectedSessionId.value = '';
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
     const executionId = workgraphRows.value[0]?.graph;
-    if (executionId && executionId !== '-') store.connectExecutionProjection(String(executionId));
+    if (executionId && executionId !== '-') store.connectExecutionProjection(String(executionId), 'full', 'mission');
     await refreshSelectedSession();
     if (selectedTeamId.value) await loadTeamRun();
   } catch (err) {
@@ -294,7 +309,7 @@ async function loadTeamRun(teamId = selectedTeamId.value) {
     || teamRunDetail.value?.graph_id
     || teamRunDetail.value?.run?.execution_graph_id
     || teamRunDetail.value?.run?.graph_id;
-  if (executionId) store.connectExecutionProjection(String(executionId));
+  if (executionId) store.connectExecutionProjection(String(executionId), 'full', 'mission');
 }
 
 async function cancelSelectedTeam() {
@@ -333,7 +348,23 @@ async function applyRecovery() {
   await refresh();
 }
 
+async function executeProjectionCommand(command: string) {
+  actionResult.value = await store.executeExecutionProjectionCommand(command);
+  await refresh();
+}
+
+function executionCommandLabel(command: string) {
+  const labels: Record<string, string> = {
+    pause: t('runtime.execution.command.pause'),
+    resume: t('runtime.execution.command.resume'),
+    cancel: t('runtime.execution.command.cancel'),
+    replan: t('runtime.execution.command.replan'),
+  };
+  return labels[command] || command;
+}
+
 onMounted(refresh);
+onUnmounted(() => store.disconnectExecutionProjection('mission'));
 </script>
 
 <template>
@@ -423,7 +454,31 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="previewRecovery">{{ t('page.mission.control.page.text.281d341bb5') }}</button>
           <button class="danger-action" type="button" :disabled="!recoveryReport" @click="applyRecovery">{{ t('page.mission.control.page.text.56ca46aeea') }}</button>
         </div>
+        <ExecutionGraphCanvas
+          :graph="executionGraph"
+          :selected-node-id="String(selectedExecutionNode?.node_id || '')"
+          @select="selectedExecutionNode = $event"
+        />
+        <div v-if="executionCommandRows.length" class="button-row" :aria-label="t('runtime.execution.commandGroup')">
+          <button
+            v-for="command in executionCommandRows"
+            :key="command.command"
+            class="ghost-action"
+            type="button"
+            :disabled="!command.available"
+            @click="executeProjectionCommand(command.command)"
+          >{{ executionCommandLabel(command.command) }}</button>
+        </div>
+        <dl v-if="selectedExecutionNode" class="detail-list">
+          <dt>{{ t('runtime.execution.node.field.node') }}</dt><dd>{{ selectedExecutionNode.node_id }}</dd>
+          <dt>{{ t('runtime.execution.node.field.status') }}</dt><dd>{{ displayStatus(selectedExecutionNode.status || 'planned') }}</dd>
+          <dt>{{ t('runtime.execution.node.field.executor') }}</dt><dd>{{ selectedExecutionNode.executor_kind || '-' }}</dd>
+          <dt>{{ t('runtime.execution.node.field.evidence') }}</dt><dd>{{ selectedExecutionNode.evidence_refs?.length || 0 }}</dd>
+          <dt>{{ t('runtime.execution.node.field.usage') }}</dt><dd>{{ formatCount('tokens', Number(selectedExecutionNode.usage?.input_tokens || 0) + Number(selectedExecutionNode.usage?.output_tokens || 0)) }} · {{ selectedExecutionNode.usage?.tool_calls || 0 }} {{ t('runtime.execution.node.tools') }}</dd>
+          <dt v-if="selectedExecutionNode.result_ref">{{ t('runtime.execution.node.field.result') }}</dt><dd v-if="selectedExecutionNode.result_ref">{{ selectedExecutionNode.result_ref }}</dd>
+        </dl>
         <RequestReceipt v-if="recoveryReport" :receipt="recoveryReport" :title="t('page.mission.control.page.title.7590b53f8e')" />
+        <RequestReceipt v-if="actionResult" :receipt="actionResult" :title="t('runtime.execution.commandReceipt')" />
       </section>
 
       <section class="mission-panel" data-section="sessions">
@@ -482,7 +537,7 @@ onMounted(refresh);
         <div class="button-row">
           <button class="danger-action" type="button" :disabled="!selectedTeamId" @click="cancelSelectedTeam">{{ t('page.mission.control.page.text.ed848a3a21') }}</button>
         </div>
-        <RawPayload v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
+        <ObjectInspectorDrawer v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
       </section>
 
       <section class="mission-panel" data-section="agents">
@@ -608,6 +663,6 @@ onMounted(refresh);
     </section>
 
     <RequestReceipt v-if="actionResult" :receipt="actionResult" />
-    <RawPayload :title="t('page.mission.control.page.title.7ac6ef49a7')" :data="missionProjection" />
+    <ObjectInspectorDrawer :title="t('page.mission.control.page.title.7ac6ef49a7')" :data="missionProjection" />
   </section>
 </template>

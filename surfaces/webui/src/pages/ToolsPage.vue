@@ -5,11 +5,9 @@ import { GitBranch, Play, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
@@ -195,10 +193,7 @@ async function refresh() {
 }
 
 async function runSafeTool() {
-  result.value = await api.writeReceipt('/api/tools/execute', {
-    method: 'POST',
-    body: JSON.stringify({ name: selectedTool.value, input: {}, mode: 'read_only' }),
-  });
+  result.value = await api.toolExecute(selectedTool.value, {}, 'read_only');
   await refresh();
 }
 
@@ -210,26 +205,17 @@ async function executeCommand() {
 }
 
 async function planIntent() {
-  result.value = await api.writeReceipt('/api/tools/intent-plan', {
-    method: 'POST',
-    body: JSON.stringify({ prompt: plannerPrompt.value, selected_tools: tools.value.map((tool: any) => tool.name).slice(0, 8) }),
-  });
+  result.value = await api.toolIntentPlan(plannerPrompt.value, tools.value.map((tool: any) => tool.name).slice(0, 8));
 }
 
 async function planFanout() {
-  result.value = await api.writeReceipt('/api/tools/context-fanout/plan', {
-    method: 'POST',
-    body: JSON.stringify({ prompt: fanoutPrompt.value }),
-  });
+  result.value = await api.toolContextFanoutPlan(fanoutPrompt.value);
 }
 
 async function runBatchReadonly() {
   try {
     const calls = parseJsonArray(batchCallsText.value, 'Batch calls');
-    result.value = await api.writeReceipt('/api/tools/batch-readonly', {
-      method: 'POST',
-      body: JSON.stringify({ calls, max_concurrency: Number(batchConcurrency.value) || 4 }),
-    });
+    result.value = await api.toolBatchReadonly(calls, Number(batchConcurrency.value) || 4);
     await refresh();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -239,10 +225,7 @@ async function runBatchReadonly() {
 async function previewMutation() {
   try {
     const edits = parseJsonArray(mutationEditsText.value, 'Mutation edits');
-    result.value = await api.writeReceipt('/api/tools/mutations/preview', {
-      method: 'POST',
-      body: JSON.stringify({ edits }),
-    });
+    result.value = await api.toolMutationPreview(edits);
     extractExpectedHashes(result.value);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -252,10 +235,7 @@ async function previewMutation() {
 async function applyMutation() {
   try {
     const edits = parseJsonArray(mutationEditsText.value, 'Mutation edits');
-    result.value = await api.writeReceipt('/api/tools/mutations/apply', {
-      method: 'POST',
-      body: JSON.stringify({ edits, expected_hashes: expectedHashes.value }),
-    });
+    result.value = await api.toolMutationApply(edits, expectedHashes.value);
     await refresh();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -263,10 +243,7 @@ async function applyMutation() {
 }
 
 async function createCheckpoint() {
-  result.value = await api.writeReceipt('/api/tools/checkpoints', {
-    method: 'POST',
-    body: JSON.stringify({ label: checkpointLabel.value || undefined }),
-  });
+  result.value = await api.toolCheckpointCreate(checkpointLabel.value);
   await refresh();
 }
 
@@ -281,7 +258,7 @@ async function restoreCheckpoint(id = selectedCheckpointId.value) {
     restoreArmedId.value = id;
     return;
   }
-  result.value = await api.writeReceipt(`/api/tools/checkpoints/${encodeURIComponent(id)}/restore`, { method: 'POST' });
+  result.value = await api.toolCheckpointRestore(id);
   restoreArmedId.value = '';
   await refresh();
 }
@@ -311,8 +288,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="toolContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="toolsWorkflow" :title="t('page.tools.page.title.94f33c18ea')" density="compact" />
 
     <section class="metric-row tools-metrics">
       <article class="metric-card" data-tone="success">
@@ -434,7 +409,7 @@ onMounted(refresh);
           @live="applyMutation"
         />
         <DataTable v-if="mutationPreviewRows.length" searchable copyable row-key="path" :rows="mutationPreviewRows" :columns="['path', 'status', 'expected_hash', 'changed']" />
-        <RawPayload :title="t('page.tools.page.title.141f116987')" :data="expectedHashes" />
+        <ObjectInspectorDrawer :title="t('page.tools.page.title.141f116987')" :data="expectedHashes" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="checkpoints">
@@ -507,7 +482,7 @@ onMounted(refresh);
         <DataTable v-if="ledgerRows.length" searchable copyable row-key="seq" :rows="ledgerRows" :columns="['seq', 'kind', 'status', 'tool', 'at']" />
         <EmptyState v-else :title="t('page.tools.page.title.31c128d6c2')" :detail="t('page.tools.page.detail.ad2723c87a')" />
         <RequestReceipt :receipt="result" :title="t('page.tools.page.title.184f1d349a')" />
-        <RawPayload :title="t('page.tools.page.title.d1d15f8e25')" :data="result || state.cache || {}" />
+        <ObjectInspectorDrawer :title="t('page.tools.page.title.d1d15f8e25')" :data="result || state.cache || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="risk">

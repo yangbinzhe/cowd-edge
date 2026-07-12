@@ -5,15 +5,13 @@ import { Network, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import GatewayRemediationList from '../components/workbench/GatewayRemediationList.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { displayStatus } from '../i18n/domain/status';
 
 const loading = ref(false);
@@ -111,12 +109,8 @@ const openAiToolRows = computed(() => (Array.isArray(openAiTools.value.tools) ? 
 const resources = computed(() => Array.isArray(state.value.resources?.resources) ? state.value.resources.resources : Array.isArray(state.value.resources?.items) ? state.value.resources.items : []);
 const mcpServers = computed(() => Array.isArray(state.value.mcp?.servers) ? state.value.mcp.servers : []);
 const connectorServices = computed(() => Array.isArray(state.value.connectorServices?.services) ? state.value.connectorServices.services : []);
-const surfaces = computed(() => Array.isArray(state.value.surfaces?.registry?.surfaces) ? state.value.surfaces.registry.surfaces : []);
-const surfaceHost = computed(() => state.value.surfaceHealth?.host || state.value.surfaceHealth || {});
-const surfaceRuntime = computed(() => Array.isArray(state.value.surfaceHealth?.runtime) ? state.value.surfaceHealth.runtime : []);
 const edgeRegistry = computed(() => state.value.edge || {});
 const edgeHealth = computed(() => edgeRegistry.value.health || state.value.edgeHealth?.health || {});
-const edgeSurfaces = computed(() => Array.isArray(edgeRegistry.value.surfaces) ? edgeRegistry.value.surfaces : []);
 const edgeMessageConnectors = computed(() => Array.isArray(edgeRegistry.value.message_connectors) ? edgeRegistry.value.message_connectors : []);
 const edgeSourceConnectors = computed(() => Array.isArray(edgeRegistry.value.source_connectors) ? edgeRegistry.value.source_connectors : []);
 const edgeAutomationConnectors = computed(() => Array.isArray(edgeRegistry.value.automation_connectors) ? edgeRegistry.value.automation_connectors : []);
@@ -126,12 +120,10 @@ const configReloadRestartFields = computed(() => {
   const fields = configReloadStatus.value?.restart_required?.fields;
   return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
 });
-const messageConnectorReadiness = computed(() => Array.isArray(state.value.messageConnectors?.connectors) ? state.value.messageConnectors.connectors : []);
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
 const identities = computed(() => Array.isArray(state.value.identities?.identities) ? state.value.identities.identities : []);
 const grants = computed(() => Array.isArray(state.value.grants?.grants) ? state.value.grants.grants : []);
 const edgeRows = computed(() => [
-  ...edgeSurfaces.value.map((item: any) => ({ ...item, edge_type: 'surface' })),
   ...edgeMessageConnectors.value.map((item: any) => ({ ...item, edge_type: 'message' })),
   ...edgeSourceConnectors.value.map((item: any) => ({ ...item, edge_type: 'source' })),
   ...edgeAutomationConnectors.value.map((item: any) => ({ ...item, edge_type: 'automation' })),
@@ -253,53 +245,6 @@ const grantRows = computed(() => grants.value.slice(0, 12).map((item: any) => ({
   capability: item.capability,
   type: item.grant_type,
 })));
-const surfaceRows = computed(() => surfaces.value.slice(0, 12).map((item: any) => ({
-  runtime: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.status || item.status || '-',
-  id: item.id,
-  name: item.name || item.id || '-',
-  kind: item.kind || '-',
-  lifecycle: item.lifecycle || '-',
-  failures: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.consecutive_failures ?? 0,
-  restarts: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.restart_count ?? 0,
-  circuit: surfaceRuntime.value.find((runtime: any) => runtime.surface === item.id)?.circuit_open ? 'open' : 'closed',
-  routes: Array.isArray(item.routes) ? item.routes.length : Number(item.routes || 0),
-  resources: Array.isArray(item.resources) ? item.resources.length : Number(item.resources || 0),
-})));
-const messageConnectorReadinessRows = computed(() => messageConnectorReadiness.value.slice(0, 12).map((item: any) => ({
-  connector: item.connector || item.name || '-',
-  config: item.configuration_status || '-',
-  runtime: item.runtime?.status || 'not-attached',
-  enabled: item.enabled === false ? 'no' : 'yes',
-  credential: item.credential_present ? 'present' : 'missing',
-  failures: item.runtime?.consecutive_failures ?? 0,
-  restarts: item.runtime?.restart_count ?? 0,
-  circuit: item.runtime?.circuit_open ? 'open' : 'closed',
-})));
-const messageEndpointRows = computed(() => (state.value.messageEndpoints?.endpoints || []).slice(0, 16).map((item: any) => ({
-  endpoint: item.endpoint_id || '-',
-  connector: item.connector || '-',
-  kind: item.kind || '-',
-  status: item.status || '-',
-  configured: item.configured ? 'yes' : 'no',
-  capabilities: Array.isArray(item.capabilities) ? item.capabilities.length : 0,
-})));
-const messageRouteRows = computed(() => (state.value.messageRoutes?.routes || []).slice(0, 16).map((item: any) => ({
-  route: item.route_id || '-',
-  connector: item.connector || '-',
-  policy: item.policy || '-',
-  status: item.status || '-',
-  configured: item.configured ? 'yes' : 'no',
-  runtime: item.runtime?.status || '-',
-})));
-const messageBindingRows = computed(() => (state.value.messageBindings?.bindings || []).slice(0, 16).map((item: any) => ({
-  binding: item.binding_id || '-',
-  connector: item.connector || '-',
-  endpoint: item.endpoint || '-',
-  status: item.status || item.outbound_status || '-',
-  session: item.runtime_session_id || item.source_session_id || '-',
-  resources: item.resource_count ?? 0,
-  direction: item.direction || '-',
-})));
 const gatewayAlignmentRows = computed(() => [
   {
     lane: 'EdgeHost',
@@ -308,14 +253,6 @@ const gatewayAlignmentRows = computed(() => [
     webui: `${edgeRows.value.length} edges`,
     tui: 'surface unchanged',
     action: edgeRows.value.length ? 'monitor edge domains' : 'refresh /api/edges projection',
-  },
-  {
-    lane: 'Surface host',
-    owner: 'Gateway',
-    backend: surfaceHost.value.status || state.value.surfaceHealth?.status || 'unknown',
-    webui: surfaces.value.length ? `${surfaces.value.length} surfaces` : 'no registry data',
-    tui: surfaces.value.some((item: any) => String(item.id || '').toLowerCase() === 'tui') ? 'registered' : 'projected by Gateway',
-    action: surfaces.value.length ? 'monitor events' : 'start gateway or refresh registry',
   },
   {
     lane: 'Connectors',
@@ -343,8 +280,8 @@ const gatewayAlignmentRows = computed(() => [
   },
 ]);
 const gatewayAlignmentStatus = computed(() => {
-  if (state.value.surfaceHealth?.__offline || state.value.summary?.__offline) return 'offline';
-  if (!surfaces.value.length || !accounts.value.length) return 'degraded';
+  if (state.value.summary?.__state && state.value.summary.__state !== 'ready') return state.value.summary.__state;
+  if (!accounts.value.length) return 'degraded';
   return 'ready';
 });
 const gatewayRemediationRows = computed(() => [
@@ -353,16 +290,8 @@ const gatewayRemediationRows = computed(() => [
     lane: 'EdgeHost',
     severity: edgeRows.value.length ? 'ready' : 'degraded',
     problem: edgeRows.value.length ? 'Edge projection is visible.' : 'No Edge projection data is available.',
-    evidence: `surfaces=${edgeSurfaces.value.length}, message=${edgeMessageConnectors.value.length}, source=${edgeSourceConnectors.value.length}, automation=${edgeAutomationConnectors.value.length}`,
-    next_action: edgeRows.value.length ? 'Use Edge rows to distinguish UI surfaces, message connectors, and source connectors.' : 'Verify /api/edges and SurfaceHost manifest roots.',
-  },
-  {
-    id: 'surface-host',
-    lane: 'Surface host',
-    severity: state.value.surfaceHealth?.__offline ? 'blocked' : surfaces.value.length ? 'ready' : 'degraded',
-    problem: surfaces.value.length ? 'Surface registry is visible.' : 'No surface registry data is available.',
-    evidence: `status=${surfaceHost.value.status || state.value.surfaceHealth?.status || 'unknown'}, surfaces=${surfaces.value.length}`,
-    next_action: surfaces.value.length ? 'Monitor route/resource events.' : 'Start Gateway, refresh SurfaceHost, then inspect /api/surfaces/health.',
+    evidence: `message=${edgeMessageConnectors.value.length}, source=${edgeSourceConnectors.value.length}, automation=${edgeAutomationConnectors.value.length}`,
+    next_action: edgeRows.value.length ? 'Inspect connector manifests and source-adapter readiness.' : 'Verify /api/edges connector discovery.',
   },
   {
     id: 'connector-accounts',
@@ -412,22 +341,6 @@ const connectorServiceToolRows = computed(() => {
     mode: item.supports_commit ? 'commit' : 'dry-run',
   })) : [];
 });
-const gatewayContext = computed(() => [
-  { label: t('edge.context.total'), value: edgeRows.value.length, tone: edgeRows.value.length ? 'success' : 'warn' },
-  { label: t('script.pages.gatewaypage.label.f243224b11'), value: `${surfaces.value.length} surfaces`, tone: surfaces.value.length ? 'success' : 'warn' },
-  { label: t('script.pages.gatewaypage.label.4b1e9501b9'), value: accounts.value.length, tone: accounts.value.length ? 'success' : 'warn' },
-  { label: t('script.pages.gatewaypage.label.42c248d3eb'), value: identities.value.length },
-  { label: t('config.reload.label'), value: configReloadStatus.value?.status || 'unknown', tone: configReloadStatus.value?.restart_required?.required ? 'warn' : 'success' },
-]);
-const gatewayWorkflow = computed(() => [
-  { id: 'surfaces', label: t('edge.workflow.host'), status: edgeRows.value.length ? 'ready' : 'degraded', count: edgeRows.value.length },
-  { id: 'surfaces', label: t('script.pages.gatewaypage.label.f086bb51e1'), status: surfaces.value.length ? 'ready' : 'idle', count: surfaces.value.length },
-  { id: 'connectors', label: t('script.pages.gatewaypage.label.4b1e9501b9'), status: accounts.value.length ? 'ready' : 'degraded', count: accounts.value.length },
-  { id: 'resources', label: t('script.pages.gatewaypage.label.87df60de33'), status: resourceRows.value.length ? 'ready' : 'idle', count: resourceRows.value.length },
-  { id: 'identities', label: t('script.pages.gatewaypage.label.7e5a975b6a'), status: identityRows.value.length ? 'ready' : 'blocked', count: identityRows.value.length },
-  { id: 'identities', label: t('script.pages.gatewaypage.label.c02329c48f'), status: grantRows.value.length ? 'ready' : 'blocked', count: grantRows.value.length },
-  { id: 'executions', label: t('script.pages.gatewaypage.label.6ea36ce8d4'), status: actionResult.value ? 'active' : 'idle', description: executeMode.value },
-]);
 const gatewayEvidence = computed(() => [
   ...executionRows.value.slice(0, 3).map((row) => ({
     id: String(row.id || ''),
@@ -724,7 +637,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, connectorSources, edge, surfacesData, surfaceHealth, messageConnectorsData, messageEndpointsData, messageRoutesData, messageBindingsData, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, connectorSources, edge, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -735,12 +648,6 @@ async function refresh() {
       api.connectorServices(),
       api.connectorSources(),
       api.edgeRegistry(),
-      api.surfaceRegistry(),
-      api.surfaceHostHealth(),
-      api.messageConnectors(),
-      api.messageEndpoints(),
-      api.messageRoutes(),
-      api.messageBindings(),
       api.crossPlaneSummary(),
       api.crossPlaneIdentities(),
       api.crossPlaneGrants(),
@@ -755,7 +662,7 @@ async function refresh() {
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorSources, connectorServiceTools: serviceTools, edge, surfaces: surfacesData, surfaceHealth, messageConnectors: messageConnectorsData, messageEndpoints: messageEndpointsData, messageRoutes: messageRoutesData, messageBindings: messageBindingsData, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorSources, connectorServiceTools: serviceTools, edge, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -811,35 +718,23 @@ async function executeConnectorServiceTool() {
 
 async function revalidateResource() {
   if (!resourceRef.value) return;
-  actionResult.value = await api.writeReceipt('/api/connectors/resources/revalidate', {
-    method: 'POST',
-    body: JSON.stringify({ reference: resourceRef.value }),
-  });
+  actionResult.value = await api.connectorRevalidateResource(resourceRef.value);
   await refresh();
 }
 
 async function promoteResourceMemory() {
   if (!resourceRef.value) return;
-  actionResult.value = await api.writeReceipt('/api/connectors/resources/promote-memory', {
-    method: 'POST',
-    body: JSON.stringify({ reference: resourceRef.value }),
-  });
+  actionResult.value = await api.connectorPromoteMemory(resourceRef.value);
   await refresh();
 }
 
 async function runPreflight() {
-  actionResult.value = await api.writeReceipt('/api/cross-plane/action/preflight', {
-    method: 'POST',
-    body: JSON.stringify(crossPlaneAction()),
-  });
+  actionResult.value = await api.crossPlanePreflight(crossPlaneAction());
   await refresh();
 }
 
 async function simulatePolicy() {
-  actionResult.value = await api.writeReceipt('/api/cross-plane/policy/simulate', {
-    method: 'POST',
-    body: JSON.stringify(crossPlaneAction()),
-  });
+  actionResult.value = await api.crossPlanePolicySimulate(crossPlaneAction());
   await refresh();
 }
 
@@ -858,26 +753,20 @@ async function createIdentity() {
     created_at: new Date().toISOString(),
     expires_at: null,
   };
-  actionResult.value = await api.writeReceipt('/api/cross-plane/identities', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+  actionResult.value = await api.crossPlaneCreateIdentity(body);
   identityId.value = actionResult.value?.data?.identity?.id || actionResult.value?.identity?.id || identityId.value;
   await refresh();
 }
 
 async function revokeIdentity() {
   if (!identityId.value) return;
-  actionResult.value = await api.writeReceipt(`/api/cross-plane/identities/${encodeURIComponent(identityId.value)}`, { method: 'DELETE' });
+  actionResult.value = await api.crossPlaneRevokeIdentity(identityId.value);
   identityId.value = '';
   await refresh();
 }
 
 async function resolveIdentity() {
-  actionResult.value = await api.writeReceipt('/api/cross-plane/identity/resolve', {
-    method: 'POST',
-    body: JSON.stringify({ identity_ref: identityRef.value }),
-  });
+  actionResult.value = await api.crossPlaneResolveIdentity(identityRef.value);
   await refresh();
 }
 
@@ -896,17 +785,14 @@ async function createGrant() {
     created_by: 'webui',
     approval_id: null,
   };
-  actionResult.value = await api.writeReceipt('/api/cross-plane/grants', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+  actionResult.value = await api.crossPlaneCreateGrant(body);
   grantId.value = actionResult.value?.data?.grant?.id || actionResult.value?.grant?.id || grantId.value;
   await refresh();
 }
 
 async function revokeGrant() {
   if (!grantId.value) return;
-  actionResult.value = await api.writeReceipt(`/api/cross-plane/grants/${encodeURIComponent(grantId.value)}`, { method: 'DELETE' });
+  actionResult.value = await api.crossPlaneRevokeGrant(grantId.value);
   grantId.value = '';
   await refresh();
 }
@@ -928,8 +814,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="gatewayContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="gatewayWorkflow" :title="t('page.gateway.page.title.15380a6a3f')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -947,21 +831,6 @@ onMounted(refresh);
         <strong>{{ executions.length }}</strong>
         <small>{{ t('page.gateway.page.text.7fe818b5cc') }}</small>
       </article>
-      <article class="metric-card" data-tone="info">
-        <span>{{ t('page.gateway.page.text.d5cf00c093') }}</span>
-        <strong>{{ surfaces.length }}</strong>
-        <small>{{ displayStatus(surfaceHost.status || state.surfaceHealth?.status || 'unknown') }} / {{ surfaceHost.circuit_open_count || 0 }} circuit</small>
-      </article>
-      <article class="metric-card" data-tone="info">
-        <span>{{ t('page.gateway.page.text.9fcdea7846') }}</span>
-        <strong>{{ identities.length }}/{{ grants.length }}</strong>
-        <small>{{ t('page.gateway.page.text.caec320908') }}</small>
-      </article>
-      <article class="metric-card" :data-tone="edgeRows.length ? 'success' : 'warn'">
-        <span>{{ t('edge.metric.total') }}</span>
-        <strong>{{ edgeRows.length }}</strong>
-        <small>{{ t('edge.metric.breakdown', { surfaces: edgeSurfaces.length, message: edgeMessageConnectors.length, source: edgeSourceConnectors.length }) }}</small>
-      </article>
       <article class="metric-card" :data-tone="configReloadStatus.restart_required?.required ? 'warn' : (configReloadStatus.status === 'invalid' ? 'danger' : 'success')">
         <span>{{ t('config.reload.label') }}</span>
         <strong>{{ configReloadStatus.status || 'unknown' }}</strong>
@@ -970,7 +839,7 @@ onMounted(refresh);
     </section>
 
     <section class="gateway-grid">
-      <section class="management-panel gateway-panel wide" data-section="surfaces">
+      <section class="management-panel gateway-panel wide" data-section="connectors">
         <header>
           <h2>{{ t('edge.gateway.title') }}</h2>
           <StatusPill :status="edgeHealth.status || 'unknown'" />
@@ -978,7 +847,7 @@ onMounted(refresh);
         <p>{{ t('edge.gateway.detail') }}</p>
         <DataTable v-if="edgeRows.length" searchable copyable row-key="id" :rows="edgeRows" :columns="['domain', 'id', 'name', 'status', 'lifecycle', 'capabilities', 'routes', 'resources', 'source']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('edge.empty.title')" :detail="t('edge.empty.detail')" />
-        <RawPayload :title="t('edge.gateway.raw')" :data="edgeHealth || {}" />
+        <ObjectInspectorDrawer :title="t('edge.gateway.raw')" :data="edgeHealth || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="alignment">
@@ -994,7 +863,7 @@ onMounted(refresh);
       <section class="management-panel gateway-panel wide" data-section="alignment">
         <header>
           <h2>{{ t('page.gateway.contract.title') }}</h2>
-          <StatusPill :status="capabilityContract.__offline ? 'offline' : (capabilityCoverage.route_contract_parity ? 'ready' : 'degraded')" />
+          <StatusPill :status="capabilityContract.__state && capabilityContract.__state !== 'ready' ? capabilityContract.__state : (capabilityCoverage.route_contract_parity ? 'ready' : 'degraded')" />
         </header>
         <p>{{ t('page.gateway.contract.detail') }}</p>
         <section class="metric-row compact">
@@ -1006,45 +875,17 @@ onMounted(refresh);
         <DataTable v-if="gatewayContractRows.length" searchable copyable row-key="id" :rows="gatewayContractRows" :columns="['domain', 'method', 'path', 'risk', 'visible']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.contract.empty')" :detail="t('page.gateway.contract.emptyDetail')" />
         <DataTable v-if="openAiToolRows.length" searchable copyable row-key="name" :rows="openAiToolRows" :columns="['name', 'description', 'parameters']" @row-click="selectedDetail = $event" />
-        <RawPayload :title="t('page.gateway.contract.raw')" :data="{ contract: capabilityContract, openapi: { openapi: openApiDocument.openapi, path_count: openApiPathCount }, openai_tools: openAiTools }" />
-      </section>
-
-      <section class="management-panel gateway-panel wide" data-section="surfaces">
-        <header>
-          <h2>{{ t('page.gateway.page.text.f13f7c3a12') }}</h2>
-          <StatusPill :status="state.surfaceHealth?.__offline ? 'offline' : (surfaceHost.status || state.surfaceHealth?.status || 'ready')" />
-        </header>
-        <p>{{ t('page.gateway.page.text.7fa2efe0a9') }}</p>
-        <DataTable v-if="surfaceRows.length" searchable copyable row-key="id" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else :title="t('page.gateway.page.title.ae647d6b79')" :detail="t('page.gateway.page.detail.767891561a')" />
-        <RawPayload :title="t('page.gateway.page.title.ed73c8169c')" :data="state.surfaceHealth || {}" />
+        <ObjectInspectorDrawer :title="t('page.gateway.contract.raw')" :data="{ contract: capabilityContract, openapi: { openapi: openApiDocument.openapi, path_count: openApiPathCount }, openai_tools: openAiTools }" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">
         <header>
           <h2>{{ t('page.gateway.page.text.df4bfe6273') }}</h2>
-          <StatusPill :status="state.summary?.__offline ? 'offline' : 'ready'" />
+          <StatusPill :status="state.summary?.__state || 'ready'" />
         </header>
         <DataTable v-if="accountRows.length" searchable copyable :rows="accountRows" :columns="['provider', 'account', 'status', 'scopes']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.gateway.page.title.bed97233b0')" :detail="t('page.gateway.page.detail.51394d64f1')" />
-        <DataTable v-if="messageConnectorReadinessRows.length" searchable copyable row-key="connector" :rows="messageConnectorReadinessRows" :columns="['connector', 'config', 'runtime', 'enabled', 'credential', 'failures', 'restarts', 'circuit']" @row-click="selectedDetail = $event" />
-        <RawPayload :title="t('page.gateway.page.title.a0df395cfc')" :data="state.platforms || {}" />
-        <RawPayload :title="t('page.gateway.page.title.513df4116b')" :data="state.messageConnectors || {}" />
-      </section>
-
-      <section class="management-panel gateway-panel wide" data-section="message-plane">
-        <header>
-          <h2>{{ t('messagePlane.title') }}</h2>
-          <StatusPill :status="messageConnectorReadinessRows.length ? 'ready' : 'degraded'" />
-        </header>
-        <p>{{ t('messagePlane.detail') }}</p>
-        <DataTable v-if="messageEndpointRows.length" searchable copyable row-key="endpoint" :rows="messageEndpointRows" :columns="['endpoint', 'connector', 'kind', 'status', 'configured', 'capabilities']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else :title="t('messagePlane.endpoints.emptyTitle')" :detail="t('messagePlane.endpoints.emptyDetail')" />
-        <DataTable v-if="messageRouteRows.length" searchable copyable row-key="route" :rows="messageRouteRows" :columns="['route', 'connector', 'policy', 'status', 'configured', 'runtime']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else :title="t('messagePlane.routes.emptyTitle')" :detail="t('messagePlane.routes.emptyDetail')" />
-        <DataTable v-if="messageBindingRows.length" searchable copyable row-key="binding" :rows="messageBindingRows" :columns="['binding', 'connector', 'endpoint', 'status', 'session', 'resources', 'direction']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else :title="t('messagePlane.bindings.emptyTitle')" :detail="t('messagePlane.bindings.emptyDetail')" />
-        <RawPayload :title="t('messagePlane.raw')" :data="{ connectors: state.messageConnectors || {}, endpoints: state.messageEndpoints || {}, routes: state.messageRoutes || {}, bindings: state.messageBindings || {} }" />
+        <ObjectInspectorDrawer :title="t('page.gateway.page.title.a0df395cfc')" :data="state.platforms || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">
@@ -1059,7 +900,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('edge.source.empty.title')" :detail="t('edge.source.empty.detail')" />
         <DataTable v-if="sourceRuntimeRows.length" searchable copyable row-key="adapter" :rows="sourceRuntimeRows" :columns="['adapter', 'name', 'family', 'status', 'watermarks', 'last_run', 'degraded']" @row-click="selectedDetail = $event" />
         <DataTable v-if="sourceWatermarkRows.length" searchable copyable row-key="resource" :rows="sourceWatermarkRows" :columns="['adapter', 'resource', 'table', 'strategy', 'cursor', 'checksum']" @row-click="selectedDetail = $event" />
-        <RawPayload :title="t('edge.connectors.raw')" :data="{ message_connectors: edgeMessageConnectors, source_connectors: edgeSourceConnectors, source_runtime: state.connectorSources, automation_connectors: edgeAutomationConnectors }" />
+        <ObjectInspectorDrawer :title="t('edge.connectors.raw')" :data="{ message_connectors: edgeMessageConnectors, source_connectors: edgeSourceConnectors, source_runtime: state.connectorSources, automation_connectors: edgeAutomationConnectors }" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">
@@ -1147,7 +988,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" @click="loadEdgeSourceSnapshots">{{ t('edge.snapshot.action.list') }}</button>
         </div>
         <RequestReceipt :receipt="sourceSnapshotResult" :title="t('edge.snapshot.receipt')" />
-        <RawPayload :title="t('edge.snapshot.readPlan')" :data="sourceSnapshotReadPlan" />
+        <ObjectInspectorDrawer :title="t('edge.snapshot.readPlan')" :data="sourceSnapshotReadPlan" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="connectors">
@@ -1187,7 +1028,7 @@ onMounted(refresh);
         </label>
         <button class="ghost-action" type="button" :disabled="!connectorServiceId || !connectorServiceToolId" @click="executeConnectorServiceTool">{{ t('page.gateway.page.text.c0e6cf81d6') }}</button>
         <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.83dadbfefc')" />
-        <RawPayload :title="t('page.gateway.page.title.f8bba99b1e')" :data="{ platform: state.platformDetail, connectorServices: state.connectorServices, connectorServiceTools: state.connectorServiceTools }" />
+        <ObjectInspectorDrawer :title="t('page.gateway.page.title.f8bba99b1e')" :data="{ platform: state.platformDetail, connectorServices: state.connectorServices, connectorServiceTools: state.connectorServiceTools }" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="connectors">
@@ -1204,7 +1045,7 @@ onMounted(refresh);
           <h2>{{ t('page.gateway.page.text.cd60e278cf') }}</h2>
           <span>{{ formatCount('servers', mcpServers.length) }}</span>
         </header>
-        <RawPayload :title="t('page.gateway.page.title.c593f2c735')" :data="state.mcp || {}" />
+        <ObjectInspectorDrawer :title="t('page.gateway.page.title.c593f2c735')" :data="state.mcp || {}" />
       </section>
 
       <section class="management-panel gateway-panel wide" data-section="resources">
@@ -1255,7 +1096,7 @@ onMounted(refresh);
           @live="executeCrossPlaneAction"
         />
         <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.280dcfc888')" />
-        <RawPayload :title="t('page.gateway.page.title.023d50a0fe')" :data="state.crossPlane || {}" />
+        <ObjectInspectorDrawer :title="t('page.gateway.page.title.023d50a0fe')" :data="state.crossPlane || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="identities">
@@ -1331,7 +1172,7 @@ onMounted(refresh);
           <input v-model="idempotencyKey" type="text" :placeholder="t('page.gateway.page.placeholder.7915771597')" />
         </label>
         <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.1a70dec206')" />
-        <RawPayload :title="t('page.gateway.page.title.178eed6c71')" :data="actionResult || {}" />
+        <ObjectInspectorDrawer :title="t('page.gateway.page.title.178eed6c71')" :data="actionResult || {}" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="executions">
@@ -1344,7 +1185,7 @@ onMounted(refresh);
         <EvidenceTrace :items="gatewayEvidence" :title="t('page.gateway.page.title.abd0756c8f')" />
         <DetailDrawer :title="t('page.gateway.page.title.402c21482a')" :row="selectedDetail" @close="selectedDetail = null" />
         <RequestReceipt :receipt="actionResult" :title="t('page.gateway.page.title.21964d7bc6')" />
-        <RawPayload :title="t('page.gateway.page.title.18f4a5d2d9')" :data="actionResult || state.audit || {}" />
+        <ObjectInspectorDrawer :title="t('page.gateway.page.title.18f4a5d2d9')" :data="actionResult || state.audit || {}" />
       </section>
     </section>
   </section>

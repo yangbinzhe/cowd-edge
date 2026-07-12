@@ -5,6 +5,15 @@ export type NavId = 'chat' | 'mission' | 'runtime' | 'context' | 'reality' | 'me
 export type CompanionTab = 'activity' | 'thinking' | 'workspace' | 'evidence' | 'inspector';
 export type Tone = 'neutral' | 'info' | 'success' | 'warn' | 'danger';
 export type ChatDisplayMode = 'panorama' | 'clean';
+export type ApiReadStatus = 'ready' | 'offline' | 'forbidden' | 'not_found' | 'invalid_response' | 'server_error' | 'error' | 'stale';
+
+export interface ApiReadState {
+  __state?: ApiReadStatus;
+  __error?: string;
+  __http_status?: number;
+  __refreshed_at?: string;
+  __last_success_at?: string;
+}
 
 export interface NavItem {
   id: NavId;
@@ -115,7 +124,7 @@ export interface SessionTurnProjection {
     limit: number;
     has_more: boolean;
   };
-  __offline?: boolean;
+  __state?: ApiReadStatus;
   __error?: string;
 }
 
@@ -179,7 +188,7 @@ export interface GatewayCapabilityContract {
   capability_count: number;
   coverage: GatewayCapabilityCoverage;
   capabilities: GatewayCapability[];
-  __offline?: boolean;
+  __state?: ApiReadStatus;
   __error?: string;
 }
 
@@ -200,7 +209,7 @@ export interface GatewayOpenAiTools {
   source?: string;
   tool_count?: number;
   tools: GatewayOpenAiTool[];
-  __offline?: boolean;
+  __state?: ApiReadStatus;
   __error?: string;
 }
 

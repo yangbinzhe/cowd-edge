@@ -36,7 +36,7 @@ export function useEndpointState<T>(loader: () => Promise<T>, fallback: T) {
     try {
       const data: any = await loader();
       state.value.data = data;
-      state.value.offline = Boolean(data?.__offline);
+      state.value.offline = data?.__state === 'offline';
       state.value.degraded = Boolean(data?.degraded || data?.status === 'degraded');
       state.value.empty = countPayload(data) === 0;
       state.value.error = data?.__error || data?.error || '';

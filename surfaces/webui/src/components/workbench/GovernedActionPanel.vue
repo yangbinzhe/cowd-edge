@@ -43,10 +43,11 @@ const emit = defineEmits<{
 
 const mode = ref('plan');
 const payloadDraft = ref<Record<string, unknown>>({ ...(props.payload || {}) });
+const payloadSignature = computed(() => JSON.stringify(props.payload || {}));
 
-watch(() => props.payload, (value) => {
-  payloadDraft.value = { ...(value || {}) };
-}, { deep: true });
+watch(payloadSignature, () => {
+  payloadDraft.value = { ...(props.payload || {}) };
+});
 
 const capabilityRows = computed(() => [
   [t('component.workbench.governed.action.panel.field.validate'), props.contract.validate || t('status.notDeclared')],

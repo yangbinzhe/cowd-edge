@@ -136,7 +136,6 @@ const clientText = read(files.client);
 const pageText = read(files.page);
 const pageEvidenceText = renderablePageEvidence(pageText);
 const appText = read(files.app);
-const workflowStripText = read(files.workflowStrip);
 const capabilitiesText = read(files.capabilities);
 const stylesText = read(files.styles);
 const tuiPanelText = read(files.tuiPanel);
@@ -156,7 +155,7 @@ for (const section of requiredSections) {
 }
 if (!appText.includes("querySelectorAll<HTMLElement>('.main-surface [data-section]')")) failures.push('generic section visibility controller missing in App.vue');
 if (!appText.includes('panel.hidden = hidden')) failures.push('generic section visibility must use hidden attribute');
-if (!workflowStripText.includes('store.selectSection')) failures.push('WorkflowStrip must select active section before scrolling');
+if (fs.existsSync(files.workflowStrip)) failures.push('obsolete WorkflowStrip implementation must not remain active');
 if (stylesText.includes('data-active-section="registry"')) failures.push('legacy per-section CSS whitelist should not be restored');
 for (const heading of hasAll(pageEvidenceText, requiredHeadings)) failures.push(`ToolsPage missing heading ${heading}`);
 
@@ -167,16 +166,16 @@ const pageMustUse = [
   'api.runtimeTimeline(',
   '<DataTable',
   '<RequestReceipt',
-  '<RawPayload',
+  '<ObjectInspectorDrawer',
   'Preview mutation',
   'Apply transaction',
   'Run readonly batch',
 ];
 for (const item of hasAll(pageEvidenceText, pageMustUse)) failures.push(`ToolsPage missing implementation evidence ${item}`);
 
-const rawOnlyPattern = /data-section="(?:operations|mutations|checkpoints|cache|ledger)"[\s\S]{0,1200}<RawPayload[\s\S]{0,300}<\/section>/g;
+const rawOnlyPattern = /data-section="(?:operations|mutations|checkpoints|cache|ledger)"[\s\S]{0,1200}<ObjectInspectorDrawer[\s\S]{0,300}<\/section>/g;
 const rawOnlyMatches = Array.from(pageText.matchAll(rawOnlyPattern)).filter((match) => !/DataTable|RequestReceipt|EmptyState/.test(match[0]));
-if (rawOnlyMatches.length) failures.push('ToolsPage has a tool-ops section that appears to expose only RawPayload');
+if (rawOnlyMatches.length) failures.push('ToolsPage has a tool-ops section that appears to expose only an object inspector');
 
 if (!backendText.includes('is_webui_generic_tool_allowed')) failures.push('backend execute whitelist guard missing');
 if (!backendText.includes('validate_workspace_relative_path')) failures.push('backend workspace path guard missing');

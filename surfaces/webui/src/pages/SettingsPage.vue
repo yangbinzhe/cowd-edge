@@ -5,7 +5,6 @@ import { Moon, Plus, Shield, Sun, Trash2 } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { api } from '../api/client';
 import { useI18n, type Locale } from '../i18n';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
@@ -34,7 +33,7 @@ const accessModeLabels = {
 } as const;
 const accessModeCode = computed(() => {
   if (authResult.value?.valid || authResult.value?.auth_required === false) return 'internal';
-  if (authResult.value?.__offline) return 'offline';
+  if (authResult.value?.__state && authResult.value.__state !== 'ready') return authResult.value.__state;
   if (authResult.value?.error || authResult.value?.__error) return 'external';
   return 'sameOrigin';
 });
@@ -215,10 +214,7 @@ async function addProfile() {
   const name = profileName.value.trim();
   if (!name) return;
   await run('profile-create', async () => {
-    settingsReceipt.value = await api.writeReceipt('/api/profiles', {
-      method: 'POST',
-      body: JSON.stringify({ name }),
-    });
+    settingsReceipt.value = await api.createProfile(name);
     await store.refreshProfiles();
     profileName.value = '';
   });
@@ -247,10 +243,7 @@ async function saveDefaultModelGoverned(payload: Record<string, unknown> = {}) {
   const model = String(payload.model || defaultModel.value || configuredModel.value || '').trim();
   if (!model) return;
   await run('model-save', async () => {
-    settingsReceipt.value = await api.writeReceipt('/api/config', {
-      method: 'PUT',
-      body: JSON.stringify({ model }),
-    });
+    settingsReceipt.value = await api.updateRuntimeConfig({ model });
     defaultModel.value = model;
     await store.refreshRuntimeConfigProjection();
   });
@@ -282,10 +275,7 @@ async function previewApprovalGoverned(payload: Record<string, unknown> = {}) {
 async function saveApprovalGoverned(payload: Record<string, unknown> = {}) {
   await run('approval-save', async () => {
     const nextConfig = Object.keys(payload).length ? payload : JSON.parse(approvalDraft.value || '{}');
-    settingsReceipt.value = await api.writeReceipt('/api/approval/config', {
-      method: 'PUT',
-      body: JSON.stringify(nextConfig),
-    });
+    settingsReceipt.value = await api.updateApprovalConfig(nextConfig);
     store.approvalConfig = settingsReceipt.value?.data || nextConfig;
     approvalDraft.value = JSON.stringify(store.approvalConfig || nextConfig, null, 2);
   });
@@ -299,17 +289,14 @@ function updateSoloDraft(event: Event) {
 
 async function switchProfile(profile: string) {
   await run(`profile-${profile}`, async () => {
-    settingsReceipt.value = await api.writeReceipt('/api/profiles/switch', {
-      method: 'POST',
-      body: JSON.stringify({ profile }),
-    });
+    settingsReceipt.value = await api.switchProfile(profile);
     await store.refreshProfiles();
   });
 }
 
 async function deleteProfile(id: string) {
   await run(`delete-${id}`, async () => {
-    settingsReceipt.value = await api.writeReceipt(`/api/profiles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    settingsReceipt.value = await api.deleteProfile(id);
     await store.refreshProfiles();
   });
 }
@@ -423,7 +410,6 @@ function selectSettingsSection(id: string) {
     </header>
 
     <p v-if="settingsError" class="settings-alert">{{ settingsError }}</p>
-    <PrimaryContextBar :items="settingsContext" density="compact" :max-visible="4" />
 
     <div class="settings-workbench">
       <aside class="settings-nav" :aria-label="t('settings.nav.aria')">

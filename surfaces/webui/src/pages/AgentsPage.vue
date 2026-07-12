@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { GitBranch, Play, RefreshCw, Search, Trash2, Users } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { displayStatus } from '../i18n/domain/status';
 import { useAppStore } from '../stores/app';
 
@@ -142,7 +140,7 @@ async function refresh() {
     tasks.value = nextTasks;
     teamProfiles.value = nextProfiles;
     const executionId = nextRuns?.runs?.find((run: any) => run.graph_id)?.graph_id;
-    if (executionId) store.connectExecutionProjection(String(executionId));
+    if (executionId) store.connectExecutionProjection(String(executionId), 'full', 'agents');
     if (!selectedTaskId.value) {
       selectedTaskId.value = nextTasks?.current?.id || nextTasks?.tasks?.[0]?.id || '';
     }
@@ -162,7 +160,7 @@ async function loadGraph() {
   }
   graph.value = await api.taskAgentGraph(selectedTaskId.value);
   const executionId = graph.value?.execution_graph_id || graph.value?.graph_id || graph.value?.id;
-  if (executionId) store.connectExecutionProjection(String(executionId));
+  if (executionId) store.connectExecutionProjection(String(executionId), 'full', 'agents');
 }
 
 async function startTask() {
@@ -374,6 +372,7 @@ function selectTask(id: string) {
 }
 
 onMounted(refresh);
+onUnmounted(() => store.disconnectExecutionProjection('agents'));
 </script>
 
 <template>
@@ -390,8 +389,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="agentsContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="agentsWorkflow" :title="t('page.agents.page.title.01566a0372')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -438,7 +435,7 @@ onMounted(refresh);
         <button class="primary-action" type="button" @click="discoverAgents">{{ t('page.agents.page.text.961a6c8625') }}</button>
         <DataTable v-if="discoveredRows.length" searchable copyable row-key="agent_id" :rows="discoveredRows" :columns="['agent_id', 'role', 'reputation', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.agents.page.title.1f579ef765')" :detail="t('page.agents.page.detail.eb533ab1ab')" />
-        <RawPayload :title="t('page.agents.page.title.425652af9a')" :data="discovery.team || {}" />
+        <ObjectInspectorDrawer :title="t('page.agents.page.title.425652af9a')" :data="discovery.team || {}" />
         <DataTable v-if="reputationRows.length" searchable copyable row-key="agent_id" :rows="reputationRows" :columns="['agent_id', 'reputation', 'status']" @row-click="selectedDetail = $event" />
       </section>
 
@@ -633,10 +630,10 @@ onMounted(refresh);
           <h2>{{ t('page.agents.page.text.e8aa236684') }}</h2>
           <span>{{ formatCount('graphs', runItems.length) }}</span>
         </header>
-        <RawPayload :title="t('page.agents.page.title.3606e135fe')" :data="runs" />
+        <ObjectInspectorDrawer :title="t('page.agents.page.title.3606e135fe')" :data="runs" />
         <DetailDrawer :title="t('page.agents.page.title.c74579aea5')" :row="selectedDetail" @close="selectedDetail = null" />
         <RequestReceipt :receipt="actionResult || profileResult" :title="t('page.agents.page.title.6cf3650bd1')" />
-        <RawPayload :title="t('page.agents.page.title.fe453c49db')" :data="actionResult || graph" />
+        <ObjectInspectorDrawer :title="t('page.agents.page.title.fe453c49db')" :data="actionResult || graph" />
       </section>
     </section>
   </section>

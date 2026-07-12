@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
 import { displayStatus } from '../../i18n/domain/status';
+import type { ApiReadStatus } from '../../types';
 
 const props = withDefaults(defineProps<{
-  status?: 'ready' | 'empty' | 'offline' | 'error' | 'degraded' | 'unsupported' | 'loading';
+  status?: ApiReadStatus | 'empty' | 'degraded' | 'unsupported' | 'loading';
   title?: string;
   detail?: string;
   endpoint?: string;

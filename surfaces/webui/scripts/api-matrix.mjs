@@ -64,16 +64,16 @@ const criticalMethods = {
   matrixSourcePackUpsert: { criticality: 'p0', page: 'gateway' },
   matrixSourceSnapshotPlan: { criticality: 'p0', page: 'gateway' },
   matrixSourceSnapshotRun: { criticality: 'p0', page: 'gateway' },
-  mfgSourcePackUpsert: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgIngestFact: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgEntityUpsert: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgRelationUpsert: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgComputeJobRun: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgSeedDomain: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgSeedOntology: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgExecuteAction: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgExecutionBridge: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
-  mfgRetryReportDelivery: { criticality: 'p0', page: 'mfg', quarantineRequired: true },
+  mfgSourcePackUpsert: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgIngestFact: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgEntityUpsert: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgRelationUpsert: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgComputeJobRun: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgSeedDomain: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgSeedOntology: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgExecuteAction: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgExecutionBridge: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgRetryReportDelivery: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
 };
 
 function read(file) {
@@ -128,7 +128,7 @@ function extractClientMethods() {
       operation: inferMethod(body) === 'GET' ? 'read' : 'write',
       criticality: criticalMethods[name]?.criticality || 'p2',
       page: criticalMethods[name]?.page || inferPage(name, route),
-      quarantine_required: Boolean(criticalMethods[name]?.quarantineRequired),
+      governed_receipt_required: Boolean(criticalMethods[name]?.governedReceiptRequired),
     });
   }
   return entries;
@@ -231,11 +231,11 @@ function routeMatches(entry, route) {
   return a.every((part, index) => part === b[index] || part === ':param' || b[index] === ':param');
 }
 
-function hasQuarantineEvidence(entry) {
-  if (!entry.quarantine_required) return true;
+function hasGovernedReceiptEvidence(entry) {
+  if (!entry.governed_receipt_required) return true;
   const mfgPath = path.join(webuiRoot, 'src/pages/MfgPage.vue');
   const text = read(mfgPath);
-  return text.includes(`data-mfg-risk="${entry.client_method}"`) && text.includes('mfg-live-quarantined');
+  return text.includes(`data-mfg-risk="${entry.client_method}"`) && text.includes('mfg-governed-action');
 }
 
 const clientEntries = extractClientMethods();
@@ -256,7 +256,7 @@ const entries = clientEntries.map((entry) => {
     has_backend_route: matchedRoutes.length > 0,
     has_frontend_test: testFiles.length > 0,
     test_files: testFiles,
-    quarantine_ok: hasQuarantineEvidence(entry),
+    governed_receipt_ok: hasGovernedReceiptEvidence(entry),
   };
 });
 
@@ -267,7 +267,7 @@ for (const entry of entries.filter((item) => item.has_ui_call)) {
 for (const entry of entries.filter((item) => item.criticality === 'p0' || item.criticality === 'p1')) {
   if (!entry.has_ui_call) blocking.push(`${entry.client_method}: missing UI call`);
   if (entry.operation === 'write' && !entry.has_frontend_test) blocking.push(`${entry.client_method}: missing frontend request test`);
-  if (entry.quarantine_required && !entry.quarantine_ok) blocking.push(`${entry.client_method}: missing MFG temporary quarantine evidence`);
+  if (entry.governed_receipt_required && !entry.governed_receipt_ok) blocking.push(`${entry.client_method}: missing MFG governed receipt evidence`);
 }
 
 const requiredFindings = [];

@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import TimelineList from '../components/workbench/TimelineList.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
@@ -26,9 +24,6 @@ const runtimeSnapshot = ref<any>({});
 const sourceAudit = ref<any>({});
 const sourceRepairPlan = ref<any>({});
 const runtimeTurns = ref<any>({});
-const missionProjection = ref<any>({});
-const missionApprovals = ref<any>({});
-const missionRelations = ref<any>({});
 const effectiveConfig = ref<any>({});
 const leases = ref<any>({});
 const approvals = ref<any>([]);
@@ -37,7 +32,6 @@ const tasks = ref<any>({});
 const growthStatus = ref<any>({});
 const growthEvents = ref<any>({});
 const actionResult = ref<any>(null);
-const selectedExecutionId = ref('');
 const leaseOwner = ref('webui');
 const leaseMode = ref('shared');
 const turnPrompt = ref('Summarize current runtime state and blockers');
@@ -51,63 +45,6 @@ const configReloadRestartFields = computed(() => {
 });
 const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.status || 'unknown'));
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
-const missionControlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
-const mission = computed(() => missionControlProjection.value?.mission || {});
-const executionGraphs = computed(() => {
-  const projection = missionControlProjection.value?.execution_graphs || mission.value?.execution_graph_projection || {};
-  const entries = projection?.execution_graphs || [];
-  return Array.isArray(entries)
-    ? entries.map((entry: any) => ({
-      id: String(entry.execution_graph_id || entry.graph_id || entry.id || ''),
-      session: String(entry.session_id || '-'),
-      status: String(entry.status || '-'),
-      objective: String(entry.objective || entry.summary || '-'),
-    })).filter((entry: any) => entry.id)
-    : [];
-});
-const selectedExecution = computed(() => selectedExecutionId.value || executionGraphs.value[0]?.id || '');
-const executionProjection = computed(() => {
-  const projection = store.currentExecutionProjection;
-  return projection?.execution_id === selectedExecution.value ? projection : null;
-});
-const executionNodeRows = computed(() => {
-  const nodes = executionProjection.value?.graph?.nodes;
-  return Array.isArray(nodes) ? nodes.map((node: any) => ({
-    id: node.node_id || node.id || '-',
-    kind: node.kind || '-',
-    status: node.status || '-',
-    executor: node.executor_kind || '-',
-    evidence: Array.isArray(node.evidence_refs) ? node.evidence_refs.length : 0,
-  })) : [];
-});
-const childExecutionRows = computed(() => {
-  const children = executionProjection.value?.child_executions;
-  return Array.isArray(children) ? children.map((child: any) => ({
-    id: child.execution_id || '-',
-    parent: child.parent_execution_id || '-',
-    node: child.parent_node_id || '-',
-    status: child.status || '-',
-    objective: child.objective || '-',
-  })) : [];
-});
-const executionCommandRows = computed(() => executionProjection.value?.available_commands || []);
-const missionSessions = computed(() => Array.isArray(mission.value?.sessions) ? mission.value.sessions : []);
-const missionEvents = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
-const missionApprovalProjection = computed(() => mission.value?.approval_projection || missionApprovals.value?.approvals || {});
-const missionRelationProjection = computed(() => mission.value?.relation_projection || missionRelations.value?.relations || {});
-const missionSessionRows = computed(() => missionSessions.value.slice(0, 12).map((session: any) => ({
-  id: session.session_id || session.id || '-',
-  title: session.title || session.session_id || '-',
-  status: session.status || '-',
-  teams: Array.isArray(session.active_team_ids) ? session.active_team_ids.length : 0,
-  agents: Array.isArray(session.active_agent_ids) ? session.active_agent_ids.length : 0,
-})));
-const missionEventRows = computed(() => missionEvents.value.slice(0, 10).map((event: any) => ({
-  sequence: event.sequence ?? '-',
-  type: event.event_type || event.kind || event.type || '-',
-  session: event.session_id || '-',
-  message: event.message || event.summary || '-',
-})));
 const timelineRows = computed(() => (Array.isArray(timeline.value?.events) ? timeline.value.events : []).slice(0, 16).map((event: any) => ({
   sequence: event.sequence ?? event.id ?? '-',
   scope: event.scope || event.kind || event.type || '-',
@@ -153,21 +90,6 @@ const growthSources = computed(() => {
   if (Array.isArray(sources)) return sources.length;
   return sources && typeof sources === 'object' ? Object.keys(sources).length : 0;
 });
-const runtimeContext = computed(() => [
-  { label: t('script.pages.runtimepage.label.f7f1997c6c'), value: sessionId.value },
-  { label: t('script.pages.runtimepage.label.68c2cc7f0c'), value: controlPlane.value.configured_model || effectiveConfig.value?.model || 'unresolved' },
-  { label: t('script.pages.runtimepage.label.7ceee3f361'), value: controlPlane.value.provider_count ?? 0, tone: controlPlane.value.provider_count ? 'success' : 'warn' },
-  { label: t('config.reload.label'), value: configReloadStatusLabel.value, tone: store.configReloadAttention ? 'warn' : 'success' },
-]);
-const runtimeWorkflow = computed(() => [
-  { id: 'overview', label: t('script.pages.runtimepage.label.8851142da5'), status: controlPlane.value.degraded ? 'degraded' : 'ready', count: controlPlane.value.provider_count ?? 0, description: 'providers' },
-  { id: 'runs', label: t('script.pages.runtimepage.label.b24ef8c7cc'), status: leases.value?.__offline ? 'blocked' : 'ready', count: Array.isArray(leases.value?.leases) ? leases.value.leases.length : 0 },
-  { id: 'runs', label: t('script.pages.runtimepage.label.368e8081b7'), status: turnRows.value.length ? 'active' : 'idle', count: turnRows.value.length },
-  { id: 'mission', label: t('script.pages.runtimepage.label.e4698d4cea'), status: missionSessions.value.length ? 'ready' : 'idle', count: missionSessions.value.length },
-  { id: 'timeline', label: t('script.pages.runtimepage.label.018514a3d5'), status: timelineRows.value.length ? 'ready' : 'idle', count: timelineRows.value.length },
-  { id: 'policy', label: t('script.pages.runtimepage.label.8cc047ac17'), status: approvalItems.value.length ? 'blocked' : 'ready', count: approvalItems.value.length },
-  { id: 'growth', label: t('script.pages.runtimepage.label.f3b21e049f'), status: growthPromotionRows.value.length ? 'done' : 'idle', count: growthEventRows.value.length },
-]);
 const runtimeEvidence = computed(() => [
   ...timelineRows.value.slice(0, 5).map((row: any) => ({
     id: String(row.sequence || ''),
@@ -234,9 +156,6 @@ async function refresh() {
       nextSourceAudit,
       nextRepairPlan,
       nextTurns,
-      nextMission,
-      nextMissionApprovals,
-      nextMissionRelations,
       nextConfig,
       nextLeases,
       nextApprovals,
@@ -252,9 +171,6 @@ async function refresh() {
       api.runtimeSourceAudit(),
       api.runtimeSourceRepairPlan(),
       api.runtimeTurns(),
-      api.missionControl(),
-      api.missionApprovals(),
-      api.missionRelations(),
       api.effectiveConfig(),
       api.runtimeSessionLeases(),
       api.approvalPending(),
@@ -270,9 +186,6 @@ async function refresh() {
     sourceAudit.value = nextSourceAudit;
     sourceRepairPlan.value = nextRepairPlan;
     runtimeTurns.value = nextTurns;
-    missionProjection.value = nextMission;
-    missionApprovals.value = nextMissionApprovals;
-    missionRelations.value = nextMissionRelations;
     effectiveConfig.value = nextConfig;
     leases.value = nextLeases;
     approvals.value = nextApprovals;
@@ -282,8 +195,6 @@ async function refresh() {
     growthEvents.value = nextGrowthEvents;
     store.configReloadStatus = nextReloadStatus;
     selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
-    if (!selectedExecutionId.value && executionGraphs.value[0]?.id) selectedExecutionId.value = executionGraphs.value[0].id;
-    if (selectedExecution.value) store.connectExecutionProjection(selectedExecution.value);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -326,27 +237,7 @@ async function respondApproval(id: string, approved: boolean) {
   await refresh();
 }
 
-function selectExecution(executionId: string) {
-  selectedExecutionId.value = executionId;
-  store.connectExecutionProjection(executionId);
-}
-
-async function executeProjectionCommand(command: string) {
-  actionResult.value = await store.executeExecutionProjectionCommand(command);
-}
-
-function executionCommandLabel(command: string) {
-  const labels: Record<string, string> = {
-    pause: t('runtime.execution.command.pause'),
-    resume: t('runtime.execution.command.resume'),
-    cancel: t('runtime.execution.command.cancel'),
-    replan: t('runtime.execution.command.replan'),
-  };
-  return labels[command] || command;
-}
-
 onMounted(refresh);
-onUnmounted(() => store.disconnectExecutionProjection());
 </script>
 
 <template>
@@ -363,8 +254,6 @@ onUnmounted(() => store.disconnectExecutionProjection());
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="runtimeContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="runtimeWorkflow" :title="t('page.runtime.page.title.cd537a35f0')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card">
@@ -381,16 +270,6 @@ onUnmounted(() => store.disconnectExecutionProjection());
         <span>{{ t('page.runtime.page.text.8ee2353a6b') }}</span>
         <strong>{{ approvalItems.length }}</strong>
         <small>{{ taskRows.length }} visible tasks</small>
-      </article>
-      <article class="metric-card" data-tone="info">
-        <span>{{ t('page.runtime.page.text.6cf339578a') }}</span>
-        <strong>{{ missionSessions.length }}</strong>
-        <small>{{ mission.active_session_id || t('page.runtime.page.inline.9e652504d9') }}</small>
-      </article>
-      <article class="metric-card" data-tone="warning">
-        <span>{{ t('page.runtime.page.text.188d0073a9') }}</span>
-        <strong>{{ growthStatus.event_count ?? growthEventRows.length }}</strong>
-        <small>{{ formatCount('promotions', growthStatus.promotion_count ?? growthPromotionRows.length) }}</small>
       </article>
       <article class="metric-card" :data-tone="store.configReloadInvalid ? 'danger' : (store.configReloadNeedsRestart ? 'warn' : 'success')">
         <span>{{ t('config.reload.label') }}</span>
@@ -423,16 +302,16 @@ onUnmounted(() => store.disconnectExecutionProjection());
           <dt>{{ t('config.reload.restartRequired') }}</dt>
           <dd>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : t('config.reload.no') }}</dd>
         </dl>
-        <RawPayload :title="t('page.runtime.page.title.bd73a88559')" :data="effectiveConfig" />
-        <RawPayload :title="t('config.reload.statusTitle')" :data="configReloadStatus" />
-        <RawPayload :title="t('page.runtime.page.title.c86b8b732a')" :data="runtimeStatus" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.bd73a88559')" :data="effectiveConfig" />
+        <ObjectInspectorDrawer :title="t('config.reload.statusTitle')" :data="configReloadStatus" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.c86b8b732a')" :data="runtimeStatus" />
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.d71a6eb85e')" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="overview">
         <header>
           <h2>{{ t('page.runtime.page.text.73dcc03517') }}</h2>
-          <StatusPill :status="sourceAudit.__offline || runtimeSnapshot.__offline ? 'offline' : (sourceAudit.report?.ok === false ? 'degraded' : 'ready')" />
+          <StatusPill :status="sourceAudit.__state && sourceAudit.__state !== 'ready' ? sourceAudit.__state : (runtimeSnapshot.__state && runtimeSnapshot.__state !== 'ready' ? runtimeSnapshot.__state : (sourceAudit.report?.ok === false ? 'degraded' : 'ready'))" />
         </header>
         <dl class="detail-list">
           <dt>{{ t('page.runtime.page.text.2076b210ae') }}</dt>
@@ -442,84 +321,17 @@ onUnmounted(() => store.disconnectExecutionProjection());
           <dt>{{ t('page.runtime.page.text.27a30f378f') }}</dt>
           <dd>{{ sourceRepairPlan.repair_plan?.length || 0 }}</dd>
         </dl>
-        <RawPayload :title="t('page.runtime.page.title.1d53dbce6a')" :data="runtimeSnapshot" />
-        <RawPayload :title="t('page.runtime.page.title.79e8d02599')" :data="{ audit: sourceAudit, repair: sourceRepairPlan }" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.1d53dbce6a')" :data="runtimeSnapshot" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.79e8d02599')" :data="{ audit: sourceAudit, repair: sourceRepairPlan }" />
       </section>
 
-      <section class="management-panel runtime-panel wide" data-section="mission">
+      <section class="management-panel runtime-panel wide" data-section="mission-link">
         <header>
-          <h2>{{ t('page.runtime.page.text.9ad26584ae') }}</h2>
-          <StatusPill :status="missionProjection.__offline ? 'offline' : (missionSessions.length ? 'ready' : 'idle')" />
+          <h2>{{ t('runtime.missionLink.title') }}</h2>
+          <StatusPill status="ready" />
         </header>
-        <dl class="detail-list">
-          <dt>{{ t('page.runtime.page.text.8c9939cab6') }}</dt>
-          <dd>{{ mission.active_session_id || '-' }}</dd>
-          <dt>{{ t('page.runtime.page.text.e7346c0efc') }}</dt>
-          <dd>{{ missionSessions.length }}</dd>
-          <dt>{{ t('page.runtime.page.text.8ee2353a6b') }}</dt>
-          <dd>{{ missionApprovalProjection.pending_count ?? 0 }}</dd>
-          <dt>{{ t('page.runtime.page.text.74b4efa226') }}</dt>
-          <dd>{{ missionRelationProjection.relation_count ?? 0 }}</dd>
-        </dl>
-        <DataTable v-if="missionSessionRows.length" :rows="missionSessionRows" :columns="['id', 'title', 'status', 'teams', 'agents']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else :title="t('page.runtime.page.title.764ff57548')" :detail="t('page.runtime.page.detail.d92a88eb8c')" />
-        <DataTable v-if="missionEventRows.length" :rows="missionEventRows" :columns="['sequence', 'type', 'session', 'message']" @row-click="selectedDetail = $event" />
-        <RawPayload :title="t('page.runtime.page.title.c172d5cfe2')" :data="{ projection: missionProjection, approvals: missionApprovals, relations: missionRelations }" />
-      </section>
-
-      <section class="management-panel runtime-panel wide" data-section="execution-projection">
-        <header>
-          <h2>{{ t('runtime.execution.title') }}</h2>
-          <StatusPill :status="executionProjection ? 'ready' : 'idle'" />
-        </header>
-        <div v-if="executionGraphs.length" class="button-row execution-selector" role="list" :aria-label="t('runtime.execution.selector')">
-          <button
-            v-for="entry in executionGraphs"
-            :key="entry.id"
-            type="button"
-            class="ghost-action"
-            :class="{ active: selectedExecution === entry.id }"
-            @click="selectExecution(entry.id)"
-          >
-            {{ entry.objective }} · {{ entry.status }}
-          </button>
-        </div>
-        <EmptyState v-if="!executionGraphs.length" :title="t('runtime.execution.emptyTitle')" :detail="t('runtime.execution.emptyDetail')" />
-        <template v-else-if="executionProjection">
-          <dl class="detail-list">
-            <dt>{{ t('runtime.execution.graph') }}</dt>
-            <dd>{{ executionProjection.execution_id }}</dd>
-            <dt>{{ t('runtime.execution.revision') }}</dt>
-            <dd>{{ executionProjection.revision }}</dd>
-            <dt>{{ t('runtime.execution.cursor') }}</dt>
-            <dd>{{ executionProjection.cursor }}</dd>
-            <dt>{{ t('runtime.execution.strategy') }}</dt>
-            <dd>{{ executionProjection.strategy?.summary || '-' }}</dd>
-            <dt>{{ t('runtime.execution.scope') }}</dt>
-            <dd>{{ executionProjection.session_id || '-' }}</dd>
-          </dl>
-          <div class="button-row" v-if="executionCommandRows.length">
-            <button
-              v-for="command in executionCommandRows"
-              :key="command.command"
-              type="button"
-              class="ghost-action"
-              :disabled="!command.available"
-              @click="executeProjectionCommand(command.command)"
-            >
-              {{ executionCommandLabel(command.command) }}
-            </button>
-          </div>
-          <DataTable v-if="executionNodeRows.length" :rows="executionNodeRows" :columns="['id', 'kind', 'status', 'executor', 'evidence']" @row-click="selectedDetail = $event" />
-          <DataTable v-if="childExecutionRows.length" :rows="childExecutionRows" :columns="['id', 'parent', 'node', 'status', 'objective']" @row-click="selectedDetail = $event" />
-          <div class="metric-row compact-metric-row">
-            <article class="metric-card"><span>{{ t('runtime.execution.goals') }}</span><strong>{{ executionProjection.goals.length }}</strong></article>
-            <article class="metric-card"><span>{{ t('runtime.execution.agents') }}</span><strong>{{ executionProjection.agents.length }}</strong></article>
-            <article class="metric-card"><span>{{ t('runtime.execution.teams') }}</span><strong>{{ executionProjection.teams.length }}</strong></article>
-            <article class="metric-card"><span>{{ t('runtime.execution.children') }}</span><strong>{{ childExecutionRows.length }}</strong></article>
-            <article class="metric-card"><span>{{ t('runtime.execution.approvals') }}</span><strong>{{ executionProjection.approvals.length }}</strong></article>
-          </div>
-        </template>
+        <p class="panel-note">{{ t('runtime.missionLink.detail') }}</p>
+        <a class="primary-action" href="#/mission">{{ t('runtime.missionLink.action') }}</a>
       </section>
 
       <section class="management-panel runtime-panel" data-section="runs">
@@ -543,7 +355,7 @@ onUnmounted(() => store.disconnectExecutionProjection());
           <button class="ghost-action" type="button" @click="releaseLease">{{ t('page.runtime.page.text.3e1c429858') }}</button>
         </div>
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.e757994218')" />
-        <RawPayload :title="t('page.runtime.page.title.e86490ec1d')" :data="leases" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.e86490ec1d')" :data="leases" />
       </section>
 
       <section class="management-panel runtime-panel" data-section="policy">
@@ -571,7 +383,7 @@ onUnmounted(() => store.disconnectExecutionProjection());
       <section class="management-panel runtime-panel" data-section="timeline">
         <header>
           <h2>{{ t('page.runtime.page.text.f3558aafc0') }}</h2>
-          <StatusPill :status="timeline.__offline ? 'offline' : 'ready'" />
+          <StatusPill :status="timeline.__state || 'ready'" />
         </header>
         <TimelineList v-if="timelineListItems.length" :items="timelineListItems" />
         <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'detail']" @row-click="selectedDetail = $event" />
@@ -585,7 +397,7 @@ onUnmounted(() => store.disconnectExecutionProjection());
         </header>
         <DataTable v-if="taskRows.length" :rows="taskRows" :columns="['id', 'status', 'objective', 'current_phase', 'failures']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.c3b49b1801')" :detail="t('page.runtime.page.detail.bb56d607f9')" />
-        <RawPayload :title="t('page.runtime.page.title.09aeda5ef4')" :data="controlPlane" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.09aeda5ef4')" :data="controlPlane" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="runs">
@@ -609,7 +421,7 @@ onUnmounted(() => store.disconnectExecutionProjection());
         <DataTable v-if="turnRows.length" :rows="turnRows" :columns="['id', 'status', 'session', 'task', 'prompt']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.3d05bab814')" :detail="t('page.runtime.page.detail.334c21b2ac')" />
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.42c676123b')" />
-        <RawPayload :title="t('page.runtime.page.title.0d53bacfd6')" :data="runtimeTurns" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.0d53bacfd6')" :data="runtimeTurns" />
       </section>
 
       <section class="management-panel runtime-panel wide" data-section="growth">
@@ -617,7 +429,7 @@ onUnmounted(() => store.disconnectExecutionProjection());
           <h2>{{ t('page.runtime.page.text.996c9d7071') }}</h2>
           <div class="button-row">
             <RouterLink class="ghost-action" :to="`/reality?section=fact-flow&session_id=${encodeURIComponent(sessionId)}`">{{ t('page.runtime.page.text.f381fb2c63') }}</RouterLink>
-            <StatusPill :status="growthStatus.__offline || growthEvents.__offline ? 'offline' : 'ready'" />
+            <StatusPill :status="growthStatus.__state && growthStatus.__state !== 'ready' ? growthStatus.__state : (growthEvents.__state && growthEvents.__state !== 'ready' ? growthEvents.__state : 'ready')" />
           </div>
         </header>
         <dl class="detail-list">
@@ -628,7 +440,7 @@ onUnmounted(() => store.disconnectExecutionProjection());
           <dt>{{ t('page.runtime.page.text.c247c75434') }}</dt>
           <dd>{{ growthSources }}</dd>
           <dt>{{ t('page.runtime.page.text.1debc04086') }}</dt>
-          <dd>{{ growthStatus.status ? displayStatus(growthStatus.status) : (growthStatus.__offline ? t('page.runtime.page.inline.461aa94b0c') : t('page.runtime.page.inline.a6b1ab29de')) }}</dd>
+          <dd>{{ growthStatus.status ? displayStatus(growthStatus.status) : (growthStatus.__state && growthStatus.__state !== 'ready' ? t('page.runtime.page.inline.461aa94b0c') : t('page.runtime.page.inline.a6b1ab29de')) }}</dd>
         </dl>
         <DataTable v-if="growthEventRows.length" :rows="growthEventRows" :columns="['id', 'source', 'mode', 'risk', 'at']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.78769f1c69')" :detail="t('page.runtime.page.detail.340bd22f56')" />
@@ -636,7 +448,7 @@ onUnmounted(() => store.disconnectExecutionProjection());
         <EmptyState v-else :title="t('page.runtime.page.title.f57369a2f0')" :detail="t('page.runtime.page.detail.9cf299404f')" />
         <EvidenceTrace :items="runtimeEvidence" :title="t('page.runtime.page.title.ba93e308cd')" />
         <EvidenceObjectDetail :title="t('page.runtime.page.title.03bcf82613')" :evidence="selectedEvidence" @close="selectedDetail = null" />
-        <RawPayload :title="t('page.runtime.page.title.0889c4b92a')" :data="{ status: growthStatus, events: growthEvents }" />
+        <ObjectInspectorDrawer :title="t('page.runtime.page.title.0889c4b92a')" :data="{ status: growthStatus, events: growthEvents }" />
       </section>
     </section>
   </section>

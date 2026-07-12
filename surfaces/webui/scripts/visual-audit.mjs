@@ -20,6 +20,7 @@ const routes = [
   { id: 'reality', path: '/#/reality' },
   { id: 'skills', path: '/#/skills' },
   { id: 'agents', path: '/#/agents' },
+  { id: 'tools', path: '/#/tools' },
   { id: 'surfaces', path: '/#/surfaces' },
   { id: 'gateway', path: '/#/gateway' },
   { id: 'mfg', path: '/#/apps/mfg' },
@@ -180,8 +181,15 @@ try {
           ].map((selector) => rectOf(selector)).filter((rect) => rect.visible && rect.top < window.innerHeight);
           const visibleControls = Array.from(document.querySelectorAll('button, a, input, select, textarea'))
             .filter((element) => visible(element) && element.getBoundingClientRect().top < window.innerHeight);
+          const touchTargetRect = (element) => {
+            if (element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) {
+              const label = element.closest('label') || document.querySelector(`label[for="${element.id}"]`);
+              if (label && visible(label)) return label.getBoundingClientRect();
+            }
+            return element.getBoundingClientRect();
+          };
           const smallTouchTargetCount = visibleControls.filter((element) => {
-            const rect = element.getBoundingClientRect();
+            const rect = touchTargetRect(element);
             return rect.width < 44 || rect.height < 44;
           }).length;
           const unlabeledIconButtons = Array.from(document.querySelectorAll('button.icon-action'))

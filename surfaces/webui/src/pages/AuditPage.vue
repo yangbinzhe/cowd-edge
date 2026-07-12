@@ -5,12 +5,10 @@ import { RefreshCw } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
-import RawPayload from '../components/workbench/RawPayload.vue';
+import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
-import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
-import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 
@@ -36,6 +34,8 @@ const evalBudget = ref('low');
 const evalAllowRealModel = ref(false);
 const evolutionActionResult = ref<any>(null);
 const evolutionDraft = ref<any>(null);
+const selectedEvolutionProposalId = ref('');
+const selectedEvolutionCandidateId = ref('');
 
 function items(collection: any, key: string) {
   return Array.isArray(collection?.[key]) ? collection[key] : Array.isArray(collection) ? collection : [];
@@ -241,6 +241,8 @@ const evolutionCandidateRows = computed(() => evolutionCandidates.value.slice(0,
   gates: Array.isArray(candidate.adoption_gate) ? candidate.adoption_gate.length : 0,
   modified: candidate.mainline_modified ? 'yes' : 'no',
 })));
+const selectedEvolutionProposal = computed(() => evolutionProposalRows.value.find((row: any) => row.id === selectedEvolutionProposalId.value) || null);
+const selectedEvolutionCandidate = computed(() => evolutionCandidateRows.value.find((row: any) => row.id === selectedEvolutionCandidateId.value) || null);
 const evolutionSandboxRows = computed(() => evolutionSandboxEvals.value.slice(0, 10).map((item: any) => ({
   id: item.eval_id,
   candidate_id: item.candidate_id || '-',
@@ -468,7 +470,13 @@ async function createEvolutionDiagnosis() {
 async function openEvolutionDraft(row: Record<string, unknown>) {
   const id = String(row.id || '');
   if (!id) return;
+  selectedEvolutionProposalId.value = id;
   evolutionDraft.value = await api.evolutionSkillDraft(id);
+}
+
+function selectEvolutionCandidate(row: Record<string, unknown>) {
+  selectedEvolutionCandidateId.value = String(row.id || '');
+  selectedDetail.value = { ...row, source: 'evolution.candidate', evidence: row.id, status: row.status };
 }
 
 async function runEvolutionSandbox(row: Record<string, unknown>) {
@@ -535,8 +543,6 @@ onMounted(refresh);
     </header>
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
-    <PrimaryContextBar :items="auditContext" density="compact" :max-visible="4" />
-    <WorkflowStrip :steps="auditWorkflow" :title="t('page.audit.page.title.79a1baef6a')" density="compact" />
 
     <section class="metric-row">
       <article class="metric-card" data-tone="info">
@@ -743,7 +749,7 @@ onMounted(refresh);
           <DataTable v-if="evalReportGateItems.length" searchable copyable :rows="evalReportGateItems" :columns="['name', 'status', 'required', 'evidence', 'repair_hint']" row-key="name" />
           <DataTable v-if="evalProviderRounds.length" searchable copyable :rows="evalProviderRounds" :columns="['round_index', 'name', 'model', 'status', 'elapsed_ms', 'text_delta_count', 'tool_use_count', 'request_summary', 'response_summary', 'detail_path']" row-key="detail_path" />
           <DataTable v-if="evalArtifactRows.length" searchable copyable :rows="evalArtifactRows" :columns="['index', 'path']" row-key="path" />
-          <RawPayload :title="t('page.audit.page.title.052bb3b0c7')" :data="evalReportDetail" />
+          <ObjectInspectorDrawer :title="t('page.audit.page.title.052bb3b0c7')" :data="evalReportDetail" />
         </section>
       </section>
 
@@ -816,23 +822,23 @@ onMounted(refresh);
         <DataTable v-if="evolutionMissionRows.length" searchable copyable :rows="evolutionMissionRows" :columns="['id', 'status', 'owner', 'goals', 'signals', 'proposals', 'candidates']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.mission', evidence: $event.id, status: $event.status }" />
         <DataTable v-if="evolutionProposalRows.length" searchable copyable :rows="evolutionProposalRows" :columns="['id', 'kind', 'diagnosis', 'owner', 'status', 'risk', 'approval', 'benefit']" row-key="id" @row-click="openEvolutionDraft" />
         <div v-if="evolutionProposalRows.length" class="button-row">
-          <button class="ghost-action" type="button" @click="createEvolutionCandidate(evolutionProposalRows[0])">{{ t('page.audit.evolution.createCandidate') }}</button>
-          <button class="ghost-action" type="button" @click="decideEvolutionProposal(evolutionProposalRows[0], 'approved')">{{ t('page.audit.evolution.approve') }}</button>
-          <button class="ghost-action" type="button" @click="decideEvolutionProposal(evolutionProposalRows[0], 'archived')">{{ t('page.audit.evolution.archive') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal" @click="selectedEvolutionProposal && createEvolutionCandidate(selectedEvolutionProposal)">{{ t('page.audit.evolution.createCandidate') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal" @click="selectedEvolutionProposal && decideEvolutionProposal(selectedEvolutionProposal, 'approved')">{{ t('page.audit.evolution.approve') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal" @click="selectedEvolutionProposal && decideEvolutionProposal(selectedEvolutionProposal, 'archived')">{{ t('page.audit.evolution.archive') }}</button>
         </div>
-        <DataTable v-if="evolutionCandidateRows.length" searchable copyable :rows="evolutionCandidateRows" :columns="['id', 'proposal', 'kind', 'status', 'baseline', 'candidate', 'gates', 'modified']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.candidate', evidence: $event.id, status: $event.status }" />
+        <DataTable v-if="evolutionCandidateRows.length" searchable copyable :rows="evolutionCandidateRows" :columns="['id', 'proposal', 'kind', 'status', 'baseline', 'candidate', 'gates', 'modified']" row-key="id" @row-click="selectEvolutionCandidate" />
         <div v-if="evolutionCandidateRows.length" class="button-row">
-          <button class="ghost-action" type="button" @click="runEvolutionSandbox(evolutionCandidateRows[0])">{{ t('page.audit.evolution.runSandbox') }}</button>
-          <button class="ghost-action" type="button" @click="evaluateEvolutionCandidate(evolutionCandidateRows[0])">{{ t('page.audit.evolution.evaluateCandidate') }}</button>
-          <button class="ghost-action" type="button" @click="promoteEvolutionCandidate(evolutionCandidateRows[0])">{{ t('page.audit.evolution.promoteCandidate') }}</button>
-          <button class="ghost-action" type="button" @click="decideEvolutionCandidate(evolutionCandidateRows[0], 'approved_for_adoption')">{{ t('page.audit.evolution.adoptCandidate') }}</button>
-          <button class="ghost-action" type="button" @click="decideEvolutionCandidate(evolutionCandidateRows[0], 'archived')">{{ t('page.audit.evolution.archive') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate" @click="selectedEvolutionCandidate && runEvolutionSandbox(selectedEvolutionCandidate)">{{ t('page.audit.evolution.runSandbox') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate" @click="selectedEvolutionCandidate && evaluateEvolutionCandidate(selectedEvolutionCandidate)">{{ t('page.audit.evolution.evaluateCandidate') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate" @click="selectedEvolutionCandidate && promoteEvolutionCandidate(selectedEvolutionCandidate)">{{ t('page.audit.evolution.promoteCandidate') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate" @click="selectedEvolutionCandidate && decideEvolutionCandidate(selectedEvolutionCandidate, 'approved_for_adoption')">{{ t('page.audit.evolution.adoptCandidate') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate" @click="selectedEvolutionCandidate && decideEvolutionCandidate(selectedEvolutionCandidate, 'archived')">{{ t('page.audit.evolution.archive') }}</button>
         </div>
         <DataTable v-if="evolutionSandboxRows.length" searchable copyable :rows="evolutionSandboxRows" :columns="['id', 'candidate_id', 'proposal', 'recommendation', 'baseline', 'candidate', 'delta', 'regressions', 'modified']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.sandbox', evidence: $event.id, status: $event.recommendation }" />
         <DataTable v-if="evolutionActiveCapabilityRows.length" searchable copyable :rows="evolutionActiveCapabilityRows" :columns="['version', 'candidate', 'kind', 'adapter', 'owner', 'status', 'scope', 'effects']" row-key="version" @row-click="selectedDetail = { ...$event, source: 'evolution.active_capability', evidence: $event.version, status: $event.status, summary: $event.kind }" />
         <EmptyState v-if="!evolutionSignalRows.length && !evolutionDiagnosisRows.length && !evolutionProposalRows.length && !evolutionCandidateRows.length" :title="t('page.audit.evolution.emptyTitle')" :detail="t('page.audit.evolution.emptyDetail')" />
         <RequestReceipt v-if="evolutionActionResult" :receipt="evolutionActionResult" :title="t('page.audit.evolution.receipt')" />
-        <RawPayload v-if="evolutionDraft" :title="t('page.audit.evolution.skillDraft')" :data="evolutionDraft" />
+        <ObjectInspectorDrawer v-if="evolutionDraft" :title="t('page.audit.evolution.skillDraft')" :data="evolutionDraft" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="approvals">
@@ -860,7 +866,7 @@ onMounted(refresh);
         </header>
         <DataTable v-if="executionRows.length" searchable copyable :rows="executionRows" :columns="['id', 'status', 'dispatch', 'mode']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'execution', evidence: $event.id }" />
         <EvidenceObjectDetail :title="t('page.audit.page.title.f699e4008c')" :evidence="selectedEvidence" @close="selectedDetail = null" />
-        <RawPayload :title="t('page.audit.page.title.ad0dea9223')" :data="{ capabilities: state.capabilities, projection: state.projection, surfaces: state.surfaces }" />
+        <ObjectInspectorDrawer :title="t('page.audit.page.title.ad0dea9223')" :data="{ capabilities: state.capabilities, projection: state.projection, surfaces: state.surfaces }" />
       </section>
     </section>
   </section>
