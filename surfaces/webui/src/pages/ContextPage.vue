@@ -87,19 +87,36 @@ const contextEvidence = computed(() => [
     source: evidence.value.source || 'gateway.evidence',
   }] : []),
 ]);
+const executionProjection = computed(() => store.currentExecutionProjection);
+const projectionContextRows = computed(() => (executionProjection.value?.context || []).map((item: any) => ({
+  id: item.id || '-',
+  kind: item.kind || '-',
+  status: item.status || '-',
+  summary: item.summary || '-',
+  evidence: Array.isArray(item.evidence_refs) ? item.evidence_refs.length : 0,
+})));
+const projectionUsageRows = computed(() => (executionProjection.value?.usage || []).map((item: any) => ({
+  id: item.id || '-',
+  kind: item.kind || '-',
+  status: item.status || '-',
+  summary: item.summary || '-',
+})));
 
 async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [nextEnvelope, nextHistory, nextRecommendations] = await Promise.all([
+    const [nextEnvelope, nextHistory, nextRecommendations, nextTimeline] = await Promise.all([
       api.contextCurrent(sessionId.value, query.value, profile.value),
       api.contextHistory(sessionId.value),
       api.contextRecommendations(sessionId.value),
+      api.runtimeTimeline(sessionId.value).catch(() => ({})),
     ]);
     envelope.value = nextEnvelope;
     history.value = nextHistory;
     recommendations.value = nextRecommendations;
+    const executionId = nextTimeline?.execution_graph_summary?.latest?.graph_id;
+    if (executionId) store.connectExecutionProjection(String(executionId));
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -183,6 +200,7 @@ onMounted(refresh);
           {{ t('template.pages.contextpage.2e16e8d2e9') }}
         </button>
         <DataTable v-if="itemRows.length" searchable copyable :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="projectionContextRows.length" searchable copyable row-key="id" :rows="projectionContextRows" :columns="['id', 'kind', 'status', 'summary', 'evidence']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.3e00f7b727')" :detail="t('page.context.page.detail.0f6e3d1ebe')" />
         <EvidenceTrace :items="contextEvidence" :title="t('page.context.page.title.97f9320e36')" />
       </section>
@@ -215,6 +233,7 @@ onMounted(refresh);
           {{ t('template.pages.contextpage.9beb96dac8') }}
         </button>
         <RequestReceipt :receipt="actionResult" :title="t('page.context.page.title.ea2c090ac6')" />
+        <DataTable v-if="projectionUsageRows.length" searchable copyable row-key="id" :rows="projectionUsageRows" :columns="['id', 'kind', 'status', 'summary']" @row-click="selectedDetail = $event" />
         <DataTable v-if="recommendationRows.length" searchable copyable :rows="recommendationRows" :columns="['id', 'action', 'count', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.e62d3fb566')" :detail="t('page.context.page.detail.dcd7576e63')" />
       </section>
@@ -227,7 +246,7 @@ onMounted(refresh);
         <DataTable v-if="historyRows.length" searchable copyable :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.fae4d2126c')" :detail="t('page.context.page.detail.56aba34430')" />
         <DetailDrawer :title="t('page.context.page.title.66cb55e17d')" :row="selectedDetail" @close="selectedDetail = null" />
-        <RawPayload :title="t('page.context.page.title.b8176568a4')" :data="envelope" />
+        <RawPayload :title="t('page.context.page.title.b8176568a4')" :data="executionProjection || envelope" />
         <RawPayload :title="t('page.context.page.title.49b5f508d1')" :data="actionResult || recommendations" />
       </section>
     </section>

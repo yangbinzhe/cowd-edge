@@ -4,6 +4,8 @@ import type {
   GatewayCapabilityContract,
   GatewayOpenAiTools,
   NavId,
+  ExecutionProjection,
+  ExecutionProjectionDelta,
   SessionSummary,
   SessionTurnProjection,
   WorkspaceFile,
@@ -349,9 +351,9 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['Runs', '/api/skills/runs'],
     ],
     agents: [
-      ['Agent runs', '/api/agents/runs'],
+      ['Agent runs', '/api/agents/execution-graphs'],
       ['Tasks', '/api/tasks'],
-      ['Task graph', '/api/tasks/current/agent-graph'],
+      ['Task graph', '/api/tasks/current/execution-graph'],
     ],
     tools: [
       ['Registry', '/api/tools'],
@@ -397,6 +399,15 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
 };
 
 export const api = {
+  executionProjection: (executionId: string, detailScope: 'summary' | 'full' = 'summary') => read<ExecutionProjection>(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=${detailScope}`, {
+    schema_version: 1, execution_id: executionId, revision: 0, cursor: 0, graph: {}, goals: [], agents: [], teams: [], relations: [], approvals: [], interventions: [], usage: [], context: [], evidence: [], health: [], recovery: [], available_commands: [],
+  }),
+  executionProjectionDelta: (executionId: string, cursor: number, detailScope: 'summary' | 'full' = 'summary') => read<ExecutionProjectionDelta>(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${cursor}&detail_scope=${detailScope}`, {
+    schema_version: 1, execution_id: executionId, base_cursor: cursor, target_cursor: cursor, events: [],
+  }),
+  executeProjectionCommand: (executionId: string, request: Record<string, unknown>) => write(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
+    method: 'POST', body: JSON.stringify(request),
+  }),
   writeReceipt: writeWithReceipt,
   health: () => read('/api/webui/manifest', {
     kind: 'cowd.webui.manifest',
@@ -551,57 +562,29 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  dispatchMissionSessions: (policy: Record<string, unknown> = { max_commands: 10, dispatch_mode: 'mark_claimed_only', allow_background: true }) => writeWithReceipt('/api/mission/control/sessions/dispatch', {
+  interpretMissionCommand: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/control/interpret', {
     method: 'POST',
-    body: JSON.stringify(policy),
+    body: JSON.stringify(body),
   }),
   bridgeMissionSession: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/control/sessions/bridge', {
     method: 'POST',
     body: JSON.stringify(body),
   }),
   teamExecutionPlan: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/execution`, {}),
-  tickTeamExecution: (teamId: string) => writeWithReceipt(`/api/mission/control/teams/${encodeURIComponent(teamId)}/execution`, { method: 'POST' }),
   collaborationRuns: () => read('/api/mission/control/teams', { projection: { runs: [] } }),
   collaborationRun: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/run`, {}),
   cancelTeamRuntime: (teamId: string) => writeWithReceipt(`/api/mission/control/teams/${encodeURIComponent(teamId)}/cancel`, { method: 'POST' }),
-  handoffTeamRuntime: (teamId: string, body: Record<string, unknown>) => writeWithReceipt(`/api/mission/control/teams/${encodeURIComponent(teamId)}/handoff`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  }),
-  synthesizeTeamRuntime: (teamId: string) => writeWithReceipt(`/api/mission/control/teams/${encodeURIComponent(teamId)}/synthesis`, { method: 'POST' }),
   teamMissionEvidence: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/evidence`, { events: [], tasks: [], evidence: [] }),
   agentMissionEvents: (agentId: string) => read(`/api/mission/control/agents/${encodeURIComponent(agentId)}/events`, { events: [], tasks: [] }),
-  stewardScheduler: () => read('/api/mission/control/stewards/scheduler', {}),
-  tickStewardScheduler: (config: Record<string, unknown> = {
-    max_session_commands_per_tick: 10,
-    max_team_ticks: 10,
-    allow_background_sessions: true,
-    dispatch_mode: 'mark_claimed_only',
-  }) => writeWithReceipt('/api/mission/control/stewards/scheduler', {
-    method: 'POST',
-    body: JSON.stringify(config),
-  }),
-  stewardHandoff: (stewardId: string) => read(`/api/mission/control/stewards/${encodeURIComponent(stewardId)}/handoff`, {}),
   runtimeRecoveryReport: () => read('/api/runtime/events/replay-report', {}),
   applyRuntimeRecovery: () => writeWithReceipt('/api/runtime/events/recover', { method: 'POST' }),
   missionApprovals: () => read('/api/mission/approvals', { approvals: { requests: [], pending_count: 0 } }),
   missionRelations: () => read('/api/mission/relations', { relations: { relations: [], proxies: [] } }),
   missionConflicts: () => read('/api/mission/conflicts', { conflicts: { receipts: [], count: 0 } }),
   missionSessionDetail: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}`, {}),
-  missionSessionInbox: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox`, { commands: [], summary: {} }),
-  consumeMissionSessionCommand: (sessionId: string, commandId: string, mode = 'mark_claimed_only') => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(commandId)}/consume`, {
-    method: 'POST',
-    body: JSON.stringify({ mode }),
-  }),
-  cancelMissionSessionCommand: (sessionId: string, commandId: string) => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(commandId)}/cancel`, { method: 'POST' }),
-  retryMissionSessionCommand: (sessionId: string, commandId: string) => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/inbox/${encodeURIComponent(commandId)}/retry`, { method: 'POST' }),
   startMissionTeamRuntime: (sessionId: string, objective: string, executionMode = 'provider_in_process') => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/teams/runtime`, {
     method: 'POST',
     body: JSON.stringify({ objective, execution_mode: executionMode }),
-  }),
-  routeMissionCommand: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/route', {
-    method: 'POST',
-    body: JSON.stringify(body),
   }),
   decideMissionApproval: (approvalId: string, approved: boolean, reason = '') => writeWithReceipt(`/api/mission/approvals/${encodeURIComponent(approvalId)}/decision`, {
     method: 'POST',
@@ -770,7 +753,13 @@ export const api = {
     body: JSON.stringify({ task }),
   }),
   agentReputation: () => read('/api/agents/reputation', { items: [], summary: {} }),
-  agentRuns: () => read('/api/agents/runs', { runs: [] }),
+  agentRuns: async () => {
+    const response = await read<any>('/api/agents/execution-graphs', { graphs: [] });
+    return {
+      ...response,
+      runs: Array.isArray(response) ? response : (response.runs || response.graphs || []),
+    };
+  },
   agentTeamProfiles: () => read('/api/agents/team-profiles', { profiles: [] }),
   agentTeamProfile: (id: string) => read(`/api/agents/team-profiles/${encodeURIComponent(id)}`, {}),
   createAgentTeamProfile: (body: Record<string, unknown>) => write('/api/agents/team-profiles', {
@@ -782,8 +771,8 @@ export const api = {
     body: JSON.stringify(body),
   }),
   deleteAgentTeamProfile: (id: string) => write(`/api/agents/team-profiles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  taskAgentGraph: (id: string) => read(`/api/tasks/${encodeURIComponent(id)}/agent-graph`, { nodes: [] }),
-  upsertTaskAgentGraph: (id: string, body: Record<string, unknown>) => write(`/api/tasks/${encodeURIComponent(id)}/agent-graph`, {
+  taskAgentGraph: (id: string) => read(`/api/tasks/${encodeURIComponent(id)}/execution-graph`, { nodes: [] }),
+  upsertTaskAgentGraph: (id: string, body: Record<string, unknown>) => write(`/api/tasks/${encodeURIComponent(id)}/execution-graph`, {
     method: 'POST',
     body: JSON.stringify(body),
   }),

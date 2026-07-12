@@ -55,6 +55,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
     [
       section('overview', t('script.data.capabilities.label.0efc2e6be4'), t('data.capabilities.string.f0a3e31e80'), 'summary', 'compact', 'runtime.status'),
       section('mission', t('capability.section.runtime.mission.label'), t('capability.section.runtime.mission.description'), 'table', 'standard', 'runtime.mission'),
+      section('execution-projection', t('runtime.execution.title'), t('runtime.execution.emptyDetail'), 'graph', 'inspect', 'runtime.execution_projection'),
       section('runs', t('script.data.capabilities.label.fcde5c325d'), t('data.capabilities.string.2aa35b8983'), 'table', 'standard', 'runtime.run'),
       section('policy', t('script.data.capabilities.label.bb9cf14180'), t('data.capabilities.string.2742c73c25'), 'governance', 'inspect', 'runtime.policy'),
       section('timeline', t('script.data.capabilities.label.018514a3d5'), t('data.capabilities.string.932915f166'), 'timeline', 'standard', 'runtime.event'),
@@ -83,7 +84,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('agents', t('capability.section.mission.agents.label'), t('capability.section.mission.agents.description'), 'table', 'standard', 'mission.agent'),
       section('routes', t('capability.section.mission.routes.label'), t('capability.section.mission.routes.description'), 'form', 'standard', 'mission.route'),
       section('runtime-v2', t('page.mission.control.runtimeV2.title'), t('capability.section.mission.runtimeV2.description'), 'table', 'standard', 'mission.runtime_v2'),
-      section('inbox', t('capability.section.mission.inbox.label'), t('capability.section.mission.inbox.description'), 'queue', 'standard', 'mission.command'),
+      section('relations', t('unit.relations'), t('capability.section.mission.overview.description'), 'graph', 'inspect', 'mission.relation'),
       section('approvals', t('capability.section.mission.approvals.label'), t('capability.section.mission.approvals.description'), 'governance', 'inspect', 'mission.approval'),
       section('trace', t('capability.section.mission.trace.label'), t('capability.section.mission.trace.description'), 'timeline', 'standard', 'mission.trace'),
     ],
@@ -205,12 +206,12 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('runs', t('capability.section.agents.runs.label'), t('capability.section.agents.runs.description'), 'timeline', 'standard', 'agent.run'),
     ],
     [
-      { label: t('data.capabilities.string.ae29b4411f'), kind: 'primary', endpoint: '/api/tasks/:id/agent-graph' },
+      { label: t('data.capabilities.string.ae29b4411f'), kind: 'primary', endpoint: '/api/tasks/:id/execution-graph' },
       { label: t('data.capabilities.string.e042386c4d'), kind: 'secondary', endpoint: '/api/tasks/:id/phases/:phase/review' },
       { label: t('data.capabilities.string.d908be73ae'), kind: 'danger', endpoint: '/api/tasks/:id/cancel' },
     ],
     [
-      { label: t('script.data.capabilities.label.d93d10ff0f'), value: '/api/agents/runs' },
+      { label: t('script.data.capabilities.label.d93d10ff0f'), value: '/api/agents/execution-graphs' },
       { label: t('script.data.capabilities.label.6d525b7156'), value: t('data.capabilities.string.d892f89fee') },
       { label: t('script.data.capabilities.label.4bed336194'), value: t('data.capabilities.string.a7d1e2b5ba') },
     ],

@@ -178,6 +178,21 @@ function extractRoutes() {
   const routes = [];
   for (const file of routeDirs.flatMap(walk).filter((item) => item.endsWith('.rs'))) {
     const text = read(file);
+    // TypedRouteSpec is the authoritative route declaration for the
+    // projection family. Do not make the matrix claim those APIs disappeared
+    // simply because their Axum registration uses `spec.path` instead of a
+    // repeated literal in `.route(...)`.
+    const typedRouteRegex = /TypedRouteSpec::new\(\s*"([A-Z]+)"\s*,\s*"([^"]+)"/g;
+    let typedRoute;
+    while ((typedRoute = typedRouteRegex.exec(text))) {
+      const [, method, route] = typedRoute;
+      routes.push({
+        method,
+        path: route,
+        normalized_path: normalizeRoute(route),
+        file: path.relative(webuiRoot, file),
+      });
+    }
     let offset = 0;
     while (offset < text.length) {
       const routeIndex = text.indexOf('.route(', offset);

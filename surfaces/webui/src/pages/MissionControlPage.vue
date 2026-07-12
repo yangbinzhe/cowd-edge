@@ -2,7 +2,7 @@
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import {
-  AlertTriangle, CheckCircle2, Database, GitBranch, Inbox, Play, RefreshCw, Route,
+  AlertTriangle, CheckCircle2, Database, RefreshCw, Route,
   ShieldCheck, Square, Users, Workflow,
 } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -20,9 +20,7 @@ const error = ref('');
 const showFullTrace = ref(true);
 const selectedSessionId = ref('');
 const selectedTeamId = ref('');
-const stewardDispatchMode = ref('mark_claimed_only');
 const teamObjective = ref('Analyze the current task, split roles, execute, and produce an evidence-backed summary');
-const teamHandoffNote = ref(t('page.mission.teamHandoff.default'));
 const routeTarget = ref('');
 const routeCommand = ref('Review current evidence and summarize blockers');
 const missionProjection = ref<any>({});
@@ -30,12 +28,9 @@ const approvals = ref<any>({});
 const relations = ref<any>({});
 const conflicts = ref<any>({});
 const sessionDetail = ref<any>({});
-const sessionInbox = ref<any>({});
 const timeline = ref<any>({});
 const realityFlow = ref<any>({});
 const actionResult = ref<any>(null);
-const schedulerState = ref<any>(null);
-const stewardHandoff = ref<any>(null);
 const recoveryReport = ref<any>(null);
 const teamRunDetail = ref<any>({});
 const controlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
@@ -54,13 +49,6 @@ const approvalItems = computed(() => {
   return [];
 });
 const pendingApprovals = computed(() => approvalItems.value.filter((item: any) => String(item.status || 'pending') === 'pending'));
-const sessionCommands = computed(() => {
-  if (Array.isArray(sessionInbox.value?.commands)) return sessionInbox.value.commands;
-  if (Array.isArray(sessionDetail.value?.session_commands)) return sessionDetail.value.session_commands;
-  if (Array.isArray(mission.value?.session_commands)) return mission.value.session_commands.filter((command: any) => command.target_session_id === activeSession.value);
-  return [];
-});
-const commandSummary = computed(() => mission.value?.session_command_summary || sessionInbox.value?.summary || {});
 const teams = computed(() => Array.isArray(controlProjection.value?.teams) ? controlProjection.value.teams : (Array.isArray(mission.value?.team_projections) ? mission.value.team_projections : []));
 const agents = computed(() => Array.isArray(controlProjection.value?.agents) ? controlProjection.value.agents : (Array.isArray(mission.value?.agent_projections) ? mission.value.agent_projections : []));
 const collaborationRuns = computed(() => {
@@ -71,8 +59,18 @@ const collaborationRuns = computed(() => {
 });
 const events = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
 const runtimeDigestEvents = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest) ? controlProjection.value.event_digest.latest : []);
-const stewardRows = computed(() => Array.isArray(controlProjection.value?.stewards) ? controlProjection.value.stewards : []);
 const relationCount = computed(() => controlProjection.value?.relations?.relation_count || relations.value?.relations?.relation_count || mission.value?.relation_projection?.relation_count || 0);
+const relationRows = computed(() => {
+  const source = controlProjection.value?.relations || relations.value?.relations || mission.value?.relation_projection || {};
+  const rows = source?.relations || [];
+  return Array.isArray(rows) ? rows.map((relation: any) => ({
+    id: relation.relation_id || relation.id || '-',
+    from: relation.from_session_id || '-',
+    to: relation.to_session_id || '-',
+    kind: relation.kind || '-',
+    summary: relation.summary || '-',
+  })) : [];
+});
 const workgraphProjection = computed(() => controlProjection.value?.workgraphs || mission.value?.workgraph_projection || {});
 const workgraphRows = computed(() => {
   const rows = workgraphProjection.value?.workgraphs || workgraphProjection.value?.items || [];
@@ -171,8 +169,28 @@ const evidenceRows = computed(() => {
 const cleanCounters = computed(() => ({
   tools: Number(sessionDetail.value?.tool_count || sessionDetail.value?.tool_calls || 0),
   memory: Number(sessionDetail.value?.memory_recall_count || sessionDetail.value?.memory_recalls || 0),
-  commands: sessionCommands.value.length,
+  handoffs: relationCount.value,
 }));
+const executionProjection = computed(() => store.currentExecutionProjection);
+const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
+  id: node.node_id || '-',
+  kind: node.kind || '-',
+  status: node.status || '-',
+  executor: node.executor_kind || '-',
+  evidence: Array.isArray(node.evidence_refs) ? node.evidence_refs.length : 0,
+})));
+const canonicalRelationRows = computed(() => (executionProjection.value?.relations || []).map((relation: any) => ({
+  id: relation.id || '-',
+  status: relation.status || '-',
+  summary: relation.summary || '-',
+  evidence: Array.isArray(relation.evidence_refs) ? relation.evidence_refs.length : 0,
+})));
+const canonicalApprovalRows = computed(() => (executionProjection.value?.approvals || []).map((approval: any) => ({
+  id: approval.id || '-',
+  status: approval.status || '-',
+  summary: approval.summary || '-',
+  evidence: Array.isArray(approval.evidence_refs) ? approval.evidence_refs.length : 0,
+})));
 const sessionRows = computed(() => sessions.value.map((session: any) => ({
   id: session.session_id || session.id || '-',
   title: session.title || session.summary || session.session_id || '-',
@@ -197,21 +215,6 @@ const agentRows = computed(() => agents.value.slice(0, 24).map((agent: any) => (
   team: agent.team_id || agent.active_team_id || '-',
   summary: agent.summary || agent.objective || agent.last_message || agent.name || '-',
 })));
-const dispatchPreview = computed(() => ({
-  affected: sessionCommands.value.slice(0, 8).map((command: any) => command.target_session_id || activeSession.value || command.command_id),
-  expected: ['mission.command.claimed', 'session.inbox.updated', 'runtime.turn.optional'],
-  risk: sessionCommands.value.length > 5 ? 'medium' : 'low',
-  approval: pendingApprovals.value.length ? `${pendingApprovals.value.length} pending approval gate(s)` : 'no pending approval gate',
-}));
-const stewardPreview = computed(() => {
-  const stewardIds = stewardRows.value.map((steward: any) => steward.id || steward.steward_id || steward.name).filter(Boolean);
-  return {
-    affected: stewardIds.length ? stewardIds : sessions.value.slice(0, 6).map((session: any) => session.session_id || session.id),
-    expected: ['steward.scheduler.tick', 'team.execution.tick', 'handoff.snapshot'],
-    risk: stewardRows.value.length ? 'medium' : 'low',
-    approval: 'bounded by steward policy and runtime approvals',
-  };
-});
 const recoveryPreview = computed(() => {
   const candidates = recoveryReport.value?.candidates || recoveryReport.value?.report?.candidates || recoveryReport.value?.plan?.candidates || [];
   const gaps = candidates.length ? candidates : (recoveryReport.value?.gaps || recoveryReport.value?.replay_gaps || recoveryReport.value?.report?.gaps || []);
@@ -242,6 +245,8 @@ async function refresh() {
     conflicts.value = nextConflicts;
     if (!selectedSessionId.value) selectedSessionId.value = store.activeSessionId || sessions.value[0]?.session_id || sessions.value[0]?.id || '';
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
+    const executionId = workgraphRows.value[0]?.graph;
+    if (executionId && executionId !== '-') store.connectExecutionProjection(String(executionId));
     await refreshSelectedSession();
     if (selectedTeamId.value) await loadTeamRun();
   } catch (err) {
@@ -256,14 +261,12 @@ async function refreshSelectedSession() {
   if (!sessionId) return;
   const requests: Promise<any>[] = [
     api.missionSessionDetail(sessionId),
-    api.missionSessionInbox(sessionId),
   ];
   if (showFullTrace.value) {
     requests.push(api.runtimeTimeline(sessionId), api.realityFlow(sessionId, 80));
   }
-  const [detail, inbox, nextTimeline, nextReality] = await Promise.all(requests);
+  const [detail, nextTimeline, nextReality] = await Promise.all(requests);
   sessionDetail.value = detail;
-  sessionInbox.value = inbox;
   timeline.value = nextTimeline || {};
   realityFlow.value = nextReality || {};
 }
@@ -279,7 +282,6 @@ async function startTeam() {
   const teamId = actionResult.value?.team?.team_id || actionResult.value?.receipt?.result?.team?.team_id;
   if (teamId) {
     selectedTeamId.value = teamId;
-    actionResult.value = await api.tickTeamExecution(teamId);
   }
   await refresh();
 }
@@ -288,29 +290,11 @@ async function loadTeamRun(teamId = selectedTeamId.value) {
   if (!teamId) return;
   selectedTeamId.value = teamId;
   teamRunDetail.value = await api.collaborationRun(teamId);
-}
-
-async function tickSelectedTeam() {
-  if (!selectedTeamId.value) return;
-  actionResult.value = await api.tickTeamExecution(selectedTeamId.value);
-  await refresh();
-}
-
-async function synthesizeSelectedTeam() {
-  if (!selectedTeamId.value) return;
-  actionResult.value = await api.synthesizeTeamRuntime(selectedTeamId.value);
-  teamRunDetail.value = actionResult.value;
-  await refresh();
-}
-
-async function handoffSelectedTeam() {
-  if (!selectedTeamId.value) return;
-  actionResult.value = await api.handoffTeamRuntime(selectedTeamId.value, {
-    target: 'human-agent',
-    note: teamHandoffNote.value,
-  });
-  teamRunDetail.value = actionResult.value;
-  await refresh();
+  const executionId = teamRunDetail.value?.execution_graph_id
+    || teamRunDetail.value?.graph_id
+    || teamRunDetail.value?.run?.execution_graph_id
+    || teamRunDetail.value?.run?.graph_id;
+  if (executionId) store.connectExecutionProjection(String(executionId));
 }
 
 async function cancelSelectedTeam() {
@@ -321,62 +305,17 @@ async function cancelSelectedTeam() {
 
 async function routeToSession() {
   if (!activeSession.value || !routeTarget.value.trim() || !routeCommand.value.trim()) return;
-  actionResult.value = await api.missionControlCommand({
-    target: { session: { session_id: activeSession.value } },
-    action: 'route_to_session',
-    actor: 'webui',
-    payload: {
-      target_session_id: routeTarget.value.trim().replace(/^@/, ''),
-      command: routeCommand.value.trim(),
-    },
+  actionResult.value = await api.interpretMissionCommand({
+    current_session_id: activeSession.value,
+    target_ref: routeTarget.value.trim().replace(/^@/, ''),
+    command_text: routeCommand.value.trim(),
+    execute: true,
   });
   await refresh();
 }
 
 async function decideApproval(approvalId: string, approved: boolean) {
   actionResult.value = await api.decideMissionApproval(approvalId, approved, approved ? 'approved from Mission Control' : 'denied from Mission Control');
-  await refresh();
-}
-
-async function consumeCommand(commandId: string, mode = 'mark_claimed_only') {
-  actionResult.value = await api.consumeMissionSessionCommand(activeSession.value, commandId, mode);
-  await refresh();
-}
-
-async function cancelCommand(commandId: string) {
-  actionResult.value = await api.cancelMissionSessionCommand(activeSession.value, commandId);
-  await refresh();
-}
-
-async function retryCommand(commandId: string) {
-  actionResult.value = await api.retryMissionSessionCommand(activeSession.value, commandId);
-  await refresh();
-}
-
-async function dispatchSessions() {
-  actionResult.value = await api.dispatchMissionSessions();
-  await refresh();
-}
-
-async function previewStewardship() {
-  const [scheduler, handoff] = await Promise.all([
-    api.stewardScheduler().catch((error) => ({ __offline: true, __error: String(error) })),
-    stewardRows.value[0]?.id || stewardRows.value[0]?.steward_id
-      ? api.stewardHandoff(stewardRows.value[0].id || stewardRows.value[0].steward_id).catch((error) => ({ __offline: true, __error: String(error) }))
-      : Promise.resolve({ steward: null, note: 'no steward selected from current projection' }),
-  ]);
-  schedulerState.value = scheduler;
-  stewardHandoff.value = handoff;
-}
-
-async function tickStewards() {
-  if (!schedulerState.value) await previewStewardship();
-  actionResult.value = await api.tickStewardScheduler({
-    max_session_commands_per_tick: 10,
-    max_team_ticks: 10,
-    allow_background_sessions: true,
-    dispatch_mode: stewardDispatchMode.value,
-  });
   await refresh();
 }
 
@@ -411,8 +350,6 @@ onMounted(refresh);
         </label>
         <button class="ghost-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="16" />{{ t('page.mission.control.page.text.8364cc9fa6') }}</button>
-        <button class="ghost-action" type="button" @click="dispatchSessions">{{ t('page.mission.control.page.text.6b851c1b61') }}</button>
-        <button class="ghost-action" type="button" @click="previewStewardship">{{ t('page.mission.control.page.text.a14649984f') }}</button>
         <button class="ghost-action" type="button" @click="previewRecovery">{{ t('page.mission.control.page.text.ac15490f40') }}</button>
       </div>
     </header>
@@ -431,8 +368,8 @@ onMounted(refresh);
         <small>{{ t('page.mission.control.page.text.281dd561ad') }}</small>
       </article>
       <article class="metric-card">
-        <span>{{ t('page.mission.control.page.text.79a658d351') }}</span>
-        <strong>{{ stewardRows.length }}</strong>
+        <span>{{ t('unit.relations') }}</span>
+        <strong>{{ relationCount }}</strong>
         <small>{{ t('page.mission.control.page.text.81e193588a') }}</small>
       </article>
       <article class="metric-card" :data-tone="pendingApprovals.length ? 'warn' : 'success'">
@@ -441,9 +378,9 @@ onMounted(refresh);
         <small>{{ t('page.mission.control.page.text.3d3e8b0be9') }}</small>
       </article>
       <article class="metric-card">
-        <span>{{ t('page.mission.control.page.text.98e1681877') }}</span>
-        <strong>{{ commandSummary.total || sessionCommands.length }}</strong>
-        <small>{{ t('page.mission.control.summary.commandStates', { pending: commandSummary.pending || 0, running: commandSummary.running || 0 }) }}</small>
+        <span>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
+        <strong>{{ workgraphRows.length }}</strong>
+        <small>{{ t('page.mission.control.runtimeV2.title') }}</small>
       </article>
     </div>
 
@@ -453,7 +390,7 @@ onMounted(refresh);
       <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
       <span><strong>{{ workgraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
       <span><strong>{{ conflictItems.length }}</strong>{{ t('page.mission.control.runtimeV2.conflicts') }}</span>
-      <span><strong>{{ cleanCounters.commands }}</strong>{{ t('unit.commands') }}</span>
+      <span><strong>{{ cleanCounters.handoffs }}</strong>{{ t('unit.relations') }}</span>
     </div>
 
     <div class="mission-grid">
@@ -463,25 +400,6 @@ onMounted(refresh);
           <span>{{ t('page.mission.control.page.text.5e7c8e4b54') }}</span>
         </header>
         <div class="mission-preview-grid">
-          <MissionActionPreview
-            :title="t('page.mission.control.page.title.f3a4686d1d')"
-            action="Claim or start pending session commands through Mission Runtime."
-            :target="activeSession || 'all sessions'"
-            :affected="dispatchPreview.affected"
-            :expected="dispatchPreview.expected"
-            :risk="dispatchPreview.risk"
-            :approval="dispatchPreview.approval"
-          />
-          <MissionActionPreview
-            :title="t('page.mission.control.page.title.94a752af20')"
-            action="Tick delegated stewards and collect handoff state before execution."
-            :target="stewardRows[0]?.id || stewardRows[0]?.steward_id || 'scheduler'"
-            :affected="stewardPreview.affected"
-            :expected="stewardPreview.expected"
-            :risk="stewardPreview.risk"
-            :approval="stewardPreview.approval"
-            :source="schedulerState ? 'backend scheduler state' : 'frontend projection preview'"
-          />
           <MissionActionPreview
             :title="t('page.mission.control.page.title.96c5455ed4')"
             action="Replay and recover runtime gaps only after recovery report is visible."
@@ -501,22 +419,10 @@ onMounted(refresh);
           :rows="controlReadinessRows"
           :columns="['action', 'status', 'reason', 'approval', 'targets', 'policy']"
         />
-        <label class="field-line">
-          {{ t('page.mission.control.scheduler.dispatchMode') }}
-          <select v-model="stewardDispatchMode">
-            <option value="mark_claimed_only">mark_claimed_only</option>
-            <option value="start_runtime_turn">start_runtime_turn</option>
-          </select>
-        </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="dispatchSessions">{{ t('page.mission.control.page.text.526c2cd14f') }}</button>
-          <button class="ghost-action" type="button" @click="previewStewardship">{{ t('page.mission.control.page.text.673c612f9e') }}</button>
-          <button class="primary-action" type="button" @click="tickStewards">{{ t('page.mission.control.page.text.f9b5c5c5ae') }}</button>
           <button class="ghost-action" type="button" @click="previewRecovery">{{ t('page.mission.control.page.text.281d341bb5') }}</button>
           <button class="danger-action" type="button" :disabled="!recoveryReport" @click="applyRecovery">{{ t('page.mission.control.page.text.56ca46aeea') }}</button>
         </div>
-        <RequestReceipt v-if="schedulerState" :receipt="schedulerState" :title="t('page.mission.control.page.title.7b05b80c41')" />
-        <RawPayload v-if="stewardHandoff" :title="t('page.mission.control.page.title.59f468683e')" :data="stewardHandoff" />
         <RequestReceipt v-if="recoveryReport" :receipt="recoveryReport" :title="t('page.mission.control.page.title.7590b53f8e')" />
       </section>
 
@@ -573,14 +479,7 @@ onMounted(refresh);
           </button>
           <p v-if="!teamRunRows.length" class="empty-note">{{ t('page.mission.control.page.text.f0c708899b') }}</p>
         </div>
-        <label class="field-line">
-          {{ t('template.pages.missioncontrolpage.da796fa714') }}
-          <textarea v-model="teamHandoffNote" rows="3" />
-        </label>
         <div class="button-row">
-          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="tickSelectedTeam">{{ t('page.mission.control.page.text.d1e9e2d114') }}</button>
-          <button class="primary-action" type="button" :disabled="!selectedTeamId" @click="synthesizeSelectedTeam">{{ t('page.mission.control.page.text.359d792ff9') }}</button>
-          <button class="ghost-action" type="button" :disabled="!selectedTeamId" @click="handoffSelectedTeam">{{ t('page.mission.control.page.text.347108bf3d') }}</button>
           <button class="danger-action" type="button" :disabled="!selectedTeamId" @click="cancelSelectedTeam">{{ t('page.mission.control.page.text.ed848a3a21') }}</button>
         </div>
         <RawPayload v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
@@ -654,40 +553,27 @@ onMounted(refresh);
           :rows="actionContractRows"
           :columns="['action', 'tool', 'use', 'projection']"
         />
+        <DataTable
+          v-if="executionNodeRows.length"
+          searchable
+          copyable
+          row-key="id"
+          :rows="executionNodeRows"
+          :columns="['id', 'kind', 'status', 'executor', 'evidence']"
+        />
         <p v-if="!workgraphRows.length && !conflictItems.length && !actionContractRows.length" class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
       </section>
     </div>
 
     <div class="mission-grid lower">
-      <section class="mission-panel wide" data-section="inbox">
+      <section class="mission-panel wide" data-section="relations">
         <header>
-          <h2>{{ t('page.mission.control.page.text.38c0d91903') }}</h2>
+          <h2>{{ t('unit.relations') }}</h2>
           <span>{{ selectedSession.title || selectedSessionId || activeSession }}</span>
         </header>
-        <div class="mission-command-list">
-          <article v-for="command in sessionCommands" :key="command.command_id" class="activity-item">
-            <div>
-              <strong>{{ command.kind || t('page.mission.control.fallback.command') }} · {{ displayStatus(command.status) }}</strong>
-              <p>{{ command.command }}</p>
-              <small>{{ command.command_id }} · {{ t('page.mission.control.command.from', { source: command.from_session_id || '-' }) }}</small>
-            </div>
-            <div class="button-row">
-              <button class="icon-action" :title="t('page.mission.control.action.claim')" type="button" @click="consumeCommand(command.command_id)">
-                <Inbox :size="15" />
-              </button>
-              <button class="icon-action" :title="t('page.mission.control.page.title.f9e851ae97')" type="button" @click="consumeCommand(command.command_id, 'start_turn')">
-                <Play :size="15" />
-              </button>
-              <button class="icon-action" :title="t('page.mission.control.action.retry')" type="button" @click="retryCommand(command.command_id)">
-                <GitBranch :size="15" />
-              </button>
-              <button class="danger-action" :title="t('page.mission.control.action.cancel')" type="button" @click="cancelCommand(command.command_id)">
-                <Square :size="15" />
-              </button>
-            </div>
-          </article>
-          <p v-if="!sessionCommands.length" class="empty-note">{{ t('page.mission.control.page.text.85c2cc0a2c') }}</p>
-        </div>
+        <DataTable v-if="relationRows.length" searchable copyable row-key="id" :rows="relationRows" :columns="['id', 'from', 'to', 'kind', 'summary']" />
+        <DataTable v-if="canonicalRelationRows.length" searchable copyable row-key="id" :rows="canonicalRelationRows" :columns="['id', 'status', 'summary', 'evidence']" />
+        <p v-else class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
       </section>
 
       <section class="mission-panel" data-section="approvals">
@@ -703,6 +589,7 @@ onMounted(refresh);
             <ShieldCheck :size="15" />{{ t('page.mission.control.page.text.3784408abf') }}</button>
         </article>
         <p v-if="!pendingApprovals.length" class="empty-note">{{ t('page.mission.control.page.text.77f4b7d8e5') }}</p>
+        <DataTable v-if="canonicalApprovalRows.length" searchable copyable row-key="id" :rows="canonicalApprovalRows" :columns="['id', 'status', 'summary', 'evidence']" />
       </section>
     </div>
 

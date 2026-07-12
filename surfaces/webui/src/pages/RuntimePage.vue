@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -37,6 +37,7 @@ const tasks = ref<any>({});
 const growthStatus = ref<any>({});
 const growthEvents = ref<any>({});
 const actionResult = ref<any>(null);
+const selectedExecutionId = ref('');
 const leaseOwner = ref('webui');
 const leaseMode = ref('shared');
 const turnPrompt = ref('Summarize current runtime state and blockers');
@@ -52,6 +53,44 @@ const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
 const missionControlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
 const mission = computed(() => missionControlProjection.value?.mission || {});
+const executionGraphs = computed(() => {
+  const projection = missionControlProjection.value?.execution_graphs || mission.value?.execution_graph_projection || {};
+  const entries = projection?.execution_graphs || [];
+  return Array.isArray(entries)
+    ? entries.map((entry: any) => ({
+      id: String(entry.execution_graph_id || entry.graph_id || entry.id || ''),
+      session: String(entry.session_id || '-'),
+      status: String(entry.status || '-'),
+      objective: String(entry.objective || entry.summary || '-'),
+    })).filter((entry: any) => entry.id)
+    : [];
+});
+const selectedExecution = computed(() => selectedExecutionId.value || executionGraphs.value[0]?.id || '');
+const executionProjection = computed(() => {
+  const projection = store.currentExecutionProjection;
+  return projection?.execution_id === selectedExecution.value ? projection : null;
+});
+const executionNodeRows = computed(() => {
+  const nodes = executionProjection.value?.graph?.nodes;
+  return Array.isArray(nodes) ? nodes.map((node: any) => ({
+    id: node.node_id || node.id || '-',
+    kind: node.kind || '-',
+    status: node.status || '-',
+    executor: node.executor_kind || '-',
+    evidence: Array.isArray(node.evidence_refs) ? node.evidence_refs.length : 0,
+  })) : [];
+});
+const childExecutionRows = computed(() => {
+  const children = executionProjection.value?.child_executions;
+  return Array.isArray(children) ? children.map((child: any) => ({
+    id: child.execution_id || '-',
+    parent: child.parent_execution_id || '-',
+    node: child.parent_node_id || '-',
+    status: child.status || '-',
+    objective: child.objective || '-',
+  })) : [];
+});
+const executionCommandRows = computed(() => executionProjection.value?.available_commands || []);
 const missionSessions = computed(() => Array.isArray(mission.value?.sessions) ? mission.value.sessions : []);
 const missionEvents = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
 const missionApprovalProjection = computed(() => mission.value?.approval_projection || missionApprovals.value?.approvals || {});
@@ -243,6 +282,8 @@ async function refresh() {
     growthEvents.value = nextGrowthEvents;
     store.configReloadStatus = nextReloadStatus;
     selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
+    if (!selectedExecutionId.value && executionGraphs.value[0]?.id) selectedExecutionId.value = executionGraphs.value[0].id;
+    if (selectedExecution.value) store.connectExecutionProjection(selectedExecution.value);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -285,7 +326,27 @@ async function respondApproval(id: string, approved: boolean) {
   await refresh();
 }
 
+function selectExecution(executionId: string) {
+  selectedExecutionId.value = executionId;
+  store.connectExecutionProjection(executionId);
+}
+
+async function executeProjectionCommand(command: string) {
+  actionResult.value = await store.executeExecutionProjectionCommand(command);
+}
+
+function executionCommandLabel(command: string) {
+  const labels: Record<string, string> = {
+    pause: t('runtime.execution.command.pause'),
+    resume: t('runtime.execution.command.resume'),
+    cancel: t('runtime.execution.command.cancel'),
+    replan: t('runtime.execution.command.replan'),
+  };
+  return labels[command] || command;
+}
+
 onMounted(refresh);
+onUnmounted(() => store.disconnectExecutionProjection());
 </script>
 
 <template>
@@ -404,6 +465,61 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.runtime.page.title.764ff57548')" :detail="t('page.runtime.page.detail.d92a88eb8c')" />
         <DataTable v-if="missionEventRows.length" :rows="missionEventRows" :columns="['sequence', 'type', 'session', 'message']" @row-click="selectedDetail = $event" />
         <RawPayload :title="t('page.runtime.page.title.c172d5cfe2')" :data="{ projection: missionProjection, approvals: missionApprovals, relations: missionRelations }" />
+      </section>
+
+      <section class="management-panel runtime-panel wide" data-section="execution-projection">
+        <header>
+          <h2>{{ t('runtime.execution.title') }}</h2>
+          <StatusPill :status="executionProjection ? 'ready' : 'idle'" />
+        </header>
+        <div v-if="executionGraphs.length" class="button-row execution-selector" role="list" :aria-label="t('runtime.execution.selector')">
+          <button
+            v-for="entry in executionGraphs"
+            :key="entry.id"
+            type="button"
+            class="ghost-action"
+            :class="{ active: selectedExecution === entry.id }"
+            @click="selectExecution(entry.id)"
+          >
+            {{ entry.objective }} · {{ entry.status }}
+          </button>
+        </div>
+        <EmptyState v-if="!executionGraphs.length" :title="t('runtime.execution.emptyTitle')" :detail="t('runtime.execution.emptyDetail')" />
+        <template v-else-if="executionProjection">
+          <dl class="detail-list">
+            <dt>{{ t('runtime.execution.graph') }}</dt>
+            <dd>{{ executionProjection.execution_id }}</dd>
+            <dt>{{ t('runtime.execution.revision') }}</dt>
+            <dd>{{ executionProjection.revision }}</dd>
+            <dt>{{ t('runtime.execution.cursor') }}</dt>
+            <dd>{{ executionProjection.cursor }}</dd>
+            <dt>{{ t('runtime.execution.strategy') }}</dt>
+            <dd>{{ executionProjection.strategy?.summary || '-' }}</dd>
+            <dt>{{ t('runtime.execution.scope') }}</dt>
+            <dd>{{ executionProjection.session_id || '-' }}</dd>
+          </dl>
+          <div class="button-row" v-if="executionCommandRows.length">
+            <button
+              v-for="command in executionCommandRows"
+              :key="command.command"
+              type="button"
+              class="ghost-action"
+              :disabled="!command.available"
+              @click="executeProjectionCommand(command.command)"
+            >
+              {{ executionCommandLabel(command.command) }}
+            </button>
+          </div>
+          <DataTable v-if="executionNodeRows.length" :rows="executionNodeRows" :columns="['id', 'kind', 'status', 'executor', 'evidence']" @row-click="selectedDetail = $event" />
+          <DataTable v-if="childExecutionRows.length" :rows="childExecutionRows" :columns="['id', 'parent', 'node', 'status', 'objective']" @row-click="selectedDetail = $event" />
+          <div class="metric-row compact-metric-row">
+            <article class="metric-card"><span>{{ t('runtime.execution.goals') }}</span><strong>{{ executionProjection.goals.length }}</strong></article>
+            <article class="metric-card"><span>{{ t('runtime.execution.agents') }}</span><strong>{{ executionProjection.agents.length }}</strong></article>
+            <article class="metric-card"><span>{{ t('runtime.execution.teams') }}</span><strong>{{ executionProjection.teams.length }}</strong></article>
+            <article class="metric-card"><span>{{ t('runtime.execution.children') }}</span><strong>{{ childExecutionRows.length }}</strong></article>
+            <article class="metric-card"><span>{{ t('runtime.execution.approvals') }}</span><strong>{{ executionProjection.approvals.length }}</strong></article>
+          </div>
+        </template>
       </section>
 
       <section class="management-panel runtime-panel" data-section="runs">

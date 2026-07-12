@@ -13,7 +13,9 @@ import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import WorkflowStrip from '../components/layout/WorkflowStrip.vue';
 import PrimaryContextBar from '../components/layout/PrimaryContextBar.vue';
 import { displayStatus } from '../i18n/domain/status';
+import { useAppStore } from '../stores/app';
 
+const store = useAppStore();
 const loading = ref(false);
 const error = ref('');
 const catalog = ref<any>({});
@@ -100,6 +102,26 @@ const agentEvidence = computed(() => [
     source: 'gateway.agents.runs',
   })),
 ]);
+const executionProjection = computed(() => store.currentExecutionProjection);
+const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
+  id: node.node_id || '-',
+  kind: node.kind || '-',
+  status: node.status || '-',
+  executor: node.executor_kind || '-',
+  evidence: Array.isArray(node.evidence_refs) ? node.evidence_refs.length : 0,
+})));
+const executionAgentRows = computed(() => (executionProjection.value?.agents || []).map((agent: any) => ({
+  id: agent.id || '-',
+  status: agent.status || '-',
+  summary: agent.summary || '-',
+  evidence: Array.isArray(agent.evidence_refs) ? agent.evidence_refs.length : 0,
+})));
+const executionTeamRows = computed(() => (executionProjection.value?.teams || []).map((team: any) => ({
+  id: team.id || '-',
+  status: team.status || '-',
+  summary: team.summary || '-',
+  evidence: Array.isArray(team.evidence_refs) ? team.evidence_refs.length : 0,
+})));
 
 async function refresh() {
   loading.value = true;
@@ -119,6 +141,8 @@ async function refresh() {
     runs.value = nextRuns;
     tasks.value = nextTasks;
     teamProfiles.value = nextProfiles;
+    const executionId = nextRuns?.runs?.find((run: any) => run.graph_id)?.graph_id;
+    if (executionId) store.connectExecutionProjection(String(executionId));
     if (!selectedTaskId.value) {
       selectedTaskId.value = nextTasks?.current?.id || nextTasks?.tasks?.[0]?.id || '';
     }
@@ -137,6 +161,8 @@ async function loadGraph() {
     return;
   }
   graph.value = await api.taskAgentGraph(selectedTaskId.value);
+  const executionId = graph.value?.execution_graph_id || graph.value?.graph_id || graph.value?.id;
+  if (executionId) store.connectExecutionProjection(String(executionId));
 }
 
 async function startTask() {
@@ -580,8 +606,26 @@ onMounted(refresh);
           </article>
         </div>
         <EmptyState v-if="!graphNodes.length" :title="t('page.agents.page.title.731f196b87')" :detail="t('page.agents.page.detail.5722274f98')" />
+        <DataTable
+          v-if="executionNodeRows.length"
+          searchable
+          copyable
+          row-key="id"
+          :rows="executionNodeRows"
+          :columns="['id', 'kind', 'status', 'executor', 'evidence']"
+          @row-click="selectedDetail = $event"
+        />
+        <DataTable
+          v-if="executionAgentRows.length || executionTeamRows.length"
+          searchable
+          copyable
+          row-key="id"
+          :rows="[...executionAgentRows, ...executionTeamRows]"
+          :columns="['id', 'status', 'summary', 'evidence']"
+          @row-click="selectedDetail = $event"
+        />
         <EvidenceTrace :items="agentEvidence" :title="t('page.agents.page.title.bb922d3236')" />
-        <RequestReceipt :receipt="actionResult || graph" :title="t('page.agents.page.title.4056356344')" />
+        <RequestReceipt :receipt="actionResult || executionProjection || graph" :title="t('page.agents.page.title.4056356344')" />
       </section>
 
       <section class="management-panel agents-panel wide" data-section="runs">

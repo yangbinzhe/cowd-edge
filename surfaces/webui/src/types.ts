@@ -1,4 +1,5 @@
 import type { Component } from 'vue';
+import type { components as GatewayComponents } from './generated/gateway-api';
 
 export type NavId = 'chat' | 'mission' | 'runtime' | 'context' | 'reality' | 'memory' | 'skills' | 'agents' | 'tools' | 'surfaces' | 'gateway' | 'mfg' | 'audit' | 'settings';
 export type CompanionTab = 'activity' | 'thinking' | 'workspace' | 'evidence' | 'inspector';
@@ -55,6 +56,10 @@ export interface ActivityEvent {
   status?: string;
   at?: string;
 }
+
+export type ExecutionProjectionEntity = GatewayComponents['schemas']['ExecutionProjectionEntity'];
+export type ExecutionProjection = GatewayComponents['schemas']['ExecutionProjection'];
+export type ExecutionProjectionDelta = GatewayComponents['schemas']['ProjectionDelta'];
 
 export interface WorkspaceFile {
   name: string;

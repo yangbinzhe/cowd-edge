@@ -706,21 +706,18 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/relations', expect.any(Object));
   });
 
-  it('writes Mission Control operations with gateway contracts', async () => {
+  it('writes Mission Control operations through canonical control contracts', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
     await api.startMissionTeamRuntime('mission-a', 'inspect runtime evidence', 'register_only');
-    await api.routeMissionCommand({
-      from_session_id: 'mission-a',
+    await api.interpretMissionCommand({
+      current_session_id: 'mission-a',
       target_ref: 'mission-b',
-      command: 'summarize blockers',
+      command_text: 'summarize blockers',
+      execute: true,
     });
-    await api.consumeMissionSessionCommand('mission-b', 'command-1', 'start_turn');
     await api.decideMissionApproval('approval-1', false, 'unsafe');
-    await api.stewardScheduler();
-    await api.tickStewardScheduler();
-    await api.stewardHandoff('steward-1');
     await api.runtimeRecoveryReport();
     await api.applyRuntimeRecovery();
 
@@ -728,25 +725,19 @@ describe('Cowd Vue WebUI shell', () => {
       method: 'POST',
       body: JSON.stringify({ objective: 'inspect runtime evidence', execution_mode: 'register_only' }),
     }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/route', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/interpret', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({
-        from_session_id: 'mission-a',
+        current_session_id: 'mission-a',
         target_ref: 'mission-b',
-        command: 'summarize blockers',
+        command_text: 'summarize blockers',
+        execute: true,
       }),
-    }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/sessions/mission-b/inbox/command-1/consume', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ mode: 'start_turn' }),
     }));
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/approvals/approval-1/decision', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ approved: false, decided_by: 'webui', reason: 'unsafe' }),
     }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/stewards/scheduler', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/stewards/scheduler', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/stewards/steward-1/handoff', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/runtime/events/replay-report', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/runtime/events/recover', expect.objectContaining({ method: 'POST' }));
   });
@@ -1061,7 +1052,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('证据下钻载荷');
   });
 
-  it('renders Mission Control governed previews before stewardship and recovery writes', async () => {
+  it('renders Mission Control recovery and canonical relation controls', async () => {
     const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
@@ -1108,13 +1099,9 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('治理动作');
-    expect(wrapper.text()).toContain('分发会话收件箱');
     expect(wrapper.text()).toContain('运行时恢复');
     expect(wrapper.text()).toContain('Need tool access');
     expect(wrapper.get('button.danger-action[disabled]').text()).toContain('应用恢复');
-    await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('加载 steward 状态'))?.trigger('click');
-    await settleAsync();
-    expect(wrapper.text()).toContain('Steward 调度器状态');
     await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('加载恢复报告'))?.trigger('click');
     await settleAsync();
     expect(wrapper.text()).toContain('运行时恢复报告');
@@ -1417,9 +1404,9 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/agents/catalog') return Promise.resolve(new Response(JSON.stringify({ summary: { total: 1, active: 1 }, agents: [{ name: 'planner', active: true, source: { id: 'project_cowd' }, description: 'Plans work' }] })));
       if (url === '/api/agents/directory') return Promise.resolve(new Response(JSON.stringify({ summary: { total: 1, active: 1 }, agents: [{ name: 'planner', active: true, source: { id: 'project_cowd' }, description: 'Plans work' }] })));
       if (url === '/api/agents/reputation') return Promise.resolve(new Response(JSON.stringify({ items: [{ agent_id: 'planner', reputation: 91, status: 'active' }] })));
-      if (url === '/api/agents/runs') return Promise.resolve(new Response(JSON.stringify({ runs: [{ graph_id: 'agent-graph-task-1' }] })));
+      if (url === '/api/agents/execution-graphs') return Promise.resolve(new Response(JSON.stringify({ graphs: [{ graph_id: 'agent-graph-task-1' }] })));
       if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ current: { id: 'task-1', objective: 'Ship UI', status: 'open', phases: [] }, tasks: [{ id: 'task-1', objective: 'Ship UI', status: 'open', phases: [] }] })));
-      if (url === '/api/tasks/task-1/agent-graph') return Promise.resolve(new Response(JSON.stringify({ status: 'running', nodes: [{ id: 'planner', title: 'Plan', role: 'planner', status: 'ready', objective: 'Ship UI', depends_on: [] }] })));
+      if (url === '/api/tasks/task-1/execution-graph') return Promise.resolve(new Response(JSON.stringify({ status: 'running', nodes: [{ id: 'planner', title: 'Plan', role: 'planner', status: 'ready', objective: 'Ship UI', depends_on: [] }] })));
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1436,7 +1423,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/agents/catalog', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/agents/directory', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/agents/reputation', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/task-1/agent-graph', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/task-1/execution-graph', expect.any(Object));
   });
 
   it('posts agent assemble requests through the backend contract', async () => {

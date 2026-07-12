@@ -7,6 +7,8 @@ import type {
   ChatDisplayMode,
   ChatTurn,
   CompanionTab,
+  ExecutionProjection,
+  ExecutionProjectionDelta,
   GatewayCapabilityContract,
   GatewayOpenAiTools,
   NavId,
@@ -115,24 +117,6 @@ function comparableText(value: string) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function sameAssistantFinal(a: string, b: string) {
-  const left = comparableText(a);
-  const right = comparableText(b);
-  return !!left && left === right;
-}
-
-function sameTurnContent(a: ChatTurn | null | undefined, b: ChatTurn) {
-  if (!a || a.role !== b.role) return false;
-  const left = comparableText(a.content);
-  const right = comparableText(b.content);
-  return !!left && left === right;
-}
-
-function contentDedupeKey(turn: ChatTurn) {
-  const text = comparableText(turn.content).toLowerCase();
-  return text ? `${turn.role}:${text}` : '';
-}
-
 function turnStableKey(turn: ChatTurn) {
   if (turn.id && !turn.id.startsWith('local-') && !turn.id.startsWith('assistant-stream-')) return `id:${turn.id}`;
   if (turn.sequence !== undefined && turn.sequence !== null) return `seq:${turn.role}:${turn.sequence}`;
@@ -182,8 +166,12 @@ function compactTime(session: SessionSummary) {
 
 export const useAppStore = defineStore('app', () => {
   let sessionStream: EventSource | null = null;
+  let executionProjectionStream: EventSource | null = null;
   let sessionStreamId = '';
+  const sessionStreamCursors = new Map<string, number>();
+  const sessionStreamRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let streamingAssistantId = '';
+  const committedTerminalIds = new Set<string>();
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   const booted = ref(false);
   const health = ref<any>(null);
@@ -202,6 +190,8 @@ export const useAppStore = defineStore('app', () => {
   const companionTab = ref<CompanionTab>('activity');
   const chatDisplayMode = ref<ChatDisplayMode>('panorama');
   const currentRun = ref<any>(null);
+  const currentExecutionProjection = ref<ExecutionProjection | null>(null);
+  const executionProjectionCursor = ref(0);
   const currentContextEnvelope = ref<any>(null);
   const currentRealityFlow = ref<any>({});
   const currentTimeline = ref<any>({});
@@ -533,29 +523,17 @@ export const useAppStore = defineStore('app', () => {
     const loaded = rows.map(rowToTurn);
     const merged: ChatTurn[] = [];
     const seen = new Set<string>();
-    const assistantContentSinceUser = new Set<string>();
     loaded.forEach((turn) => {
       const key = turnStableKey(turn);
-      const previous = merged.at(-1);
       const duplicateStable = key && seen.has(key);
-      const duplicateAdjacent = sameTurnContent(previous, turn);
-      const contentKey = contentDedupeKey(turn);
-      const duplicateAssistantInSameReply = turn.role === 'assistant' && contentKey && assistantContentSinceUser.has(contentKey);
-      if (duplicateStable || duplicateAdjacent || duplicateAssistantInSameReply) return;
+      if (duplicateStable) return;
       if (key) seen.add(key);
-      if (turn.role === 'user') assistantContentSinceUser.clear();
-      if (turn.role === 'assistant' && contentKey) assistantContentSinceUser.add(contentKey);
       merged.push(turn);
     });
 
     const streaming = streamingAssistantId ? turns.value.find((turn) => turn.id === streamingAssistantId && turn.status === 'streaming') : null;
     if (streaming) {
-      const hasFinal = merged.some((turn) => turn.role === 'assistant' && sameAssistantFinal(turn.content, streaming.content));
-      if (hasFinal) {
-        streamingAssistantId = '';
-      } else {
-        merged.push(streaming);
-      }
+      merged.push(streaming);
     }
     return merged;
   }
@@ -940,6 +918,17 @@ export const useAppStore = defineStore('app', () => {
       }
       if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
       if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
+      const executionId = typeof receipt?.execution?.graph_id === 'string'
+        ? receipt.execution.graph_id.trim()
+        : '';
+      if (executionId) {
+        currentRun.value = {
+          ...(currentRun.value || {}),
+          execution_id: executionId,
+          status: 'running',
+        };
+        connectExecutionProjection(executionId);
+      }
       if (receipt?.mode === 'attached_to_active_turn') {
         currentRun.value = {
           ...(currentRun.value || {}),
@@ -1055,20 +1044,18 @@ export const useAppStore = defineStore('app', () => {
     sessionStreamId = sessionId;
     streamingAssistantId = '';
     try {
-      sessionStream = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/stream`);
-      sessionStream.onmessage = (event) => handleSessionEvent(event.data);
+      const cursor = sessionStreamCursors.get(sessionId);
+      const suffix = cursor ? `?from_cursor=${encodeURIComponent(String(cursor))}` : '';
+      sessionStream = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/stream${suffix}`);
+      sessionStream.onmessage = (event) => {
+        const cursor = Number(event.lastEventId || 0);
+        if (Number.isFinite(cursor) && cursor > 0) sessionStreamCursors.set(sessionId, cursor);
+        handleSessionEvent(event.data);
+      };
       sessionStream.onerror = () => {
         if (sessionStreamId === sessionId) {
-          sessionStream?.close();
-          sessionStream = null;
-          sessionStreamId = '';
-          activity.value.unshift({
-            id: `stream-error-${Date.now()}`,
-            kind: 'error',
-            title: t('script.stores.app.title.f16e471052'),
-            detail: t('script.stores.app.detail.58a8a8b820'),
-            status: 'error',
-          });
+          scheduleSessionStreamRecovery(sessionId);
+          recordLiveActivity('runtime', 'Session stream reconnecting', sessionId, 'observed');
         }
       };
     } catch (error) {
@@ -1080,6 +1067,85 @@ export const useAppStore = defineStore('app', () => {
         status: 'error',
       });
     }
+  }
+
+  function scheduleSessionStreamRecovery(sessionId: string) {
+    if (sessionStreamRecoveryTimers.has(sessionId)) return;
+    const timer = window.setTimeout(() => {
+      sessionStreamRecoveryTimers.delete(sessionId);
+      if (sessionStreamId !== sessionId || activeSessionId.value !== sessionId) return;
+      // EventSource performs the transport reconnect. Re-read durable state so
+      // a terminal committed while the transport was unavailable is never
+      // inferred from transient output or silently lost.
+      Promise.all([
+        loadMessages(sessionId),
+        refreshContextUsage(sessionId),
+      ]).catch(() => undefined);
+    }, 400);
+    sessionStreamRecoveryTimers.set(sessionId, timer);
+  }
+
+  async function loadExecutionProjection(executionId: string, full = false) {
+    if (!executionId.trim()) return;
+    const projection = await api.executionProjection(executionId, full ? 'full' : 'summary');
+    if (projection.__offline) return;
+    currentExecutionProjection.value = projection;
+    executionProjectionCursor.value = Number(projection.cursor || 0);
+  }
+
+  function applyExecutionProjectionDelta(delta: ExecutionProjectionDelta) {
+    if (!currentExecutionProjection.value
+      || currentExecutionProjection.value.execution_id !== delta.execution_id
+      || executionProjectionCursor.value !== delta.base_cursor
+      || delta.target_cursor < delta.base_cursor) {
+      void loadExecutionProjection(delta.execution_id, chatDisplayMode.value !== 'clean');
+      return;
+    }
+    executionProjectionCursor.value = delta.target_cursor;
+    // Delta payloads only advance durable facts. Refreshing the canonical
+    // snapshot avoids UI-side lifecycle inference from textual event names.
+    if (delta.events.length) void loadExecutionProjection(delta.execution_id, chatDisplayMode.value !== 'clean');
+  }
+
+  function connectExecutionProjection(executionId: string) {
+    if (!executionId.trim()) return;
+    executionProjectionStream?.close();
+    void loadExecutionProjection(executionId, chatDisplayMode.value !== 'clean');
+    if (typeof EventSource === 'undefined') return;
+    const cursor = executionProjectionCursor.value;
+    executionProjectionStream = new EventSource(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${cursor}&detail_scope=${chatDisplayMode.value === 'clean' ? 'summary' : 'full'}`);
+    executionProjectionStream.addEventListener('projection_delta', (event) => {
+      try {
+        applyExecutionProjectionDelta(JSON.parse((event as MessageEvent).data) as ExecutionProjectionDelta);
+      } catch {
+        void loadExecutionProjection(executionId, chatDisplayMode.value !== 'clean');
+      }
+    });
+    executionProjectionStream.addEventListener('projection_resync', () => {
+      void loadExecutionProjection(executionId, chatDisplayMode.value !== 'clean');
+    });
+    executionProjectionStream.onerror = () => {
+      executionProjectionStream?.close();
+      executionProjectionStream = null;
+    };
+  }
+
+  function disconnectExecutionProjection() {
+    executionProjectionStream?.close();
+    executionProjectionStream = null;
+  }
+
+  async function executeExecutionProjectionCommand(command: string, payload: Record<string, unknown> = {}) {
+    const projection = currentExecutionProjection.value;
+    if (!projection) return;
+    const result = await api.executeProjectionCommand(projection.execution_id, {
+      command_id: `webui-${Date.now()}`,
+      expected_revision: projection.revision,
+      command,
+      payload,
+    });
+    if (result?.status === 'accepted') await loadExecutionProjection(projection.execution_id, chatDisplayMode.value !== 'clean');
+    return result;
   }
 
   function handleSessionEvent(raw: string) {
@@ -1190,19 +1256,25 @@ export const useAppStore = defineStore('app', () => {
     }
 
     if (type === 'TurnComplete') {
-      currentRun.value = { ...(currentRun.value || {}), status: 'complete', completed_at_ms: Date.now(), iterations: event.iterations };
-      completeAssistantTurn(event.response || event.text || '');
-      recordLiveActivity('runtime', 'Turn complete', event.iterations ? `${event.iterations} iterations` : '', 'complete');
-      if (activeSessionId.value) {
-        loadMessages(activeSessionId.value).catch(() => undefined);
-        api.sessionInputProjection(activeSessionId.value).then((value: any) => {
-          sessionInputProjection.value = value;
-        }).catch(() => undefined);
-        api.turnInbox(activeSessionId.value).then((value: any) => {
-          turnInbox.value = value;
-        }).catch(() => undefined);
+      // Model output is transport progress only. A durable terminal outbox
+      // receipt is the sole authority allowed to settle a final assistant
+      // message, so reconnect/replay can never create a second final row.
+      recordLiveActivity('runtime', 'Model step completed', event.iterations ? `${event.iterations} iterations` : '', 'running');
+      return;
+    }
+
+    if (type === 'TerminalCommitted') {
+      settleTerminalCommit(event);
+      return;
+    }
+
+    if (type === 'ExecutionGraphSummary' || type === 'execution_graph_summary') {
+      const executionId = event.summary?.graph_id || event.graph_id || event.execution_id || '';
+      if (executionId) {
+        currentRun.value = { ...(currentRun.value || {}), execution_id: executionId };
+        connectExecutionProjection(executionId);
       }
-      if (chatDisplayMode.value === 'panorama') refreshChatProjection(activeSessionId.value).catch(() => undefined);
+      recordLiveActivity('runtime', 'Execution graph available', executionId || event.summary?.status || '', 'running');
       return;
     }
 
@@ -1216,6 +1288,36 @@ export const useAppStore = defineStore('app', () => {
 
     if (String(type).toLowerCase().includes('error')) companionTab.value = 'inspector';
     recordLiveActivity('runtime', type, event.summary || event.content || JSON.stringify(event).slice(0, 220), event.status || 'observed');
+  }
+
+  function settleTerminalCommit(event: any) {
+    const sessionId = String(event.session_id || activeSessionId.value || '');
+    if (sessionId && sessionId !== activeSessionId.value) return;
+    const terminalId = String(event.terminal_id || event.message_id || event.runtime_commit_cursor || '');
+    if (terminalId && committedTerminalIds.has(terminalId)) return;
+    if (terminalId) committedTerminalIds.add(terminalId);
+    const cursor = Number(event.runtime_commit_cursor || 0);
+    if (sessionId && Number.isFinite(cursor) && cursor > 0) sessionStreamCursors.set(sessionId, cursor);
+    const content = event.response || event.text || '';
+    completeAssistantTurn(content);
+    currentRun.value = {
+      ...(currentRun.value || {}),
+      status: 'complete',
+      completed_at_ms: Date.now(),
+      terminal_id: event.terminal_id || null,
+      runtime_commit_cursor: event.runtime_commit_cursor || null,
+    };
+    recordLiveActivity('runtime', 'Terminal committed', terminalId || 'materialized transcript', 'complete');
+    if (activeSessionId.value) {
+      loadMessages(activeSessionId.value).catch(() => undefined);
+      api.sessionInputProjection(activeSessionId.value).then((value: any) => {
+        sessionInputProjection.value = value;
+      }).catch(() => undefined);
+      api.turnInbox(activeSessionId.value).then((value: any) => {
+        turnInbox.value = value;
+      }).catch(() => undefined);
+    }
+    if (chatDisplayMode.value === 'panorama') refreshChatProjection(activeSessionId.value).catch(() => undefined);
   }
 
   function ensureStreamingAssistantTurn() {
@@ -1244,27 +1346,13 @@ export const useAppStore = defineStore('app', () => {
     const visibleContent = normalizeTurnContent(status === 'error' ? 'system' : 'assistant', content);
     const turn = streamingAssistantId ? turns.value.find((item) => item.id === streamingAssistantId) : null;
     if (turn) {
-      const currentContent = normalizeTurnContent(turn.role, turn.content);
-      if (visibleContent && !sameAssistantFinal(currentContent, visibleContent)) {
-        const currentComparable = comparableText(currentContent);
-        const visibleComparable = comparableText(visibleContent);
-        turn.content = currentComparable
-          && visibleComparable
-          && currentComparable.length > visibleComparable.length
-          && currentComparable.includes(visibleComparable)
-          ? currentContent
-          : visibleContent;
-      } else if (currentContent) {
-        turn.content = currentContent;
-      }
+      // The terminal receipt has a stable terminal/message id and is the
+      // canonical transcript materialization. Do not compare prose to infer
+      // whether an earlier streaming value is the same final answer.
+      turn.content = visibleContent || normalizeTurnContent(turn.role, turn.content);
       turn.status = status;
     } else if (visibleContent) {
-      const alreadyShown = turns.value.some((item, index) => {
-        if (item.role !== 'assistant' || !sameAssistantFinal(item.content, visibleContent)) return false;
-        const next = turns.value[index + 1];
-        return !next || next.role !== 'user';
-      });
-      if (!alreadyShown) turns.value.push({ id: `assistant-${Date.now()}`, role: status === 'error' ? 'system' : 'assistant', content: visibleContent, status });
+      turns.value.push({ id: `assistant-${Date.now()}`, role: status === 'error' ? 'system' : 'assistant', content: visibleContent, status });
     }
     streamingAssistantId = '';
   }
@@ -1922,6 +2010,8 @@ export const useAppStore = defineStore('app', () => {
     companionTab,
     chatDisplayMode,
     currentRun,
+    currentExecutionProjection,
+    executionProjectionCursor,
     currentContextEnvelope,
     currentRealityFlow,
     currentTimeline,
@@ -2013,6 +2103,10 @@ export const useAppStore = defineStore('app', () => {
     turnActivitySummary,
     refreshChatProjection,
     refreshSessionInputs,
+    loadExecutionProjection,
+    connectExecutionProjection,
+    disconnectExecutionProjection,
+    executeExecutionProjectionCommand,
     loadWorkspace,
     loadWorkspaceTreeDir,
     toggleWorkspaceTreeDir,
