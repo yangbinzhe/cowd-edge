@@ -14,6 +14,7 @@ const sending = ref(false);
 const commandQuery = ref('');
 const inlineCommandIndex = ref(0);
 const contextUsage = computed(() => store.contextUsagePercent);
+const gatewayStatus = computed(() => store.health?.health?.status || store.health?.status || 'unknown');
 const modelLabel = computed(() => store.selectedModel || 'Select model');
 const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
 const turnRunning = computed(() => ['queued', 'running', 'cancel_requested'].includes(String(store.currentRun?.status || '')));
@@ -227,7 +228,7 @@ async function chooseCommand(command: any) {
           <button type="button" :class="{ active: !isPanorama }" @click="store.setChatDisplayMode('clean')">{{ t('page.chat.page.text.864a2f44ef') }}</button>
         </div>
         <div class="status-strip">
-          <span>{{ displayStatus(store.health?.status || 'unknown') }}</span>
+          <span>{{ displayStatus(gatewayStatus) }}</span>
           <button type="button" @click="store.openModal('model')">{{ store.selectedProfile || 'default' }}</button>
         </div>
       </div>

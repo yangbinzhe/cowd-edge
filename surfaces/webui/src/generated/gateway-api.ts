@@ -114,7 +114,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/agents/reputation": {
+    "/api/agents/self-models": {
         parameters: {
             query?: never;
             header?: never;
@@ -122,77 +122,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * agent GET /api/agents/reputation
-         * @description Query Gateway agent capability through `/api/agents/reputation` handled by `agent_reputation_handler`.
+         * agent GET /api/agents/self-models
+         * @description Query Gateway agent capability through `/api/agents/self-models` handled by `agent_self_models_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_agent_get_api_agents_reputation"];
+        get: operations["gateway_agent_get_api_agents_self_models"];
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/agents/team-profiles": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * agent GET /api/agents/team-profiles
-         * @description Query Gateway agent capability through `/api/agents/team-profiles` handled by `agent_team_profiles_list_handler`.
-         *
-         *     Risk: read. Side effects: none.
-         */
-        get: operations["gateway_agent_get_api_agents_team_profiles"];
-        put?: never;
-        /**
-         * agent POST /api/agents/team-profiles
-         * @description Invoke or create Gateway agent capability through `/api/agents/team-profiles` handled by `agent_team_profile_create_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_agent_post_api_agents_team_profiles"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/agents/team-profiles/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * agent GET /api/agents/team-profiles/:id
-         * @description Query Gateway agent capability through `/api/agents/team-profiles/:id` handled by `agent_team_profile_detail_handler`.
-         *
-         *     Risk: read. Side effects: none.
-         */
-        get: operations["gateway_agent_get_api_agents_team_profiles_by_id"];
-        /**
-         * agent PUT /api/agents/team-profiles/:id
-         * @description Replace Gateway agent capability through `/api/agents/team-profiles/:id` handled by `agent_team_profile_update_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        put: operations["gateway_agent_put_api_agents_team_profiles_by_id"];
-        post?: never;
-        /**
-         * agent DELETE /api/agents/team-profiles/:id
-         * @description Delete Gateway agent capability through `/api/agents/team-profiles/:id` handled by `agent_team_profile_delete_handler`.
-         *
-         *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state.
-         */
-        delete: operations["gateway_agent_delete_api_agents_team_profiles_by_id"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3286,50 +3224,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/active-capabilities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * evolution GET /api/evolution/active-capabilities
-         * @description Query Gateway evolution capability through `/api/evolution/active-capabilities` handled by `evolution_active_capabilities_handler`.
-         *
-         *     Risk: read. Side effects: none.
-         */
-        get: operations["gateway_evolution_get_api_evolution_active_capabilities"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/evolution/adoptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * evolution GET /api/evolution/adoptions
-         * @description Query Gateway evolution capability through `/api/evolution/adoptions` handled by `evolution_adoptions_handler`.
-         *
-         *     Risk: read. Side effects: none.
-         */
-        get: operations["gateway_evolution_get_api_evolution_adoptions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/evolution/candidates": {
         parameters: {
             query?: never;
@@ -3345,7 +3239,13 @@ export interface paths {
          */
         get: operations["gateway_evolution_get_api_evolution_candidates"];
         put?: never;
-        post?: never;
+        /**
+         * evolution POST /api/evolution/candidates
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/candidates` handled by `evolution_candidate_create_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_evolution_post_api_evolution_candidates"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3374,94 +3274,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/candidates/{id}/adoption": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * evolution POST /api/evolution/candidates/:id/adoption
-         * @description Invoke or create Gateway evolution capability through `/api/evolution/candidates/:id/adoption` handled by `evolution_candidate_adoption_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_evolution_post_api_evolution_candidates_by_id_adoption"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/evolution/candidates/{id}/artifacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * evolution GET /api/evolution/candidates/:id/artifacts
-         * @description Query Gateway evolution capability through `/api/evolution/candidates/:id/artifacts` handled by `evolution_candidate_artifacts_handler`.
-         *
-         *     Risk: read. Side effects: none.
-         */
-        get: operations["gateway_evolution_get_api_evolution_candidates_by_id_artifacts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/evolution/candidates/{id}/comparison": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * evolution GET /api/evolution/candidates/:id/comparison
-         * @description Query Gateway evolution capability through `/api/evolution/candidates/:id/comparison` handled by `evolution_candidate_comparison_handler`.
-         *
-         *     Risk: read. Side effects: none.
-         */
-        get: operations["gateway_evolution_get_api_evolution_candidates_by_id_comparison"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/evolution/candidates/{id}/decision": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * evolution POST /api/evolution/candidates/:id/decision
-         * @description Invoke or create Gateway evolution capability through `/api/evolution/candidates/:id/decision` handled by `evolution_candidate_decision_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_evolution_post_api_evolution_candidates_by_id_decision"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/evolution/candidates/{id}/evaluate": {
         parameters: {
             query?: never;
@@ -3484,7 +3296,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/candidates/{id}/promote": {
+    "/api/evolution/candidates/{id}/reviews/canary": {
         parameters: {
             query?: never;
             header?: never;
@@ -3494,19 +3306,19 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * evolution POST /api/evolution/candidates/:id/promote
-         * @description Invoke or create Gateway evolution capability through `/api/evolution/candidates/:id/promote` handled by `evolution_candidate_promote_handler`.
+         * evolution POST /api/evolution/candidates/:id/reviews/canary
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/candidates/:id/reviews/canary` handled by `evolution_candidate_canary_review_handler`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_evolution_post_api_evolution_candidates_by_id_promote"];
+        post: operations["gateway_evolution_post_api_evolution_candidates_by_id_reviews_canary"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/candidates/{id}/run": {
+    "/api/evolution/candidates/{id}/reviews/stable": {
         parameters: {
             query?: never;
             header?: never;
@@ -3516,34 +3328,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * evolution POST /api/evolution/candidates/:id/run
-         * @description Invoke or create Gateway evolution capability through `/api/evolution/candidates/:id/run` handled by `evolution_candidate_sandbox_run_handler`.
+         * evolution POST /api/evolution/candidates/:id/reviews/stable
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/candidates/:id/reviews/stable` handled by `evolution_candidate_stable_review_handler`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_evolution_post_api_evolution_candidates_by_id_run"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/evolution/candidates/{id}/sandbox-eval": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * evolution GET /api/evolution/candidates/:id/sandbox-eval
-         * @description Query Gateway evolution capability through `/api/evolution/candidates/:id/sandbox-eval` handled by `evolution_candidate_sandbox_eval_handler`.
-         *
-         *     Risk: read. Side effects: none.
-         */
-        get: operations["gateway_evolution_get_api_evolution_candidates_by_id_sandbox_eval"];
-        put?: never;
-        post?: never;
+        post: operations["gateway_evolution_post_api_evolution_candidates_by_id_reviews_stable"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3600,7 +3390,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/memory": {
+    "/api/evolution/evaluation-policy": {
         parameters: {
             query?: never;
             header?: never;
@@ -3608,12 +3398,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * evolution GET /api/evolution/memory
-         * @description Query Gateway evolution capability through `/api/evolution/memory` handled by `evolution_memory_handler`.
+         * evolution GET /api/evolution/evaluation-policy
+         * @description Query Gateway evolution capability through `/api/evolution/evaluation-policy` handled by `evolution_evaluation_policy_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_evolution_get_api_evolution_memory"];
+        get: operations["gateway_evolution_get_api_evolution_evaluation_policy"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3622,7 +3412,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/memory/activation": {
+    "/api/evolution/evaluation-policy/reviews": {
         parameters: {
             query?: never;
             header?: never;
@@ -3630,14 +3420,42 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * evolution GET /api/evolution/memory/activation
-         * @description Query Gateway evolution capability through `/api/evolution/memory/activation` handled by `evolution_memory_activation_handler`.
+         * evolution GET /api/evolution/evaluation-policy/reviews
+         * @description Query Gateway evolution capability through `/api/evolution/evaluation-policy/reviews` handled by `evolution_evaluation_policy_reviews_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_evolution_get_api_evolution_memory_activation"];
+        get: operations["gateway_evolution_get_api_evolution_evaluation_policy_reviews"];
         put?: never;
-        post?: never;
+        /**
+         * evolution POST /api/evolution/evaluation-policy/reviews
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/evaluation-policy/reviews` handled by `evolution_evaluation_policy_change_request_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_evolution_post_api_evolution_evaluation_policy_reviews"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/evaluation-policy/reviews/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * evolution POST /api/evolution/evaluation-policy/reviews/:id/decision
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/evaluation-policy/reviews/:id/decision` handled by `evolution_evaluation_policy_decision_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_evolution_post_api_evolution_evaluation_policy_reviews_by_id_decision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3738,28 +3556,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/proposals/{id}/candidates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * evolution POST /api/evolution/proposals/:id/candidates
-         * @description Invoke or create Gateway evolution capability through `/api/evolution/proposals/:id/candidates` handled by `evolution_candidate_create_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_evolution_post_api_evolution_proposals_by_id_candidates"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/evolution/proposals/{id}/decision": {
         parameters: {
             query?: never;
@@ -3804,7 +3600,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/evolution/sandbox-evals": {
+    "/api/evolution/reviews": {
         parameters: {
             query?: never;
             header?: never;
@@ -3812,14 +3608,64 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * evolution GET /api/evolution/sandbox-evals
-         * @description Query Gateway evolution capability through `/api/evolution/sandbox-evals` handled by `evolution_sandbox_evals_handler`.
+         * evolution GET /api/evolution/reviews
+         * @description Query Gateway evolution capability through `/api/evolution/reviews` handled by `evolution_reviews_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_evolution_get_api_evolution_sandbox_evals"];
+        get: operations["gateway_evolution_get_api_evolution_reviews"];
+        put?: never;
+        /**
+         * evolution POST /api/evolution/reviews
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/reviews` handled by `evolution_release_change_request_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_evolution_post_api_evolution_reviews"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/reviews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * evolution GET /api/evolution/reviews/:id
+         * @description Query Gateway evolution capability through `/api/evolution/reviews/:id` handled by `evolution_review_detail_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_evolution_get_api_evolution_reviews_by_id"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/reviews/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * evolution POST /api/evolution/reviews/:id/decision
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/reviews/:id/decision` handled by `evolution_review_decision_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_evolution_post_api_evolution_reviews_by_id_decision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3848,28 +3694,6 @@ export interface paths {
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
         post: operations["gateway_evolution_post_api_evolution_signals"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/evolution/versions/{id}/rollback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * evolution POST /api/evolution/versions/:id/rollback
-         * @description Invoke or create Gateway evolution capability through `/api/evolution/versions/:id/rollback` handled by `evolution_version_rollback_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_evolution_post_api_evolution_versions_by_id_rollback"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3906,12 +3730,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * core GET /api/gateway/capability-contract
-         * @description Query Gateway core capability through `/api/gateway/capability-contract` handled by `capability_contract_handler`.
+         * public GET /api/gateway/capability-contract
+         * @description Query Gateway public capability through `/api/gateway/capability-contract` handled by `capability_contract_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_core_get_api_gateway_capability_contract"];
+        get: operations["gateway_public_get_api_gateway_capability_contract"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3928,12 +3752,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * core GET /api/gateway/openai-tools
-         * @description Query Gateway core capability through `/api/gateway/openai-tools` handled by `openai_tools_handler`.
+         * public GET /api/gateway/openai-tools
+         * @description Query Gateway public capability through `/api/gateway/openai-tools` handled by `openai_tools_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_core_get_api_gateway_openai_tools"];
+        get: operations["gateway_public_get_api_gateway_openai_tools"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3950,12 +3774,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * core GET /api/gateway/openapi.json
-         * @description Query Gateway core capability through `/api/gateway/openapi.json` handled by `openapi_handler`.
+         * public GET /api/gateway/openapi.json
+         * @description Query Gateway public capability through `/api/gateway/openapi.json` handled by `openapi_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_core_get_api_gateway_openapi_json"];
+        get: operations["gateway_public_get_api_gateway_openapi_json"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3972,12 +3796,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * core GET /api/gateway/route-manifest
-         * @description Query Gateway core capability through `/api/gateway/route-manifest` handled by `route_manifest_handler`.
+         * public GET /api/gateway/route-manifest
+         * @description Query Gateway public capability through `/api/gateway/route-manifest` handled by `route_manifest_handler`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_core_get_api_gateway_route_manifest"];
+        get: operations["gateway_public_get_api_gateway_route_manifest"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7456,6 +7280,166 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runtime/managed-agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * runtime GET /api/runtime/managed-agents
+         * @description Query Gateway runtime capability through `/api/runtime/managed-agents` handled by `managed_agent_projection_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["gateway_runtime_get_api_runtime_managed_agents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/managed-agents/definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * runtime GET /api/runtime/managed-agents/definitions
+         * @description Query Gateway runtime capability through `/api/runtime/managed-agents/definitions` handled by `managed_agent_definitions_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["gateway_runtime_get_api_runtime_managed_agents_definitions"];
+        put?: never;
+        /**
+         * runtime POST /api/runtime/managed-agents/definitions
+         * @description Invoke or create Gateway runtime capability through `/api/runtime/managed-agents/definitions` handled by `managed_agent_definition_create_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["gateway_runtime_post_api_runtime_managed_agents_definitions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/managed-agents/dispatch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * runtime POST /api/runtime/managed-agents/dispatch
+         * @description Invoke or create Gateway runtime capability through `/api/runtime/managed-agents/dispatch` handled by `managed_agent_dispatch_handler`.
+         *
+         *     Risk: external. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["gateway_runtime_post_api_runtime_managed_agents_dispatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/managed-agents/effects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * runtime GET /api/runtime/managed-agents/effects
+         * @description Query Gateway runtime capability through `/api/runtime/managed-agents/effects` handled by `managed_agent_effects_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["gateway_runtime_get_api_runtime_managed_agents_effects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/managed-agents/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * runtime POST /api/runtime/managed-agents/events
+         * @description Invoke or create Gateway runtime capability through `/api/runtime/managed-agents/events` handled by `managed_agent_event_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["gateway_runtime_post_api_runtime_managed_agents_events"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/managed-agents/{id}/health/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * runtime POST /api/runtime/managed-agents/:id/health/reset
+         * @description Invoke or create Gateway runtime capability through `/api/runtime/managed-agents/:id/health/reset` handled by `managed_agent_health_reset_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["gateway_runtime_post_api_runtime_managed_agents_by_id_health_reset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/managed-agents/{id}/trigger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * runtime POST /api/runtime/managed-agents/:id/trigger
+         * @description Invoke or create Gateway runtime capability through `/api/runtime/managed-agents/:id/trigger` handled by `managed_agent_manual_trigger_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["gateway_runtime_post_api_runtime_managed_agents_by_id_trigger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runtime/outbox": {
         parameters: {
             query?: never;
@@ -7668,6 +7652,28 @@ export interface paths {
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
         get: operations["gateway_runtime_get_api_runtime_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/teams/{id}/working-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * agent GET /api/runtime/teams/:id/working-state
+         * @description Query Gateway agent capability through `/api/runtime/teams/:id/working-state` handled by `team_working_state_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["gateway_agent_get_api_runtime_teams_by_id_working_state"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9440,6 +9446,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/surfaces/{id}/trigger-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * surface GET /api/surfaces/:id/trigger-events
+         * @description Query Gateway surface capability through `/api/surfaces/:id/trigger-events` handled by `get_surface_trigger_events_handler`.
+         *
+         *     Risk: external. Side effects: may_call_or_control_external_surface.
+         */
+        get: operations["gateway_surface_get_api_surfaces_by_id_trigger_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/surfaces/{id}/trigger-events/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * surface POST /api/surfaces/:id/trigger-events/retry
+         * @description Invoke or create Gateway surface capability through `/api/surfaces/:id/trigger-events/retry` handled by `retry_surface_trigger_event_handler`.
+         *
+         *     Risk: external. Side effects: mutates_gateway_or_runtime_state, may_call_or_control_external_surface.
+         */
+        post: operations["gateway_surface_post_api_surfaces_by_id_trigger_events_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -9638,6 +9688,50 @@ export interface paths {
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
         post: operations["gateway_task_post_api_tasks_by_id_phases_by_phase_id_review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * agent GET /api/team-templates
+         * @description Query Gateway agent capability through `/api/team-templates` handled by `team_templates_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_agent_get_api_team_templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team-templates/instantiate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * agent POST /api/team-templates/instantiate
+         * @description Invoke or create Gateway agent capability through `/api/team-templates/instantiate` handled by `team_template_instantiate_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_agent_post_api_team_templates_instantiate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10267,6 +10361,12 @@ export interface components {
             expected_revision: number;
             payload: unknown;
         };
+        ExecutionEdgeProjection: {
+            from: string;
+            /** @enum {string} */
+            kind: "depends_on" | "verifies" | "produces";
+            to: string;
+        };
         ExecutionGraphProjection: {
             commit_cursor: number;
             edges: components["schemas"]["ExecutionEdgeProjection"][];
@@ -10276,11 +10376,6 @@ export interface components {
             parent_execution?: components["schemas"]["ExecutionParentBinding"] | null;
             revision: number;
             terminal_result_ref?: string | null;
-        };
-        ExecutionEdgeProjection: {
-            from: string;
-            kind: "depends_on" | "verifies" | "produces";
-            to: string;
         };
         ExecutionNodeProjection: {
             evidence_refs: string[];
@@ -10589,270 +10684,11 @@ export interface operations {
             };
         };
     };
-    gateway_agent_get_api_agents_reputation: {
+    gateway_agent_get_api_agents_self_models: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_agent_get_api_agents_team_profiles: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_agent_post_api_agents_team_profiles: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_agent_get_api_agents_team_profiles_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_agent_put_api_agents_team_profiles_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_agent_delete_api_agents_team_profiles_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
             cookie?: never;
         };
         requestBody?: never;
@@ -18273,92 +18109,6 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_get_api_evolution_active_capabilities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_evolution_get_api_evolution_adoptions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     gateway_evolution_get_api_evolution_candidates: {
         parameters: {
             query?: never;
@@ -18367,6 +18117,64 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_post_api_evolution_candidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -18412,232 +18220,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_evolution_post_api_evolution_candidates_by_id_adoption: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_evolution_get_api_evolution_candidates_by_id_artifacts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_evolution_get_api_evolution_candidates_by_id_comparison: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_evolution_post_api_evolution_candidates_by_id_decision: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -18741,7 +18323,7 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_post_api_evolution_candidates_by_id_promote: {
+    gateway_evolution_post_api_evolution_candidates_by_id_reviews_canary: {
         parameters: {
             query?: never;
             header?: never;
@@ -18809,7 +18391,7 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_post_api_evolution_candidates_by_id_run: {
+    gateway_evolution_post_api_evolution_candidates_by_id_reviews_stable: {
         parameters: {
             query?: never;
             header?: never;
@@ -18842,51 +18424,6 @@ export interface operations {
                 };
             };
         };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_evolution_get_api_evolution_candidates_by_id_sandbox_eval: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -19068,7 +18605,7 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_get_api_evolution_memory: {
+    gateway_evolution_get_api_evolution_evaluation_policy: {
         parameters: {
             query?: never;
             header?: never;
@@ -19111,7 +18648,7 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_get_api_evolution_memory_activation: {
+    gateway_evolution_get_api_evolution_evaluation_policy_reviews: {
         parameters: {
             query?: never;
             header?: never;
@@ -19119,6 +18656,132 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_post_api_evolution_evaluation_policy_reviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_post_api_evolution_evaluation_policy_reviews_by_id_decision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -19388,74 +19051,6 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_post_api_evolution_proposals_by_id_candidates: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     gateway_evolution_post_api_evolution_proposals_by_id_decision: {
         parameters: {
             query?: never;
@@ -19569,7 +19164,7 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_get_api_evolution_sandbox_evals: {
+    gateway_evolution_get_api_evolution_reviews: {
         parameters: {
             query?: never;
             header?: never;
@@ -19577,6 +19172,177 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_post_api_evolution_reviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_get_api_evolution_reviews_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_post_api_evolution_reviews_by_id_decision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -19713,74 +19479,6 @@ export interface operations {
             };
         };
     };
-    gateway_evolution_post_api_evolution_versions_by_id_rollback: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     gateway_workspace_get_api_file_raw: {
         parameters: {
             query?: never;
@@ -19822,7 +19520,7 @@ export interface operations {
             };
         };
     };
-    gateway_core_get_api_gateway_capability_contract: {
+    gateway_public_get_api_gateway_capability_contract: {
         parameters: {
             query?: never;
             header?: never;
@@ -19865,7 +19563,7 @@ export interface operations {
             };
         };
     };
-    gateway_core_get_api_gateway_openai_tools: {
+    gateway_public_get_api_gateway_openai_tools: {
         parameters: {
             query?: never;
             header?: never;
@@ -19908,7 +19606,7 @@ export interface operations {
             };
         };
     };
-    gateway_core_get_api_gateway_openapi_json: {
+    gateway_public_get_api_gateway_openapi_json: {
         parameters: {
             query?: never;
             header?: never;
@@ -19951,7 +19649,7 @@ export interface operations {
             };
         };
     };
-    gateway_core_get_api_gateway_route_manifest: {
+    gateway_public_get_api_gateway_route_manifest: {
         parameters: {
             query?: never;
             header?: never;
@@ -28404,6 +28102,445 @@ export interface operations {
             };
         };
     };
+    gateway_runtime_get_api_runtime_managed_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_runtime_get_api_runtime_managed_agents_definitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_runtime_post_api_runtime_managed_agents_definitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_runtime_post_api_runtime_managed_agents_dispatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_runtime_get_api_runtime_managed_agents_effects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_runtime_post_api_runtime_managed_agents_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_runtime_post_api_runtime_managed_agents_by_id_health_reset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_runtime_post_api_runtime_managed_agents_by_id_trigger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_runtime_get_api_runtime_outbox: {
         parameters: {
             query?: never;
@@ -28871,6 +29008,51 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_agent_get_api_runtime_teams_by_id_working_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -33548,6 +33730,119 @@ export interface operations {
             };
         };
     };
+    gateway_surface_get_api_surfaces_by_id_trigger_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_surface_post_api_surfaces_by_id_trigger_events_retry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_task_get_api_tasks: {
         parameters: {
             query?: never;
@@ -34141,6 +34436,107 @@ export interface operations {
                         id: string;
                         /** @description Path parameter `phase_id` */
                         phase_id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_agent_get_api_team_templates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_agent_post_api_team_templates_instantiate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
                     };
                 };
             };

@@ -199,6 +199,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
     [
       section('catalog', t('capability.section.agents.catalog.label'), t('capability.section.agents.catalog.description'), 'table', 'standard', 'agent.catalog'),
       section('discovery', t('capability.section.agents.discovery.label'), t('capability.section.agents.discovery.description'), 'table', 'standard', 'agent.discovery'),
+      section('managed-agents', t('capability.section.agents.managed.label'), t('capability.section.agents.managed.description'), 'governance', 'inspect', 'runtime.managed_agent'),
       section('tasks', t('capability.section.agents.tasks.label'), t('capability.section.agents.tasks.description'), 'queue', 'standard', 'agent.task'),
       section('reviews', t('capability.section.agents.reviews.label'), t('capability.section.agents.reviews.description'), 'governance', 'inspect', 'agent.review'),
       section('graph', t('data.capabilities.string.b0dedef95b'), t('data.capabilities.string.4d1e70fa50'), 'graph', 'inspect', 'agent.graph'),
@@ -250,6 +251,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('routes', t('script.data.capabilities.label.03730e5840'), t('data.capabilities.string.05942baecd'), 'table', 'standard', 'surface.route'),
       section('dispatch', t('script.data.capabilities.label.840e1b364a'), t('data.capabilities.string.ff04d823f3'), 'form', 'standard', 'surface.dispatch'),
       section('delivery', t('capability.section.surfaces.delivery.label'), t('capability.section.surfaces.delivery.description'), 'queue', 'standard', 'surface.delivery'),
+      section('trigger-events', t('page.surface.triggerEvents.title'), t('page.surface.triggerEvents.detail'), 'queue', 'standard', 'surface.trigger_event'),
       section('events', t('script.data.capabilities.label.c5497bca58'), t('data.capabilities.string.e0bbab98f3'), 'timeline', 'standard', 'surface.event'),
     ],
     [
@@ -326,6 +328,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('harness-eval-runs', t('capability.section.audit.harnessEvalRuns.label'), t('capability.section.audit.harnessEvalRuns.description'), 'timeline', 'standard', 'harness.eval.run'),
       section('harness-eval-scenarios', t('capability.section.audit.harnessEvalScenarios.label'), t('capability.section.audit.harnessEvalScenarios.description'), 'table', 'standard', 'harness.eval.scenario'),
       section('evolution', t('capability.section.audit.evolution.label'), t('capability.section.audit.evolution.description'), 'governance', 'inspect', 'runtime.evolution'),
+      section('evaluation-policy', t('capability.section.audit.evaluationPolicy.label'), t('capability.section.audit.evaluationPolicy.description'), 'governance', 'inspect', 'runtime.evaluation_policy'),
       section('approvals', t('capability.section.audit.approvals.label'), t('capability.section.audit.approvals.description'), 'governance', 'inspect', 'approval.audit'),
       section('cross-plane', t('capability.section.audit.crossPlane.label'), t('capability.section.audit.crossPlane.description'), 'table', 'standard', 'cross-plane.audit'),
     ],

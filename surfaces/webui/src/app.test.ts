@@ -524,8 +524,8 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/harness-eval/runs/run-1/cancel', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('calls evolution diagnosis candidate sandbox adoption and skill draft endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, signals: [], diagnoses: [], proposals: [], candidates: [], evals: [] }), { status: 200 })));
+  it('uses Runtime-owned evolution candidates and typed release review endpoints', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, signals: [], diagnoses: [], proposals: [], candidates: [], reviews: [] }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
     await api.evolutionSignals();
@@ -542,18 +542,17 @@ describe('Cowd Vue WebUI shell', () => {
     await api.evolutionSkillDraft('proposal-1');
     await api.evolutionCandidates();
     await api.evolutionCandidateDetail('candidate-1');
-    await api.evolutionCreateCandidate('proposal-1', { baseline_ref: 'baseline:main', candidate_ref: 'candidate:sandbox' });
-    await api.evolutionCandidateSandboxRun('candidate-1');
-    await api.evolutionCandidateArtifacts('candidate-1');
-    await api.evolutionCandidateEvaluate('candidate-1');
-    await api.evolutionCandidateComparison('candidate-1');
-    await api.evolutionCandidatePromote('candidate-1');
-    await api.evolutionCandidateDecision('candidate-1', 'archived');
-    await api.evolutionAdoptions();
-    await api.evolutionActiveCapabilities();
-    await api.evolutionVersionRollback('version-1');
-    await api.evolutionMemory();
-    await api.evolutionSandboxEvals();
+    await api.evolutionCreateCandidate({ candidate_id: 'candidate-1', subject: { kind: 'agent_definition' }, baseline_revision: 1, evaluation_contract_digest: 'sha256:test', source_evidence_refs: ['eval:1'], protected_dimensions: ['policy'] });
+    await api.evolutionCandidateCanaryReview('candidate-1');
+    await api.evolutionCandidateStableReview('candidate-1');
+    await api.evolutionReviews();
+    await api.evolutionReview('review-1');
+    await api.evolutionCreateReleaseReview({ request_id: 'rollback-1', subject: { kind: 'agent_definition' }, action: 'rollback', selector: { kind: 'exact_approved_revision', revision: 1 }, evidence_refs: ['run:1'] });
+    await api.evolutionReviewDecision('review-1', 'approve', 'verified');
+    await api.evolutionEvaluationPolicy();
+    await api.evolutionEvaluationPolicyReviews();
+    await api.evolutionCreateEvaluationPolicyReview({ request_id: 'policy-1', proposed_policy: { policy_id: 'default', revision: 2 } });
+    await api.evolutionEvaluationPolicyReviewDecision('policy-review-1', 'reject', 'insufficient evidence');
 
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/signals', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/signals', expect.objectContaining({ method: 'POST' }));
@@ -569,56 +568,133 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/skill-draft', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-1/candidates', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/run', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/artifacts', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/evaluate', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/comparison', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/promote', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/decision', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/adoptions', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/active-capabilities', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/versions/version-1/rollback', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/memory', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/sandbox-evals', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/reviews/canary', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/reviews/stable', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/reviews', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/reviews/review-1', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/reviews', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/reviews/review-1/decision', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/evaluation-policy', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/evaluation-policy/reviews', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/evaluation-policy/reviews', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/evaluation-policy/reviews/policy-review-1/decision', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('requires an explicit non-first evolution proposal before creating a candidate', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
+  it('uses Runtime-owned Managed Agent intent and projection endpoints', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+      definitions: [], invocations: [], health: [], effects: [],
+    }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.managedAgents();
+    await api.managedAgentDefinitions();
+    await api.createManagedAgentDefinition({
+      managed_agent_id: 'workspace/test/agent',
+      revision: 1,
+      target: { kind: 'agent', definition_id: 'workspace/test', selector: { kind: 'latest_approved_stable' } },
+      trigger: { kind: 'schedule', trigger: { interval: { every_ms: 60_000 } } },
+    });
+    await api.triggerManagedAgent('workspace/test/agent', 'request-1');
+    await api.dispatchManagedAgents('webui-test', 8);
+    await api.resetManagedAgentHealth('workspace/test/agent');
+    await api.managedAgentEffects();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents/definitions', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents/definitions', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents/workspace%2Ftest%2Fagent/trigger', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents/dispatch', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents/workspace%2Ftest%2Fagent/health/reset', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents/effects', expect.any(Object));
+    const registration = fetchMock.mock.calls.find(([path, init]) => String(path) === '/api/runtime/managed-agents/definitions' && init?.method === 'POST');
+    expect(JSON.parse(String(registration?.[1]?.body))).toMatchObject({
+      trigger: { kind: 'schedule', trigger: { interval: { every_ms: 60_000 } } },
+    });
+  });
+
+  it('renders the Managed Agent control plane as structured Runtime intent and projections', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
       const url = String(path);
-      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
-      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
-      if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
-      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
-      if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
-      if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
-      if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
-      if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
-      if (url === '/api/evolution/proposals') return Promise.resolve(new Response(JSON.stringify({ proposals: [
-        { proposal_id: 'proposal-1', kind: 'tool', status: 'draft' },
-        { proposal_id: 'proposal-2', kind: 'runtime', status: 'draft' },
-      ] })));
-      if (url === '/api/evolution/candidates') return Promise.resolve(new Response(JSON.stringify({ candidates: [] })));
-      if (url === '/api/evolution/proposals/proposal-2/skill-draft') return Promise.resolve(new Response(JSON.stringify({ id: 'proposal-2' })));
-      if (url === '/api/evolution/proposals/proposal-2/candidates') return Promise.resolve(new Response(JSON.stringify({ candidate_id: 'candidate-2' }), { status: 201 }));
-      if (init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ status: 'accepted' }), { status: 202 }));
+      if (url === '/api/agents/catalog') return Promise.resolve(new Response(JSON.stringify({ summary: {}, agents: [] })));
+      if (url === '/api/agents/directory') return Promise.resolve(new Response(JSON.stringify({ agents: [{ definition_ref: { definition_id: 'workspace/cowd/researcher' } }] })));
+      if (url === '/api/agents/self-models') return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      if (url === '/api/agents/execution-graphs') return Promise.resolve(new Response(JSON.stringify({ graphs: [] })));
+      if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ tasks: [] })));
+      if (url === '/api/team-templates') return Promise.resolve(new Response(JSON.stringify({ templates: [{ revision_ref: { template_id: 'workspace/cowd/research-team' } }] })));
+      if (url === '/api/runtime/managed-agents') return Promise.resolve(new Response(JSON.stringify({
+        definitions: [{
+          managed_agent_id: 'workspace/cowd/nightly-research',
+          revision: 2,
+          target: { kind: 'team', template_id: 'workspace/cowd/research-team' },
+          trigger: { kind: 'event', source_id: 'feishu', source_kind: 'connector_source', event_type: 'message.received' },
+          objective: 'Review overnight evidence',
+          enabled: true,
+        }],
+        invocations: [{ invocation_id: 'invoke-1', definition_id: 'workspace/cowd/nightly-research', definition_revision: 2, status: 'pending', attempt_no: 1, trigger: { kind: 'event' } }],
+        health: [{ managed_agent_id: 'workspace/cowd/nightly-research', revision: 2, status: 'healthy', consecutive_failures: 0, max_consecutive_failures: 3, active_invocation_ids: [] }],
+        effects: [{ effect_id: 'effect-1', invocation_id: 'invoke-1', effect_kind: 'tool', status: 'completed' }],
+      })));
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
-    const wrapper = await mountApp('/audit');
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    const wrapper = mount(AgentsPage, { global: { plugins: [pinia] } });
     await settleAsync();
     await settleAsync();
-    const createCandidate = wrapper.findAll('button').find((button) => button.text() === '生成候选');
-    expect(createCandidate?.attributes('disabled')).toBeDefined();
-    await wrapper.findAll('tbody tr').find((row) => row.text().includes('proposal-2'))?.trigger('click');
-    await settleAsync();
-    expect(createCandidate?.attributes('disabled')).toBeUndefined();
-    await createCandidate?.trigger('click');
-    await settleAsync();
-    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/proposals/proposal-2/candidates', expect.objectContaining({ method: 'POST' }));
+
+    const section = wrapper.get('[data-section="managed-agents"]');
+    expect(section.text()).toContain('受管 Agent');
+    expect(section.text()).toContain('团队模板');
+    expect(section.text()).toContain('外部事件');
+    expect(section.text()).toContain('调用记录');
+    expect(section.text()).toContain('围栏副作用');
+    expect(section.findAll('select').length).toBeGreaterThanOrEqual(2);
+    expect(section.text()).not.toContain('RawPayload');
+    wrapper.unmount();
   });
+
+  it('submits Audit review decisions through typed release and policy endpoints', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(path);
+      if (url === '/api/evolution/reviews') return Promise.resolve(new Response(JSON.stringify({ reviews: [{ review_id: 'release-review-1', class: 'release', action: 'promote', status: 'pending', approval_id: 'approval-1' }] })));
+      if (url === '/api/evolution/evaluation-policy') return Promise.resolve(new Response(JSON.stringify({ policy_id: 'default-floor', revision: 3 })));
+      if (url === '/api/evolution/evaluation-policy/reviews') return Promise.resolve(new Response(JSON.stringify({ reviews: [{ review_id: 'policy-review-1', status: 'pending', proposed_policy: { policy_id: 'default-floor', revision: 4 } }] })));
+      if (url.endsWith('/decision') && init?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ status: 'accepted' }), { status: 202 }));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = mount(AuditPage, {
+      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+    });
+    await settleAsync();
+    await settleAsync();
+
+    const evolution = wrapper.get('[data-section="evolution"]');
+    await evolution.find('tbody tr').trigger('click');
+    await evolution.get('input[type="text"]').setValue('evidence comparison is acceptable');
+    await evolution.findAll('button').find((button) => button.text() === '批准')?.trigger('click');
+    await settleAsync();
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/reviews/release-review-1/decision', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ decision: 'approve', reason: 'evidence comparison is acceptable' }),
+    }));
+
+    const policy = wrapper.get('[data-section="evaluation-policy"]');
+    await policy.findAll('tbody tr')[1]?.trigger('click');
+    await policy.get('input[type="text"]').setValue('policy floor is sufficiently protected');
+    await policy.findAll('button').find((button) => button.text() === '通过策略审核')?.trigger('click');
+    await settleAsync();
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/evaluation-policy/reviews/policy-review-1/decision', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ decision: 'approve', reason: 'policy floor is sufficiently protected' }),
+    }));
+    wrapper.unmount();
+  });
+
 
   it('calls real tool operation endpoints through the backend', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, checkpoints: [] }), { status: 200 })));
@@ -1257,6 +1333,9 @@ describe('Cowd Vue WebUI shell', () => {
     await api.surfaceEvents('webui');
     await api.surfaceInbox('webui');
     await api.surfaceOutbox('webui');
+    await api.surfaceMessages('webui');
+    await api.surfaceTriggerEvents('webui');
+    await api.surfaceRetryTriggerEvent('webui', 'surface-event-1');
     await api.surfaceDeliveries('webui');
     await api.surfaceReplayInbox('webui', 'msg-1');
     await api.surfaceRetryOutbox('webui', 'delivery-1');
@@ -1299,6 +1378,12 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/events', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/inbox', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/outbox', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/messages', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/trigger-events', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/trigger-events/retry', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ idempotency_key: 'surface-event-1' }),
+    }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/deliveries', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/inbox/msg-1/replay', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/outbox/delivery-1/retry', expect.objectContaining({ method: 'POST' }));
@@ -1372,6 +1457,22 @@ describe('Cowd Vue WebUI shell', () => {
         },
       })));
       if (url === '/api/surfaces/webui/outbox') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.outbox', outbox: [{ delivery_id: 'delivery-1', status: 'retry_scheduled', recipient: 'operator', attempts: 1, max_attempts: 5, next_retry_at_ms: 1, last_error: 'timeout' }], dead_letters: [] })));
+      if (url === '/api/surfaces/webui/messages') return Promise.resolve(new Response(JSON.stringify({
+        kind: 'surface.messages',
+        snapshot: {
+          trigger_events: [{ idempotency_key: 'surface-event-1', event_type: 'message.received', status: 'dead_letter', attempts: 5, max_attempts: 5, last_error: 'runtime unavailable' }],
+          active_trigger_events: [],
+          failed_trigger_events: [{ idempotency_key: 'surface-event-1', event_type: 'message.received', status: 'dead_letter', attempts: 5, max_attempts: 5, last_error: 'runtime unavailable' }],
+        },
+      })));
+      if (url === '/api/surfaces/webui/trigger-events') return Promise.resolve(new Response(JSON.stringify({
+        kind: 'surface.trigger_events',
+        events: [{ idempotency_key: 'surface-event-1', event_type: 'message.received', status: 'dead_letter', attempts: 5, max_attempts: 5, last_error: 'runtime unavailable' }],
+      })));
+      if (url === '/api/surfaces/webui/trigger-events/retry') return Promise.resolve(new Response(JSON.stringify({
+        kind: 'surface.trigger_event.retry_accepted',
+        event: { idempotency_key: 'surface-event-1', status: 'received' },
+      })));
       if (url === '/api/surfaces/webui/deliveries') return Promise.resolve(new Response(JSON.stringify({ kind: 'surface.deliveries', deliveries: [{ kind: 'outbox.retry_scheduled', status: 'retry_scheduled', delivery_id: 'delivery-1', message_id: 'msg-1', created_at_ms: 1 }] })));
       return Promise.resolve(new Response(JSON.stringify({})));
     });
@@ -1388,11 +1489,22 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('资源');
     expect(wrapper.text()).toContain('分发');
     expect(wrapper.text()).toContain('可靠投递');
+    const triggerEvents = wrapper.get('[data-section="trigger-events"]');
+    expect(triggerEvents.text()).toContain('运行时触发事件');
+    expect(triggerEvents.text()).toContain('message.received');
+    expect(triggerEvents.text()).toContain('runtime unavailable');
+    await triggerEvents.get('[data-action="retry-trigger-event"]').trigger('click');
+    await settleAsync();
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/trigger-events/retry', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ idempotency_key: 'surface-event-1' }),
+    }));
     expect(wrapper.text()).toContain('事件');
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/events', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/inbox', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/outbox', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/trigger-events', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/surfaces/webui/deliveries', expect.any(Object));
   });
 
@@ -1501,10 +1613,33 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
       if (url === '/api/agents/catalog') return Promise.resolve(new Response(JSON.stringify({ summary: { total: 1, active: 1 }, agents: [{ name: 'planner', active: true, source: { id: 'project_cowd' }, description: 'Plans work' }] })));
       if (url === '/api/agents/directory') return Promise.resolve(new Response(JSON.stringify({ summary: { total: 1, active: 1 }, agents: [{ name: 'planner', active: true, source: { id: 'project_cowd' }, description: 'Plans work' }] })));
-      if (url === '/api/agents/reputation') return Promise.resolve(new Response(JSON.stringify({ items: [{ agent_id: 'planner', reputation: 91, status: 'active' }] })));
+      if (url === '/api/agents/self-models') return Promise.resolve(new Response(JSON.stringify({ items: [{ definition_id: 'workspace/cowd/planner', definition_revision: 1, environment_fingerprint: 'env', run_count: 3, success_count: 2, failure_count: 1, total_tool_calls: 4 }] })));
       if (url === '/api/agents/execution-graphs') return Promise.resolve(new Response(JSON.stringify({ graphs: [{ graph_id: 'agent-graph-task-1' }] })));
+      if (url === '/api/team-templates') return Promise.resolve(new Response(JSON.stringify({ templates: [] })));
       if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ current: { id: 'task-1', objective: 'Ship UI', status: 'open', phases: [] }, tasks: [{ id: 'task-1', objective: 'Ship UI', status: 'open', phases: [] }] })));
       if (url === '/api/tasks/task-1/execution-graph') return Promise.resolve(new Response(JSON.stringify({ status: 'running', nodes: [{ id: 'planner', title: 'Plan', role: 'planner', status: 'ready', objective: 'Ship UI', depends_on: [] }] })));
+      if (url === '/api/runtime/managed-agents') return Promise.resolve(new Response(JSON.stringify({
+        definitions: [{
+          managed_agent_id: 'workspace/cowd/cron-review',
+          revision: 2,
+          target: { kind: 'agent', definition_id: 'workspace/cowd/reviewer' },
+          trigger: { kind: 'schedule', trigger: { cron: { expression: '0 * * * *', timezone: 'UTC' } } },
+          session_id: 'managed:cron-review',
+          objective: 'Review current evidence.',
+          acceptance: ['evidence-backed result'],
+          permission_lease: 'read_only',
+          model_lease: 'default',
+          granted_capabilities: ['read'],
+          enabled: true,
+        }],
+        invocations: [{
+          invocation_id: 'managed-invocation-1', definition_id: 'workspace/cowd/cron-review', definition_revision: 2,
+          status: 'completed', attempt_no: 1, trigger: { kind: 'schedule', trigger: { cron: { expression: '0 * * * *', timezone: 'UTC' } } },
+          execution_ref: 'execution:1', error: null,
+        }],
+        health: [{ managed_agent_id: 'workspace/cowd/cron-review', revision: 2, status: 'healthy', consecutive_failures: 0, max_consecutive_failures: 3, active_invocation_ids: [] }],
+        effects: [{ effect_id: 'effect-1', invocation_id: 'managed-invocation-1', effect_kind: 'tool', status: 'completed', receipt_ref: 'receipt:1', error: null }],
+      })));
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -1518,31 +1653,52 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('发现团队');
     expect(wrapper.text()).toContain('任务控制');
     expect(wrapper.text()).toContain('Agent 执行图');
+    expect(wrapper.text()).toContain('受管 Agent');
+    expect(wrapper.text()).toContain('Cron 调度');
+    expect(wrapper.text()).toContain('围栏副作用');
     expect(fetchMock).toHaveBeenCalledWith('/api/agents/catalog', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/agents/directory', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/agents/reputation', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/agents/self-models', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/tasks/task-1/execution-graph', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents', expect.any(Object));
+    const trigger = wrapper.findAll('[data-section="managed-agents"] button').find((button) => button.text().includes('立即触发'));
+    await trigger?.trigger('click');
+    await settleAsync();
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/managed-agents/workspace%2Fcowd%2Fcron-review/trigger', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('posts agent assemble requests through the backend contract', async () => {
+  it('posts agent discovery and Team template instantiation through Runtime contracts', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: 'agents.assemble', team: {} }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.agentAssemble('build a review team');
-    await api.createAgentTeamProfile({ id: 'qa-team', name: 'QA Team', members: ['planner'] });
-    await api.updateAgentTeamProfile('qa-team', { name: 'QA Team', members: ['planner', 'reviewer'] });
-    await api.deleteAgentTeamProfile('qa-team');
+    await api.instantiateTeamTemplate({
+      request_id: 'webui-test',
+      team_id: 'team-test',
+      session_id: 'session-test',
+      selection_mode: 'explicit',
+      template_selector: { kind: 'latest_stable', template_id: 'builtin/cowd/execute-review' },
+      objective: 'review implementation',
+      permission_lease: 'read_only',
+      model_lease: 'default',
+    });
+    await api.teamWorkingState('team-test');
     expect(fetchMock).toHaveBeenCalledWith('/api/agents/assemble', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ task: 'build a review team' }),
     }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/agents/team-profiles', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/team-templates/instantiate', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ id: 'qa-team', name: 'QA Team', members: ['planner'] }),
+      body: JSON.stringify({
+        request_id: 'webui-test',
+        team_id: 'team-test',
+        session_id: 'session-test',
+        selection_mode: 'explicit',
+        template_selector: { kind: 'latest_stable', template_id: 'builtin/cowd/execute-review' },
+        objective: 'review implementation',
+        permission_lease: 'read_only',
+        model_lease: 'default',
+      }),
     }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/agents/team-profiles/qa-team', expect.objectContaining({
-      method: 'PUT',
-      body: JSON.stringify({ name: 'QA Team', members: ['planner', 'reviewer'] }),
-    }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/agents/team-profiles/qa-team', expect.objectContaining({ method: 'DELETE' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/runtime/teams/team-test/working-state', expect.any(Object));
   });
 });

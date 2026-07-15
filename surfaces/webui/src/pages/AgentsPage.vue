@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { GitBranch, Play, RefreshCw, Search, Trash2, Users } from 'lucide-vue-next';
+import { Play, RefreshCw, Search, Users } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
@@ -19,22 +19,20 @@ const error = ref('');
 const catalog = ref<any>({});
 const directory = ref<any>({});
 const discovery = ref<any>({});
-const reputation = ref<any>({});
+const selfModels = ref<any>({});
 const runs = ref<any>({});
 const tasks = ref<any>({});
 const graph = ref<any>({});
-const teamProfiles = ref<any>({});
+const teamTemplates = ref<any>({});
+const managedAgents = ref<any>({});
 const actionResult = ref<any>(null);
-const profileResult = ref<any>(null);
+const managedActionResult = ref<any>(null);
+const teamResult = ref<any>(null);
+const teamWorkingState = ref<any>(null);
 const selectedTaskId = ref('');
-const selectedProfileId = ref('');
+const selectedTemplateId = ref('');
 const objective = ref('');
 const discoverQuery = ref('');
-const profileName = ref('WebUI Review Team');
-const profileLeader = ref('');
-const profileMembers = ref('planner,executor,reviewer');
-const profilePolicy = ref('{"max_parallel_agents":3,"requires_review":true}');
-const profileEvaluation = ref('{"success_metric":"accepted_phase_review","quality_gate":"all_tests_pass"}');
 const phaseName = ref('');
 const phaseObjective = ref('');
 const artifactLabel = ref('');
@@ -42,6 +40,27 @@ const artifactValue = ref('');
 const reviewResult = ref('');
 const failureReason = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
+const managedDefinitionId = ref('workspace/cowd/managed-agent');
+const managedTargetDefinition = ref('');
+const managedTargetKind = ref<'agent' | 'team'>('agent');
+const managedTriggerKind = ref<'manual' | 'at' | 'interval' | 'cron' | 'event'>('manual');
+const managedObjective = ref('');
+const managedCapabilities = ref('read');
+const managedAcceptance = ref('evidence-backed result');
+const managedEnabled = ref(true);
+const managedAtMs = ref('');
+const managedIntervalMs = ref('3600000');
+const managedCronExpression = ref('0 * * * *');
+const managedCronTimezone = ref('UTC');
+const managedEventSourceId = ref('');
+const managedEventSourceKind = ref('connector_source');
+const managedEventType = ref('');
+const managedEventCapabilities = ref('connector.source.event.receive');
+const managedEventAttributes = ref('');
+const managedEventMaximumAgeMs = ref('');
+const managedEventOrderPolicy = ref<'accept_any' | 'reject_older_sequence'>('accept_any');
+const selectedManagedDefinitionId = ref('');
+const selectedManagedHealthId = ref('');
 
 const agentRows = computed(() => (Array.isArray(directory.value?.agents) ? directory.value.agents : Array.isArray(catalog.value?.agents) ? catalog.value.agents : []).map((agent: any) => ({
   name: agent.name,
@@ -52,9 +71,9 @@ const agentRows = computed(() => (Array.isArray(directory.value?.agents) ? direc
 })));
 const discoveredRows = computed(() => (Array.isArray(discovery.value?.agents) ? discovery.value.agents : []).map((agent: any) => ({
   agent_id: agent.agent_id,
-  role: agent.role,
-  reputation: agent.reputation ?? '-',
-  status: agent.status,
+  definition: `${agent.definition_ref?.definition_id || '-'}@${agent.definition_ref?.revision ?? '-'}`,
+  capabilities: Array.isArray(agent.capabilities) ? agent.capabilities.join(', ') : '-',
+  status: agent.scope || '-',
 })));
 const taskItems = computed(() => Array.isArray(tasks.value?.tasks) ? tasks.value.tasks : []);
 const selectedTask = computed(() => taskItems.value.find((task: any) => task.id === selectedTaskId.value) || tasks.value?.current || taskItems.value[0] || null);
@@ -62,22 +81,79 @@ const phaseItems = computed(() => Array.isArray(selectedTask.value?.phases) ? se
 const currentPhase = computed(() => phaseItems.value.find((phase: any) => phase.id === selectedTask.value?.current_phase) || phaseItems.value[0] || null);
 const graphNodes = computed(() => Array.isArray(graph.value?.nodes) ? graph.value.nodes : []);
 const runItems = computed(() => Array.isArray(runs.value?.runs) ? runs.value.runs : []);
-const teamProfileItems = computed(() => Array.isArray(teamProfiles.value?.profiles) ? teamProfiles.value.profiles : []);
-const reputationRows = computed(() => (Array.isArray(reputation.value?.items) ? reputation.value.items : []).map((item: any) => ({
-  agent_id: item.agent_id || item.name || '-',
-  reputation: item.reputation ?? '-',
-  status: item.status ?? '-',
+const teamTemplateItems = computed(() => Array.isArray(teamTemplates.value?.templates) ? teamTemplates.value.templates : []);
+const managedDefinitionItems = computed(() => Array.isArray(managedAgents.value?.definitions) ? managedAgents.value.definitions : []);
+const managedInvocations = computed(() => Array.isArray(managedAgents.value?.invocations) ? managedAgents.value.invocations : []);
+const managedEffects = computed(() => Array.isArray(managedAgents.value?.effects) ? managedAgents.value.effects : []);
+const managedHealth = computed(() => Array.isArray(managedAgents.value?.health) ? managedAgents.value.health : []);
+const managedDefinitionRows = computed(() => managedDefinitionItems.value.map((definition: any) => ({
+  id: definition.managed_agent_id,
+  revision: definition.revision,
+  target: definition.target?.definition_id || definition.target?.template_id || '-',
+  target_kind: managedTargetLabel(definition.target?.kind),
+  trigger: managedTriggerLabel(definition.trigger),
+  enabled: definition.enabled !== false,
+  objective: definition.objective,
+})));
+const managedInvocationRows = computed(() => managedInvocations.value.slice(0, 20).map((invocation: any) => ({
+  id: invocation.invocation_id,
+  definition: `${invocation.definition_id}@${invocation.definition_revision}`,
+  status: invocation.status,
+  attempt: invocation.attempt_no,
+  trigger: invocation.trigger?.kind || '-',
+  execution: invocation.execution_ref || '-',
+  error: invocation.error || '-',
+})));
+const managedHealthRows = computed(() => managedHealth.value.map((health: any) => ({
+  id: health.managed_agent_id,
+  revision: health.revision,
+  status: health.status,
+  failures: `${health.consecutive_failures}/${health.max_consecutive_failures}`,
+  active: Array.isArray(health.active_invocation_ids) ? health.active_invocation_ids.length : 0,
+})));
+const managedEffectRows = computed(() => managedEffects.value.slice(0, 20).map((effect: any) => ({
+  id: effect.effect_id,
+  invocation: effect.invocation_id,
+  kind: effect.effect_kind,
+  status: effect.status,
+  receipt: effect.receipt_ref || '-',
+  error: effect.error || '-',
+})));
+const selectedManagedDefinition = computed(() => managedDefinitionRows.value.find((definition: any) => definition.id === selectedManagedDefinitionId.value) || null);
+const selectedManagedHealth = computed(() => managedHealthRows.value.find((health: any) => health.id === selectedManagedHealthId.value) || null);
+const managedTargetOptions = computed(() => {
+  const agents = Array.isArray(directory.value?.agents) ? directory.value.agents : [];
+  const agentOptions = agents
+    .map((agent: any) => agent.definition_ref?.definition_id || agent.source?.id || agent.id)
+    .filter(Boolean)
+    .map((id: string) => ({ id, kind: 'agent' as const }));
+  const teamOptions = teamTemplateItems.value
+    .map((template: any) => template.revision_ref?.template_id)
+    .filter(Boolean)
+    .map((id: string) => ({ id, kind: 'team' as const }));
+  return [...agentOptions, ...teamOptions];
+});
+const selectedTeamTemplate = computed(() => teamTemplateItems.value.find((template: any) => template?.revision_ref?.template_id === selectedTemplateId.value) || teamTemplateItems.value[0] || null);
+const selfModelRows = computed(() => (Array.isArray(selfModels.value?.items) ? selfModels.value.items : []).map((item: any) => ({
+  definition: `${item.definition_id || '-'}@${item.definition_revision ?? '-'}`,
+  environment: item.environment_fingerprint || '-',
+  runs: item.run_count ?? 0,
+  successful: item.success_count ?? 0,
+  failed: item.failure_count ?? 0,
+  success_rate: item.run_count ? `${Math.round((Number(item.success_count || 0) / Number(item.run_count)) * 100)}%` : '-',
+  tools: item.total_tool_calls ?? 0,
+  evidence: (item.successful_evidence_refs?.length || 0) + (item.failed_evidence_refs?.length || 0),
 })));
 const openTasks = computed(() => taskItems.value.filter((task: any) => !['completed', 'cancelled'].includes(String(task.status))).length);
 const agentsContext = computed(() => [
   { label: t('script.pages.agentspage.label.64acf7e2a7'), value: agentRows.value.length, tone: agentRows.value.length ? 'success' : 'warn' },
-  { label: t('script.pages.agentspage.label.0c2a930099'), value: teamProfileItems.value.length },
+  { label: t('page.agents.teamTemplates.metric'), value: teamTemplateItems.value.length },
   { label: t('script.pages.agentspage.label.ef2960c6f7'), value: openTasks.value, tone: openTasks.value ? 'warn' : 'success' },
   { label: t('script.pages.agentspage.label.91a4801bd6'), value: graphNodes.value.length },
 ]);
 const agentsWorkflow = computed(() => [
   { id: 'catalog', label: t('script.pages.agentspage.label.4827ea2271'), status: agentRows.value.length ? 'ready' : 'idle', count: agentRows.value.length },
-  { id: 'discovery', label: t('script.pages.agentspage.label.ff4fc0276e'), status: teamProfileItems.value.length ? 'ready' : 'idle', count: teamProfileItems.value.length },
+  { id: 'team_templates', label: t('page.agents.teamTemplates.metric'), status: teamTemplateItems.value.length ? 'ready' : 'idle', count: teamTemplateItems.value.length },
   { id: 'tasks', label: t('script.pages.agentspage.label.7bb0ddf922'), status: selectedTask.value ? 'active' : 'idle', description: selectedTask.value?.status || 'none' },
   { id: 'tasks', label: t('script.pages.agentspage.label.f6371a4980'), status: currentPhase.value ? 'active' : 'idle', description: currentPhase.value?.status || 'pending' },
   { id: 'graph', label: t('script.pages.agentspage.label.9a7405ebce'), status: graphNodes.value.length ? 'ready' : 'idle', count: graphNodes.value.length },
@@ -125,26 +201,33 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [nextCatalog, nextDirectory, nextReputation, nextRuns, nextTasks, nextProfiles] = await Promise.all([
+    const [nextCatalog, nextDirectory, nextSelfModels, nextRuns, nextTasks, nextTemplates, nextManagedAgents] = await Promise.all([
       api.agentCatalog(),
       api.agentDirectory(),
-      api.agentReputation(),
+      api.agentSelfModels(),
       api.agentRuns(),
       api.tasks(),
-      api.agentTeamProfiles(),
+      api.teamTemplates(),
+      api.managedAgents(),
     ]);
     catalog.value = nextCatalog;
     directory.value = nextDirectory;
-    reputation.value = nextReputation;
+    selfModels.value = nextSelfModels;
     runs.value = nextRuns;
     tasks.value = nextTasks;
-    teamProfiles.value = nextProfiles;
+    teamTemplates.value = nextTemplates;
+    managedAgents.value = nextManagedAgents;
+    if (!managedTargetDefinition.value) {
+      managedTargetDefinition.value = nextDirectory?.agents?.[0]?.definition_ref?.definition_id
+        || nextDirectory?.agents?.[0]?.source?.id
+        || '';
+    }
     const executionId = nextRuns?.runs?.find((run: any) => run.graph_id)?.graph_id;
     if (executionId) store.connectExecutionProjection(String(executionId), 'full', 'agents');
     if (!selectedTaskId.value) {
       selectedTaskId.value = nextTasks?.current?.id || nextTasks?.tasks?.[0]?.id || '';
     }
-    if (!selectedProfileId.value) selectedProfileId.value = nextProfiles?.profiles?.[0]?.id || '';
+    if (!selectedTemplateId.value) selectedTemplateId.value = nextTemplates?.templates?.[0]?.revision_ref?.template_id || '';
     await loadGraph();
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -165,7 +248,7 @@ async function loadGraph() {
 
 async function startTask() {
   if (!objective.value.trim()) {
-    error.value = 'Objective is required before starting a task.';
+    error.value = t('page.agents.error.objectiveRequired');
     return;
   }
   actionResult.value = await api.startTask(objective.value, false);
@@ -177,7 +260,7 @@ async function addPhase() {
   const taskId = selectedTaskId.value || selectedTask.value?.id;
   if (!taskId) return;
   if (!phaseName.value.trim() || !phaseObjective.value.trim()) {
-    error.value = 'Phase name and objective are required.';
+    error.value = t('page.agents.error.phaseRequired');
     return;
   }
   actionResult.value = await api.startTaskPhase(taskId, {
@@ -195,7 +278,7 @@ async function recordArtifact() {
   const phaseId = currentPhase.value?.id;
   if (!taskId || !phaseId) return;
   if (!artifactLabel.value.trim() || !artifactValue.value.trim()) {
-    error.value = 'Artifact label and value are required.';
+    error.value = t('page.agents.error.artifactRequired');
     return;
   }
   actionResult.value = await api.recordTaskArtifact(taskId, phaseId, {
@@ -211,7 +294,7 @@ async function reviewPhase(completed = true) {
   const phaseId = currentPhase.value?.id;
   if (!taskId || !phaseId) return;
   if (!reviewResult.value.trim()) {
-    error.value = 'Review result is required.';
+    error.value = t('page.agents.error.reviewRequired');
     return;
   }
   actionResult.value = await api.reviewTaskPhase(taskId, phaseId, reviewResult.value, completed);
@@ -225,7 +308,7 @@ async function transitionTask(action: 'complete' | 'cancel' | 'failure') {
   if (action === 'cancel') actionResult.value = await api.cancelTask(taskId);
   if (action === 'failure') {
     if (!failureReason.value.trim()) {
-      error.value = 'Failure reason is required.';
+      error.value = t('page.agents.error.failureReasonRequired');
       return;
     }
     actionResult.value = await api.recordTaskFailure(taskId, failureReason.value);
@@ -235,135 +318,276 @@ async function transitionTask(action: 'complete' | 'cancel' | 'failure') {
 
 async function discoverAgents() {
   if (!discoverQuery.value.trim()) {
-    error.value = 'Task description is required before discovering agents.';
+    error.value = t('page.agents.error.discoveryRequired');
     return;
   }
   discovery.value = await api.agentAssemble(discoverQuery.value);
 }
 
-function teamProfilePayload() {
-  let policy = {};
-  let evaluation = {};
-  try {
-    policy = JSON.parse(profilePolicy.value || '{}');
-  } catch {
-    error.value = 'Team profile policy must be valid JSON.';
-    throw new Error(error.value);
+function selectTeamTemplate(template: any) {
+  selectedTemplateId.value = template?.revision_ref?.template_id || '';
+  selectedDetail.value = template || null;
+}
+
+async function instantiateSelectedTeam() {
+  const template = selectedTeamTemplate.value;
+  const sessionId = store.activeSessionId;
+  if (!template?.revision_ref?.template_id) {
+    error.value = t('page.agents.teamTemplates.error.select');
+    return;
   }
-  try {
-    evaluation = JSON.parse(profileEvaluation.value || '{}');
-  } catch {
-    error.value = 'Team profile evaluation must be valid JSON.';
-    throw new Error(error.value);
+  if (!objective.value.trim()) {
+    error.value = t('page.agents.teamTemplates.error.objective');
+    return;
+  }
+  if (!sessionId) {
+    error.value = t('page.agents.teamTemplates.error.session');
+    return;
+  }
+  const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  teamResult.value = await api.instantiateTeamTemplate({
+    request_id: `webui-team-${nonce}`,
+    team_id: `webui-team-${nonce}`,
+    session_id: sessionId,
+    selection_mode: 'explicit',
+    template_selector: {
+      kind: 'latest_stable',
+      template_id: template.revision_ref.template_id,
+    },
+    objective: objective.value.trim(),
+    acceptance: Array.isArray(template.result_fields) ? template.result_fields : [],
+    role_binding_overrides: [],
+    cardinality_overrides: [],
+    focus_partition_plans: [],
+    permission_lease: 'read_only',
+    model_lease: store.activeSession?.model || 'default',
+    resource_scopes: [`session:${sessionId}`],
+  });
+  const teamId = teamResult.value?.team?.team_id;
+  if (teamId) teamWorkingState.value = await api.teamWorkingState(teamId);
+  await refresh();
+}
+
+async function refreshTeamWorkingState() {
+  const teamId = teamResult.value?.team?.team_id;
+  if (!teamId) return;
+  teamWorkingState.value = await api.teamWorkingState(teamId);
+}
+
+function managedRequestId(id: string) {
+  return `webui-managed:${id}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+function splitList(value: string) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseAttributes(value: string) {
+  const attributes: Record<string, string> = {};
+  for (const item of splitList(value)) {
+    const separator = item.indexOf('=');
+    if (separator <= 0 || separator === item.length - 1) return null;
+    const key = item.slice(0, separator).trim();
+    const attributeValue = item.slice(separator + 1).trim();
+    if (!key || !attributeValue || attributes[key]) return null;
+    attributes[key] = attributeValue;
+  }
+  return attributes;
+}
+
+function positiveInteger(value: string) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function managedTargetLabel(kind: unknown) {
+  return kind === 'team'
+    ? t('page.agents.managed.targetTeam')
+    : t('page.agents.managed.targetAgent');
+}
+
+function managedTriggerLabel(trigger: any) {
+  switch (trigger?.kind) {
+    case 'schedule':
+      return trigger.trigger?.at
+        ? t('page.agents.managed.triggerAt')
+        : trigger.trigger?.cron
+        ? t('page.agents.managed.triggerCron')
+        : t('page.agents.managed.triggerInterval');
+    case 'event':
+      return t('page.agents.managed.triggerEvent');
+    default:
+      return t('page.agents.managed.triggerManual');
+  }
+}
+
+function buildManagedTrigger() {
+  if (managedTriggerKind.value === 'manual') return { kind: 'manual' };
+  if (managedTriggerKind.value === 'at') {
+    const atMs = positiveInteger(managedAtMs.value);
+    if (!atMs) {
+      error.value = t('page.agents.managed.error.at');
+      return null;
+    }
+    return { kind: 'schedule', trigger: { at: { at_ms: atMs } } };
+  }
+  if (managedTriggerKind.value === 'interval') {
+    const everyMs = positiveInteger(managedIntervalMs.value);
+    if (!everyMs) {
+      error.value = t('page.agents.managed.error.interval');
+      return null;
+    }
+    return { kind: 'schedule', trigger: { interval: { every_ms: everyMs } } };
+  }
+  if (managedTriggerKind.value === 'cron') {
+    if (!managedCronExpression.value.trim() || !managedCronTimezone.value.trim()) {
+      error.value = t('page.agents.managed.error.cron');
+      return null;
+    }
+    return {
+      kind: 'schedule',
+      trigger: {
+        cron: {
+          expression: managedCronExpression.value.trim(),
+          timezone: managedCronTimezone.value.trim(),
+        },
+      },
+    };
+  }
+  const attributes = parseAttributes(managedEventAttributes.value);
+  const maximumAgeMs = managedEventMaximumAgeMs.value.trim()
+    ? positiveInteger(managedEventMaximumAgeMs.value)
+    : null;
+  if (!managedEventSourceId.value.trim() || !managedEventSourceKind.value.trim() || !managedEventType.value.trim() || attributes === null || (managedEventMaximumAgeMs.value.trim() && !maximumAgeMs)) {
+    error.value = t('page.agents.managed.error.event');
+    return null;
   }
   return {
-    id: selectedProfileId.value || undefined,
-    name: profileName.value,
-    objective: objective.value || discoverQuery.value,
-    leader: profileLeader.value || undefined,
-    members: profileMembers.value.split(',').map((item) => item.trim()).filter(Boolean),
-    policy,
-    evaluation,
+    kind: 'event',
+    source_id: managedEventSourceId.value.trim(),
+    source_kind: managedEventSourceKind.value.trim(),
+    event_type: managedEventType.value.trim(),
+    required_source_capabilities: splitList(managedEventCapabilities.value),
+    required_attributes: attributes,
+    maximum_age_ms: maximumAgeMs,
+    out_of_order_policy: managedEventOrderPolicy.value,
   };
 }
 
-function loadProfileIntoForm(profile: any) {
-  selectedProfileId.value = profile.id || '';
-  profileName.value = profile.name || '';
-  objective.value = profile.objective || objective.value;
-  discoverQuery.value = profile.objective || discoverQuery.value;
-  profileLeader.value = profile.leader || '';
-  profileMembers.value = Array.isArray(profile.members) ? profile.members.join(',') : '';
-  profilePolicy.value = JSON.stringify(profile.policy || {}, null, 2);
-  profileEvaluation.value = JSON.stringify(profile.evaluation || {}, null, 2);
+function selectManagedDefinition(definition: any) {
+  if (!definition) return;
+  selectedManagedDefinitionId.value = definition.managed_agent_id || '';
+  managedDefinitionId.value = definition.managed_agent_id || managedDefinitionId.value;
+  managedTargetKind.value = definition.target?.kind === 'team' ? 'team' : 'agent';
+  managedTargetDefinition.value = definition.target?.definition_id || definition.target?.template_id || '';
+  managedObjective.value = definition.objective || '';
+  managedAcceptance.value = Array.isArray(definition.acceptance) ? definition.acceptance.join(', ') : '';
+  managedCapabilities.value = Array.isArray(definition.granted_capabilities) ? definition.granted_capabilities.join(', ') : '';
+  managedEnabled.value = definition.enabled !== false;
+  const trigger = definition.trigger || { kind: 'manual' };
+  if (trigger.kind === 'schedule' && trigger.trigger?.at) {
+    managedTriggerKind.value = 'at';
+    managedAtMs.value = String(trigger.trigger.at.at_ms || '');
+  } else if (trigger.kind === 'schedule' && trigger.trigger?.cron) {
+    managedTriggerKind.value = 'cron';
+    managedCronExpression.value = trigger.trigger.cron.expression || '';
+    managedCronTimezone.value = trigger.trigger.cron.timezone || '';
+  } else if (trigger.kind === 'schedule') {
+    managedTriggerKind.value = 'interval';
+    managedIntervalMs.value = String(trigger.trigger?.interval?.every_ms || '');
+  } else if (trigger.kind === 'event') {
+    managedTriggerKind.value = 'event';
+    managedEventSourceId.value = trigger.source_id || '';
+    managedEventSourceKind.value = trigger.source_kind || '';
+    managedEventType.value = trigger.event_type || '';
+    managedEventCapabilities.value = Array.isArray(trigger.required_source_capabilities)
+      ? trigger.required_source_capabilities.join(', ')
+      : '';
+    managedEventAttributes.value = Object.entries(trigger.required_attributes || {})
+      .map(([key, value]) => `${key}=${value}`)
+      .join(', ');
+    managedEventMaximumAgeMs.value = trigger.maximum_age_ms ? String(trigger.maximum_age_ms) : '';
+    managedEventOrderPolicy.value = trigger.out_of_order_policy === 'reject_older_sequence'
+      ? 'reject_older_sequence'
+      : 'accept_any';
+  } else {
+    managedTriggerKind.value = 'manual';
+  }
+  selectedDetail.value = null;
 }
 
-async function selectTeamProfile(id: string) {
-  selectedProfileId.value = id;
-  const detail = await api.agentTeamProfile(id);
-  profileResult.value = detail;
-  if (detail?.profile) loadProfileIntoForm(detail.profile);
+function selectManagedHealth(health: Record<string, unknown>) {
+  selectedManagedHealthId.value = String(health.id || '');
+  selectedDetail.value = {
+    ...health,
+    source: 'runtime.managed_agent.health',
+    evidence: health.id,
+    status: health.status,
+  };
 }
 
-async function saveTeamProfile() {
-  const payload = teamProfilePayload();
-  profileResult.value = selectedProfileId.value
-    ? await api.updateAgentTeamProfile(selectedProfileId.value, payload)
-    : await api.createAgentTeamProfile(payload);
-  selectedProfileId.value = profileResult.value?.profile?.id || selectedProfileId.value;
-  await refresh();
-}
-
-async function createTeamProfile() {
-  selectedProfileId.value = '';
-  profileResult.value = await api.createAgentTeamProfile(teamProfilePayload());
-  selectedProfileId.value = profileResult.value?.profile?.id || '';
-  await refresh();
-}
-
-async function deleteTeamProfile() {
-  if (!selectedProfileId.value) return;
-  profileResult.value = await api.deleteAgentTeamProfile(selectedProfileId.value);
-  selectedProfileId.value = '';
-  await refresh();
-}
-
-function reuseTeamProfile() {
-  const profile = teamProfileItems.value.find((item: any) => item.id === selectedProfileId.value);
-  if (profile) loadProfileIntoForm(profile);
-}
-
-async function upsertGraphTemplate() {
-  const taskId = selectedTaskId.value || selectedTask.value?.id;
-  if (!taskId) return;
-  if (!objective.value.trim() || !phaseObjective.value.trim()) {
-    error.value = 'Objective and phase objective are required before generating an agent graph.';
+async function createManagedAgent() {
+  const target = managedTargetDefinition.value.trim();
+  const objectiveValue = managedObjective.value.trim();
+  const id = managedDefinitionId.value.trim();
+  if (!id || !target || !objectiveValue) {
+    error.value = t('page.agents.managed.error.required');
     return;
   }
-  const now = Date.now();
-  const nodes = [
-    {
-      id: 'planner',
-      role: 'planner',
-      title: t('script.pages.agentspage.title.ae2f98a099'),
-      objective: objective.value,
-      depends_on: [],
-      status: 'ready',
-      assigned_agent: discovery.value?.team?.leader?.agent_id || null,
-      result: null,
-      error: null,
-      created_at_ms: now,
-      updated_at_ms: now,
-    },
-    {
-      id: 'executor',
-      role: 'executor',
-      title: t('script.pages.agentspage.title.6ea36ce8d4'),
-      objective: phaseObjective.value,
-      depends_on: ['planner'],
-      status: 'pending',
-      assigned_agent: discovery.value?.team?.workers?.[0]?.agent_id || null,
-      result: null,
-      error: null,
-      created_at_ms: now,
-      updated_at_ms: now,
-    },
-    {
-      id: 'reviewer',
-      role: 'reviewer',
-      title: t('script.pages.agentspage.title.e29a79fe0c'),
-      objective: reviewResult.value || 'Review the selected task phase and attached artifacts.',
-      depends_on: ['executor'],
-      status: 'pending',
-      assigned_agent: discovery.value?.team?.workers?.[1]?.agent_id || null,
-      result: null,
-      error: null,
-      created_at_ms: now,
-      updated_at_ms: now,
-    },
-  ];
-  actionResult.value = await api.upsertTaskAgentGraph(taskId, { objective: objective.value, nodes });
-  await loadGraph();
+  const trigger = buildManagedTrigger();
+  if (!trigger) return;
+  const capabilities = splitList(managedCapabilities.value);
+  if (managedTargetKind.value === 'agent' && !capabilities.length) {
+    error.value = t('page.agents.managed.error.capabilities');
+    return;
+  }
+  const existing = managedDefinitionItems.value.find((definition: any) => definition.managed_agent_id === id);
+    managedActionResult.value = await api.createManagedAgentDefinition({
+    managed_agent_id: id,
+    revision: Number(existing?.revision || 0) + 1,
+    target: managedTargetKind.value === 'team'
+      ? { kind: 'team', template_id: target, selector: { kind: 'latest_stable', template_id: target } }
+      : { kind: 'agent', definition_id: target, selector: { kind: 'latest_approved_stable' } },
+    trigger,
+    session_id: store.activeSessionId || `managed:${id}`,
+    objective: objectiveValue,
+    acceptance: splitList(managedAcceptance.value),
+    permission_lease: 'read_only',
+    model_lease: store.activeSession?.model || 'default',
+    granted_capabilities: managedTargetKind.value === 'agent' ? capabilities : [],
+    allowed_tool_contract_refs: [],
+    allowed_skill_refs: [],
+    resource_scopes: [],
+    overlap_policy: { kind: 'forbid' },
+    retry_policy: { max_attempts: 1, initial_backoff_ms: 1000, max_backoff_ms: 60000 },
+    health_policy: { max_consecutive_failures: 3, max_run_age_ms: null },
+    enabled: managedEnabled.value,
+    });
+    selectedManagedDefinitionId.value = id;
+    await refresh();
+}
+
+async function triggerManagedAgent(id: string) {
+  managedActionResult.value = await api.triggerManagedAgent(id, managedRequestId(id));
+  await refresh();
+}
+
+async function dispatchManagedAgents() {
+  managedActionResult.value = await api.dispatchManagedAgents('webui-managed-dispatcher', 16);
+  await refresh();
+}
+
+async function resetManagedAgentHealth(id: string) {
+  managedActionResult.value = await api.resetManagedAgentHealth(id);
+  await refresh();
+}
+
+async function resetSelectedManagedHealth() {
+  if (!selectedManagedHealth.value) return;
+  await resetManagedAgentHealth(String(selectedManagedHealth.value.id));
 }
 
 function selectTask(id: string) {
@@ -408,7 +632,7 @@ onUnmounted(() => store.disconnectExecutionProjection('agents'));
       </article>
       <article class="metric-card" data-tone="info">
         <span>{{ t('page.agents.page.text.a5f816919b') }}</span>
-        <strong>{{ teamProfileItems.length }}</strong>
+        <strong>{{ teamTemplateItems.length }}</strong>
         <small>{{ t('page.agents.page.text.4c8da9a12e') }}</small>
       </article>
     </section>
@@ -417,7 +641,7 @@ onUnmounted(() => store.disconnectExecutionProjection('agents'));
       <section class="management-panel agents-panel" data-section="catalog">
         <header>
           <h2>{{ t('page.agents.page.text.c1a824a193') }}</h2>
-          <span>{{ agentRows.length }} definitions</span>
+          <span>{{ t('page.agents.summary.definitionCount', { count: agentRows.length }) }}</span>
         </header>
         <DataTable v-if="agentRows.length" searchable copyable row-key="name" :rows="agentRows" :columns="['name', 'active', 'source', 'model', 'description']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.agents.page.title.5eba27eab7')" :detail="t('page.agents.page.detail.c7ca371a29')" />
@@ -433,61 +657,52 @@ onUnmounted(() => store.disconnectExecutionProjection('agents'));
           <input v-model="discoverQuery" type="search" :placeholder="t('page.agents.page.placeholder.703309ce06')" @keyup.enter="discoverAgents" />
         </label>
         <button class="primary-action" type="button" @click="discoverAgents">{{ t('page.agents.page.text.961a6c8625') }}</button>
-        <DataTable v-if="discoveredRows.length" searchable copyable row-key="agent_id" :rows="discoveredRows" :columns="['agent_id', 'role', 'reputation', 'status']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="discoveredRows.length" searchable copyable row-key="agent_id" :rows="discoveredRows" :columns="['agent_id', 'definition', 'capabilities', 'status']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.agents.page.title.1f579ef765')" :detail="t('page.agents.page.detail.eb533ab1ab')" />
         <ObjectInspectorDrawer :title="t('page.agents.page.title.425652af9a')" :data="discovery.team || {}" />
-        <DataTable v-if="reputationRows.length" searchable copyable row-key="agent_id" :rows="reputationRows" :columns="['agent_id', 'reputation', 'status']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="selfModelRows.length" searchable copyable row-key="definition" :rows="selfModelRows" :columns="['definition', 'environment', 'runs', 'successful', 'failed', 'success_rate', 'tools', 'evidence']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel agents-panel wide" data-section="discovery">
         <header>
-          <h2>{{ t('page.agents.page.text.a761521099') }}</h2>
-          <span>{{ teamProfileItems.length }} saved</span>
+          <h2>{{ t('page.agents.teamTemplates.title') }}</h2>
+          <span>{{ t('page.agents.summary.runnableTemplateCount', { count: teamTemplateItems.length }) }}</span>
         </header>
         <div class="agents-task-layout">
           <aside class="task-list">
             <button
-              v-for="profile in teamProfileItems"
-              :key="profile.id"
+              v-for="template in teamTemplateItems"
+              :key="template.revision_ref?.template_id"
               class="memory-entry-row"
-              :class="{ active: selectedProfileId === profile.id }"
+              :class="{ active: selectedTemplateId === template.revision_ref?.template_id }"
               type="button"
-              @click="selectTeamProfile(profile.id); selectedDetail = profile"
+              @click="selectTeamTemplate(template)"
             >
-              <strong>{{ profile.name }}</strong>
-              <span>{{ profile.id }}</span>
-              <small>{{ profile.members?.length || 0 }} members · {{ profile.leader || t('page.agents.page.inline.70ae325e31') }}</small>
+              <strong>{{ template.name }}</strong>
+              <span>{{ template.revision_ref?.template_id }}@{{ template.revision_ref?.revision }}</span>
+              <small>{{ t('page.agents.summary.roleCount', { count: template.role_count || 0 }) }} · {{ template.topology?.protocol_ref || t('page.agents.summary.runtimeTopology') }}</small>
             </button>
-            <EmptyState v-if="!teamProfileItems.length" :title="t('page.agents.page.title.c0c6c88754')" :detail="t('page.agents.page.detail.59a04d34a0')" />
+            <EmptyState v-if="!teamTemplateItems.length" :title="t('page.agents.teamTemplates.emptyTitle')" :detail="t('page.agents.teamTemplates.emptyDetail')" />
           </aside>
           <main>
             <label class="field-line">
-              {{ t('template.pages.agentspage.77574766df') }}
-              <input v-model="profileName" type="text" />
-            </label>
-            <label class="field-line">
-              {{ t('template.pages.agentspage.e26c936bbe') }}
-              <input v-model="profileLeader" type="text" />
-            </label>
-            <label class="field-line">
-              {{ t('template.pages.agentspage.1cb449c112') }}
-              <input v-model="profileMembers" type="text" />
-            </label>
-            <label class="field-line">
-              {{ t('template.pages.agentspage.b9d4efc7fe') }}
-              <textarea v-model="profilePolicy" rows="4" />
-            </label>
-            <label class="field-line">
-              {{ t('template.pages.agentspage.bf8f3da5f4') }}
-              <textarea v-model="profileEvaluation" rows="4" />
+              {{ t('page.agents.teamTemplates.objective') }}
+              <textarea v-model="objective" rows="4" :placeholder="t('page.agents.teamTemplates.objectivePlaceholder')" />
             </label>
             <div class="button-row">
-              <button class="primary-action" type="button" @click="saveTeamProfile">{{ t('page.agents.page.text.b11b5f17f2') }}</button>
-              <button class="ghost-action" type="button" @click="createTeamProfile">{{ t('page.agents.page.text.7e475bc73b') }}</button>
-              <button class="ghost-action" type="button" :disabled="!selectedProfileId" @click="reuseTeamProfile">{{ t('page.agents.page.text.a5ddc17dbc') }}</button>
-              <button class="icon-action danger" type="button" :disabled="!selectedProfileId" :aria-label="t('page.agents.page.aria-label.b2b895468a')" @click="deleteTeamProfile"><Trash2 :size="14" /></button>
+              <button class="primary-action" type="button" :disabled="!selectedTeamTemplate" @click="instantiateSelectedTeam"><Play :size="15" />{{ t('page.agents.teamTemplates.start') }}</button>
+              <button class="ghost-action" type="button" :disabled="!teamResult?.team?.team_id" @click="refreshTeamWorkingState">{{ t('page.agents.teamTemplates.refreshWorkingState') }}</button>
             </div>
-            <RequestReceipt :receipt="profileResult?.receipt || profileResult" :title="t('page.agents.page.title.697919b9e4')" />
+            <DataTable
+              v-if="teamWorkingState?.working_state?.entries?.length"
+              searchable
+              copyable
+              row-key="entry_id"
+              :rows="teamWorkingState.working_state.entries"
+              :columns="['kind', 'node_id', 'summary', 'confidence_milli', 'refs']"
+              @row-click="selectedDetail = $event"
+            />
+            <RequestReceipt :receipt="teamResult || teamWorkingState" :title="t('page.agents.teamTemplates.receipt')" />
           </main>
         </div>
       </section>
@@ -531,6 +746,153 @@ onUnmounted(() => store.disconnectExecutionProjection('agents'));
             <RequestReceipt :receipt="actionResult" :title="t('page.agents.page.title.e02c33214a')" />
           </main>
         </div>
+      </section>
+
+      <section class="management-panel agents-panel wide" data-section="managed-agents">
+        <header>
+          <h2>{{ t('page.agents.managed.title') }}</h2>
+          <span>{{ managedDefinitionRows.length }}</span>
+        </header>
+        <p class="section-note">{{ t('page.agents.managed.detail') }}</p>
+        <div class="agents-task-layout">
+          <main>
+            <label class="field-line">
+              {{ t('page.agents.managed.definition') }}
+              <input v-model="managedDefinitionId" type="text" />
+            </label>
+            <label class="field-line">
+              {{ t('page.agents.managed.target') }}
+              <select v-model="managedTargetKind">
+                <option value="agent">{{ t('page.agents.managed.targetAgent') }}</option>
+                <option value="team">{{ t('page.agents.managed.targetTeam') }}</option>
+              </select>
+              <input v-model="managedTargetDefinition" list="managed-target-options" type="text" :placeholder="t('page.agents.managed.targetPlaceholder')" />
+              <datalist id="managed-target-options">
+                <option v-for="option in managedTargetOptions.filter((item) => item.kind === managedTargetKind)" :key="`${option.kind}:${option.id}`" :value="option.id" />
+              </datalist>
+            </label>
+            <label class="field-line">
+              {{ t('page.agents.managed.objective') }}
+              <textarea v-model="managedObjective" rows="3" />
+            </label>
+            <label class="field-line">
+              {{ t('page.agents.managed.acceptance') }}
+              <input v-model="managedAcceptance" type="text" :placeholder="t('page.agents.managed.listPlaceholder')" />
+            </label>
+            <label v-if="managedTargetKind === 'agent'" class="field-line">
+              {{ t('page.agents.managed.capabilities') }}
+              <input v-model="managedCapabilities" type="text" :placeholder="t('page.agents.managed.listPlaceholder')" />
+            </label>
+            <label class="field-line">
+              {{ t('page.agents.managed.triggerKind') }}
+              <select v-model="managedTriggerKind">
+                <option value="manual">{{ t('page.agents.managed.triggerManual') }}</option>
+                <option value="at">{{ t('page.agents.managed.triggerAt') }}</option>
+                <option value="interval">{{ t('page.agents.managed.triggerInterval') }}</option>
+                <option value="cron">{{ t('page.agents.managed.triggerCron') }}</option>
+                <option value="event">{{ t('page.agents.managed.triggerEvent') }}</option>
+              </select>
+            </label>
+            <label v-if="managedTriggerKind === 'at'" class="field-line">
+              {{ t('page.agents.managed.atMs') }}
+              <input v-model="managedAtMs" type="number" min="1" inputmode="numeric" />
+            </label>
+            <label v-if="managedTriggerKind === 'interval'" class="field-line">
+              {{ t('page.agents.managed.intervalMs') }}
+              <input v-model="managedIntervalMs" type="number" min="1" inputmode="numeric" />
+            </label>
+            <template v-if="managedTriggerKind === 'cron'">
+              <label class="field-line">
+                {{ t('page.agents.managed.cronExpression') }}
+                <input v-model="managedCronExpression" type="text" />
+              </label>
+              <label class="field-line">
+                {{ t('page.agents.managed.cronTimezone') }}
+                <input v-model="managedCronTimezone" type="text" />
+              </label>
+            </template>
+            <template v-if="managedTriggerKind === 'event'">
+              <label class="field-line">
+                {{ t('page.agents.managed.eventSourceId') }}
+                <input v-model="managedEventSourceId" type="text" />
+              </label>
+              <label class="field-line">
+                {{ t('page.agents.managed.eventSourceKind') }}
+                <input v-model="managedEventSourceKind" type="text" />
+              </label>
+              <label class="field-line">
+                {{ t('page.agents.managed.eventType') }}
+                <input v-model="managedEventType" type="text" />
+              </label>
+              <label class="field-line">
+                {{ t('page.agents.managed.eventCapabilities') }}
+                <input v-model="managedEventCapabilities" type="text" :placeholder="t('page.agents.managed.listPlaceholder')" />
+              </label>
+              <label class="field-line">
+                {{ t('page.agents.managed.eventAttributes') }}
+                <input v-model="managedEventAttributes" type="text" :placeholder="t('page.agents.managed.attributePlaceholder')" />
+              </label>
+              <label class="field-line">
+                {{ t('page.agents.managed.eventMaximumAge') }}
+                <input v-model="managedEventMaximumAgeMs" type="number" min="1" inputmode="numeric" :placeholder="t('page.agents.managed.optionalNumberPlaceholder')" />
+              </label>
+              <label class="field-line">
+                {{ t('page.agents.managed.eventOrder') }}
+                <select v-model="managedEventOrderPolicy">
+                  <option value="accept_any">{{ t('page.agents.managed.orderAcceptAny') }}</option>
+                  <option value="reject_older_sequence">{{ t('page.agents.managed.orderRejectOlder') }}</option>
+                </select>
+              </label>
+            </template>
+            <label class="field-line inline-check">
+              <input v-model="managedEnabled" type="checkbox" />
+              {{ t('page.agents.managed.enabled') }}
+            </label>
+            <div class="button-row">
+              <button class="primary-action" type="button" @click="createManagedAgent">{{ managedDefinitionItems.some((definition: any) => definition.managed_agent_id === managedDefinitionId.trim()) ? t('page.agents.managed.saveRevision') : t('page.agents.managed.create') }}</button>
+              <button class="ghost-action" type="button" :disabled="!managedDefinitionRows.length" @click="dispatchManagedAgents">{{ t('page.agents.managed.dispatch') }}</button>
+            </div>
+            <RequestReceipt :receipt="managedActionResult" :title="t('page.agents.managed.title')" />
+          </main>
+          <aside class="task-list">
+            <button
+              v-for="definition in managedDefinitionRows"
+              :key="definition.id"
+              class="memory-entry-row"
+              :class="{ active: selectedManagedDefinitionId === definition.id }"
+              type="button"
+              @click="selectManagedDefinition(managedDefinitionItems.find((item: any) => item.managed_agent_id === definition.id))"
+            >
+              <strong>{{ definition.id }}@{{ definition.revision }}</strong>
+              <span>{{ definition.target_kind }} · {{ definition.target }}</span>
+              <small>{{ definition.trigger }} · {{ displayStatus(definition.enabled ? 'active' : 'disabled') }}</small>
+            </button>
+            <EmptyState v-if="!managedDefinitionRows.length" :title="t('page.agents.managed.empty')" :detail="t('page.agents.managed.detail')" />
+          </aside>
+        </div>
+        <h3>{{ t('page.agents.managed.invocations') }}</h3>
+        <DataTable v-if="managedInvocationRows.length" searchable copyable row-key="id" :rows="managedInvocationRows" :columns="['id', 'definition', 'status', 'attempt', 'trigger', 'execution', 'error']" @row-click="selectedDetail = $event" />
+        <div v-if="managedDefinitionRows.length" class="button-row">
+          <button
+            v-for="definition in managedDefinitionRows"
+            :key="`${definition.id}-trigger`"
+            class="ghost-action"
+            type="button"
+            @click="triggerManagedAgent(definition.id)"
+          >{{ t('page.agents.managed.trigger') }} · {{ definition.id }}</button>
+        </div>
+        <h3>{{ t('page.agents.managed.health') }}</h3>
+        <DataTable v-if="managedHealthRows.length" searchable copyable row-key="id" :rows="managedHealthRows" :columns="['id', 'revision', 'status', 'failures', 'active']" @row-click="selectManagedHealth" />
+        <div v-if="managedHealthRows.length" class="button-row">
+          <button
+            class="ghost-action"
+            type="button"
+            :disabled="!selectedManagedHealth || selectedManagedHealth.status === 'healthy'"
+            @click="resetSelectedManagedHealth"
+          >{{ t('page.agents.managed.reset') }}<template v-if="selectedManagedHealth"> · {{ selectedManagedHealth.id }}</template></button>
+        </div>
+        <h3>{{ t('page.agents.managed.effects') }}</h3>
+        <DataTable v-if="managedEffectRows.length" searchable copyable row-key="id" :rows="managedEffectRows" :columns="['id', 'invocation', 'kind', 'status', 'receipt', 'error']" @row-click="selectedDetail = $event" />
       </section>
 
       <section class="management-panel agents-panel" data-section="tasks">
@@ -585,10 +947,6 @@ onUnmounted(() => store.disconnectExecutionProjection('agents'));
           <span><StatusPill :status="graph.status || 'offline'" /></span>
         </header>
         <div class="button-row">
-          <button class="primary-action" type="button" :disabled="!selectedTask" @click="upsertGraphTemplate">
-            <GitBranch :size="15" />
-            {{ t('template.pages.agentspage.4cd7279f3b') }}
-          </button>
           <button class="ghost-action" type="button" :disabled="!selectedTask" @click="loadGraph">
             <Users :size="15" />
             {{ t('template.pages.agentspage.b991bd4651') }}
@@ -632,7 +990,7 @@ onUnmounted(() => store.disconnectExecutionProjection('agents'));
         </header>
         <ObjectInspectorDrawer :title="t('page.agents.page.title.3606e135fe')" :data="runs" />
         <DetailDrawer :title="t('page.agents.page.title.c74579aea5')" :row="selectedDetail" @close="selectedDetail = null" />
-        <RequestReceipt :receipt="actionResult || profileResult" :title="t('page.agents.page.title.6cf3650bd1')" />
+        <RequestReceipt :receipt="actionResult || teamResult" :title="t('page.agents.page.title.6cf3650bd1')" />
         <ObjectInspectorDrawer :title="t('page.agents.page.title.fe453c49db')" :data="actionResult || graph" />
       </section>
     </section>

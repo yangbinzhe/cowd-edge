@@ -1,9 +1,18 @@
 import { test, expect } from '@playwright/test';
 
+const realGateway = Boolean(process.env.COWD_E2E_GATEWAY_URL);
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem('cowd.webui.locale', 'en-US');
   });
+  if (realGateway) {
+    const health = await page.request.get('/healthz');
+    expect(health.status()).toBe(200);
+    const capabilities = await page.request.get('/api/cowd/capabilities');
+    expect(capabilities.status()).toBe(200);
+    expect((await capabilities.json()).capabilities).toBeTruthy();
+  }
 });
 
 test('new shell uses icon rail and right Activity/Workspace companion tabs', async ({ page }) => {
@@ -19,7 +28,9 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
   await expect(page.locator('.transcript')).toBeVisible();
   await expect(page.locator('.composer textarea')).toBeVisible();
   await expect(page.locator('.turn-role')).toHaveCount(0);
-  await expect(page.locator('.status-strip')).toContainText(/unknown|local|offline|ready/);
+  await expect(page.locator('.status-strip')).toContainText(
+    realGateway ? /healthy|ready/ : /unknown|local|offline|healthy|ready/,
+  );
   await expect(page.locator('.status-strip button')).not.toHaveText('');
   await page.locator('.mode-switch button').nth(1).click();
   await expect(page.locator('.composer-stats')).toBeVisible();
@@ -124,6 +135,10 @@ test('skills agents and tools pages expose lifecycle workbenches', async ({ page
   await expect(page.getByRole('heading', { name: 'Phase gate' })).toBeVisible();
   await page.goto('/index.html#/agents?section=graph');
   await expect(page.getByRole('heading', { name: 'Agent execution graph' })).toBeVisible();
+  await page.goto('/index.html#/agents?section=managed-agents');
+  await expect(page.getByRole('heading', { name: 'Managed Agents' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Register managed Agent' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Dispatch pending' })).toBeVisible();
 
   await page.goto('/index.html#/tools');
   await expect(page.getByRole('heading', { name: 'Tool registry' })).toBeVisible();
@@ -189,6 +204,10 @@ test('audit page exposes usage and release gate governance controls', async ({ p
   await expect(page.locator('[data-section="approvals"]')).toContainText('Approval history');
   await page.goto('/index.html#/audit?section=cross-plane');
   await expect(page.locator('[data-section="cross-plane"]').first()).toContainText('Governance evidence');
+  await page.goto('/index.html#/audit?section=evolution');
+  await expect(page.getByRole('heading', { name: 'Self evolution' })).toBeVisible();
+  await page.goto('/index.html#/audit?section=evaluation-policy');
+  await expect(page.getByRole('heading', { name: 'Evaluation policy floor' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Refresh audit' })).toBeVisible();
   await expect(page.locator('.metric-row').first().locator('.metric-card')).toHaveCount(4);
 });

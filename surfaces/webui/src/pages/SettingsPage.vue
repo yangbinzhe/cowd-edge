@@ -17,6 +17,7 @@ const defaultModel = ref('');
 const settingsError = ref('');
 const busyAction = ref('');
 const authResult = ref<any>(null);
+const authCredential = ref('');
 const settingsReceipt = ref<any>(null);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const lastSavedSection = ref('');
@@ -198,6 +199,10 @@ watch(locale, (value) => {
   }
 });
 
+watch(activeSettingsSection, (section) => {
+  if (section === 'gateway' && !authResult.value) void verifyAuth();
+});
+
 async function run(label: string, action: () => Promise<unknown>) {
   settingsError.value = '';
   busyAction.value = label;
@@ -303,6 +308,22 @@ async function deleteProfile(id: string) {
 
 async function verifyAuth() {
   await run('auth-verify', async () => {
+    authResult.value = await store.verifyAuth();
+  });
+}
+
+async function loginGateway() {
+  await run('auth-login', async () => {
+    await api.authLogin(authCredential.value);
+    authCredential.value = '';
+    authResult.value = await store.verifyAuth();
+  });
+}
+
+async function logoutGateway() {
+  await run('auth-logout', async () => {
+    await api.authLogout();
+    authCredential.value = '';
     authResult.value = await store.verifyAuth();
   });
 }
@@ -555,7 +576,16 @@ function selectSettingsSection(id: string) {
         <p class="security-note">{{ t('page.settings.security.mode', { mode: accessMode }) }}</p>
         <div class="button-row">
           <button class="ghost-action" type="button" @click="verifyAuth">{{ t('page.settings.page.text.1dad098952') }}</button>
+          <button v-if="authResult?.valid" class="ghost-action" type="button" @click="logoutGateway">{{ t('settings.gateway.logout') }}</button>
         </div>
+        <form v-if="authResult?.auth_required && !authResult?.valid" class="gateway-auth-form" @submit.prevent="loginGateway">
+          <label>
+            <span>{{ t('settings.gateway.credential') }}</span>
+            <input v-model="authCredential" type="password" autocomplete="current-password" :placeholder="t('settings.gateway.credentialPlaceholder')" required />
+          </label>
+          <button class="primary-action" type="submit" :disabled="!authCredential.trim() || busyAction === 'auth-login'">{{ t('settings.gateway.login') }}</button>
+        </form>
+        <p v-if="authResult?.auth_required && !authResult?.valid" class="panel-note">{{ t('settings.gateway.sessionNotice') }}</p>
         <dl v-if="authResult" class="contract-list">
           <dt>{{ t('page.settings.page.text.dcfaad321b') }}</dt>
           <dd>{{ authResult.valid === true ? displayStatus('valid') : (authResult.status ? displayStatus(authResult.status) : authResult.authenticated !== undefined ? displayBoolean(authResult.authenticated) : t('page.settings.page.inline.3be9ccc7cd')) }}</dd>

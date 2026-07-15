@@ -129,7 +129,7 @@ function withReadState<T>(data: T, state: ApiReadState): T & ApiReadState {
 
 async function read<T>(path: string, fallback: T, init: RequestInit = {}): Promise<T & ApiReadState> {
   try {
-    const response = await fetch(path, { ...init, headers: headers(init) });
+    const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
     if (!response.ok) {
       throw new ApiReadError(await response.text() || `${response.status} ${response.statusText}`, readStatusFor(response), response.status);
     }
@@ -171,7 +171,7 @@ function payloadSummary(body: BodyInit | null | undefined): string {
 }
 
 async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, { ...init, headers: headers(init) });
+  const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
   if (!response.ok) {
     const body = await response.text();
     throw new ApiWriteError(body || `${response.status} ${response.statusText}`, {
@@ -488,7 +488,12 @@ export const api = {
     tool_count: 0,
     tools: [],
   }),
+  authLogin: (credential: string) => write('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ token: credential }),
+  }),
   authVerify: () => read('/api/auth/verify', { authenticated: false, status: 'offline' }),
+  authLogout: () => write('/api/auth/logout', { method: 'POST' }),
   sessions: (limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(`/api/sessions?limit=${limit}&offset=${offset}`, { sessions: [] }),
   searchSessions: (query: string, limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(`/api/sessions?limit=${limit}&offset=${offset}${query ? `&q=${encodeURIComponent(query)}` : ''}`, { sessions: [] }),
   searchMessages: (query: string) => read(`/api/sessions/search?q=${encodeURIComponent(query)}`, { matches: [] }),
@@ -800,7 +805,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ task }),
   }),
-  agentReputation: () => read('/api/agents/reputation', { items: [], summary: {} }),
+  agentSelfModels: () => read('/api/agents/self-models', { items: [], summary: {} }),
   agentRuns: async () => {
     const response = await read<any>('/api/agents/execution-graphs', { graphs: [] });
     return {
@@ -808,22 +813,13 @@ export const api = {
       runs: Array.isArray(response) ? response : (response.runs || response.graphs || []),
     };
   },
-  agentTeamProfiles: () => read('/api/agents/team-profiles', { profiles: [] }),
-  agentTeamProfile: (id: string) => read(`/api/agents/team-profiles/${encodeURIComponent(id)}`, {}),
-  createAgentTeamProfile: (body: Record<string, unknown>) => write('/api/agents/team-profiles', {
+  teamTemplates: () => read('/api/team-templates', { templates: [] }),
+  instantiateTeamTemplate: (body: Record<string, unknown>) => write('/api/team-templates/instantiate', {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  updateAgentTeamProfile: (id: string, body: Record<string, unknown>) => write(`/api/agents/team-profiles/${encodeURIComponent(id)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  }),
-  deleteAgentTeamProfile: (id: string) => write(`/api/agents/team-profiles/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  teamWorkingState: (id: string) => read(`/api/runtime/teams/${encodeURIComponent(id)}/working-state`, { working_state: { entries: [] } }),
   taskAgentGraph: (id: string) => read(`/api/tasks/${encodeURIComponent(id)}/execution-graph`, { nodes: [] }),
-  upsertTaskAgentGraph: (id: string, body: Record<string, unknown>) => write(`/api/tasks/${encodeURIComponent(id)}/execution-graph`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  }),
   toolRegistry: () => read('/api/tools', {}),
   toolExecute: (name: string, input: Record<string, unknown> = {}, mode = 'read_only') => write('/api/tools/execute', {
     method: 'POST',
@@ -869,6 +865,11 @@ export const api = {
   surfaceInbox: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/inbox`, { inbox: [], snapshot: {} }),
   surfaceOutbox: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/outbox`, { outbox: [], dead_letters: [] }),
   surfaceMessages: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/messages`, { kind: 'surface.messages', snapshot: {} }),
+  surfaceTriggerEvents: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/trigger-events`, { kind: 'surface.trigger_events', events: [] }),
+  surfaceRetryTriggerEvent: (id: string, idempotency_key: string) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/trigger-events/retry`, {
+    method: 'POST',
+    body: JSON.stringify({ idempotency_key }),
+  }),
   surfaceArchiveMessages: (id: string, limit = 100, olderThanMs?: number) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/messages/archive`, {
     method: 'POST',
     body: JSON.stringify({ limit, older_than_ms: olderThanMs }),
@@ -1065,36 +1066,56 @@ export const api = {
   evolutionSkillDraft: (id: string) => read(`/api/evolution/proposals/${encodeURIComponent(id)}/skill-draft`, {}),
   evolutionCandidates: () => read('/api/evolution/candidates', { candidates: [] }),
   evolutionCandidateDetail: (id: string) => read(`/api/evolution/candidates/${encodeURIComponent(id)}`, {}),
-  evolutionCreateCandidate: (id: string, body: Record<string, unknown> = {}) => writeWithReceipt(`/api/evolution/proposals/${encodeURIComponent(id)}/candidates`, {
+  evolutionCreateCandidate: (body: Record<string, unknown>) => writeWithReceipt('/api/evolution/candidates', {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  evolutionCandidateDecision: (id: string, status: 'sandbox_ready' | 'evaluated' | 'approved_for_adoption' | 'rejected' | 'archived') => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/decision`, {
-    method: 'POST',
-    body: JSON.stringify({ status }),
-  }),
-  evolutionCandidateSandboxRun: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/run`, {
+  evolutionCandidateCanaryReview: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/reviews/canary`, {
     method: 'POST',
     body: JSON.stringify({}),
   }),
-  evolutionCandidateArtifacts: (id: string) => read(`/api/evolution/candidates/${encodeURIComponent(id)}/artifacts`, { artifacts: [] }),
-  evolutionCandidateEvaluate: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/evaluate`, {
+  evolutionCandidateStableReview: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/reviews/stable`, {
     method: 'POST',
     body: JSON.stringify({}),
   }),
-  evolutionCandidateComparison: (id: string) => read(`/api/evolution/candidates/${encodeURIComponent(id)}/comparison`, { comparisons: [] }),
-  evolutionCandidatePromote: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/promote`, {
+  evolutionReviews: () => read('/api/evolution/reviews', { reviews: [] }),
+  evolutionReview: (id: string) => read(`/api/evolution/reviews/${encodeURIComponent(id)}`, {}),
+  evolutionCreateReleaseReview: (body: Record<string, unknown>) => writeWithReceipt('/api/evolution/reviews', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify(body),
   }),
-  evolutionAdoptions: () => read('/api/evolution/adoptions', { adoptions: [] }),
-  evolutionActiveCapabilities: () => read('/api/evolution/active-capabilities', { capabilities: [] }),
-  evolutionVersionRollback: (versionId: string) => writeWithReceipt(`/api/evolution/versions/${encodeURIComponent(versionId)}/rollback`, {
+  evolutionReviewDecision: (id: string, decision: 'approve' | 'reject' | 'revise', reason = '') => writeWithReceipt(`/api/evolution/reviews/${encodeURIComponent(id)}/decision`, {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({ decision, reason }),
   }),
-  evolutionMemory: () => read('/api/evolution/memory', { records: [] }),
-  evolutionSandboxEvals: () => read('/api/evolution/sandbox-evals', { evals: [] }),
+  evolutionEvaluationPolicy: () => read('/api/evolution/evaluation-policy', {}),
+  evolutionEvaluationPolicyReviews: () => read('/api/evolution/evaluation-policy/reviews', { reviews: [] }),
+  evolutionCreateEvaluationPolicyReview: (body: Record<string, unknown>) => writeWithReceipt('/api/evolution/evaluation-policy/reviews', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  evolutionEvaluationPolicyReviewDecision: (id: string, decision: 'approve' | 'reject', reason = '') => writeWithReceipt(`/api/evolution/evaluation-policy/reviews/${encodeURIComponent(id)}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
+  }),
+  managedAgents: () => read('/api/runtime/managed-agents', { definitions: [], invocations: [], effects: [], health: [] }),
+  managedAgentDefinitions: () => read('/api/runtime/managed-agents/definitions', { definitions: [] }),
+  createManagedAgentDefinition: (body: Record<string, unknown>) => writeWithReceipt('/api/runtime/managed-agents/definitions', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  triggerManagedAgent: (id: string, request_id: string) => writeWithReceipt(`/api/runtime/managed-agents/${encodeURIComponent(id)}/trigger`, {
+    method: 'POST',
+    body: JSON.stringify({ request_id }),
+  }),
+  dispatchManagedAgents: (dispatcher_id = 'webui', limit = 16) => writeWithReceipt('/api/runtime/managed-agents/dispatch', {
+    method: 'POST',
+    body: JSON.stringify({ dispatcher_id, limit }),
+  }),
+  resetManagedAgentHealth: (id: string) => writeWithReceipt(`/api/runtime/managed-agents/${encodeURIComponent(id)}/health/reset`, {
+    method: 'POST',
+  }),
+  managedAgentEffects: () => read('/api/runtime/managed-agents/effects', { effects: [] }),
   mfgApp: () => read('/api/apps/mfg/app', {}),
   mfgHealth: () => read('/api/apps/mfg/reality/health', {}),
   mfgProductionGovernance: () => read('/api/apps/mfg/production/governance', {}),

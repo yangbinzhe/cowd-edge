@@ -327,6 +327,10 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .management-panel h2 { margin: 0; font-size: 14px; }
 .management-panel header span { color: var(--text-faint); font-size: 12px; }
 .management-panel p { color: var(--text-muted); line-height: 1.5; margin: 0 0 12px; }
+.section-note { max-width: 86ch; }
+.inline-management-section { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px; }
+.inline-management-section > header { margin-bottom: 8px; }
+.inline-management-section h3 { margin: 14px 0 8px; font-size: 13px; }
 .detail-list { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px 12px; margin: 0; }
 .detail-list dt { color: var(--text-faint); font-size: 12px; }
 .detail-list dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
@@ -662,6 +666,8 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .settings-dirty-state { margin-right: auto; color: var(--text-faint); font-size: 12px; }
 .settings-action-rail[data-dirty="true"] .settings-dirty-state { color: var(--warn); }
 .settings-section label { display: grid; gap: 6px; color: var(--text-muted); }
+.gateway-auth-form { display: flex; align-items: end; gap: 8px; max-width: 520px; }
+.gateway-auth-form label { flex: 1; }
 .settings-section input:not([type="checkbox"]), .settings-section select { min-height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 0 10px; }
 .settings-section textarea { min-height: 240px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 10px; font-family: var(--font-mono); font-size: 12px; line-height: 1.55; resize: vertical; }
 .settings-alert { margin: 14px 24px 0; border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--danger) 9%, var(--surface)); color: var(--danger); padding: 10px 12px; }
@@ -763,6 +769,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .turn { grid-template-columns: 1fr; gap: 6px; }
   input:not([type="checkbox"]), select, .search-field, .field-line input, .field-line select, .field-line textarea,
   .mode-switch button, .segmented button, .workflow-step, .companion-tabs button, .memory-sections button, .filter-row select, .settings-section input:not([type="checkbox"]), .settings-section select, .data-table th button { min-height: 44px; }
+  .gateway-auth-form { align-items: stretch; flex-direction: column; max-width: none; }
   .chat-page .page-header,
   .chat-page .run-panorama,
   .chat-page .primary-context-bar,

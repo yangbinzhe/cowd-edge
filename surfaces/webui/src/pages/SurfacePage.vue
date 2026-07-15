@@ -103,6 +103,30 @@ const archivedOutboxItems = computed(() => {
   return Array.isArray(archived) ? archived : [];
 });
 const messageRoot = computed(() => state.value.messages?.message_root || state.value.messages?.snapshot?.message_root || '-');
+const triggerEventItems = computed(() => {
+  const listed = state.value.triggerEvents?.events;
+  if (Array.isArray(listed)) return listed;
+  const snapshot = state.value.messages?.snapshot?.trigger_events;
+  return Array.isArray(snapshot) ? snapshot : [];
+});
+const activeTriggerEventItems = computed(() => {
+  const snapshot = state.value.messages?.snapshot?.active_trigger_events;
+  if (Array.isArray(snapshot)) return snapshot;
+  return triggerEventItems.value.filter((item: any) => ['received', 'dispatching', 'retry_scheduled'].includes(String(item.status || '').toLowerCase()));
+});
+const failedTriggerEventItems = computed(() => {
+  const snapshot = state.value.messages?.snapshot?.failed_trigger_events;
+  if (Array.isArray(snapshot)) return snapshot;
+  return triggerEventItems.value.filter((item: any) => ['failed', 'dead_letter'].includes(String(item.status || '').toLowerCase()));
+});
+const triggerEventRows = computed(() => triggerEventItems.value.slice(0, 32).map((item: any) => ({
+  idempotency_key: item.idempotency_key || '-',
+  event_type: item.event_type || item.trigger?.event_type || '-',
+  status: item.status || '-',
+  attempts: `${item.attempts ?? 0}/${item.max_attempts ?? 0}`,
+  next_retry: item.next_retry_at_ms || '-',
+  error: item.last_error || '-',
+})));
 const supervisorEventItems = computed(() => {
   const events = state.value.status?.events || state.value.events?.supervisor_events || [];
   return Array.isArray(events) ? events : [];
@@ -206,6 +230,7 @@ const messageBindingRows = computed(() => (state.value.messageBindings?.bindings
   .slice(0, 16)
   .map((item: any) => ({ binding: item.binding_id || '-', connector: item.connector || '-', endpoint: item.endpoint || '-', status: item.status || item.outbound_status || '-', session: item.runtime_session_id || item.source_session_id || '-', direction: item.direction || '-' })));
 const retryCandidate = computed(() => outboxItems.value.find((item: any) => ['failed', 'retry_scheduled', 'dead_letter'].includes(String(item.status || ''))));
+const retryTriggerEventCandidate = computed(() => failedTriggerEventItems.value.find((item: any) => item.idempotency_key));
 const replayCandidate = computed(() => inboxItems.value[0]);
 const surfaceEvidence = computed(() => [
   ...routeRows.value.slice(0, 4).map((row: any) => ({
@@ -298,7 +323,7 @@ const surfaceDiagnosticRows = computed(() => {
 async function loadSurface(id = selectedSurface.value) {
   if (!id) return;
   selectedSurface.value = id;
-  const [detail, routes, resources, status, health, events, inbox, outbox, messages, deliveries, messageEndpoints, messageRoutes, messageBindings] = await Promise.all([
+  const [detail, routes, resources, status, health, events, inbox, outbox, messages, triggerEvents, deliveries, messageEndpoints, messageRoutes, messageBindings] = await Promise.all([
     api.surfaceDetail(id),
     api.surfaceRoutes(id),
     api.surfaceResources(id),
@@ -308,12 +333,13 @@ async function loadSurface(id = selectedSurface.value) {
     api.surfaceInbox(id),
     api.surfaceOutbox(id),
     api.surfaceMessages(id),
+    api.surfaceTriggerEvents(id),
     api.surfaceDeliveries(id),
     api.messageEndpoints(),
     api.messageRoutes(),
     api.messageBindings(),
   ]);
-  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events, inbox, outbox, messages, deliveries, messageEndpoints, messageRoutes, messageBindings };
+  state.value = { ...state.value, detail, routes, resources, status, selectedHealth: health, events, inbox, outbox, messages, triggerEvents, deliveries, messageEndpoints, messageRoutes, messageBindings };
 }
 
 async function refresh() {
@@ -383,6 +409,14 @@ async function runAction() {
 async function retryDelivery() {
   if (!selectedSurface.value || !retryCandidate.value?.delivery_id) return;
   actionResult.value = await api.surfaceRetryOutbox(selectedSurface.value, retryCandidate.value.delivery_id);
+  selectedDetail.value = actionResult.value;
+  await loadSurface(selectedSurface.value);
+}
+
+async function retryTriggerEvent() {
+  const idempotencyKey = retryTriggerEventCandidate.value?.idempotency_key;
+  if (!selectedSurface.value || !idempotencyKey) return;
+  actionResult.value = await api.surfaceRetryTriggerEvent(selectedSurface.value, idempotencyKey);
   selectedDetail.value = actionResult.value;
   await loadSurface(selectedSurface.value);
 }
@@ -605,6 +639,23 @@ onMounted(refresh);
         <DataTable v-if="messageEndpointRows.length" searchable copyable row-key="endpoint" :rows="messageEndpointRows" :columns="['endpoint', 'connector', 'kind', 'status', 'configured']" @row-click="selectedDetail = $event" />
         <DataTable v-if="messageRouteRows.length" searchable copyable row-key="route" :rows="messageRouteRows" :columns="['route', 'connector', 'policy', 'status', 'runtime']" @row-click="selectedDetail = $event" />
         <DataTable v-if="messageBindingRows.length" searchable copyable row-key="binding" :rows="messageBindingRows" :columns="['binding', 'connector', 'endpoint', 'status', 'session', 'direction']" @row-click="selectedDetail = $event" />
+      </section>
+
+      <section class="management-panel gateway-panel wide" data-section="trigger-events">
+        <header>
+          <h2>{{ t('page.surface.triggerEvents.title') }}</h2>
+          <span>{{ t('page.surface.triggerEvents.summary', { active: activeTriggerEventItems.length, failed: failedTriggerEventItems.length }) }}</span>
+        </header>
+        <p class="muted-line">{{ t('page.surface.triggerEvents.detail') }}</p>
+        <div class="button-row">
+          <button class="ghost-action" type="button" data-action="retry-trigger-event" :disabled="!retryTriggerEventCandidate" @click="retryTriggerEvent">
+            <RotateCcw :size="15" />
+            {{ t('page.surface.triggerEvents.retry') }}
+          </button>
+        </div>
+        <DataTable v-if="triggerEventRows.length" searchable copyable row-key="idempotency_key" :rows="triggerEventRows" :columns="['event_type', 'status', 'attempts', 'next_retry', 'error']" @row-click="selectedDetail = $event" />
+        <EmptyState v-else :title="t('page.surface.triggerEvents.emptyTitle')" :detail="t('page.surface.triggerEvents.emptyDetail')" />
+        <RequestReceipt :receipt="actionResult" :title="t('page.surface.triggerEvents.receiptTitle')" />
       </section>
 
       <section class="management-panel gateway-panel" data-section="events">

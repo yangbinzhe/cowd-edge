@@ -118,7 +118,7 @@ const pageRequirements = [
   },
   {
     file: 'src/pages/AgentsPage.vue',
-    terms: ['Team profiles', 'Evaluation JSON', 'api.agentTeamProfiles()', 'api.agentAssemble', 'api.agentRuns()', 'api.taskAgentGraph'],
+    terms: ['Team templates', 'api.teamTemplates()', 'api.instantiateTeamTemplate', 'api.teamWorkingState', 'api.agentAssemble', 'api.agentRuns()', 'api.taskAgentGraph'],
   },
   {
     file: 'src/pages/SettingsPage.vue',

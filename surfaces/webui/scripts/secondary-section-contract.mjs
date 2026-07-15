@@ -13,12 +13,12 @@ const pages = {
   reality: { file: 'RealityCorePage.vue', sections: ['management', 'core-map', 'overview', 'fact-flow', 'context-runtime', 'evidence', 'promotions', 'boundaries'] },
   memory: { file: 'MemoryPage.vue', sections: ['layers', 'recall', 'graph', 'context-envelope', 'knowledge-governance', 'maintenance', 'structured-core'] },
   skills: { file: 'SkillsPage.vue', sections: ['catalog', 'projection', 'files', 'runs', 'governance'] },
-  agents: { file: 'AgentsPage.vue', sections: ['catalog', 'discovery', 'tasks', 'reviews', 'graph', 'runs'] },
+  agents: { file: 'AgentsPage.vue', sections: ['catalog', 'discovery', 'managed-agents', 'tasks', 'reviews', 'graph', 'runs'] },
   tools: { file: 'ToolsPage.vue', sections: ['registry', 'operations', 'mutations', 'checkpoints', 'cache', 'ledger', 'risk'] },
-  surfaces: { file: 'SurfacePage.vue', sections: ['health', 'registry', 'routes', 'dispatch', 'delivery', 'events'] },
+  surfaces: { file: 'SurfacePage.vue', sections: ['health', 'registry', 'routes', 'dispatch', 'delivery', 'trigger-events', 'events'] },
   gateway: { file: 'GatewayPage.vue', sections: ['alignment', 'connectors', 'resources', 'executions', 'identities'] },
   mfg: { file: 'MfgPage.vue', sections: ['overview', 'data-plane', 'source-pack', 'entities', 'metrics', 'evidence', 'incident-room', 'actions', 'skills', 'reports'] },
-  audit: { file: 'AuditPage.vue', sections: ['global-timeline', 'logs', 'usage', 'release', 'harness-eval', 'harness-eval-runs', 'harness-eval-scenarios', 'evolution', 'approvals', 'cross-plane'] },
+  audit: { file: 'AuditPage.vue', sections: ['global-timeline', 'logs', 'usage', 'release', 'harness-eval', 'harness-eval-runs', 'harness-eval-scenarios', 'evolution', 'evaluation-policy', 'approvals', 'cross-plane'] },
 };
 
 function read(relativePath) {

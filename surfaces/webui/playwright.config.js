@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const gatewayUrl = process.env.COWD_E2E_GATEWAY_URL?.replace(/\/$/, '');
+const gatewayToken = process.env.COWD_E2E_GATEWAY_TOKEN;
 
 export default defineConfig({
   testDir: '.',
@@ -10,6 +11,9 @@ export default defineConfig({
     // The release gate supplies an isolated Gateway URL. Local development
     // keeps the Vite server for fast iteration, but it is not release proof.
     baseURL: gatewayUrl || 'http://127.0.0.1:9241',
+    extraHTTPHeaders: gatewayToken
+      ? { Authorization: `Bearer ${gatewayToken}` }
+      : undefined,
     serviceWorkers: 'block',
     launchOptions: {
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/snap/bin/chromium',
