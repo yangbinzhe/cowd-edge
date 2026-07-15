@@ -3,6 +3,7 @@ import { formatCount, t } from '../i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Brain, ChevronLeft, ChevronRight, CircleDot, Code2, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
+import { useChatSessionsStore } from '../stores/chatSessions';
 import MarkdownBlock from './MarkdownBlock.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
@@ -10,6 +11,7 @@ import WorkspaceTree from './workspace/WorkspaceTree.vue';
 import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/workspacePreview';
 
 const store = useAppStore();
+const chat = useChatSessionsStore();
 const fileInput = ref<HTMLInputElement | null>(null);
 const previewOpen = ref(false);
 const previewMode = ref<'render' | 'source'>('render');
@@ -52,6 +54,13 @@ const runtimeInputItems = computed(() => {
     seen.add(id);
     return true;
   }).slice(0, 12);
+});
+const liveExecution = computed(() => chat.active?.projection?.live || chat.active?.live || null);
+const liveMetrics = computed(() => liveExecution.value?.metrics || null);
+const liveContextLabel = computed(() => {
+  const usage = liveExecution.value?.context_usage;
+  if (!usage?.window_tokens) return '—';
+  return `${Number(usage.input_tokens || 0).toLocaleString()} / ${Number(usage.window_tokens).toLocaleString()}`;
 });
 
 function runtimeInputId(item: any) {
@@ -278,17 +287,17 @@ onBeforeUnmount(() => {
     <section v-else-if="store.companionTab === 'evidence'" class="companion-body evidence-tab">
       <div class="panel-title">
         <h2>{{ t('component.companion.panel.text.0a3b6fabd8') }}</h2>
-        <span>{{ formatCount('tools', store.toolCallCount) }}</span>
+        <span>{{ formatCount('tools', Number(liveMetrics?.tool_calls || 0)) }}</span>
       </div>
       <dl class="detail-list evidence-summary">
         <dt>{{ t('component.companion.panel.text.f37df354d9') }}</dt>
-        <dd>{{ displayStatus(store.currentRun?.status || 'unknown') }}</dd>
+        <dd>{{ displayStatus(liveExecution?.status || 'unknown') }}</dd>
         <dt>{{ t('component.companion.panel.text.97f11d23ce') }}</dt>
-        <dd>{{ store.currentRun?.run_id || store.currentRun?.turn_id || store.activeSessionId || '-' }}</dd>
+        <dd>{{ chat.active?.executionId || store.activeSessionId || '-' }}</dd>
         <dt>{{ t('component.companion.panel.text.2c11686ce6') }}</dt>
-        <dd>{{ store.currentRun?.context_envelope_id || store.currentContextEnvelope?.id || '-' }}</dd>
+        <dd>{{ liveContextLabel }}</dd>
         <dt>{{ t('component.companion.panel.text.06f670e7b4') }}</dt>
-        <dd>{{ store.memoryRecallCount }} recall / {{ store.memoryEvidenceCount }} evidence</dd>
+        <dd>{{ Number(liveMetrics?.memory_recalls || 0) }} recall / {{ Number(liveMetrics?.memory_evidence || 0) }} evidence</dd>
       </dl>
       <div class="stage-list">
         <article v-for="stage in store.runStageSummary" :key="stage.id" class="stage-row" :data-status="stage.status">
@@ -392,7 +401,7 @@ onBeforeUnmount(() => {
         <dt>{{ t('component.companion.panel.text.bd29ce8763') }}</dt>
         <dd>{{ store.fileError || '-' }}</dd>
         <dt>{{ t('component.companion.panel.text.2c11686ce6') }}</dt>
-        <dd>{{ store.contextUsagePercent === null ? store.contextUsageSource : `${store.contextUsagePercent}%` }}</dd>
+        <dd>{{ liveContextLabel }}</dd>
         <dt>{{ t('component.companion.panel.text.68f0885972') }}</dt>
         <dd>{{ store.selectedActivity?.title || '-' }}</dd>
       </dl>

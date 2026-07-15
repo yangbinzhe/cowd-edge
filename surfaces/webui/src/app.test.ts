@@ -99,13 +99,13 @@ describe('Cowd Vue WebUI shell', () => {
     await settle();
     expect(wrapper.get('.transcript').exists()).toBe(true);
     expect(wrapper.get('.composer textarea').exists()).toBe(true);
-    expect(wrapper.get('.context-meter').exists()).toBe(true);
+    expect(wrapper.get('.context-ring').exists()).toBe(true);
     expect(wrapper.get('.mode-switch').text()).toContain('全景');
     expect(wrapper.find('.run-panorama').exists()).toBe(false);
     expect(wrapper.get('.composer-stats').text()).toContain('工具调用');
     expect(wrapper.get('.companion-panel').exists()).toBe(true);
     expect(wrapper.text()).toContain('上下文');
-    expect(wrapper.text()).toContain('未报告');
+    expect(wrapper.text()).toContain('上下文 —');
     expect(wrapper.get('.chat-page').exists()).toBe(true);
   });
 
@@ -175,28 +175,13 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Surface 宿主');
   });
 
-  it('opens a Chat turn evidence drawer from current session projections', async () => {
+  it('keeps session evidence in the top header instead of duplicating it per message', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
-    const store = useAppStore();
-    store.turns = [{ id: 'turn-1', role: 'assistant', content: 'Done', status: 'complete', tool_name: 'workspace.read' }];
-    store.currentTimeline = {
-      events: [
-        { kind: 'tool.call', status: 'complete', detail: 'workspace.read docs/a.md' },
-        { kind: 'memory.recall', status: 'complete', detail: 'memory://m1' },
-        { kind: 'approval.policy', status: 'ready', detail: 'low risk' },
-      ],
-    };
-    store.currentRealityFlow = { stages: [{ kind: 'memory.promotion', status: 'accepted', summary: 'stable fact' }] };
-    store.attachments = [{ ref_id: 'att-1', kind: 'workspace_file', path: 'docs/a.md', label: 'A', size: 1, sha256: 'hash', added_at_ms: 1 }];
     await settle();
-    await wrapper.get('.message-meta button').trigger('click');
-    await settleAsync();
-    expect(wrapper.text()).toContain('回合证据');
-    expect(wrapper.text()).toContain('会话与当前运行投影');
-    expect(wrapper.text()).toContain('workspace.read');
-    expect(wrapper.text()).toContain('docs/a.md');
-    expect(store.selectedTurnEvidence?.summary.map((item: any) => item.label)).toContain('工具');
+    expect(wrapper.get('.session-evidence-head').text()).toContain('证据');
+    expect(wrapper.find('.message-meta button').exists()).toBe(false);
+    expect(wrapper.find('.turn-evidence-drawer').exists()).toBe(false);
   });
 
   it('deduplicates turn activity and summarizes assistant work signals', () => {

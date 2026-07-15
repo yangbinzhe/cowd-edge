@@ -8,6 +8,8 @@ import type {
   NavId,
   ExecutionProjection,
   ExecutionProjectionDelta,
+  SessionEvidenceProjection,
+  SessionExecutionIndexProjection,
   SessionSummary,
   SessionTurnProjection,
   WorkspaceFile,
@@ -506,6 +508,16 @@ export const api = {
   compactSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/compact`, { method: 'POST' }),
   cancelSessionTurn: (sessionId: string) => writeWithReceipt(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }),
   sessionStats: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/stats`, {}),
+  sessionExecution: (sessionId: string) => read<SessionExecutionIndexProjection>(`/api/sessions/${encodeURIComponent(sessionId)}/execution`, {
+    session_id: sessionId,
+    active_execution_ids: [],
+  }),
+  sessionEvidence: (sessionId: string) => read<SessionEvidenceProjection>(`/api/sessions/${encodeURIComponent(sessionId)}/evidence`, {
+    session_id: sessionId,
+    evidence_refs: [],
+    turns: [],
+    freshness: 'unavailable',
+  }),
   sessionTurnProjection: (sessionId: string, fromSeq = 0, limit = 2000) => read<SessionTurnProjection>(
     `/api/sessions/${encodeURIComponent(sessionId)}/turns?from_seq=${fromSeq}&limit=${limit}`,
     {

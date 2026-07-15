@@ -67,7 +67,87 @@ export interface ActivityEvent {
 }
 
 export type ExecutionProjectionEntity = GatewayComponents['schemas']['ExecutionProjectionEntity'];
-export type ExecutionProjection = GatewayComponents['schemas']['ExecutionProjection'];
+export type ExecutionLiveStatus = 'queued' | 'preparing_context' | 'calling_model' | 'thinking' | 'calling_tool' | 'waiting_approval' | 'finalizing' | 'complete' | 'cancelled' | 'error';
+
+export interface ContextComponentUsage {
+  kind: string;
+  tokens: number;
+  occurrences: number;
+}
+
+export interface ContextUsageProjection {
+  model?: string | null;
+  window_tokens?: number | null;
+  window_source?: string | null;
+  input_tokens?: number | null;
+  input_source?: string | null;
+  remaining_tokens?: number | null;
+  usage_percent_bp?: number | null;
+  request_sequence?: number | null;
+  components: ContextComponentUsage[];
+}
+
+export interface RunMetricsProjection {
+  tool_calls: number;
+  memory_recalls: number;
+  memory_evidence: number;
+  approvals: number;
+  context_items: number;
+  files_touched: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
+export interface ExecutionLiveState {
+  revision: number;
+  status: ExecutionLiveStatus;
+  status_detail?: string | null;
+  turn_id?: string | null;
+  started_at_ms: number;
+  updated_at_ms: number;
+  last_progress_at_ms: number;
+  context_usage?: ContextUsageProjection | null;
+  metrics: RunMetricsProjection;
+  output_preview?: string | null;
+  terminal_ref?: string | null;
+  error?: string | null;
+}
+
+export interface SessionExecutionIndexProjection {
+  session_id: string;
+  active_execution_ids: string[];
+  latest_execution_id?: string | null;
+  latest_status?: ExecutionLiveStatus | null;
+  latest_live_revision?: number | null;
+  last_progress_at_ms?: number | null;
+  terminal_ref?: string | null;
+}
+
+export type EvidenceFreshness = 'live' | 'durable' | 'unavailable';
+
+export interface TurnEvidenceProjection {
+  session_id: string;
+  turn_id: string;
+  input_message_id: string;
+  execution_id: string;
+  terminal_ref?: string | null;
+  assistant_message_id?: string | null;
+  context_report_id?: string | null;
+  evidence_refs: string[];
+  freshness: EvidenceFreshness;
+}
+
+export interface SessionEvidenceProjection {
+  session_id: string;
+  evidence_refs: string[];
+  turns: TurnEvidenceProjection[];
+  freshness: EvidenceFreshness;
+}
+
+export type ExecutionProjection = GatewayComponents['schemas']['ExecutionProjection'] & {
+  live?: ExecutionLiveState | null;
+};
 export type ExecutionProjectionDelta = GatewayComponents['schemas']['ProjectionDelta'];
 
 export interface WorkspaceFile {

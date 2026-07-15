@@ -181,8 +181,12 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .composer-stats strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .composer-chip { min-height: 28px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--text-muted); padding: 0 9px; }
 .composer-chip:hover { color: var(--text); border-color: var(--border-2); }
-.context-meter { width: 96px; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
-.context-meter i { display: block; height: 100%; background: var(--success); }
+.context-ring { --context-progress: 0%; width: 34px; height: 34px; border-radius: 50%; display: inline-grid; place-items: center; background: conic-gradient(var(--success) var(--context-progress), var(--surface-3) 0); position: relative; flex: 0 0 auto; }
+.context-ring::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--surface-1); }
+.context-ring i { position: relative; font-size: 9px; font-style: normal; color: var(--text); }
+.session-evidence-head, .run-status { border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 5px 9px; font-size: 12px; color: var(--muted); }
+.run-status[data-status='error'], .run-status[data-status='waiting_approval'] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 42%, var(--border)); }
+.turn-run-state { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; }
 .composer-actions { display: flex; gap: 8px; align-items: center; }
 
 .companion-panel { position: relative; border-left: 1px solid var(--border); border-right: 0; display: flex; flex-direction: column; min-height: 0; }

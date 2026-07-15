@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { t } from '../i18n';
+import { displayStatus } from '../i18n/domain/status';
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { Plus, Radio, Search } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
+import { useChatSessionsStore } from '../stores/chatSessions';
 
 const store = useAppStore();
+const chat = useChatSessionsStore();
 const SIDEBAR_WIDTH_KEY = 'cowd.webui.sessionSidebarWidth';
 const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 420;
@@ -15,6 +18,28 @@ let resizeEnd: (() => void) | null = null;
 
 async function searchSessions() {
   await store.refreshSessions();
+}
+
+async function openSession(sessionId: string) {
+  // Capture the session identity at the click boundary.  The chat manager
+  // owns all delayed stream/receipt writes for this ID; the global store only
+  // provides shell-level selection and attachments.
+  await store.loadMessages(sessionId);
+}
+
+async function createSession() {
+  await store.createSession();
+  if (store.activeSessionId) await chat.open(store.activeSessionId);
+}
+
+function sessionLiveStatus(sessionId: string) {
+  return String(chat.states[sessionId]?.projection?.live?.status || chat.states[sessionId]?.live?.status || '');
+}
+
+function isSessionRunning(session: any) {
+  return chat.states[session.id]?.pending
+    || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(sessionLiveStatus(session.id))
+    || store.isSessionRunning(session);
 }
 
 function clampSidebarWidth(width: number) {
@@ -78,7 +103,7 @@ onBeforeUnmount(() => {
   <aside class="session-sidebar">
     <button class="session-sidebar-resizer" type="button" :aria-label="t('session.sidebar.resize')" @pointerdown="startResize" />
     <header class="sidebar-head">
-      <button class="primary-action" type="button" @click="store.createSession">
+      <button class="primary-action" type="button" @click="createSession">
         <Plus :size="16" />
         {{ t('template.components.sessionsidebar.5c881d23b5') }}
       </button>
@@ -97,19 +122,19 @@ onBeforeUnmount(() => {
           class="session-row"
           :class="{ active: session.id === store.activeSessionId }"
           type="button"
-          @click="store.loadMessages(session.id)"
+          @click="openSession(session.id)"
         >
           <span class="session-row-top">
             <span class="session-title">
-              <Radio v-if="store.isSessionRunning(session)" :size="11" />
+              <Radio v-if="isSessionRunning(session)" :size="11" />
               <i v-else-if="store.isSessionUnread(session)" class="session-unread-dot"></i>
               {{ store.sessionTitle(session) }}
             </span>
             <time class="session-row-time">{{ store.compactTime(session) }}</time>
           </span>
-          <span v-if="store.isSessionPinned(session) || store.isSessionRunning(session) || store.isSessionUnread(session) || session.parent_session_id || session.branch_count" class="session-state-line">
+          <span v-if="store.isSessionPinned(session) || isSessionRunning(session) || store.isSessionUnread(session) || session.parent_session_id || session.branch_count" class="session-state-line">
             <small v-if="store.isSessionPinned(session)">{{ t('session.badge.pinned') }}</small>
-            <small v-if="store.isSessionRunning(session)">{{ t('session.badge.running') }}</small>
+            <small v-if="isSessionRunning(session)">{{ displayStatus(sessionLiveStatus(session.id) || 'running') }}</small>
             <small v-else-if="store.isSessionUnread(session)">{{ t('session.badge.unread') }}</small>
             <small v-if="session.parent_session_id || session.branch_count">{{ t('session.badge.branch') }}</small>
           </span>

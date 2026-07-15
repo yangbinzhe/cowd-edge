@@ -17,7 +17,7 @@ import type {
   SessionSummary,
   WorkspaceFile,
 } from '../types';
-import { cleanAssistantContent, collapseRepeatedText } from '../utils/chatContent';
+import { cleanAssistantContent } from '../utils/chatContent';
 import {
   createWorkspaceRoot,
   findWorkspaceTreeNode,
@@ -29,7 +29,8 @@ import {
   type WorkspaceTreeNode,
 } from '../utils/workspaceTree';
 import { buildWorkspacePreviewHtml, isWorkspaceTextPreview, workspacePreviewKind, workspacePreviewMime } from '../utils/workspacePreview';
-import { activitySummary, mergeTurnActivity, normalizeTurnActivity } from '../utils/turnSettlement';
+import { activitySummary, normalizeTurnActivity } from '../utils/turnSettlement';
+import { useChatSessionsStore } from './chatSessions';
 
 const PINNED_SESSION_KEY = 'cowd.webui.sessions.pinned';
 const VIEWED_SESSION_KEY = 'cowd.webui.sessions.viewedCounts';
@@ -89,18 +90,6 @@ function formatFileSize(size?: number) {
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function blockText(block: any): string {
-  if (!block) return '';
-  if (typeof block === 'string') return block;
-  return block.text || block.content || block.output || block.thinking || '';
-}
-
-function normalizeTurnContent(role: string, content: string) {
-  const normalized = String(content || '').replace(/\r\n/g, '\n');
-  if (String(role || '').toLowerCase() === 'user') return normalized;
-  return cleanAssistantContent(collapseRepeatedText(normalized), (tool, outcome) => t(outcome === 'failed' ? 'chat.toolEvidence.failed' : 'chat.toolEvidence.inline', { tool }));
-}
-
 function cleanRuntimeSummary(content: string) {
   return cleanAssistantContent(String(content || ''), (tool, outcome) => t(outcome === 'failed' ? 'chat.toolEvidence.failed' : 'chat.toolEvidence.inline', { tool }));
 }
@@ -111,17 +100,6 @@ function sanitizeActivityEvent(event: ActivityEvent): ActivityEvent {
     title: cleanRuntimeSummary(event.title),
     detail: cleanRuntimeSummary(event.detail),
   };
-}
-
-function comparableText(value: string) {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function turnStableKey(turn: ChatTurn) {
-  if (turn.id && !turn.id.startsWith('local-') && !turn.id.startsWith('assistant-stream-')) return `id:${turn.id}`;
-  if (turn.sequence !== undefined && turn.sequence !== null) return `seq:${turn.role}:${turn.sequence}`;
-  if (turn.tool_use_id) return `tool:${turn.role}:${turn.tool_use_id}`;
-  return '';
 }
 
 function updatedAtMs(session: SessionSummary) {
@@ -165,7 +143,6 @@ function compactTime(session: SessionSummary) {
 }
 
 export const useAppStore = defineStore('app', () => {
-  let sessionStream: EventSource | null = null;
   let executionProjectionStream: EventSource | null = null;
   let executionProjectionStreamId = '';
   let executionProjectionScope: 'summary' | 'full' = 'summary';
@@ -176,11 +153,6 @@ export const useAppStore = defineStore('app', () => {
     updatedAt: number;
   };
   const executionProjectionOwners = new Map<ExecutionProjectionOwner, ExecutionProjectionSubscription>();
-  let sessionStreamId = '';
-  const sessionStreamCursors = new Map<string, number>();
-  const sessionStreamRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  let streamingAssistantId = '';
-  const committedTerminalIds = new Set<string>();
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   const booted = ref(false);
   const health = ref<any>(null);
@@ -194,7 +166,6 @@ export const useAppStore = defineStore('app', () => {
   const approvalConfig = ref<any>(null);
   const sessions = ref<SessionSummary[]>([]);
   const activeSessionId = ref('');
-  const turns = ref<ChatTurn[]>([]);
   const activity = ref<ActivityEvent[]>([]);
   const companionTab = ref<CompanionTab>('activity');
   const chatDisplayMode = ref<ChatDisplayMode>('panorama');
@@ -206,11 +177,7 @@ export const useAppStore = defineStore('app', () => {
   const currentTimeline = ref<any>({});
   const sessionInputProjection = ref<any>(null);
   const turnInbox = ref<any>(null);
-  const selectedTurnEvidence = ref<Record<string, any> | null>(null);
   const selectedActivity = ref<Record<string, unknown> | null>(null);
-  const liveToolCount = ref(0);
-  const liveMemoryRecallCount = ref(0);
-  const liveMemoryEvidenceCount = ref(0);
   const workspaceRoot = ref('');
   const workspaceDir = ref('');
   const workspaceFiles = ref<WorkspaceFile[]>([]);
@@ -233,10 +200,6 @@ export const useAppStore = defineStore('app', () => {
   const selectedModel = ref('');
   const selectedProfile = ref('default');
   const commandError = ref('');
-  const contextUsagePercent = ref<number | null>(null);
-  const contextUsageSource = ref(t('store.app.string.18eb606335'));
-  const contextUsedTokens = ref(0);
-  const contextLimitTokens = ref(0);
   const sessionQuery = ref('');
   const sessionPageLimit = ref(50);
   const sessionOffset = ref(0);
@@ -285,14 +248,6 @@ export const useAppStore = defineStore('app', () => {
     });
     return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
   });
-  const contextUsageLabel = computed(() => {
-    const used = contextUsedTokens.value;
-    const limit = contextLimitTokens.value;
-    if (used > 0 && limit > 0) return `${used.toLocaleString()} / ${limit.toLocaleString()}`;
-    if (limit > 0) return `0 / ${limit.toLocaleString()}`;
-    if (used > 0) return `${used.toLocaleString()} / ${contextUsageSource.value}`;
-    return contextUsageSource.value;
-  });
   const availableModels = computed(() => {
     const models = providerModels(controlPlane.value, providers.value || settings.value);
     return models.length ? models : (selectedModel.value ? [selectedModel.value] : []);
@@ -303,24 +258,6 @@ export const useAppStore = defineStore('app', () => {
   const configReloadAttention = computed(() => {
     const status = String(configReloadStatus.value?.status || '').toLowerCase();
     return configReloadInvalid.value || configReloadNeedsRestart.value || status === 'attention' || status === 'reload_needed';
-  });
-  const toolCallCount = computed(() => {
-    const timelineEvents = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
-    const timelineCount = timelineEvents.filter((event: any) => String(event.kind || event.event_type || event.type || '').toLowerCase().includes('tool')).length;
-    return Math.max(liveToolCount.value, timelineCount);
-  });
-  const memoryRecallCount = computed(() => {
-    const timelineEvents = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
-    const timelineCount = timelineEvents.filter((event: any) => {
-      const kind = String(event.kind || event.event_type || event.type || '').toLowerCase();
-      return kind.includes('memory') || kind.includes('recall');
-    }).length;
-    return Math.max(liveMemoryRecallCount.value, timelineCount);
-  });
-  const memoryEvidenceCount = computed(() => {
-    const stages = Array.isArray(currentRealityFlow.value?.stages) ? currentRealityFlow.value.stages : [];
-    const memoryStages = stages.filter((stage: any) => String(stage.kind || '').toLowerCase().includes('memory'));
-    return Math.max(liveMemoryEvidenceCount.value, memoryStages.length);
   });
   const runStageSummary = computed(() => {
     const events = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
@@ -370,15 +307,6 @@ export const useAppStore = defineStore('app', () => {
     return Array.from(fileMap.values());
   });
 
-  function summarizeEvent(event: any) {
-    return {
-      kind: String(event.kind || event.event_type || event.type || event.source || 'event'),
-      status: String(event.status || event.phase || event.decision || 'observed'),
-      summary: String(event.detail || event.summary || event.message || event.title || event.ref || event.id || '').slice(0, 180),
-      raw: event,
-    };
-  }
-
   function turnActivityStorageKey(sessionId = activeSessionId.value) {
     return `cowd.webui.turnActivityOpen.${sessionId || 'none'}`;
   }
@@ -412,251 +340,6 @@ export const useAppStore = defineStore('app', () => {
 
   function turnActivitySummary(turn: ChatTurn) {
     return activitySummary(turn);
-  }
-
-  function attachActivityToStreamingTurn(event: ActivityEvent) {
-    const turn = streamingAssistantId ? turns.value.find((item) => item.id === streamingAssistantId) : null;
-    if (!turn) return;
-    turn.activity = mergeTurnActivity(turn.activity || [], event);
-  }
-
-  function eventText(event: any) {
-    return `${event.kind || ''} ${event.event_type || ''} ${event.type || ''} ${event.source || ''} ${event.status || ''} ${event.detail || ''} ${event.summary || ''}`.toLowerCase();
-  }
-
-  function turnEvidenceFromProjection(turn: ChatTurn, runtimeTurn: any = null) {
-    const timelineEvents = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
-    const realityEvents = [
-      ...(Array.isArray(currentRealityFlow.value?.events) ? currentRealityFlow.value.events : []),
-      ...(Array.isArray(currentRealityFlow.value?.stages) ? currentRealityFlow.value.stages : []),
-      ...(Array.isArray(currentRealityFlow.value?.promotions) ? currentRealityFlow.value.promotions : []),
-    ];
-    const envelope = currentContextEnvelope.value?.envelope || currentContextEnvelope.value || {};
-    const contextItems = [
-      ...(Array.isArray(envelope.items) ? envelope.items : []),
-      ...(Array.isArray(envelope.context_items) ? envelope.context_items : []),
-      ...(Array.isArray(envelope.evidence) ? envelope.evidence : []),
-    ];
-    const activityRows = activity.value.map((item) => ({
-      kind: item.kind,
-      status: item.status || 'observed',
-      summary: `${item.title}${item.detail ? `: ${item.detail}` : ''}`,
-      raw: item,
-    }));
-    const toolEvents = [
-      ...timelineEvents.filter((event: any) => eventText(event).includes('tool')).map(summarizeEvent),
-      ...activityRows.filter((event) => event.kind === 'tool'),
-      ...(turn.tool_name ? [{ kind: 'message.tool', status: turn.status || 'complete', summary: turn.tool_name, raw: turn }] : []),
-    ];
-    const memoryEvents = [
-      ...timelineEvents.filter((event: any) => eventText(event).includes('memory') || eventText(event).includes('recall')).map(summarizeEvent),
-      ...realityEvents.filter((event: any) => eventText(event).includes('memory') || eventText(event).includes('fact') || eventText(event).includes('promotion')).map(summarizeEvent),
-      ...contextItems.filter((item: any) => eventText(item).includes('memory') || eventText(item).includes('recall')).map(summarizeEvent),
-    ];
-    const approvalEvents = [
-      ...timelineEvents.filter((event: any) => eventText(event).includes('approval') || eventText(event).includes('policy') || eventText(event).includes('risk')).map(summarizeEvent),
-      ...activityRows.filter((event) => event.kind === 'approval' || eventText(event).includes('policy')),
-    ];
-    const runtimeEvents = timelineEvents.slice(0, 24).map(summarizeEvent);
-    const files = currentRunFiles.value.slice(0, 24).map((file: any) => ({
-      path: file.path || file.ref || '-',
-      kind: file.kind || 'runtime-ref',
-      status: file.status || 'observed',
-      raw: file,
-    }));
-    return {
-      turn,
-      runtime_turn: runtimeTurn,
-      source_note: t('store.app.string.718831f909'),
-      summary: [
-        { label: t('script.stores.app.label.4fa8cc860c'), value: toolEvents.length },
-        { label: t('script.stores.app.label.89c8a2851d'), value: memoryEvents.length },
-        { label: t('script.stores.app.label.6ce6c512ea'), value: files.length },
-        { label: t('script.stores.app.label.deb9d03cf0'), value: approvalEvents.length },
-        { label: t('script.stores.app.label.c5497bca58'), value: runtimeEvents.length },
-      ],
-      tools: toolEvents,
-      memory: memoryEvents,
-      files,
-      approvals: approvalEvents,
-      events: runtimeEvents,
-      context: envelope,
-      reality: currentRealityFlow.value,
-    };
-  }
-
-  function rowContent(row: any) {
-    const direct = String(row?.content || '').trim();
-    if (direct) return direct;
-    const blockParts = (Array.isArray(row?.blocks) ? row.blocks : [])
-      .map(blockText)
-      .map((part) => String(part || '').trim())
-      .filter(Boolean)
-      .filter((part, index, parts) => index === 0 || comparableText(part) !== comparableText(parts[index - 1]));
-    return blockParts.join('\n\n');
-  }
-
-  function rowActivity(row: any) {
-    const events = Array.isArray(row?.activity) ? row.activity : Array.isArray(row?.events) ? row.events : [];
-    return events.map((event: any) => sanitizeActivityEvent(normalizeTurnActivity(event)));
-  }
-
-  function rowTokenUsage(row: any) {
-    return row?.token_usage
-      || row?.usage
-      || row?.usage_metadata
-      || row?.stats?.token_usage
-      || row?.metrics?.token_usage
-      || undefined;
-  }
-
-  function rowToTurn(row: any, index: number): ChatTurn {
-    const role = row.role || 'assistant';
-    const content = rowContent(row);
-    return {
-      id: String(row.id || row.sequence || index),
-      role,
-      content: normalizeTurnContent(role, content),
-      status: 'complete',
-      activity: rowActivity(row),
-      blocks: row.blocks || [],
-      sequence: row.sequence,
-      created_at_ms: row.created_at_ms,
-      tool_use_id: row.tool_use_id,
-      tool_name: row.tool_name,
-      token_usage: rowTokenUsage(row),
-    };
-  }
-
-  function mergeLoadedTurns(rows: any[]): ChatTurn[] {
-    const loaded = rows.map(rowToTurn);
-    const merged: ChatTurn[] = [];
-    const seen = new Set<string>();
-    loaded.forEach((turn) => {
-      const key = turnStableKey(turn);
-      const duplicateStable = key && seen.has(key);
-      if (duplicateStable) return;
-      if (key) seen.add(key);
-      merged.push(turn);
-    });
-
-    const streaming = streamingAssistantId ? turns.value.find((turn) => turn.id === streamingAssistantId && turn.status === 'streaming') : null;
-    if (streaming) {
-      merged.push(streaming);
-    }
-    return merged;
-  }
-
-  function numberFrom(value: unknown) {
-    const number = Number(value);
-    return Number.isFinite(number) && number > 0 ? number : 0;
-  }
-
-  function tokenCountFrom(value: any) {
-    if (!value || typeof value !== 'object') return 0;
-    const direct = numberFrom(value.total_tokens)
-      || numberFrom(value.totalTokens)
-      || numberFrom(value.total)
-      || numberFrom(value.tokens_total)
-      || numberFrom(value.token_count)
-      || numberFrom(value.tokenCount)
-      || numberFrom(value.token_usage?.total_tokens)
-      || numberFrom(value.token_usage?.total)
-      || numberFrom(value.usage?.total_tokens)
-      || numberFrom(value.usage?.total)
-      || numberFrom(value.usage_metadata?.total_tokens)
-      || numberFrom(value.usage_metadata?.total);
-    if (direct) return direct;
-    const input = numberFrom(value.input_tokens)
-      || numberFrom(value.prompt_tokens)
-      || numberFrom(value.inputTokens)
-      || numberFrom(value.promptTokens)
-      || numberFrom(value.token_usage?.input_tokens)
-      || numberFrom(value.token_usage?.prompt_tokens)
-      || numberFrom(value.usage?.input_tokens)
-      || numberFrom(value.usage?.prompt_tokens)
-      || numberFrom(value.usage_metadata?.input_tokens)
-      || numberFrom(value.usage_metadata?.prompt_tokens);
-    const output = numberFrom(value.output_tokens)
-      || numberFrom(value.completion_tokens)
-      || numberFrom(value.outputTokens)
-      || numberFrom(value.completionTokens)
-      || numberFrom(value.token_usage?.output_tokens)
-      || numberFrom(value.token_usage?.completion_tokens)
-      || numberFrom(value.usage?.output_tokens)
-      || numberFrom(value.usage?.completion_tokens)
-      || numberFrom(value.usage_metadata?.output_tokens)
-      || numberFrom(value.usage_metadata?.completion_tokens);
-    return input + output;
-  }
-
-  function findContextWindowIn(value: any, model = selectedModel.value): number {
-    const candidateKeys = [
-      'context_window',
-      'contextWindow',
-      'max_context_tokens',
-      'maxContextTokens',
-      'context_limit',
-      'contextLimit',
-      'context_length',
-      'contextLength',
-      'model_context_window',
-      'modelContextWindow',
-      'max_input_tokens',
-      'maxInputTokens',
-      'max_tokens',
-      'maxTokens',
-      'token_budget',
-      'tokenBudget',
-    ];
-    const visited = new Set<any>();
-    const wantedModel = String(model || '').toLowerCase();
-    const visit = (node: any): number => {
-      if (!node || typeof node !== 'object' || visited.has(node)) return 0;
-      visited.add(node);
-      for (const key of candidateKeys) {
-        const direct = numberFrom(node[key]);
-        if (direct) return direct;
-      }
-      if (wantedModel) {
-        const name = String(node.id || node.name || node.model || '').toLowerCase();
-        if (name && name === wantedModel) {
-          for (const key of candidateKeys) {
-            const direct = numberFrom(node[key]);
-            if (direct) return direct;
-          }
-        }
-      }
-      if (Array.isArray(node)) {
-        for (const item of node) {
-          const found = visit(item);
-          if (found) return found;
-        }
-      } else {
-        for (const child of Object.values(node)) {
-          const found = visit(child);
-          if (found) return found;
-        }
-      }
-      return 0;
-    };
-    return visit(value);
-  }
-
-  function resolveContextLimit(stats: any) {
-    return numberFrom(stats.context_window)
-      || numberFrom(stats.max_context_tokens)
-      || numberFrom(stats.context_limit)
-      || numberFrom(stats.token_budget)
-      || numberFrom(stats.model_context_window)
-      || numberFrom(stats.token_usage?.limit)
-      || numberFrom(stats.token_usage?.context_window)
-      || numberFrom(stats.usage?.limit)
-      || numberFrom(stats.usage?.context_window)
-      || findContextWindowIn(stats)
-      || findContextWindowIn(controlPlane.value)
-      || findContextWindowIn(providers.value)
-      || findContextWindowIn(settings.value);
   }
 
   async function boot() {
@@ -714,8 +397,6 @@ export const useAppStore = defineStore('app', () => {
     await Promise.all([
       activeSessionId.value ? loadMessages(activeSessionId.value) : Promise.resolve(),
       loadWorkspace(''),
-      activeSessionId.value ? loadAttachments(activeSessionId.value) : Promise.resolve(),
-      loadActivity(),
     ]);
     busy.value = false;
     booted.value = true;
@@ -738,40 +419,15 @@ export const useAppStore = defineStore('app', () => {
   async function loadMessages(sessionId: string) {
     activeSessionId.value = sessionId;
     openTurnActivity.value = loadTurnActivityState(sessionId);
-    const data = await api.messages(sessionId);
-    const rows = Array.isArray(data) ? data : (data.messages || []);
-    turns.value = mergeLoadedTurns(rows);
-    if (!turns.value.length) turns.value = [{ id: 'empty', role: 'system', content: t('store.app.session.empty'), status: 'complete' }];
+    const chat = useChatSessionsStore();
+    await chat.open(sessionId);
     markSessionViewed(sessionId);
-    connectSessionStream(sessionId);
-    await refreshContextUsage(sessionId);
-    await loadAttachments(sessionId);
-    if (chatDisplayMode.value === 'panorama') await refreshChatProjection(sessionId);
-  }
-
-  async function refreshContextUsage(sessionId = activeSessionId.value) {
-    if (!sessionId) {
-      contextUsagePercent.value = null;
-      contextUsageSource.value = t('store.app.string.44a6946f79');
-      contextUsedTokens.value = 0;
-      contextLimitTokens.value = 0;
-      return;
-    }
-    const stats: any = await api.sessionStats(sessionId);
-    const used = tokenCountFrom(stats);
-    const limit = resolveContextLimit(stats);
-    contextUsedTokens.value = Number.isFinite(used) && used > 0 ? used : 0;
-    contextLimitTokens.value = limit;
-    if (used > 0 && limit > 0) {
-      contextUsagePercent.value = Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
-      contextUsageSource.value = t('store.app.string.6e69362394');
-    } else if (limit > 0) {
-      contextUsagePercent.value = 0;
-      contextUsageSource.value = t('chat.context.limitOnly');
-    } else {
-      contextUsagePercent.value = null;
-      contextUsageSource.value = t('store.app.string.18eb606335');
-    }
+    await Promise.all([
+      loadAttachments(sessionId),
+      loadActivity(),
+      refreshSessionInputs(sessionId),
+      chatDisplayMode.value === 'panorama' ? refreshChatProjection(sessionId) : Promise.resolve(),
+    ]);
   }
 
   async function refreshSessions(query = sessionQuery.value, reset = true) {
@@ -800,20 +456,20 @@ export const useAppStore = defineStore('app', () => {
     sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)];
     activeSessionId.value = session.id;
     selectedModel.value = session.model || selectedModel.value;
-    turns.value = [{ id: `system-${Date.now()}`, role: 'system', content: t('store.app.session.created'), status: 'complete' }];
+    const chat = useChatSessionsStore();
+    await chat.open(session.id);
     attachments.value = [];
     markSessionViewed(session.id);
-    connectSessionStream(session.id);
   }
 
   async function deleteSession(sessionId: string) {
     await api.deleteSession(sessionId);
+    useChatSessionsStore().close(sessionId);
     sessions.value = sessions.value.filter((session) => session.id !== sessionId);
     selectedSessionIds.value = selectedSessionIds.value.filter((id) => id !== sessionId);
     if (activeSessionId.value === sessionId) {
       activeSessionId.value = sessions.value[0]?.id || '';
       if (activeSessionId.value) await loadMessages(activeSessionId.value);
-      else turns.value = [];
     }
   }
 
@@ -825,7 +481,7 @@ export const useAppStore = defineStore('app', () => {
 
   function markSessionViewed(sessionId: string) {
     const session = sessions.value.find((item) => item.id === sessionId);
-    const count = Number(session?.message_count || turns.value.length || 0);
+    const count = Number(session?.message_count || 0);
     sessionViewedCounts.value = { ...sessionViewedCounts.value, [sessionId]: count };
     writeStored(VIEWED_SESSION_KEY, sessionViewedCounts.value);
   }
@@ -904,72 +560,6 @@ export const useAppStore = defineStore('app', () => {
     await loadActivity();
   }
 
-  async function send(content: string) {
-    const sessionId = activeSessionId.value;
-    if (!sessionId) {
-      await createSession();
-    }
-    turns.value.push({ id: `local-${Date.now()}`, role: 'user', content, status: 'complete' });
-    resetCurrentRun(content);
-    ensureStreamingAssistantTurn();
-    companionTab.value = 'activity';
-    activity.value.unshift({ id: `send-${Date.now()}`, kind: 'runtime', title: t('script.stores.app.title.001e413a9b'), detail: content.slice(0, 140), status: 'pending' });
-    try {
-      const contentWithAttachments = renderMessageWithAttachments(content);
-      const resourceIds = attachments.value
-        .filter((item) => item.resource_id || item.uri?.startsWith('resource://'))
-        .map((item) => item.resource_id || item.uri || item.ref_id)
-        .filter((value): value is string => Boolean(value));
-      const idempotencyKey = `webui:${activeSessionId.value}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
-      const receipt: any = await api.sendMessage(activeSessionId.value, contentWithAttachments, resourceIds, idempotencyKey);
-      if (resourceIds.length) {
-        attachments.value = attachments.value.filter((item) => !resourceIds.includes(item.resource_id || item.uri || item.ref_id));
-      }
-      if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
-      if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
-      const executionId = typeof receipt?.execution?.graph_id === 'string'
-        ? receipt.execution.graph_id.trim()
-        : '';
-      if (executionId) {
-        currentRun.value = {
-          ...(currentRun.value || {}),
-          execution_id: executionId,
-          status: 'running',
-        };
-        connectExecutionProjection(executionId, chatDisplayMode.value === 'clean' ? 'summary' : 'full', 'chat');
-      }
-      if (receipt?.mode === 'attached_to_active_turn') {
-        currentRun.value = {
-          ...(currentRun.value || {}),
-          run_id: receipt.run_id || currentRun.value?.run_id || '',
-          turn_id: receipt.input?.active_turn_id || currentRun.value?.turn_id || '',
-          status: 'running',
-          latest_input_receipt: receipt.input,
-        };
-        recordLiveActivity('runtime', 'Input attached', receipt.input?.reason?.summary || receipt.input?.decision || '', 'running');
-      } else {
-        currentRun.value = {
-          ...(currentRun.value || {}),
-          run_id: receipt?.run_id || currentRun.value?.run_id || '',
-          turn_id: receipt?.turn?.turn_id || currentRun.value?.turn_id || '',
-          status: receipt?.status || 'running',
-          turn_receipt: receipt?.turn || null,
-        };
-        recordLiveActivity('runtime', 'Turn accepted', receipt?.turn?.turn_id || receipt?.run_id || '', 'running');
-      }
-      await loadActivity();
-      if (chatDisplayMode.value === 'panorama') await refreshChatProjection(activeSessionId.value, content);
-    } catch (error) {
-      turns.value.push({
-        id: `error-${Date.now()}`,
-        role: 'system',
-        content: t('store.app.send.failed', { error: error instanceof Error ? error.message : String(error) }),
-        status: 'error',
-      });
-      activity.value.unshift({ id: `send-error-${Date.now()}`, kind: 'error', title: t('script.stores.app.title.91172a3984'), detail: error instanceof Error ? error.message : String(error), status: 'error' });
-    }
-  }
-
   async function loadActivity() {
     if (!activeSessionId.value) {
       activity.value = [];
@@ -978,33 +568,6 @@ export const useAppStore = defineStore('app', () => {
     const data: any = await api.runtimeTimeline(activeSessionId.value);
     currentTimeline.value = data;
     activity.value = normalizeActivity(data.events || data.timeline || []).map(sanitizeActivityEvent);
-  }
-
-  async function loadTurnEvidence(turn: ChatTurn) {
-    if (chatDisplayMode.value === 'panorama' && activeSessionId.value) {
-      await refreshChatProjection(activeSessionId.value, turn.content || '').catch(() => undefined);
-    }
-    let runtimeTurn: any = null;
-    const canInspectTurn = turn.id
-      && !turn.id.startsWith('local-')
-      && !turn.id.startsWith('assistant-stream-')
-      && !turn.id.startsWith('system-')
-      && turn.id !== 'empty'
-      && (turn.id.startsWith('turn-') || turn.id.startsWith('runtime-turn-') || turn.id.startsWith('rt-'));
-    if (canInspectTurn) {
-      runtimeTurn = await api.runtimeTurn(turn.id).catch((error) => ({
-        ok: false,
-        endpoint: `/api/runtime/turns/${turn.id}`,
-        error: error instanceof Error ? error.message : String(error),
-      }));
-    }
-    selectedTurnEvidence.value = turnEvidenceFromProjection(turn, runtimeTurn);
-    companionTab.value = 'evidence';
-    return selectedTurnEvidence.value;
-  }
-
-  function clearTurnEvidence() {
-    selectedTurnEvidence.value = null;
   }
 
   async function refreshChatProjection(sessionId = activeSessionId.value, query = '') {
@@ -1027,71 +590,6 @@ export const useAppStore = defineStore('app', () => {
     ]);
     if (projection) sessionInputProjection.value = projection;
     if (inbox) turnInbox.value = inbox;
-  }
-
-  function resetCurrentRun(prompt = '') {
-    currentRun.value = {
-      run_id: '',
-      turn_id: '',
-      status: 'queued',
-      prompt,
-      started_at_ms: Date.now(),
-    };
-    currentContextEnvelope.value = null;
-    currentRealityFlow.value = {};
-    currentTimeline.value = {};
-    sessionInputProjection.value = null;
-    turnInbox.value = null;
-    liveToolCount.value = 0;
-    liveMemoryRecallCount.value = 0;
-    liveMemoryEvidenceCount.value = 0;
-  }
-
-  function connectSessionStream(sessionId: string) {
-    if (!sessionId || (sessionStream && sessionStreamId === sessionId)) return;
-    if (sessionStream) sessionStream.close();
-    sessionStreamId = sessionId;
-    streamingAssistantId = '';
-    try {
-      const cursor = sessionStreamCursors.get(sessionId);
-      const suffix = cursor ? `?from_cursor=${encodeURIComponent(String(cursor))}` : '';
-      sessionStream = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/stream${suffix}`);
-      sessionStream.onmessage = (event) => {
-        const cursor = Number(event.lastEventId || 0);
-        if (Number.isFinite(cursor) && cursor > 0) sessionStreamCursors.set(sessionId, cursor);
-        handleSessionEvent(event.data);
-      };
-      sessionStream.onerror = () => {
-        if (sessionStreamId === sessionId) {
-          scheduleSessionStreamRecovery(sessionId);
-          recordLiveActivity('runtime', 'Session stream reconnecting', sessionId, 'observed');
-        }
-      };
-    } catch (error) {
-      activity.value.unshift({
-        id: `stream-open-error-${Date.now()}`,
-        kind: 'error',
-        title: t('script.stores.app.title.9b07b06010'),
-        detail: error instanceof Error ? error.message : String(error),
-        status: 'error',
-      });
-    }
-  }
-
-  function scheduleSessionStreamRecovery(sessionId: string) {
-    if (sessionStreamRecoveryTimers.has(sessionId)) return;
-    const timer = window.setTimeout(() => {
-      sessionStreamRecoveryTimers.delete(sessionId);
-      if (sessionStreamId !== sessionId || activeSessionId.value !== sessionId) return;
-      // EventSource performs the transport reconnect. Re-read durable state so
-      // a terminal committed while the transport was unavailable is never
-      // inferred from transient output or silently lost.
-      Promise.all([
-        loadMessages(sessionId),
-        refreshContextUsage(sessionId),
-      ]).catch(() => undefined);
-    }, 400);
-    sessionStreamRecoveryTimers.set(sessionId, timer);
   }
 
   async function loadExecutionProjection(executionId: string, detailScope: 'summary' | 'full') {
@@ -1189,216 +687,7 @@ export const useAppStore = defineStore('app', () => {
     return result;
   }
 
-  function handleSessionEvent(raw: string) {
-    let event: any;
-    try {
-      event = JSON.parse(raw);
-    } catch {
-      event = { type: 'RuntimeEvent', content: raw };
-    }
-    const type = event.type || 'RuntimeEvent';
-    if (type === 'Connected') return;
-
-    if (type === 'TurnStarted') {
-      ensureStreamingAssistantTurn();
-      currentRun.value = { ...(currentRun.value || {}), status: 'running', started_at_ms: currentRun.value?.started_at_ms || Date.now() };
-      recordLiveActivity('runtime', 'Turn started', '', 'running');
-      return;
-    }
-
-    if (type === 'TextDelta') {
-      appendAssistantDelta(event.content || event.text || '');
-      return;
-    }
-
-    if (type === 'ThinkingDelta') {
-      companionTab.value = 'thinking';
-      recordLiveActivity('think', 'Thinking', event.content || event.thinking || '', 'running');
-      return;
-    }
-
-    if (type === 'ToolStart' || type === 'ToolProgress' || type === 'ToolComplete') {
-      companionTab.value = 'activity';
-      if (type === 'ToolStart') liveToolCount.value += 1;
-      recordLiveActivity(
-        'tool',
-        event.name || type,
-        event.summary || event.progress || event.preview || event.id || '',
-        type === 'ToolComplete' ? 'complete' : 'running',
-      );
-      return;
-    }
-
-    if (type === 'SessionInputReceived') {
-      companionTab.value = 'activity';
-      currentRun.value = {
-        ...(currentRun.value || {}),
-        status: 'running',
-        latest_input_receipt: event.receipt || event.input,
-      };
-      recordLiveActivity(
-        'runtime',
-        'Input received',
-        event.receipt?.reason?.summary || event.receipt?.decision || event.input?.decision || '',
-        'running',
-      );
-      return;
-    }
-
-    if (type === 'SessionInputProjection') {
-      sessionInputProjection.value = event.projection || event.input_projection || event;
-      return;
-    }
-
-    if (type === 'TurnInboxUpdated') {
-      turnInbox.value = event.inbox || event.turn_inbox || event;
-      recordLiveActivity('context', 'Turn inbox updated', `${turnInbox.value?.pending_count || 0} pending`, 'running');
-      return;
-    }
-
-    if (type === 'TurnInputCheckpointConsumed') {
-      turnInbox.value = {
-        ...(turnInbox.value || {}),
-        last_checkpoint: event.checkpoint,
-        last_consumed: event.consumed || [],
-      };
-      recordLiveActivity(
-        'context',
-        'Input checkpoint consumed',
-        `${event.checkpoint || ''} ${(event.consumed || []).length} item(s)`,
-        'complete',
-      );
-      return;
-    }
-
-    if (type === 'ContextEnvelope') {
-      const envelope = event.envelope || event;
-      currentContextEnvelope.value = envelope;
-      currentRun.value = {
-        ...(currentRun.value || {}),
-        run_id: event.run_id || currentRun.value?.run_id || '',
-        turn_id: event.turn_id || currentRun.value?.turn_id || '',
-        context_envelope_id: event.envelope_id || envelope.envelope_id || envelope.id || '',
-      };
-      const envelopeItems = [
-        ...(Array.isArray(envelope.items) ? envelope.items : []),
-        ...(Array.isArray(envelope.context_items) ? envelope.context_items : []),
-        ...(Array.isArray(envelope.evidence) ? envelope.evidence : []),
-      ];
-      const memoryItems = envelopeItems.filter((item: any) => {
-        const text = `${item.kind || ''} ${item.source || ''} ${item.source_type || ''} ${item.ref || ''}`.toLowerCase();
-        return text.includes('memory') || text.includes('recall');
-      });
-      const envelopeText = JSON.stringify(event).toLowerCase();
-      const memoryMentions = (envelopeText.match(/memory|recall/g) || []).length;
-      liveMemoryEvidenceCount.value = Math.max(liveMemoryEvidenceCount.value, memoryItems.length || Math.min(memoryMentions, 99));
-      recordLiveActivity('context', 'Context envelope', event.envelope_id || event.run_id || '', 'complete');
-      return;
-    }
-
-    if (type === 'TurnComplete') {
-      // Model output is transport progress only. A durable terminal outbox
-      // receipt is the sole authority allowed to settle a final assistant
-      // message, so reconnect/replay can never create a second final row.
-      recordLiveActivity('runtime', 'Model step completed', event.iterations ? `${event.iterations} iterations` : '', 'running');
-      return;
-    }
-
-    if (type === 'TerminalCommitted') {
-      settleTerminalCommit(event);
-      return;
-    }
-
-    if (type === 'ExecutionGraphSummary' || type === 'execution_graph_summary') {
-      const executionId = event.summary?.graph_id || event.graph_id || event.execution_id || '';
-      if (executionId) {
-        currentRun.value = { ...(currentRun.value || {}), execution_id: executionId };
-        connectExecutionProjection(executionId, chatDisplayMode.value === 'clean' ? 'summary' : 'full', 'chat');
-      }
-      recordLiveActivity('runtime', 'Execution graph available', executionId || event.summary?.status || '', 'running');
-      return;
-    }
-
-    if (type === 'TurnError') {
-      companionTab.value = 'inspector';
-      currentRun.value = { ...(currentRun.value || {}), status: 'error', error: event.error || 'Turn failed', completed_at_ms: Date.now() };
-      completeAssistantTurn(event.error || 'Turn failed', 'error');
-      recordLiveActivity('error', 'Turn failed', event.error || '', 'error');
-      return;
-    }
-
-    if (String(type).toLowerCase().includes('error')) companionTab.value = 'inspector';
-    recordLiveActivity('runtime', type, event.summary || event.content || JSON.stringify(event).slice(0, 220), event.status || 'observed');
-  }
-
-  function settleTerminalCommit(event: any) {
-    const sessionId = String(event.session_id || activeSessionId.value || '');
-    if (sessionId && sessionId !== activeSessionId.value) return;
-    const terminalId = String(event.terminal_id || event.message_id || event.runtime_commit_cursor || '');
-    if (terminalId && committedTerminalIds.has(terminalId)) return;
-    if (terminalId) committedTerminalIds.add(terminalId);
-    const cursor = Number(event.runtime_commit_cursor || 0);
-    if (sessionId && Number.isFinite(cursor) && cursor > 0) sessionStreamCursors.set(sessionId, cursor);
-    const content = event.response || event.text || '';
-    completeAssistantTurn(content);
-    currentRun.value = {
-      ...(currentRun.value || {}),
-      status: 'complete',
-      completed_at_ms: Date.now(),
-      terminal_id: event.terminal_id || null,
-      runtime_commit_cursor: event.runtime_commit_cursor || null,
-    };
-    recordLiveActivity('runtime', 'Terminal committed', terminalId || 'materialized transcript', 'complete');
-    if (activeSessionId.value) {
-      loadMessages(activeSessionId.value).catch(() => undefined);
-      api.sessionInputProjection(activeSessionId.value).then((value: any) => {
-        sessionInputProjection.value = value;
-      }).catch(() => undefined);
-      api.turnInbox(activeSessionId.value).then((value: any) => {
-        turnInbox.value = value;
-      }).catch(() => undefined);
-    }
-    if (chatDisplayMode.value === 'panorama') refreshChatProjection(activeSessionId.value).catch(() => undefined);
-  }
-
-  function ensureStreamingAssistantTurn() {
-    const current = streamingAssistantId ? turns.value.find((turn) => turn.id === streamingAssistantId) : null;
-    if (current && current.status === 'streaming') return current;
-    streamingAssistantId = `assistant-stream-${Date.now()}`;
-    const turn = { id: streamingAssistantId, role: 'assistant' as const, content: '', status: 'streaming' as const, activity: [] };
-    turns.value.push(turn);
-    return turn;
-  }
-
-  function appendAssistantDelta(delta: string) {
-    if (!delta) return;
-    const turn = ensureStreamingAssistantTurn();
-    const incoming = String(delta || '');
-    const current = comparableText(turn.content);
-    const incomingComparable = comparableText(incoming);
-    if (current && incomingComparable.startsWith(current)) {
-      turn.content = normalizeTurnContent('assistant', incoming);
-    } else {
-      turn.content += incoming;
-    }
-  }
-
-  function completeAssistantTurn(content: string, status: 'complete' | 'error' = 'complete') {
-    const visibleContent = normalizeTurnContent(status === 'error' ? 'system' : 'assistant', content);
-    const turn = streamingAssistantId ? turns.value.find((item) => item.id === streamingAssistantId) : null;
-    if (turn) {
-      // The terminal receipt has a stable terminal/message id and is the
-      // canonical transcript materialization. Do not compare prose to infer
-      // whether an earlier streaming value is the same final answer.
-      turn.content = visibleContent || normalizeTurnContent(turn.role, turn.content);
-      turn.status = status;
-    } else if (visibleContent) {
-      turns.value.push({ id: `assistant-${Date.now()}`, role: status === 'error' ? 'system' : 'assistant', content: visibleContent, status });
-    }
-    streamingAssistantId = '';
-  }
-
-  function recordLiveActivity(kind: ActivityEvent['kind'], title: string, detail: string, status: string) {
+  function recordActivity(kind: ActivityEvent['kind'], title: string, detail: string, status: string) {
     const id = `live-${title}-${status}`;
     const event = normalizeTurnActivity({
       id: `${id}-${Date.now()}`,
@@ -1414,23 +703,6 @@ export const useAppStore = defineStore('app', () => {
       activity.value.unshift(event);
     }
     activity.value = activity.value.slice(0, 80);
-    attachActivityToStreamingTurn(event);
-    const lower = `${title} ${detail}`.toLowerCase();
-    if (kind === 'context' && (lower.includes('memory') || lower.includes('recall'))) liveMemoryRecallCount.value += 1;
-  }
-
-  async function stopCurrentTurn() {
-    if (!activeSessionId.value) return;
-    const receipt = await api.cancelSessionTurn(activeSessionId.value);
-    currentRun.value = { ...(currentRun.value || {}), status: 'cancel_requested', cancel_receipt: receipt };
-    activity.value.unshift({
-      id: `cancel-${Date.now()}`,
-      kind: receipt.ok ? 'runtime' : 'error',
-      title: t('script.stores.app.title.d42269932f'),
-      detail: receipt.error || receipt.payload_summary || activeSessionId.value,
-      status: receipt.ok ? 'complete' : 'error',
-    });
-    return receipt;
   }
 
   async function cancelSessionInput(inputId: string, reason = 'cancelled from webui') {
@@ -1438,7 +710,7 @@ export const useAppStore = defineStore('app', () => {
     const receipt = await api.cancelSessionInput(activeSessionId.value, inputId, reason);
     if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
     if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
-    recordLiveActivity('runtime', t('chat.input.cancelled'), inputId, receipt?.input ? 'complete' : 'error');
+    recordActivity('runtime', t('chat.input.cancelled'), inputId, receipt?.input ? 'complete' : 'error');
     return receipt;
   }
 
@@ -1447,14 +719,8 @@ export const useAppStore = defineStore('app', () => {
     const receipt = await api.reclassifySessionInput(activeSessionId.value, inputId, decision, reason);
     if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
     if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
-    recordLiveActivity('runtime', t('chat.input.reclassified'), `${inputId} -> ${decision}`, receipt?.input ? 'complete' : 'error');
+    recordActivity('runtime', t('chat.input.reclassified'), `${inputId} -> ${decision}`, receipt?.input ? 'complete' : 'error');
     return receipt;
-  }
-
-  async function retryLastUserTurn() {
-    const lastUser = [...turns.value].reverse().find((turn) => turn.role === 'user' && turn.content.trim());
-    if (!lastUser) return;
-    await send(lastUser.content);
   }
 
   function setChatDisplayMode(mode: ChatDisplayMode) {
@@ -1832,6 +1098,22 @@ export const useAppStore = defineStore('app', () => {
     return `${content}\n\nContext attachments:\n${refs}`;
   }
 
+  function composeChatInput(content: string) {
+    const resourceIds = attachments.value
+      .filter((item) => item.resource_id || item.uri?.startsWith('resource://'))
+      .map((item) => item.resource_id || item.uri || item.ref_id)
+      .filter((value): value is string => Boolean(value));
+    return {
+      transportContent: renderMessageWithAttachments(content),
+      resourceIds,
+    };
+  }
+
+  function clearSubmittedResourceAttachments(resourceIds: string[]) {
+    if (!resourceIds.length) return;
+    attachments.value = attachments.value.filter((item) => !resourceIds.includes(item.resource_id || item.uri || item.ref_id));
+  }
+
   async function saveFile() {
     if (!selectedFile.value) return;
     try {
@@ -2048,7 +1330,6 @@ export const useAppStore = defineStore('app', () => {
     approvalConfig,
     sessions,
     activeSessionId,
-    turns,
     activity,
     companionTab,
     chatDisplayMode,
@@ -2060,11 +1341,7 @@ export const useAppStore = defineStore('app', () => {
     currentTimeline,
     sessionInputProjection,
     turnInbox,
-    selectedTurnEvidence,
     selectedActivity,
-    toolCallCount,
-    memoryRecallCount,
-    memoryEvidenceCount,
     runStageSummary,
     currentRunFiles,
     workspaceRoot,
@@ -2089,11 +1366,6 @@ export const useAppStore = defineStore('app', () => {
     activeModal,
     selectedModel,
     selectedProfile,
-    contextUsagePercent,
-    contextUsageSource,
-    contextUsedTokens,
-    contextLimitTokens,
-    contextUsageLabel,
     availableModels,
     availableProfiles,
     commandError,
@@ -2122,7 +1394,6 @@ export const useAppStore = defineStore('app', () => {
     refreshSessions,
     loadMoreSessions,
     loadMessages,
-    refreshContextUsage,
     createSession,
     deleteSession,
     toggleSessionSelected,
@@ -2137,10 +1408,7 @@ export const useAppStore = defineStore('app', () => {
     revealMoreSessions,
     branchSession,
     compactSession,
-    send,
     loadActivity,
-    loadTurnEvidence,
-    clearTurnEvidence,
     isTurnActivityOpen,
     toggleTurnActivity,
     turnActivitySummary,
@@ -2159,6 +1427,8 @@ export const useAppStore = defineStore('app', () => {
     loadAttachments,
     attachWorkspaceFile,
     removeAttachment,
+    composeChatInput,
+    clearSubmittedResourceAttachments,
     uploadWorkspaceFile,
     uploadWorkspaceFiles,
     uploadResource,
@@ -2177,10 +1447,8 @@ export const useAppStore = defineStore('app', () => {
     openCompanion,
     closeCompanion,
     toggleCompanion,
-    stopCurrentTurn,
     cancelSessionInput,
     reclassifySessionInput,
-    retryLastUserTurn,
     setChatDisplayMode,
     selectSection,
     openModal,

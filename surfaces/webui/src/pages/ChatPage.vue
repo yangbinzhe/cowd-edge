@@ -3,25 +3,35 @@ import { formatCount, t } from '../i18n';
 import { computed, nextTick, ref, watch } from 'vue';
 import { Bot, Boxes, Brain, ChevronDown, CircleDot, Folder, Hash, Paperclip, Search, Send, Square, Wrench, X, Zap } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
+import { useChatSessionsStore } from '../stores/chatSessions';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
-import TurnEvidenceDrawer from '../components/workbench/TurnEvidenceDrawer.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
+const chat = useChatSessionsStore();
 const draft = ref('');
 const sending = ref(false);
 const commandQuery = ref('');
 const inlineCommandIndex = ref(0);
-const contextUsage = computed(() => store.contextUsagePercent);
+const live = computed(() => chat.active?.projection?.live || chat.active?.live || null);
+const contextUsage = computed(() => {
+  const value = Number(live.value?.context_usage?.usage_percent_bp);
+  return Number.isFinite(value) ? value / 100 : null;
+});
+const contextLabel = computed(() => {
+  const usage = live.value?.context_usage;
+  return usage?.window_tokens ? `${Number(usage.input_tokens || 0).toLocaleString()} / ${Number(usage.window_tokens).toLocaleString()}` : '—';
+});
+const executionStatus = computed(() => String(live.value?.status || (chat.active?.pending ? 'queued' : 'idle')));
 const gatewayStatus = computed(() => store.health?.health?.status || store.health?.status || 'unknown');
 const modelLabel = computed(() => store.selectedModel || 'Select model');
 const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
-const turnRunning = computed(() => ['queued', 'running', 'cancel_requested'].includes(String(store.currentRun?.status || '')));
+const turnRunning = computed(() => !!chat.active?.pending || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(executionStatus.value));
 const composerStats = computed(() => [
-  { label: t('page.chat.cleanCounters.tools'), value: store.toolCallCount },
-  { label: t('page.chat.cleanCounters.memoryRecall'), value: store.memoryRecallCount },
-  { label: t('page.chat.cleanCounters.memoryEvidence'), value: store.memoryEvidenceCount },
+  { label: t('page.chat.cleanCounters.tools'), value: Number(live.value?.metrics?.tool_calls || 0) },
+  { label: t('page.chat.cleanCounters.memoryRecall'), value: Number(live.value?.metrics?.memory_recalls || 0) },
+  { label: t('page.chat.cleanCounters.memoryEvidence'), value: Number(live.value?.metrics?.memory_evidence || 0) },
 ]);
 const filteredCommands = computed(() => {
   const query = commandQuery.value.trim().toLowerCase().replace(/^\//, '');
@@ -38,6 +48,7 @@ const inlineCommandOptions = computed(() => {
 });
 
 useEscapeKey(() => store.closeModal(), () => !!store.activeModal);
+watch(() => store.activeSessionId, (sessionId) => { if (sessionId) chat.open(sessionId).catch(() => undefined); }, { immediate: true });
 
 watch(() => activeSlash.value?.query, () => {
   inlineCommandIndex.value = 0;
@@ -147,18 +158,24 @@ async function submit() {
   }
   sending.value = true;
   draft.value = '';
-  await store.send(text);
-  sending.value = false;
-  await nextTick();
+  try {
+    if (store.activeSessionId) {
+      const input = store.composeChatInput(text);
+      const accepted = await chat.send(store.activeSessionId, text, input);
+      if (accepted) store.clearSubmittedResourceAttachments(input.resourceIds);
+    }
+  } finally {
+    sending.value = false;
+    await nextTick();
+  }
 }
 
 async function stop() {
-  await store.stopCurrentTurn();
-  sending.value = false;
-}
-
-async function inspectTurn(turn: any) {
-  await store.loadTurnEvidence(turn);
+  try {
+    if (store.activeSessionId) await chat.stop(store.activeSessionId);
+  } finally {
+    sending.value = false;
+  }
 }
 
 function turnActivityParts(turn: any) {
@@ -223,6 +240,9 @@ async function chooseCommand(command: any) {
         <p>{{ isPanorama ? t('page.chat.page.inline.bfa241e27c') : t('page.chat.page.inline.276b6d067f') }}</p>
       </div>
       <div class="chat-top-actions">
+        <div class="session-evidence-head" :title="`${chat.active?.evidence?.evidence_refs?.length || 0} evidence refs`">
+          {{ chat.active?.evidence?.evidence_refs?.length || 0 }} {{ t('page.chat.page.text.848af509ba') }}
+        </div>
         <div class="mode-switch" role="group" :aria-label="t('page.chat.page.aria-label.67bb66bc9a')">
           <button type="button" :class="{ active: isPanorama }" @click="store.setChatDisplayMode('panorama')">{{ t('page.chat.page.text.a94b1a4460') }}</button>
           <button type="button" :class="{ active: !isPanorama }" @click="store.setChatDisplayMode('clean')">{{ t('page.chat.page.text.864a2f44ef') }}</button>
@@ -242,14 +262,16 @@ async function chooseCommand(command: any) {
     </nav>
 
     <div class="transcript" :aria-label="t('page.chat.page.aria-label.e683294716')">
-      <article v-for="turn in store.turns" :key="turn.id" class="turn" :data-role="turn.role">
+      <article v-for="turn in chat.active?.turns || []" :key="turn.id" class="turn" :data-role="turn.role">
         <div v-if="isPanorama" class="message-meta">
           <span v-if="turn.sequence" class="meta-sequence">#{{ turn.sequence }}</span>
           <span><CircleDot :size="12" />{{ displayStatus(turn.status || 'unknown') }}</span>
           <span v-if="turn.tool_name"><Wrench :size="12" />{{ turn.tool_name }}</span>
-          <button type="button" @click="inspectTurn(turn)"><Hash :size="12" />{{ t('page.chat.page.text.848af509ba') }}</button>
         </div>
         <MarkdownBlock :content="turn.content" />
+        <p v-if="turn.id === `stream:${chat.active?.sessionId}` && turnRunning" class="turn-run-state" role="status">
+          {{ displayStatus(executionStatus) }} · {{ live?.status_detail || t('status.loading') }}
+        </p>
         <section
           v-if="isPanorama && turn.role === 'assistant' && store.turnActivitySummary(turn).total"
           class="turn-activity"
@@ -277,12 +299,6 @@ async function chooseCommand(command: any) {
       </article>
     </div>
 
-    <TurnEvidenceDrawer
-      v-if="isPanorama && store.selectedTurnEvidence"
-      :evidence="store.selectedTurnEvidence"
-      @close="store.clearTurnEvidence()"
-    />
-
     <footer class="composer">
       <textarea v-model="draft" :placeholder="t('page.chat.page.placeholder.3e0e768fa8')" @keydown="handleComposerKeydown" />
       <div v-if="activeSlash && inlineCommandOptions.length" class="composer-command-popover">
@@ -306,12 +322,13 @@ async function chooseCommand(command: any) {
       <div class="composer-bar">
         <div class="composer-context">
           <span class="composer-context-usage">
-            <span>{{ t('page.chat.context.usage', { value: store.contextUsageLabel }) }}</span>
-            <div class="context-meter"><i :style="{ width: `${contextUsage || 0}%` }" /></div>
+            <span class="context-ring" :style="{ '--context-progress': `${contextUsage ?? 0}%` }" :aria-label="`Context ${contextLabel}`"><i>{{ contextUsage === null ? '—' : Math.round(contextUsage) + '%' }}</i></span>
+            <span>{{ t('page.chat.context.usage', { value: contextLabel }) }}</span>
           </span>
           <span class="composer-stats">
             <small v-for="item in composerStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</small>
           </span>
+          <span class="run-status" :data-status="executionStatus" role="status" aria-live="polite">{{ displayStatus(executionStatus) }} · {{ live?.status_detail || chat.active?.streamState }}</span>
           <button type="button" class="composer-chip" @click="store.openModal('workspace')"><Folder :size="14" /> {{ store.workspaceDir || t('page.chat.page.inline.59c92a9169') }}</button>
           <button type="button" class="composer-chip" @click="store.openModal('model')"><Bot :size="14" /> {{ modelLabel }}</button>
           <button v-if="store.attachments.length" type="button" class="composer-chip" @click="store.openCompanion('workspace')"><Paperclip :size="14" /> {{ formatCount('sources', store.attachments.length) }}</button>
