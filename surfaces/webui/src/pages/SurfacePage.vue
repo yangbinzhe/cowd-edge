@@ -3,6 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { Activity, Play, RefreshCw, RotateCcw, Send, ShieldCheck, Square, Wrench } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -18,6 +19,7 @@ import TimelineList from '../components/workbench/TimelineList.vue';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptSurfaceTopology } from '../adapters/graph/surfaceTopology';
 
+const route = useRoute();
 const loading = ref(false);
 const error = ref('');
 const actionError = ref('');
@@ -130,6 +132,11 @@ const surfaceTopologyGraph = computed(() => adaptSurfaceTopology({
   endpoints: state.value.messageEndpoints?.endpoints || [],
   routes: [...routeItems.value, ...(state.value.messageRoutes?.routes || [])],
   bindings: state.value.messageBindings?.bindings || [],
+  inbox: inboxItems.value,
+  outbox: outboxItems.value,
+  deliveries: deliveryItems.value,
+  triggerEvents: triggerEventItems.value,
+  deadLetters: deadLetterItems.value,
   selectedSurface: selectedSurface.value,
 }, t('page.surface.page.text.d0eb56ac2a')));
 const deliveryTimeline = computed(() => [
@@ -529,6 +536,7 @@ onMounted(refresh);
         </header>
         <GraphSurface
           :model="surfaceTopologyGraph"
+          :selected-node-id="String(route.query.focus || '')"
           :loading="loading"
           :connection-state="state.registry?.__state || state.edge?.health?.status || 'ready'"
           @select-node="selectedDetail = $event.raw || $event"
@@ -636,6 +644,14 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.c215d81d09') }}</h2>
           <span>{{ activeInboxItems.length + activeOutboxItems.length }} active · {{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ · {{ archivedOutboxItems.length }} archived</span>
         </header>
+        <GraphSurface
+          :model="surfaceTopologyGraph"
+          :selected-node-id="String(route.query.focus || '')"
+          :loading="loading"
+          :connection-state="state.messages?.__state || state.selectedHealth?.status || 'ready'"
+          @select-node="selectedDetail = $event.raw || $event"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
         <TimelineList v-if="deliveryTimeline.length" :items="deliveryTimeline" :title="t('page.surface.page.text.c215d81d09')" live @select="selectedDetail = $event" />
         <p class="muted-line">message root: {{ messageRoot }}</p>
         <div class="button-row">

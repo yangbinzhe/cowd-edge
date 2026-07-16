@@ -3,6 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { GitBranch, Play, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -15,6 +16,7 @@ import { useAppStore } from '../stores/app';
 import { adaptToolOperationsGraph } from '../adapters/graph/toolOperations';
 
 const store = useAppStore();
+const route = useRoute();
 const loading = ref(false);
 const error = ref('');
 const state = ref<any>({});
@@ -345,7 +347,7 @@ onMounted(refresh);
           <h2>{{ t('page.tools.page.text.86c5ed2cc8') }}</h2>
           <span>{{ t('page.tools.page.text.6a1ed0bece') }}</span>
         </header>
-        <GraphSurface :model="toolOperationsGraph" :loading="loading" />
+        <GraphSurface :model="toolOperationsGraph" :selected-node-id="String(route.query.focus || '')" :loading="loading" />
         <label class="field-line">
           {{ t('template.pages.toolspage.f41a6f7d28') }}
           <textarea v-model="plannerPrompt" rows="3" />

@@ -27,13 +27,16 @@ describe('graph runtime contracts', () => {
   });
 
   it('exports only the selected view while preserving graph provenance and diagnostics', () => {
-    const model: GraphViewModel = { id: 'g', title: 'Runtime', revision: 9, status: 'live', nodes, edges, truncated: true };
+    const rawNodes = [{ ...nodes[0], raw: { internal_reasoning: 'must not export' } }, nodes[1]];
+    const model: GraphViewModel = { id: 'g', title: 'Runtime', revision: 9, status: 'live', nodes: rawNodes, edges, truncated: true };
     const diagnostics = graphDiagnostics(nodes, edges);
-    const payload = graphExportPayload(model, nodes.slice(0, 1), [], 'RIGHT', diagnostics, new Date('2026-07-16T00:00:00.000Z'));
+    const payload = graphExportPayload(model, rawNodes.slice(0, 1), [], 'RIGHT', diagnostics, new Date('2026-07-16T00:00:00.000Z'));
     expect(payload.graph).toMatchObject({ id: 'g', revision: 9, truncated: true, direction: 'RIGHT' });
     expect(payload.selection).toEqual({ node_count: 1, edge_count: 0 });
     expect(payload.diagnostics.danglingEdgeIds).toEqual(['b-missing']);
     expect(payload.generated_at).toBe('2026-07-16T00:00:00.000Z');
+    expect(payload.nodes[0]).not.toHaveProperty('raw');
+    expect(JSON.stringify(payload)).not.toContain('internal_reasoning');
   });
 
   it('keeps a 500-node view complete for list fallback decisions', () => {

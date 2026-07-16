@@ -1,15 +1,17 @@
 import type { GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/graph';
 
+function refs(value: unknown) { return Array.isArray(value) ? value.map((item: any) => String(item?.ref || item || '')).filter(Boolean) : []; }
+
 export function adaptHarnessEvalGraph(input: Record<string, any>, title = ''): GraphViewModel {
   const nodes = new Map<string, GraphNodeView>();
   const edges: GraphEdgeView[] = [];
   const addNode = (id: string, type: string, label: string, status: string, raw: any) => {
     if (!id || nodes.has(id)) return;
-    nodes.set(id, { id, type, label: label || id, status: status || 'recorded', group: type, summary: String(raw?.objective || raw?.message || raw?.evidence || raw?.repair_hint || id), evidenceRefs: Array.isArray(raw?.required_evidence) ? raw.required_evidence.map(String) : [], raw });
+    nodes.set(id, { id, type, label: label || id, status: status || 'recorded', group: type, summary: String(raw?.objective || raw?.message || raw?.evidence || raw?.repair_hint || id), evidenceRefs: refs(raw?.required_evidence || raw?.evidence_refs || raw?.artifacts), correlationRefs: [raw?.scenario_id, raw?.run_id, raw?.report_id, raw?.detail_path].filter(Boolean).map(String), href: `/audit?section=harness-eval&focus=${encodeURIComponent(id)}`, raw });
   };
   const addEdge = (source: string, target: string, type: string, raw: any) => {
     if (!nodes.has(source) || !nodes.has(target)) return;
-    edges.push({ id: `${type}:${source}:${target}`, source, target, type, label: type.replace(/_/g, ' '), raw });
+    edges.push({ id: `${type}:${source}:${target}`, source, target, type, label: type.replace(/_/g, ' '), evidenceRefs: refs(raw?.required_evidence || raw?.evidence_refs), correlationRefs: [raw?.scenario_id, raw?.run_id, raw?.report_id].filter(Boolean).map(String), raw });
   };
   const scenarios = Array.isArray(input.scenarios) ? input.scenarios : [];
   const runs = Array.isArray(input.runs) ? input.runs : [];

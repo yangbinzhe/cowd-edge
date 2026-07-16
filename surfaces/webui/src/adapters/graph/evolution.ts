@@ -9,11 +9,17 @@ export function adaptEvolutionGraph(input: Record<string, any>, title = ''): Gra
   const edges: GraphEdgeView[] = [];
   const addNode = (id: string, type: string, label: string, status: string, raw: any, summary = '') => {
     if (!id || nodes.has(id)) return;
-    nodes.set(id, { id, type, label: label || id, status: status || 'recorded', group: type, summary: summary || id, evidenceRefs: refs(raw?.evidence_refs || raw?.source_evidence_refs), raw });
+    nodes.set(id, {
+      id, type, label: label || id, status: status || 'recorded', group: type, summary: summary || id,
+      evidenceRefs: refs(raw?.evidence_refs || raw?.source_evidence_refs),
+      correlationRefs: [raw?.mission_id, raw?.signal_id, raw?.diagnosis_id, raw?.proposal_id, raw?.candidate_id, raw?.review_id, raw?.comparison_report_ref].filter(Boolean).map(String),
+      href: `/audit?section=evolution&focus=${encodeURIComponent(id)}`,
+      raw,
+    });
   };
   const addEdge = (source: string, target: string, type: string, raw: any) => {
     if (!source || !target || !nodes.has(source) || !nodes.has(target)) return;
-    edges.push({ id: `${type}:${source}:${target}`, source, target, type, label: type.replace(/_/g, ' '), raw });
+    edges.push({ id: `${type}:${source}:${target}`, source, target, type, label: type.replace(/_/g, ' '), evidenceRefs: refs(raw?.evidence_refs || raw?.source_evidence_refs), correlationRefs: [raw?.mission_id, raw?.proposal_id, raw?.candidate_id].filter(Boolean).map(String), raw });
   };
   const signals = Array.isArray(input.signals) ? input.signals : [];
   const diagnoses = Array.isArray(input.diagnoses) ? input.diagnoses : [];

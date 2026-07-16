@@ -3,6 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { RefreshCw } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -18,6 +19,7 @@ import { adaptEvolutionGraph } from '../adapters/graph/evolution';
 import { adaptHarnessEvalGraph } from '../adapters/graph/harnessEval';
 
 const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
+const route = useRoute();
 const loading = ref(false);
 const error = ref('');
 const state = ref<any>({});
@@ -729,6 +731,7 @@ onMounted(refresh);
         </header>
         <GraphSurface
           :model="harnessEvalGraph"
+          :selected-node-id="String(route.query.focus || '')"
           :loading="loading"
           @select-node="selectedDetail = $event.raw || $event"
           @select-edge="selectedDetail = $event.raw || $event"
@@ -872,6 +875,7 @@ onMounted(refresh);
         </div>
         <GraphSurface
           :model="evolutionGraph"
+          :selected-node-id="String(route.query.focus || '')"
           :loading="loading"
           @select-node="selectedDetail = $event.raw || $event"
           @select-edge="selectedDetail = $event.raw || $event"

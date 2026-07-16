@@ -50,6 +50,8 @@ export function graphExportPayload(
   diagnostics: GraphDiagnostics,
   generatedAt = new Date(),
 ) {
+  const publicNodes = nodes.map(({ raw: _raw, ...node }) => node);
+  const publicEdges = edges.map(({ raw: _raw, ...edge }) => edge);
   return {
     schema_version: 1,
     graph: {
@@ -62,8 +64,8 @@ export function graphExportPayload(
     },
     selection: { node_count: nodes.length, edge_count: edges.length },
     diagnostics,
-    nodes,
-    edges,
+    nodes: publicNodes,
+    edges: publicEdges,
     generated_at: generatedAt.toISOString(),
   };
 }

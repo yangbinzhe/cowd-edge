@@ -1,15 +1,19 @@
 import type { GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/graph';
 
+function refs(value: unknown) {
+  return Array.isArray(value) ? value.map((item: any) => String(item?.ref || item || '')).filter(Boolean) : [];
+}
+
 export function adaptCrossPlaneGraph(input: Record<string, any>, title = ''): GraphViewModel {
   const nodes = new Map<string, GraphNodeView>();
   const edges: GraphEdgeView[] = [];
   const addNode = (id: string, type: string, label: string, status: string, raw: any) => {
     if (!id || nodes.has(id)) return;
-    nodes.set(id, { id, type, label: label || id, status: status || 'recorded', group: type, summary: String(raw?.summary || raw?.identity_ref || raw?.capability || raw?.resource_ref || id), raw });
+    nodes.set(id, { id, type, label: label || id, status: status || 'recorded', group: type, summary: String(raw?.summary || raw?.identity_ref || raw?.capability || raw?.resource_ref || id), evidenceRefs: refs(raw?.evidence_refs || raw?.audit_refs), correlationRefs: [raw?.request_id, raw?.execution_id, raw?.audit_ref, raw?.principal_id].filter(Boolean).map(String), href: `/gateway?section=executions&focus=${encodeURIComponent(id)}`, raw });
   };
   const addEdge = (source: string, target: string, type: string, raw: any) => {
     if (!source || !target || !nodes.has(source) || !nodes.has(target)) return;
-    edges.push({ id: `${type}:${source}:${target}`, source, target, type, label: type.replace(/_/g, ' '), raw });
+    edges.push({ id: `${type}:${source}:${target}`, source, target, type, label: type.replace(/_/g, ' '), evidenceRefs: refs(raw?.evidence_refs || raw?.audit_refs), correlationRefs: [raw?.request_id, raw?.execution_id, raw?.audit_ref].filter(Boolean).map(String), raw });
   };
   const identities = Array.isArray(input.identities) ? input.identities : [];
   const grants = Array.isArray(input.grants) ? input.grants : [];

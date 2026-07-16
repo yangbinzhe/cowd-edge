@@ -3,6 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { Network, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -19,6 +20,7 @@ import TimelineList from '../components/workbench/TimelineList.vue';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptCrossPlaneGraph } from '../adapters/graph/crossPlane';
 
+const route = useRoute();
 const loading = ref(false);
 const error = ref('');
 const state = ref<any>({});
@@ -1113,6 +1115,7 @@ onMounted(refresh);
         </header>
         <GraphSurface
           :model="crossPlaneGraph"
+          :selected-node-id="String(route.query.focus || '')"
           :loading="loading"
           :connection-state="state.crossPlane?.status || 'ready'"
           @select-node="selectedDetail = $event.raw || $event"
