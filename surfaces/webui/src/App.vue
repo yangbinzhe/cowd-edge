@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from './i18n';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Activity, Brain, Boxes, CircleDot, ClipboardCheck, Crosshair, Layers, MessageSquare,
@@ -13,6 +13,7 @@ import { pluginNavItems } from './plugins/registry';
 import CompanionPanel from './components/CompanionPanel.vue';
 import CapabilitySidebar from './components/CapabilitySidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
+import CapabilitySectionNav from './components/layout/CapabilitySectionNav.vue';
 
 const store = useAppStore();
 const route = useRoute();
@@ -56,6 +57,11 @@ function defaultSectionFor(page: NavId) {
 const currentPage = computed<NavId>(() => pageFromRoute(route.path));
 const isChatRoute = computed(() => currentPage.value === 'chat');
 const isSettingsRoute = computed(() => currentPage.value === 'settings');
+const currentCapabilitySpec = computed(() => {
+  if (isChatRoute.value || isSettingsRoute.value) return null;
+  return capabilitySpecs[currentPage.value as Exclude<NavId, 'chat' | 'settings'>] || null;
+});
+const currentSections = computed(() => currentCapabilitySpec.value?.sections || []);
 const isCompactViewport = ref(false);
 function updateViewportMode() {
   if (typeof window === 'undefined') return;
@@ -73,7 +79,18 @@ const shellMode = computed(() => {
 });
 const activeSection = computed(() => {
   const querySection = typeof route.query.section === 'string' ? route.query.section : '';
-  return querySection || store.activeSectionByPage[currentPage.value] || defaultSectionFor(currentPage.value);
+  const storedSection = store.activeSectionByPage[currentPage.value] || '';
+  const available = new Set(currentSections.value.map((section) => section.id));
+  if (querySection && available.has(querySection)) return querySection;
+  if (storedSection && available.has(storedSection)) return storedSection;
+  return defaultSectionFor(currentPage.value);
+});
+const sectionVisibilityCss = computed(() => {
+  if (!currentCapabilitySpec.value || !activeSection.value) return '';
+  const page = String(currentPage.value).replace(/[^a-z0-9_-]/gi, '');
+  const section = String(activeSection.value).replace(/[^a-z0-9_-]/gi, '');
+  if (!page || !section) return '';
+  return `.main-surface[data-page="${page}"][data-active-section="${section}"] [data-section]:not([data-section="${section}"]) { display: none !important; }`;
 });
 const showCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
@@ -102,31 +119,23 @@ const configReloadNotice = computed(() => {
 });
 const configReloadTone = computed(() => store.configReloadInvalid ? 'danger' : 'warn');
 
-function syncSectionVisibility() {
-  const active = activeSection.value;
-  const panels = document.querySelectorAll<HTMLElement>('.main-surface [data-section]');
-  panels.forEach((panel) => {
-    const section = panel.dataset.section || '';
-    const hidden = !!active && !!section && section !== active;
-    panel.hidden = hidden;
-    panel.setAttribute('aria-hidden', hidden ? 'true' : 'false');
-  });
-}
-
-watch([currentPage, activeSection], async () => {
+watch([currentPage, activeSection], () => {
   const section = activeSection.value;
   if (section && store.activeSectionByPage[currentPage.value] !== section) {
     store.selectSection(currentPage.value, section);
   }
-  await nextTick();
-  syncSectionVisibility();
 }, { immediate: true });
+
+async function selectCapabilitySection(sectionId: string) {
+  if (!currentSections.value.some((section) => section.id === sectionId)) return;
+  store.selectSection(currentPage.value, sectionId);
+  await router.replace({ query: { ...route.query, section: sectionId } });
+}
 
 onMounted(() => {
   updateViewportMode();
   if (typeof window !== 'undefined') window.addEventListener('resize', updateViewportMode);
   store.boot();
-  syncSectionVisibility();
 });
 
 onBeforeUnmount(() => {
@@ -136,6 +145,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-shell" :data-shell="shellMode" :data-companion="companionState">
+    <style v-if="sectionVisibilityCss" v-text="sectionVisibilityCss" />
     <nav class="rail" :aria-label="t('app.aria-label.4afc7f101b')">
       <button
         v-for="item in nav"
@@ -159,6 +169,13 @@ onBeforeUnmount(() => {
         <strong>{{ store.configReloadInvalid ? t('config.reload.notApplied') : t('config.reload.needRestart') }}</strong>
         <span>{{ configReloadNotice }}</span>
       </div>
+      <CapabilitySectionNav
+        v-if="currentCapabilitySpec"
+        :title="currentCapabilitySpec.title"
+        :sections="currentSections"
+        :active-section="activeSection"
+        @select="selectCapabilitySection"
+      />
       <RouterView />
     </main>
 

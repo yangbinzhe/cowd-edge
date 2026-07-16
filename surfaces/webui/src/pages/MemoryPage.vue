@@ -357,10 +357,6 @@ function selectStructuredRow(row: Record<string, unknown>) {
 async function selectMemorySection(sectionId: string) {
   store.selectSection('memory', sectionId);
   await router.replace({ query: { ...route.query, section: sectionId } });
-  requestAnimationFrame(() => {
-    const target = document.querySelector<HTMLElement>(`[data-section="${sectionId}"]`);
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
 }
 
 onMounted(refresh);

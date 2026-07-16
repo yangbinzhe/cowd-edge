@@ -70,6 +70,14 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .sidebar-warning { margin: 0; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); border-radius: 8px; padding: 8px; color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, var(--surface)); font-size: 12px; line-height: 1.4; }
 
 .main-surface { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); }
+.main-surface > .capability-page { flex: 1 1 auto; height: auto; }
+.capability-section-nav { display: none; flex: 0 0 auto; min-width: 0; border-bottom: 1px solid var(--border); background: var(--surface); }
+.capability-section-select { display: none; min-width: 0; }
+.capability-section-select select { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 0 10px; }
+.capability-section-tabs { min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; }
+.capability-section-tab { flex: 0 0 auto; min-height: 38px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-muted); padding: 0 11px; white-space: nowrap; }
+.capability-section-tab:hover, .capability-section-tab.active { border-color: var(--border); background: var(--surface-2); color: var(--text); }
+.capability-section-tab:focus-visible, .capability-section-select select:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
 .config-reload-banner { margin: 10px 14px 0; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); border-radius: 8px; background: color-mix(in srgb, var(--warn) 9%, var(--surface)); color: var(--text); padding: 8px 11px; display: flex; align-items: center; gap: 10px; font-size: 13px; line-height: 1.45; flex-wrap: wrap; }
 .config-reload-banner strong { color: var(--warn); }
 .config-reload-banner[data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--danger) 9%, var(--surface)); }
@@ -716,6 +724,8 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .app-shell[data-shell="chat-panorama"],
   .app-shell[data-companion="open"] { grid-template-columns: 52px minmax(0, 1fr) minmax(320px, var(--companion-width, 340px)); }
   .session-sidebar, .capability-sidebar { display: none; }
+  .capability-section-nav { display: flex; align-items: center; gap: 8px; padding: 7px 12px; }
+  .capability-section-tabs { flex: 1 1 auto; }
   .run-panorama { grid-template-columns: 1fr; }
   .run-stage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .companion-toggle { right: 12px; top: 12px; }
@@ -732,6 +742,9 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .rail-button, .icon-action, .primary-action, .ghost-action, .danger-action, .composer-chip, .status-strip button, .message-meta button { min-width: 44px; min-height: 44px; }
   .session-actions .icon-action { width: 44px; height: 44px; min-height: 44px; }
   .main-surface { min-height: 0; overflow: hidden; }
+  .capability-section-nav { padding: 7px 10px; }
+  .capability-section-select { display: block; flex: 1 1 auto; }
+  .capability-section-tabs { display: none; }
   .capability-page, .settings-page, .memory-page, .agents-page, .runtime-page, .context-page, .gateway-page { overflow: auto; }
   .companion-panel { min-height: 0; max-height: 45dvh; border-left: 0; border-top: 1px solid var(--border); }
   .companion-toggle, .app-shell[data-companion="open"] .companion-toggle { right: 12px; top: 64px; width: 44px; height: 44px; }

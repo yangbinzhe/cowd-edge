@@ -42,30 +42,9 @@ type CapabilitySection = NonNullable<(typeof spec.value)>['sections'][number];
 
 const activeSection = computed(() => store.activeSectionByPage[pageId.value] || String(route.query.section || ''));
 
-function normalizeText(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-
-function focusSection(section: CapabilitySection) {
-  const direct = document.querySelector<HTMLElement>(`[data-section="${section.id}"], #section-${section.id}`);
-  const sectionText = normalizeText(section.label);
-  const sectionTokens = normalizeText(`${section.id} ${section.label}`).split(' ').filter((token) => token.length > 2);
-  const byHeading = Array.from(document.querySelectorAll<HTMLElement>('main h1, main h2, main h3')).find((heading) => {
-    const headingText = normalizeText(heading.textContent || '');
-    return headingText.includes(sectionText) || sectionTokens.some((token) => headingText.includes(token));
-  });
-  const target = direct || byHeading;
-
-  if (!target) return;
-  if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
-  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  target.focus({ preventScroll: true });
-}
-
 async function selectSection(section: CapabilitySection) {
   store.selectSection(pageId.value, section.id);
   await router.replace({ query: { ...route.query, section: section.id } });
-  focusSection(section);
 }
 
 watch(() => route.query.section, async (sectionId) => {
