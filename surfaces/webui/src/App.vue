@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from './i18n';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Activity, Brain, Boxes, CircleDot, ClipboardCheck, Crosshair, Layers, MessageSquare,
@@ -85,13 +85,14 @@ const activeSection = computed(() => {
   if (storedSection && available.has(storedSection)) return storedSection;
   return defaultSectionFor(currentPage.value);
 });
-const sectionVisibilityCss = computed(() => {
-  if (!currentCapabilitySpec.value || !activeSection.value) return '';
-  const page = String(currentPage.value).replace(/[^a-z0-9_-]/gi, '');
-  const section = String(activeSection.value).replace(/[^a-z0-9_-]/gi, '');
-  if (!page || !section) return '';
-  return `.main-surface[data-page="${page}"][data-active-section="${section}"] [data-section]:not([data-section="${section}"]) { display: none !important; }`;
-});
+async function syncSectionVisibility() {
+  await nextTick();
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll<HTMLElement>('.main-surface [data-section]').forEach((panel) => {
+    const hidden = Boolean(activeSection.value) && panel.dataset.section !== activeSection.value;
+    panel.hidden = hidden;
+  });
+}
 const showCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
   if (isChatRoute.value) {
@@ -124,6 +125,7 @@ watch([currentPage, activeSection], () => {
   if (section && store.activeSectionByPage[currentPage.value] !== section) {
     store.selectSection(currentPage.value, section);
   }
+  void syncSectionVisibility();
 }, { immediate: true });
 
 async function selectCapabilitySection(sectionId: string) {
@@ -135,6 +137,7 @@ async function selectCapabilitySection(sectionId: string) {
 onMounted(() => {
   updateViewportMode();
   if (typeof window !== 'undefined') window.addEventListener('resize', updateViewportMode);
+  void syncSectionVisibility();
   store.boot();
 });
 
@@ -145,7 +148,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app-shell" :data-shell="shellMode" :data-companion="companionState">
-    <style v-if="sectionVisibilityCss" v-text="sectionVisibilityCss" />
     <nav class="rail" :aria-label="t('app.aria-label.4afc7f101b')">
       <button
         v-for="item in nav"

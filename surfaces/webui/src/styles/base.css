@@ -811,7 +811,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .skills-console, .skills-detail { grid-template-columns: 1fr; }
   .metric-row { grid-template-columns: 1fr; }
   .turn { grid-template-columns: 1fr; gap: 6px; }
-  input:not([type="checkbox"]), select, .search-field, .field-line input, .field-line select, .field-line textarea,
+  input:not([type="checkbox"]), select, .search-field, .field-line input, .field-line select, .field-line textarea, .graph-toolbar select,
   .mode-switch button, .segmented button, .workflow-step, .companion-tabs button, .memory-sections button, .filter-row select, .settings-section input:not([type="checkbox"]), .settings-section select, .data-table th button { min-height: 44px; }
   .gateway-auth-form { align-items: stretch; flex-direction: column; max-width: none; }
   .chat-page .page-header,

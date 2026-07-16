@@ -10,6 +10,7 @@ import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
+import EmptyState from '../components/workbench/EmptyState.vue';
 import { displayStatus } from '../i18n/domain/status';
 
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
@@ -251,6 +252,11 @@ onMounted(refresh);
           <span>{{ item.description || item.source }}</span>
           <small>{{ item.scope }} · {{ displayStatus(item.status) }} · {{ displayStatus(item.risk) }}</small>
         </button>
+        <EmptyState
+          v-if="!loading && !filteredItems.length"
+          :title="items.length ? t('page.skills.empty.filteredTitle') : t('page.skills.empty.catalogTitle')"
+          :detail="items.length ? t('page.skills.empty.filteredDetail') : t('page.skills.empty.catalogDetail')"
+        />
       </aside>
 
       <main class="skills-detail">

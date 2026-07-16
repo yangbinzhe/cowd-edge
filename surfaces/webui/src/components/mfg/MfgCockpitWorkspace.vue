@@ -280,5 +280,5 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
 .mfg-widget__controls button { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--text-muted); }
 .mfg-widget__controls button:hover { color: var(--text); border-color: var(--border-2); }
 .mfg-cockpit__empty { margin: 0; padding: 24px; color: var(--text-muted); border: 1px dashed var(--border-2); border-radius: 10px; }
-@media (max-width: 820px) { .mfg-cockpit__editor, .mfg-cockpit__sharing { grid-template-columns: 1fr; } .mfg-cockpit__grid { grid-template-columns: 1fr !important; grid-auto-rows: auto; } .mfg-widget { grid-column: 1 !important; grid-row: auto !important; min-height: 180px; } }
+@media (max-width: 820px) { .mfg-cockpit__toolbar select, .mfg-cockpit__editor input, .mfg-cockpit__editor select { min-width: 44px; min-height: 44px; } .mfg-cockpit__editor, .mfg-cockpit__sharing { grid-template-columns: 1fr; } .mfg-cockpit__grid { grid-template-columns: 1fr !important; grid-auto-rows: auto; } .mfg-widget { grid-column: 1 !important; grid-row: auto !important; min-height: 180px; } }
 </style>

@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 
+const gatewayProxyTarget = process.env.COWD_VITE_GATEWAY_URL || 'http://127.0.0.1:8642';
+
 export default defineConfig({
   plugins: [vue()],
   root: '.',
@@ -21,9 +23,9 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     proxy: {
-      '/api': 'http://127.0.0.1:8642',
-      '/healthz': 'http://127.0.0.1:8642',
-      '/readyz': 'http://127.0.0.1:8642',
+      '/api': gatewayProxyTarget,
+      '/healthz': gatewayProxyTarget,
+      '/readyz': gatewayProxyTarget,
     },
   },
 });
