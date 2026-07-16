@@ -1287,6 +1287,29 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ profile }),
   }),
+  mfgCockpitProfiles: (cadence?: string) => read(`/api/apps/mfg/cockpit/profiles${cadence ? `?cadence=${encodeURIComponent(cadence)}` : ''}`, { items: [] }),
+  mfgCockpitProfile: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}`, {}),
+  mfgCockpitWidgetCatalog: () => read('/api/apps/mfg/cockpit/widget-catalog', { items: [] }),
+  mfgCockpitProjection: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection`, {}),
+  mfgDeleteCockpitProfile: (profileId: string, expectedRevision: number) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${encodeURIComponent(expectedRevision)}`, { method: 'DELETE' }),
+  mfgCloneCockpitProfile: (profileId: string, body: Record<string, unknown> = {}) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/clone`, { method: 'POST', body: JSON.stringify(body) }),
+  mfgShareCockpitProfile: (profileId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/share`, { method: 'POST', body: JSON.stringify(body) }),
+  mfgAlertRules: () => read('/api/apps/mfg/focus/alert-rules', { items: [] }),
+  mfgUpsertAlertRule: (rule: Record<string, unknown>) => write('/api/apps/mfg/focus/alert-rules', { method: 'POST', body: JSON.stringify({ rule }) }),
+  mfgAlertOccurrences: (status?: string) => read(`/api/apps/mfg/focus/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`, { items: [] }),
+  mfgAlertCommand: (occurrenceId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/focus/alerts/${encodeURIComponent(occurrenceId)}/command`, { method: 'POST', body: JSON.stringify(body) }),
+  mfgAlertSubscriptions: () => read('/api/apps/mfg/focus/alert-subscriptions', { items: [] }),
+  mfgUpsertAlertSubscription: (subscription: Record<string, unknown>) => write('/api/apps/mfg/focus/alert-subscriptions', { method: 'POST', body: JSON.stringify({ subscription }) }),
+  mfgForecasts: (metricRefs: string[] = [], horizon = 'next_period') => read(`/api/apps/mfg/focus/forecasts?metric_refs=${encodeURIComponent(metricRefs.join(','))}&horizon=${encodeURIComponent(horizon)}`, { items: [] }),
+  mfgAssignments: (query: Record<string, string> = {}) => {
+    const params = new URLSearchParams(query);
+    const suffix = params.size ? `?${params.toString()}` : '';
+    return read(`/api/apps/mfg/assignments${suffix}`, { items: [] });
+  },
+  mfgAssignment: (assignmentId: string) => read(`/api/apps/mfg/assignments/${encodeURIComponent(assignmentId)}`, {}),
+  mfgUpsertAssignment: (assignment: Record<string, unknown>) => write('/api/apps/mfg/assignments', { method: 'POST', body: JSON.stringify({ assignment }) }),
+  mfgAssignmentCommand: (assignmentId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/assignments/${encodeURIComponent(assignmentId)}/command`, { method: 'POST', body: JSON.stringify(body) }),
+  mfgLive: (cursor?: number) => read(`/api/apps/mfg/live${cursor === undefined ? '' : `?cursor=${encodeURIComponent(cursor)}`}`, {}),
   mfgGenerateReport: (profileId: string, report: Record<string, unknown>) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/reports/generate`, {
     method: 'POST',
     body: JSON.stringify({ report }),
