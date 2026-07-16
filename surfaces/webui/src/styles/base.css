@@ -402,10 +402,16 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .graph-surface-header h3, .evidence-inspector h3 { margin: 0; font-size: 14px; }
 .graph-surface-header small, .evidence-inspector small { color: var(--text-faint); }
 .graph-surface-header .graph-truncated { display: block; margin-top: 3px; color: var(--warn); }
+.graph-surface-header .graph-diagnostic { display: block; margin-top: 3px; color: var(--danger); }
 .graph-toolbar { min-width: 0; display: flex; align-items: center; gap: 7px; padding: 8px; border-bottom: 1px solid var(--border); overflow-x: auto; }
 .graph-toolbar .search-field { flex: 1 1 220px; min-width: 180px; }
 .graph-toolbar select { min-height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); padding: 0 8px; }
 .graph-flow { min-height: 420px; background-image: radial-gradient(circle, color-mix(in srgb, var(--border) 72%, transparent) 1px, transparent 1px); background-size: 20px 20px; }
+.graph-minimap { width: 168px; height: 108px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--surface) 94%, transparent); pointer-events: none; }
+.graph-minimap svg { display: block; width: 160px; height: 100px; }
+.graph-minimap-frame { fill: var(--bg); stroke: var(--border); }
+.graph-minimap-node { fill: color-mix(in srgb, var(--accent) 38%, var(--surface-2)); stroke: var(--border-2); vector-effect: non-scaling-stroke; }
+.graph-minimap-node.selected { fill: var(--accent); stroke: var(--text); }
 .graph-node { width: 196px; min-height: 76px; border: 1px solid var(--border-2); border-radius: 9px; background: var(--surface); color: var(--text); padding: 10px; box-shadow: 0 5px 18px rgba(0,0,0,.16); }
 .graph-node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
 .graph-node.status-running, .graph-node.status-active { border-color: color-mix(in srgb, var(--info) 54%, var(--border)); }
