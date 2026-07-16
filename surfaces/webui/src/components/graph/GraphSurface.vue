@@ -216,7 +216,10 @@ watch([canvasNodes, canvasEdges, direction, showList, () => props.model.revision
         <small v-if="model.truncated" class="graph-truncated">{{ t('graph.state.truncated') }}</small>
         <small v-if="diagnosticCount" class="graph-diagnostic">{{ t('graph.state.diagnostics', { count: diagnosticCount, dangling: diagnostics.danglingEdgeIds.length }) }}</small>
       </div>
-      <StatusPill :status="connectionState || model.status || 'ready'" />
+      <div class="graph-header-actions">
+        <RouterLink v-if="selectedNode?.href" class="ghost-action" :to="selectedNode.href">{{ t('graph.action.openLinked') }}</RouterLink>
+        <StatusPill :status="connectionState || model.status || 'ready'" />
+      </div>
     </header>
     <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
     <div class="graph-toolbar">

@@ -5,8 +5,9 @@ export function adaptTeamTopology(template: Record<string, any> | null, workingS
   const dependencies = Array.isArray(template?.dependencies) ? template.dependencies : [];
   const entries = Array.isArray(workingState?.working_state?.entries) ? workingState.working_state.entries : [];
   const entryByNode = new Map(entries.map((entry: any) => [String(entry.node_id || entry.role_id || ''), entry]));
+  const teamId = String(workingState?.team_id || workingState?.working_state?.team_id || template?.revision_ref?.template_id || 'team-topology');
   return {
-    id: String(template?.revision_ref?.template_id || 'team-topology'),
+    id: teamId,
     title: String(template?.name || template?.topology?.protocol_ref || ''),
     revision: Number(template?.revision_ref?.revision || 0),
     status: entries.length ? 'live' : 'ready',
@@ -20,6 +21,8 @@ export function adaptTeamTopology(template: Record<string, any> | null, workingS
         group: String(role.agent_definition_id || ''),
         summary: String(working?.summary || role.responsibility || role.task_contract?.contract_ref || ''),
         evidenceRefs: Array.isArray(working?.refs) ? working.refs.map(String) : [],
+        correlationRefs: [teamId, working?.execution_id, working?.agent_id, working?.task_id].filter(Boolean).map(String),
+        href: `/agents?section=discovery&team_id=${encodeURIComponent(teamId)}&role_id=${encodeURIComponent(String(role.role_id))}`,
         badges: [role.cardinality?.kind, role.partition?.kind, role.task_contract?.contract_ref].filter(Boolean).map(String),
         raw: { ...role, working_state: working || null },
       };
@@ -30,6 +33,8 @@ export function adaptTeamTopology(template: Record<string, any> | null, workingS
       target: String(dependency.to_role_id),
       type: 'role-dependency',
       label: 'depends on',
+      evidenceRefs: Array.isArray(dependency.evidence_refs) ? dependency.evidence_refs.map(String) : [],
+      correlationRefs: [teamId, dependency.protocol_ref].filter(Boolean).map(String),
       raw: dependency,
     })),
   };

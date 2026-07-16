@@ -399,6 +399,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .graph-surface { min-width: 0; display: grid; grid-template-rows: auto auto minmax(360px, 1fr) auto; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); }
 .graph-surface:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent); outline-offset: 2px; }
 .graph-surface-header, .evidence-inspector > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.graph-header-actions { display: flex; align-items: center; gap: 7px; }
 .graph-surface-header h3, .evidence-inspector h3 { margin: 0; font-size: 14px; }
 .graph-surface-header small, .evidence-inspector small { color: var(--text-faint); }
 .graph-surface-header .graph-truncated { display: block; margin-top: 3px; color: var(--warn); }

@@ -8,6 +8,8 @@ export interface GraphNodeView {
   group?: string;
   summary?: string;
   evidenceRefs?: string[];
+  correlationRefs?: string[];
+  href?: string;
   badges?: string[];
   raw?: Record<string, unknown>;
 }
@@ -20,6 +22,8 @@ export interface GraphEdgeView {
   label?: string;
   status?: string;
   evidenceRefs?: string[];
+  correlationRefs?: string[];
+  href?: string;
   raw?: Record<string, unknown>;
 }
 

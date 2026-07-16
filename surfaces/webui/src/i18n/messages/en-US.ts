@@ -2532,6 +2532,7 @@ export const enUS: MessageCatalog = {
   "graph.action.direction": "Graph direction",
   "graph.action.list": "List view",
   "graph.action.export": "Export JSON",
+  "graph.action.openLinked": "Open linked view",
   "graph.action.fullscreen": "Fullscreen",
   "graph.action.retry": "Retry",
   "graph.action.close": "Close",

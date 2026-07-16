@@ -2532,6 +2532,7 @@ export const zhCN: MessageCatalog = {
   "graph.action.direction": "图方向",
   "graph.action.list": "列表视图",
   "graph.action.export": "导出 JSON",
+  "graph.action.openLinked": "打开关联视图",
   "graph.action.fullscreen": "全屏",
   "graph.action.retry": "重试",
   "graph.action.close": "关闭",

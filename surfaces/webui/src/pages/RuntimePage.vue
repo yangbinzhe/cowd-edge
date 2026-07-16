@@ -16,6 +16,7 @@ import TimelineList from '../components/workbench/TimelineList.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 
 const store = useAppStore();
 const loading = ref(false);
@@ -47,18 +48,13 @@ const configReloadRestartFields = computed(() => {
 });
 const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.status || 'unknown'));
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
-const timelineRows = computed(() => (Array.isArray(timeline.value?.events) ? timeline.value.events : []).slice(0, 16).map((event: any) => ({
-  sequence: event.sequence ?? event.id ?? '-',
-  scope: event.scope || event.kind || event.type || '-',
-  kind: event.kind || event.type || '-',
-  status: event.status || event.phase || '-',
-  detail: event.detail || event.summary || event.message || '-',
-})));
+const timelineRows = computed(() => adaptRuntimeTimeline(Array.isArray(timeline.value?.events) ? timeline.value.events : []).slice(0, 16));
 const timelineListItems = computed(() => timelineRows.value.map((row: any) => ({
   id: row.sequence,
   title: row.kind,
   status: row.status,
   detail: `${row.scope} · ${row.detail}`,
+  ...row,
 })));
 const taskRows = computed(() => (Array.isArray(tasks.value?.tasks) ? tasks.value.tasks : []).slice(0, 12).map((task: any) => ({
   id: task.id,
@@ -134,10 +130,10 @@ const selectedEvidence = computed<EvidenceObject | null>(() => {
     status: row.status || row.phase || row.risk || row.mode || 'recorded',
     summary: row.detail || row.summary || row.message || row.prompt || row.objective || ref,
     session_id: row.session || row.session_id || sessionId.value,
-    turn_id: row.id && kind === 'runtime.turn' ? row.id : row.turn_id,
+    turn_id: row.turn_id || (row.id && kind === 'runtime.turn' ? row.id : undefined),
     audit_ref: row.approval_id || row.request_id,
-    route: row.session || row.session_id ? `/runtime?session_id=${encodeURIComponent(String(row.session || row.session_id))}` : undefined,
-    raw: row,
+    route: row.route || (row.session || row.session_id ? `/runtime?session_id=${encodeURIComponent(String(row.session || row.session_id))}` : undefined),
+    raw: row.raw || row,
   };
 });
 
@@ -388,7 +384,7 @@ onMounted(refresh);
           <StatusPill :status="timeline.__state || 'ready'" />
         </header>
         <TimelineList v-if="timelineListItems.length" :items="timelineListItems" live @select="selectedDetail = $event" />
-        <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'detail']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'correlation', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.16b97cb353')" :detail="t('page.runtime.page.detail.059281d68e')" />
       </section>
 
