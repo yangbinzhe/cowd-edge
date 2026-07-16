@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { RefreshCw, ShieldCheck } from 'lucide-vue-next';
@@ -279,7 +281,7 @@ onMounted(refresh);
     </section>
 
     <section class="runtime-grid">
-      <section class="management-panel runtime-panel" data-section="overview">
+      <section class="management-panel runtime-panel" v-show="isSectionActive('overview')" data-section="overview">
         <header>
           <h2>{{ t('page.runtime.page.text.895180bcc2') }}</h2>
           <StatusPill :status="configReloadStatusLabel" />
@@ -308,7 +310,7 @@ onMounted(refresh);
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.d71a6eb85e')" />
       </section>
 
-      <section class="management-panel runtime-panel wide" data-section="overview">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('overview')" data-section="overview">
         <header>
           <h2>{{ t('page.runtime.page.text.73dcc03517') }}</h2>
           <StatusPill :status="sourceAudit.__state && sourceAudit.__state !== 'ready' ? sourceAudit.__state : (runtimeSnapshot.__state && runtimeSnapshot.__state !== 'ready' ? runtimeSnapshot.__state : (sourceAudit.report?.ok === false ? 'degraded' : 'ready'))" />
@@ -325,7 +327,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.runtime.page.title.79e8d02599')" :data="{ audit: sourceAudit, repair: sourceRepairPlan }" />
       </section>
 
-      <section class="management-panel runtime-panel wide" data-section="mission-link">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('mission-link')" data-section="mission-link">
         <header>
           <h2>{{ t('runtime.missionLink.title') }}</h2>
           <StatusPill status="ready" />
@@ -334,7 +336,7 @@ onMounted(refresh);
         <a class="primary-action" href="#/mission">{{ t('runtime.missionLink.action') }}</a>
       </section>
 
-      <section class="management-panel runtime-panel" data-section="runs">
+      <section class="management-panel runtime-panel" v-show="isSectionActive('runs')" data-section="runs">
         <header>
           <h2>{{ t('page.runtime.page.text.f81fa83905') }}</h2>
           <span>{{ formatCount('leases', leases.leases?.length || leases.count || 0) }}</span>
@@ -358,7 +360,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.runtime.page.title.e86490ec1d')" :data="leases" />
       </section>
 
-      <section class="management-panel runtime-panel" data-section="policy">
+      <section class="management-panel runtime-panel" v-show="isSectionActive('policy')" data-section="policy">
         <header>
           <h2>{{ t('page.runtime.page.text.93f65d3d63') }}</h2>
           <span>{{ formatCount('pending', approvalItems.length) }}</span>
@@ -380,7 +382,7 @@ onMounted(refresh);
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.a09bbcf3ae')" />
       </section>
 
-      <section class="management-panel runtime-panel" data-section="timeline">
+      <section class="management-panel runtime-panel" v-show="isSectionActive('timeline')" data-section="timeline">
         <header>
           <h2>{{ t('page.runtime.page.text.f3558aafc0') }}</h2>
           <StatusPill :status="timeline.__state || 'ready'" />
@@ -390,7 +392,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.runtime.page.title.16b97cb353')" :detail="t('page.runtime.page.detail.059281d68e')" />
       </section>
 
-      <section class="management-panel runtime-panel wide" data-section="runs">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('runs')" data-section="runs">
         <header>
           <h2>{{ t('page.runtime.page.text.aa5f5e3bb0') }}</h2>
           <span>{{ formatCount('tasks', taskRows.length) }}</span>
@@ -400,7 +402,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.runtime.page.title.09aeda5ef4')" :data="controlPlane" />
       </section>
 
-      <section class="management-panel runtime-panel wide" data-section="runs">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('runs')" data-section="runs">
         <header>
           <h2>{{ t('page.runtime.page.text.7557813607') }}</h2>
           <span>{{ formatCount('turns', turnRows.length) }}</span>
@@ -424,7 +426,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.runtime.page.title.0d53bacfd6')" :data="runtimeTurns" />
       </section>
 
-      <section class="management-panel runtime-panel wide" data-section="growth">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('growth')" data-section="growth">
         <header>
           <h2>{{ t('page.runtime.page.text.996c9d7071') }}</h2>
           <div class="button-row">

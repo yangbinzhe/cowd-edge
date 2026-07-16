@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref, watch } from 'vue';
 import { FileText, Languages, RefreshCw, Search } from 'lucide-vue-next';
@@ -206,7 +208,7 @@ onMounted(refresh);
     <p v-if="error" class="settings-alert">{{ error }}</p>
 
     <section class="skills-console">
-      <aside class="skills-catalog" data-section="catalog">
+      <aside class="skills-catalog" v-show="isSectionActive('catalog')" data-section="catalog">
         <header class="skills-toolbar">
           <label class="search-field">
             <Search :size="15" />
@@ -260,7 +262,7 @@ onMounted(refresh);
       </aside>
 
       <main class="skills-detail">
-        <section class="management-panel" data-section="projection">
+        <section class="management-panel" v-show="isSectionActive('projection')" data-section="projection">
           <header>
             <h2>{{ t('page.skills.page.text.e8ec22f1d0') }}</h2>
             <span>{{ skill.scope || t('page.skills.page.inline.12c70558ba') }}</span>
@@ -290,7 +292,7 @@ onMounted(refresh);
           <RequestReceipt :receipt="actionResult" :title="t('page.skills.page.title.09895e511f')" />
         </section>
 
-        <section class="management-panel" data-section="files">
+        <section class="management-panel" v-show="isSectionActive('files')" data-section="files">
           <header>
             <h2>{{ t('page.skills.page.text.44a674dcd4') }}</h2>
             <div class="button-row">
@@ -327,7 +329,7 @@ onMounted(refresh);
           </article>
         </section>
 
-        <section class="management-panel" data-section="runs">
+        <section class="management-panel" v-show="isSectionActive('runs')" data-section="runs">
           <header>
             <h2>{{ t('page.skills.page.text.2ddf474cdf') }}</h2>
             <span>{{ formatCount('runs', runItems.length) }}</span>
@@ -353,7 +355,7 @@ onMounted(refresh);
           <ObjectInspectorDrawer :title="t('page.skills.page.title.cd28167d21')" :data="actionResult || { projection, runs }" />
         </section>
 
-        <section class="management-panel" data-section="governance">
+        <section class="management-panel" v-show="isSectionActive('governance')" data-section="governance">
           <header>
             <h2>{{ t('script.data.capabilities.label.823619e079') }}</h2>
             <StatusPill :status="skill.risk || skill.status || 'policy'" />

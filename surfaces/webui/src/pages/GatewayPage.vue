@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { Network, RefreshCw, ShieldCheck } from 'lucide-vue-next';
@@ -873,7 +875,7 @@ onMounted(refresh);
     </section>
 
     <section class="gateway-grid">
-      <section class="management-panel gateway-panel wide" data-section="connectors">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('connectors')" data-section="connectors">
         <header>
           <h2>{{ t('edge.gateway.title') }}</h2>
           <StatusPill :status="edgeHealth.status || 'unknown'" />
@@ -884,7 +886,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('edge.gateway.raw')" :data="edgeHealth || {}" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="alignment">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('alignment')" data-section="alignment">
         <header>
           <h2>{{ t('page.gateway.page.text.3aaa20c63d') }}</h2>
           <StatusPill :status="gatewayAlignmentStatus" />
@@ -894,7 +896,7 @@ onMounted(refresh);
         <GatewayRemediationList :rows="gatewayRemediationRows" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="alignment">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('alignment')" data-section="alignment">
         <header>
           <h2>{{ t('page.gateway.contract.title') }}</h2>
           <StatusPill :status="capabilityContract.__state && capabilityContract.__state !== 'ready' ? capabilityContract.__state : (capabilityCoverage.route_contract_parity ? 'ready' : 'degraded')" />
@@ -912,7 +914,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.gateway.contract.raw')" :data="{ contract: capabilityContract, openapi: { openapi: openApiDocument.openapi, path_count: openApiPathCount }, openai_tools: openAiTools }" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="connectors">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('connectors')" data-section="connectors">
         <header>
           <h2>{{ t('page.gateway.page.text.df4bfe6273') }}</h2>
           <StatusPill :status="state.summary?.__state || 'ready'" />
@@ -922,7 +924,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.gateway.page.title.a0df395cfc')" :data="state.platforms || {}" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="connectors">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('connectors')" data-section="connectors">
         <header>
           <h2>{{ t('edge.connectors.title') }}</h2>
           <StatusPill :status="edgeMessageConnectors.length || edgeSourceConnectors.length ? 'ready' : 'degraded'" />
@@ -937,7 +939,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('edge.connectors.raw')" :data="{ message_connectors: edgeMessageConnectors, source_connectors: edgeSourceConnectors, source_runtime: state.connectorSources, automation_connectors: edgeAutomationConnectors }" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="connectors">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('connectors')" data-section="connectors">
         <header>
           <h2>{{ t('edge.snapshot.title') }}</h2>
           <span>/api/matrix/source-packs/:id/snapshots/run</span>
@@ -1025,7 +1027,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('edge.snapshot.readPlan')" :data="sourceSnapshotReadPlan" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="connectors">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('connectors')" data-section="connectors">
         <header>
           <h2>{{ t('page.gateway.page.text.715580f4cf') }}</h2>
           <span>{{ platformName }}</span>
@@ -1065,7 +1067,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.gateway.page.title.f8bba99b1e')" :data="{ platform: state.platformDetail, connectorServices: state.connectorServices, connectorServiceTools: state.connectorServiceTools }" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="connectors">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('connectors')" data-section="connectors">
         <header>
           <h2>{{ t('page.gateway.page.text.b4e80b5466') }}</h2>
           <span>{{ t('common.shownCount', { count: capabilityRows.length, unit: t('unit.capabilities') }) }}</span>
@@ -1074,7 +1076,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.gateway.page.title.e6acca3a2d')" :detail="t('page.gateway.page.detail.662c9ed56d')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="connectors">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('connectors')" data-section="connectors">
         <header>
           <h2>{{ t('page.gateway.page.text.cd60e278cf') }}</h2>
           <span>{{ formatCount('servers', mcpServers.length) }}</span>
@@ -1082,7 +1084,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.gateway.page.title.c593f2c735')" :data="state.mcp || {}" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="resources">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('resources')" data-section="resources">
         <header>
           <h2>{{ t('page.gateway.page.text.d3bc27eaea') }}</h2>
           <span>{{ formatCount('resources', resources.length) }}</span>
@@ -1104,7 +1106,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.gateway.page.title.e0f40327a7')" :detail="t('page.gateway.page.detail.fe442047a7')" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="executions">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('executions')" data-section="executions">
         <header>
           <h2>{{ t('page.gateway.page.text.edae12bca9') }}</h2>
           <span>{{ displayStatus(state.crossPlane?.status || 'preflight') }}</span>
@@ -1141,7 +1143,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.gateway.page.title.023d50a0fe')" :data="state.crossPlane || {}" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="identities">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('identities')" data-section="identities">
         <header>
           <h2>{{ t('page.gateway.page.text.1a7b03d75e') }}</h2>
           <span>{{ formatCount('identities', identities.length) }}</span>
@@ -1197,7 +1199,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.gateway.page.title.aca4aa4ff7')" :detail="t('page.gateway.page.detail.f58a29a773')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="executions">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('executions')" data-section="executions">
         <header>
           <h2>{{ t('page.gateway.page.text.92c5112468') }}</h2>
           <span>{{ executeMode }}</span>
@@ -1217,7 +1219,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.gateway.page.title.178eed6c71')" :data="actionResult || {}" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="executions">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('executions')" data-section="executions">
         <header>
           <h2>{{ t('page.gateway.page.text.0cef581c98') }}</h2>
           <span>{{ formatCount('executions', executionRows.length) }}</span>

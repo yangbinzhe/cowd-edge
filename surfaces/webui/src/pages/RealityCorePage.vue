@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
@@ -371,7 +373,7 @@ onMounted(() => {
     </section>
 
     <section class="reality-grid">
-      <section class="management-panel reality-panel wide" data-section="management">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('management')" data-section="management">
         <header>
           <h2>{{ t('page.reality.core.page.text.dac90c69e6') }}</h2>
           <span>{{ managementRows.length }} control lanes</span>
@@ -392,7 +394,7 @@ onMounted(() => {
         <EmptyState v-else :title="t('page.reality.core.page.title.9ff8fab91b')" :detail="t('page.reality.core.page.detail.127f3dd76a')" />
       </section>
 
-      <section class="management-panel reality-panel wide" data-section="core-map">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('core-map')" data-section="core-map">
         <header>
           <h2>{{ t('page.reality.core.page.text.0f6a4d9cbb') }}</h2>
           <span>{{ t('page.reality.core.page.text.d2b98161a7') }}</span>
@@ -401,7 +403,7 @@ onMounted(() => {
         <EmptyState v-else :title="t('page.reality.core.page.title.c2bff56680')" :detail="t('page.reality.core.page.detail.af5a795207')" />
       </section>
 
-      <section class="management-panel reality-panel" data-section="overview">
+      <section class="management-panel reality-panel" v-show="isSectionActive('overview')" data-section="overview">
         <header>
           <h2>{{ t('page.reality.core.page.text.cb151a9a1c') }}</h2>
           <span>{{ status.generated_at || t('page.reality.core.page.inline.e049bd1422') }}</span>
@@ -410,7 +412,7 @@ onMounted(() => {
         <EmptyState v-else :title="t('page.reality.core.page.title.552e99583f')" :detail="t('page.reality.core.page.detail.e82982ba71')" />
       </section>
 
-      <section class="management-panel reality-panel wide" data-section="context-runtime">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('context-runtime')" data-section="context-runtime">
         <header>
           <h2>{{ t('reality.contextRuntime.label') }}</h2>
           <span>{{ contextRuntime.latest_envelope_id || t('memory.contextEnvelope.noEnvelope') }}</span>
@@ -438,7 +440,7 @@ onMounted(() => {
         <ObjectInspectorDrawer :title="t('memory.knowledgeGovernance.recallQuality')" :data="knowledgeRecallQuality" />
       </section>
 
-      <section class="management-panel reality-panel wide" data-section="fact-flow">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('fact-flow')" data-section="fact-flow">
         <header>
           <h2>{{ t('page.reality.core.page.text.608ba31424') }}</h2>
           <span>{{ flow.source || 'growth.promotions' }}</span>
@@ -455,7 +457,7 @@ onMounted(() => {
         <EmptyState v-else :title="t('page.reality.core.page.title.615c073377')" :detail="t('page.reality.core.page.detail.2d3cb4ec7e')" />
       </section>
 
-      <section class="management-panel reality-panel wide" data-section="evidence">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('evidence')" data-section="evidence">
         <header>
           <h2>{{ t('page.reality.core.page.text.826db23211') }}</h2>
           <span>{{ formatCount('refs', evidenceRows.length) }}</span>
@@ -464,7 +466,7 @@ onMounted(() => {
         <EmptyState v-else :title="t('page.reality.core.page.title.df8254f898')" :detail="t('page.reality.core.page.detail.050f3da73d')" />
       </section>
 
-      <section class="management-panel reality-panel" data-section="promotions">
+      <section class="management-panel reality-panel" v-show="isSectionActive('promotions')" data-section="promotions">
         <header>
           <h2>{{ t('page.reality.core.page.text.e788169274') }}</h2>
           <span>{{ formatCount('receipts', promotionRows.length) }}</span>
@@ -473,7 +475,7 @@ onMounted(() => {
         <EmptyState v-else :title="t('page.reality.core.page.title.af22a6d0ae')" :detail="t('page.reality.core.page.detail.b421d2b906')" />
       </section>
 
-      <section class="management-panel reality-panel" data-section="boundaries">
+      <section class="management-panel reality-panel" v-show="isSectionActive('boundaries')" data-section="boundaries">
         <header>
           <h2>{{ t('page.reality.core.page.text.64c93e07da') }}</h2>
           <span>{{ t('page.reality.core.page.text.23dc486a98') }}</span>

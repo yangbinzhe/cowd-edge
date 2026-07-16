@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { GitBranch, Play, RefreshCw, ShieldCheck } from 'lucide-vue-next';
@@ -316,7 +318,7 @@ onMounted(refresh);
     </section>
 
     <section class="gateway-grid">
-      <section class="management-panel gateway-panel wide" data-section="registry">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('registry')" data-section="registry">
         <header>
           <h2>{{ t('page.tools.page.text.a4819572ae') }}</h2>
           <span>{{ formatCount('tools', tools.length) }}</span>
@@ -338,7 +340,7 @@ onMounted(refresh);
         </div>
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="operations">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('operations')" data-section="operations">
         <header>
           <h2>{{ t('page.tools.page.text.86c5ed2cc8') }}</h2>
           <span>{{ t('page.tools.page.text.6a1ed0bece') }}</span>
@@ -373,7 +375,7 @@ onMounted(refresh);
         </div>
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="mutations">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('mutations')" data-section="mutations">
         <header>
           <h2>{{ t('page.tools.page.text.e716d4ff02') }}</h2>
           <span>{{ t('page.tools.page.text.c38a665303') }}</span>
@@ -416,7 +418,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.tools.page.title.141f116987')" :data="expectedHashes" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="checkpoints">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('checkpoints')" data-section="checkpoints">
         <header>
           <h2>{{ t('page.tools.page.text.111e726ea3') }}</h2>
           <span>{{ checkpointRows.length }} available</span>
@@ -469,7 +471,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.tools.page.title.a19a3515e0')" :detail="t('page.tools.page.detail.f539f4ce24')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="cache">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('cache')" data-section="cache">
         <header>
           <h2>{{ t('page.tools.page.text.54a5a2e2a7') }}</h2>
           <span>{{ formatCount('metrics', cacheRows.length) }}</span>
@@ -478,7 +480,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.tools.page.title.d30324b46e')" :detail="t('page.tools.page.detail.5ad74f74b7')" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="ledger">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('ledger')" data-section="ledger">
         <header>
           <h2>{{ t('page.tools.page.text.237dfb0a3b') }}</h2>
           <span>{{ ledgerRows.length }} recent events</span>
@@ -489,7 +491,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.tools.page.title.d1d15f8e25')" :data="result || state.cache || {}" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="risk">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('risk')" data-section="risk">
         <header>
           <h2>{{ t('page.tools.page.text.6bd451cf41') }}</h2>
           <span>{{ selectedCapability }}</span>
@@ -512,7 +514,7 @@ onMounted(refresh);
         <DataTable v-if="commandRows.length" searchable copyable row-key="name" :rows="commandRows" :columns="['name', 'action', 'target', 'description']" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="risk">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('risk')" data-section="risk">
         <header>
           <h2>{{ t('page.tools.page.text.8994b17557') }}</h2>
           <span>{{ t('common.shownCount', { count: historyRows.length, unit: t('unit.records') }) }}</span>

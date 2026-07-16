@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from './i18n';
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, provide, readonly, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Activity, Brain, Boxes, CircleDot, ClipboardCheck, Crosshair, Layers, MessageSquare,
@@ -14,6 +14,7 @@ import CompanionPanel from './components/CompanionPanel.vue';
 import CapabilitySidebar from './components/CapabilitySidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
 import CapabilitySectionNav from './components/layout/CapabilitySectionNav.vue';
+import { activeCapabilitySectionKey } from './composables/useCapabilitySection';
 
 const store = useAppStore();
 const route = useRoute();
@@ -85,14 +86,7 @@ const activeSection = computed(() => {
   if (storedSection && available.has(storedSection)) return storedSection;
   return defaultSectionFor(currentPage.value);
 });
-async function syncSectionVisibility() {
-  await nextTick();
-  if (typeof document === 'undefined') return;
-  document.querySelectorAll<HTMLElement>('.main-surface [data-section]').forEach((panel) => {
-    const hidden = Boolean(activeSection.value) && panel.dataset.section !== activeSection.value;
-    panel.hidden = hidden;
-  });
-}
+provide(activeCapabilitySectionKey, readonly(activeSection));
 const showCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
   if (isChatRoute.value) {
@@ -125,7 +119,6 @@ watch([currentPage, activeSection], () => {
   if (section && store.activeSectionByPage[currentPage.value] !== section) {
     store.selectSection(currentPage.value, section);
   }
-  void syncSectionVisibility();
 }, { immediate: true });
 
 async function selectCapabilitySection(sectionId: string) {
@@ -137,7 +130,6 @@ async function selectCapabilitySection(sectionId: string) {
 onMounted(() => {
   updateViewportMode();
   if (typeof window !== 'undefined') window.addEventListener('resize', updateViewportMode);
-  void syncSectionVisibility();
   store.boot();
 });
 

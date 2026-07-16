@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -456,7 +458,7 @@ onMounted(refresh);
       </nav>
 
       <main class="memory-main">
-        <section id="memory-layers" class="management-panel memory-panel wide" data-section="layers">
+        <section id="memory-layers" class="management-panel memory-panel wide" v-show="isSectionActive('layers')" data-section="layers">
           <header>
             <h2>{{ t('page.memory.page.text.59a9b03328') }}</h2>
             <span>{{ formatCount('entries', entries.length) }}</span>
@@ -529,7 +531,7 @@ onMounted(refresh);
           </div>
         </section>
 
-        <section id="memory-recall" class="management-panel memory-panel" data-section="recall">
+        <section id="memory-recall" class="management-panel memory-panel" v-show="isSectionActive('recall')" data-section="recall">
           <header>
             <h2>{{ t('page.memory.page.text.74f1596f5e') }}</h2>
             <span>{{ formatCount('matches', recallExplain.total || 0) }}</span>
@@ -547,7 +549,7 @@ onMounted(refresh);
           <ObjectInspectorDrawer :title="t('page.memory.page.title.7ea35b5ba8')" :data="packet" />
         </section>
 
-        <section id="memory-context-envelope" class="management-panel memory-panel wide" data-section="context-envelope">
+        <section id="memory-context-envelope" class="management-panel memory-panel wide" v-show="isSectionActive('context-envelope')" data-section="context-envelope">
           <header>
             <h2>{{ t('memory.contextEnvelope.label') }}</h2>
             <span>{{ contextEnvelope.latest_envelope_id || t('memory.contextEnvelope.noEnvelope') }}</span>
@@ -579,7 +581,7 @@ onMounted(refresh);
           <ObjectInspectorDrawer :title="t('memory.contextEnvelope.raw')" :data="contextEnvelope" />
         </section>
 
-        <section id="memory-knowledge-governance" class="management-panel memory-panel wide" data-section="knowledge-governance">
+        <section id="memory-knowledge-governance" class="management-panel memory-panel wide" v-show="isSectionActive('knowledge-governance')" data-section="knowledge-governance">
           <header>
             <h2>{{ t('memory.knowledgeGovernance.label') }}</h2>
             <span>{{ knowledge.projection_mode || '-' }}</span>
@@ -619,7 +621,7 @@ onMounted(refresh);
           <ObjectInspectorDrawer :title="t('memory.knowledgeGovernance.raw')" :data="knowledge" />
         </section>
 
-        <section id="memory-graph" class="management-panel memory-panel" data-section="graph">
+        <section id="memory-graph" class="management-panel memory-panel" v-show="isSectionActive('graph')" data-section="graph">
           <header>
             <h2>{{ t('page.memory.page.text.8af20392f9') }}</h2>
             <span>{{ t('common.shownCount', { count: entityRows.length, unit: t('unit.entities') }) }}</span>
@@ -674,7 +676,7 @@ onMounted(refresh);
           <ObjectInspectorDrawer :title="t('page.memory.page.title.c2bbd9a5f2')" :data="{ clusters, runtime, links }" />
         </section>
 
-        <section id="memory-maintenance" class="management-panel memory-panel" data-section="maintenance">
+        <section id="memory-maintenance" class="management-panel memory-panel" v-show="isSectionActive('maintenance')" data-section="maintenance">
           <header>
             <h2>{{ t('page.memory.page.text.44500c4e90') }}</h2>
             <span>{{ formatCount('candidates', candidateRows.length) }}</span>
@@ -698,7 +700,7 @@ onMounted(refresh);
           <ObjectInspectorDrawer :title="t('page.memory.page.title.695f0468d1')" :data="performance" />
         </section>
 
-        <section id="structured-core" class="management-panel memory-panel wide" data-section="structured-core">
+        <section id="structured-core" class="management-panel memory-panel wide" v-show="isSectionActive('structured-core')" data-section="structured-core">
           <header>
             <h2>{{ t('page.memory.page.text.e198d8cb55') }}</h2>
             <span>{{ t('page.memory.page.text.00b20a67e4') }}</span>

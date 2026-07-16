@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
 import { Activity, Play, RefreshCw, RotateCcw, Send, ShieldCheck, Square, Wrench } from 'lucide-vue-next';
@@ -486,7 +488,7 @@ onMounted(refresh);
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
 
-    <section class="metric-row tools-metrics" data-section="health">
+    <section class="metric-row tools-metrics" v-show="isSectionActive('health')" data-section="health">
       <article class="metric-card" data-tone="success">
         <span>{{ t('page.surface.page.text.89e795a427') }}</span>
         <strong>{{ surfaces.length }}</strong>
@@ -510,7 +512,7 @@ onMounted(refresh);
     </section>
 
     <section class="gateway-grid">
-      <section class="management-panel gateway-panel wide" data-section="registry">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('registry')" data-section="registry">
         <header>
           <h2>{{ t('edge.surface.partition.title') }}</h2>
           <StatusPill :status="state.edge?.health?.status || 'unknown'" />
@@ -520,7 +522,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('edge.gateway.raw')" :data="state.edge?.health || {}" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="registry">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('registry')" data-section="registry">
         <header>
           <h2>{{ t('page.surface.page.text.d0eb56ac2a') }}</h2>
           <StatusPill :status="state.registry?.__state || 'ready'" />
@@ -544,7 +546,7 @@ onMounted(refresh);
         </label>
       </section>
 
-      <section class="management-panel gateway-panel" data-section="health">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('health')" data-section="health">
         <header>
           <h2>{{ t('page.surface.page.text.0a8f2a8cc3') }}</h2>
           <span>{{ selectedSurface }}</span>
@@ -576,7 +578,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.surface.page.title.640ad216d7')" :data="state.status || selectedRuntime || {}" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="routes">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('routes')" data-section="routes">
         <header>
           <h2>{{ t('page.surface.page.text.e3d84f3df6') }}</h2>
           <span>{{ formatCount('entries', routeRows.length) }}</span>
@@ -585,7 +587,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.surface.page.title.0926c31b98')" :detail="t('page.surface.page.detail.833cc1397b')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="routes">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('routes')" data-section="routes">
         <header>
           <h2>{{ t('page.surface.page.text.df4e5009f8') }}</h2>
           <span>{{ formatCount('entries', resourceRows.length) }}</span>
@@ -594,7 +596,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.surface.page.title.bbd67aec43')" :detail="t('page.surface.page.detail.da70eaf510')" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="dispatch">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('dispatch')" data-section="dispatch">
         <header>
           <h2>{{ t('page.surface.page.text.0324d20822') }}</h2>
           <span>{{ t('page.surface.page.text.44b8bcb54a') }}</span>
@@ -629,7 +631,7 @@ onMounted(refresh);
         <RequestReceipt :receipt="actionResult" :title="t('page.surface.page.title.a15a0f334d')" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="delivery">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('delivery')" data-section="delivery">
         <header>
           <h2>{{ t('page.surface.page.text.c215d81d09') }}</h2>
           <span>{{ activeInboxItems.length + activeOutboxItems.length }} active · {{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ · {{ archivedOutboxItems.length }} archived</span>
@@ -667,7 +669,7 @@ onMounted(refresh);
         <DataTable v-if="messageBindingRows.length" searchable copyable row-key="binding" :rows="messageBindingRows" :columns="['binding', 'connector', 'endpoint', 'status', 'session', 'direction']" @row-click="selectedDetail = $event" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="trigger-events">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('trigger-events')" data-section="trigger-events">
         <header>
           <h2>{{ t('page.surface.triggerEvents.title') }}</h2>
           <span>{{ t('page.surface.triggerEvents.summary', { active: activeTriggerEventItems.length, failed: failedTriggerEventItems.length }) }}</span>
@@ -684,7 +686,7 @@ onMounted(refresh);
         <RequestReceipt :receipt="actionResult" :title="t('page.surface.triggerEvents.receiptTitle')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="events">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('events')" data-section="events">
         <header>
           <h2>{{ t('page.surface.page.text.a14d7b470c') }}</h2>
           <span>{{ eventRows.length + supervisorRows.length }} recent</span>
@@ -695,7 +697,7 @@ onMounted(refresh);
         <EvidenceTrace :items="surfaceEvidence" :title="t('page.surface.page.title.a565340669')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="events">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('events')" data-section="events">
         <header>
           <h2>{{ t('page.surface.page.text.b6890edcf9') }}</h2>
           <span>{{ selectedSurface }}</span>

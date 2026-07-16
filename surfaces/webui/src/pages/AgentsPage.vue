@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Play, RefreshCw, Search, Users } from 'lucide-vue-next';
@@ -651,7 +653,7 @@ onUnmounted(() => projections.release('agents'));
     </section>
 
     <section class="agents-workbench-grid">
-      <section class="management-panel agents-panel" data-section="catalog">
+      <section class="management-panel agents-panel" v-show="isSectionActive('catalog')" data-section="catalog">
         <header>
           <h2>{{ t('page.agents.page.text.c1a824a193') }}</h2>
           <span>{{ t('page.agents.summary.definitionCount', { count: agentRows.length }) }}</span>
@@ -660,7 +662,7 @@ onUnmounted(() => projections.release('agents'));
         <EmptyState v-else :title="t('page.agents.page.title.5eba27eab7')" :detail="t('page.agents.page.detail.c7ca371a29')" />
       </section>
 
-      <section class="management-panel agents-panel" data-section="discovery">
+      <section class="management-panel agents-panel" v-show="isSectionActive('discovery')" data-section="discovery">
         <header>
           <h2>{{ t('page.agents.page.text.74f4319c57') }}</h2>
           <span>{{ formatCount('matches', discovery.count || 0) }}</span>
@@ -676,7 +678,7 @@ onUnmounted(() => projections.release('agents'));
         <DataTable v-if="selfModelRows.length" searchable copyable row-key="definition" :rows="selfModelRows" :columns="['definition', 'environment', 'runs', 'successful', 'failed', 'success_rate', 'tools', 'evidence']" @row-click="selectedDetail = $event" />
       </section>
 
-      <section class="management-panel agents-panel wide" data-section="discovery">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('discovery')" data-section="discovery">
         <header>
           <h2>{{ t('page.agents.teamTemplates.title') }}</h2>
           <span>{{ t('page.agents.summary.runnableTemplateCount', { count: teamTemplateItems.length }) }}</span>
@@ -726,7 +728,7 @@ onUnmounted(() => projections.release('agents'));
         </div>
       </section>
 
-      <section class="management-panel agents-panel wide" data-section="tasks">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('tasks')" data-section="tasks">
         <header>
           <h2>{{ t('page.agents.page.text.9574008891') }}</h2>
           <span>{{ selectedTask?.status ? displayStatus(selectedTask.status) : t('page.agents.page.inline.5adf7ffa15') }}</span>
@@ -767,7 +769,7 @@ onUnmounted(() => projections.release('agents'));
         </div>
       </section>
 
-      <section class="management-panel agents-panel wide" data-section="managed-agents">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('managed-agents')" data-section="managed-agents">
         <header>
           <h2>{{ t('page.agents.managed.title') }}</h2>
           <span>{{ managedDefinitionRows.length }}</span>
@@ -914,7 +916,7 @@ onUnmounted(() => projections.release('agents'));
         <DataTable v-if="managedEffectRows.length" searchable copyable row-key="id" :rows="managedEffectRows" :columns="['id', 'invocation', 'kind', 'status', 'receipt', 'error']" @row-click="selectedDetail = $event" />
       </section>
 
-      <section class="management-panel agents-panel" data-section="tasks">
+      <section class="management-panel agents-panel" v-show="isSectionActive('tasks')" data-section="tasks">
         <header>
           <h2>{{ t('page.agents.page.text.278a33d389') }}</h2>
           <span>{{ formatCount('phases', phaseItems.length) }}</span>
@@ -936,7 +938,7 @@ onUnmounted(() => projections.release('agents'));
         <EmptyState v-else :title="t('page.agents.page.title.e026c4dcdc')" :detail="t('page.agents.page.detail.113c5f31fe')" />
       </section>
 
-      <section class="management-panel agents-panel" data-section="reviews">
+      <section class="management-panel agents-panel" v-show="isSectionActive('reviews')" data-section="reviews">
         <header>
           <h2>{{ t('page.agents.page.text.1b944ea5ee') }}</h2>
           <span>{{ currentPhase?.id || t('page.agents.page.inline.5e18e610e8') }}</span>
@@ -960,7 +962,7 @@ onUnmounted(() => projections.release('agents'));
         <RequestReceipt :receipt="actionResult" :title="t('page.agents.page.title.e74434a723')" />
       </section>
 
-      <section class="management-panel agents-panel wide" data-section="graph">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('graph')" data-section="graph">
         <header>
           <h2>{{ t('page.agents.page.text.74c44a4258') }}</h2>
           <span><StatusPill :status="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'offline'" /></span>
@@ -1001,7 +1003,7 @@ onUnmounted(() => projections.release('agents'));
         <RequestReceipt :receipt="actionResult || executionProjection || graph" :title="t('page.agents.page.title.4056356344')" />
       </section>
 
-      <section class="management-panel agents-panel wide" data-section="runs">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('runs')" data-section="runs">
         <header>
           <h2>{{ t('page.agents.page.text.e8aa236684') }}</h2>
           <span>{{ formatCount('graphs', runItems.length) }}</span>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
@@ -397,7 +399,7 @@ onUnmounted(() => projections.release('mission'));
 
     <div v-if="error" class="file-error">{{ error }}</div>
 
-    <div class="metric-row tools-metrics" data-section="overview">
+    <div class="metric-row tools-metrics" v-show="isSectionActive('overview')" data-section="overview">
       <article class="metric-card">
         <span>{{ t('page.mission.control.page.text.3ca3f069de') }}</span>
         <strong>{{ sessions.length }}</strong>
@@ -425,7 +427,7 @@ onUnmounted(() => projections.release('mission'));
       </article>
     </div>
 
-    <div class="clean-counts" data-section="overview">
+    <div class="clean-counts" v-show="isSectionActive('overview')" data-section="overview">
       <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
       <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
       <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
@@ -435,7 +437,7 @@ onUnmounted(() => projections.release('mission'));
     </div>
 
     <div class="mission-grid">
-      <section class="mission-panel governed-wide" data-section="overview">
+      <section class="mission-panel governed-wide" v-show="isSectionActive('overview')" data-section="overview">
         <header>
           <h2>{{ t('page.mission.control.page.text.658886936e') }}</h2>
           <span>{{ t('page.mission.control.page.text.5e7c8e4b54') }}</span>
@@ -492,7 +494,7 @@ onUnmounted(() => projections.release('mission'));
         <RequestReceipt v-if="actionResult" :receipt="actionResult" :title="t('runtime.execution.commandReceipt')" />
       </section>
 
-      <section class="mission-panel" data-section="sessions">
+      <section class="mission-panel" v-show="isSectionActive('sessions')" data-section="sessions">
         <header>
           <h2>{{ t('page.mission.control.page.text.3ca3f069de') }}</h2>
           <span>{{ activeSession || t('page.mission.control.page.inline.54b8982e68') }}</span>
@@ -513,7 +515,7 @@ onUnmounted(() => projections.release('mission'));
         </div>
       </section>
 
-      <section class="mission-panel" data-section="teams">
+      <section class="mission-panel" v-show="isSectionActive('teams')" data-section="teams">
         <header>
           <h2>{{ t('page.mission.control.page.text.5901596e99') }}</h2>
           <StatusPill :status="activeSession ? 'ready' : 'idle'" />
@@ -526,7 +528,7 @@ onUnmounted(() => projections.release('mission'));
           <Users :size="16" />{{ t('page.mission.control.page.text.978a4ee277') }}</button>
       </section>
 
-      <section class="mission-panel" data-section="teams">
+      <section class="mission-panel" v-show="isSectionActive('teams')" data-section="teams">
         <header>
           <h2>{{ t('page.mission.control.page.text.ed040118e2') }}</h2>
           <StatusPill :status="selectedTeamId ? 'ready' : 'idle'" />
@@ -551,7 +553,7 @@ onUnmounted(() => projections.release('mission'));
         <ObjectInspectorDrawer v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
       </section>
 
-      <section class="mission-panel" data-section="agents">
+      <section class="mission-panel" v-show="isSectionActive('agents')" data-section="agents">
         <header>
           <h2>{{ t('capability.section.mission.agents.label') }}</h2>
           <span>{{ formatCount('agents', agentRows.length) }}</span>
@@ -568,7 +570,7 @@ onUnmounted(() => projections.release('mission'));
         <p v-else class="empty-note">{{ t('capability.section.mission.agents.description') }}</p>
       </section>
 
-      <section class="mission-panel" data-section="routes">
+      <section class="mission-panel" v-show="isSectionActive('routes')" data-section="routes">
         <header>
           <h2>{{ t('page.mission.control.page.text.eb5e456863') }}</h2>
           <StatusPill :status="routeTarget ? 'ready' : 'idle'" />
@@ -585,7 +587,7 @@ onUnmounted(() => projections.release('mission'));
           <Route :size="16" />{{ t('page.mission.control.page.text.7dd0114f4f') }}</button>
       </section>
 
-      <section class="mission-panel governed-wide" data-section="runtime-v2">
+      <section class="mission-panel governed-wide" v-show="isSectionActive('runtime-v2')" data-section="runtime-v2">
         <header>
           <h2>{{ t('page.mission.control.runtimeV2.title') }}</h2>
           <StatusPill :status="missionHealth.status || (conflictItems.length ? 'degraded' : 'ready')" />
@@ -632,7 +634,7 @@ onUnmounted(() => projections.release('mission'));
     </div>
 
     <div class="mission-grid lower">
-      <section class="mission-panel wide" data-section="relations">
+      <section class="mission-panel wide" v-show="isSectionActive('relations')" data-section="relations">
         <header>
           <h2>{{ t('unit.relations') }}</h2>
           <span>{{ selectedSession.title || selectedSessionId || activeSession }}</span>
@@ -642,7 +644,7 @@ onUnmounted(() => projections.release('mission'));
         <p v-else class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
       </section>
 
-      <section class="mission-panel" data-section="approvals">
+      <section class="mission-panel" v-show="isSectionActive('approvals')" data-section="approvals">
         <header>
           <h2>{{ t('page.mission.control.page.text.ba7c90b793') }}</h2>
           <StatusPill :status="pendingApprovals.length ? 'blocked' : 'ready'" />
@@ -659,7 +661,7 @@ onUnmounted(() => projections.release('mission'));
       </section>
     </div>
 
-    <section v-if="showFullTrace" class="mission-panel trace-panel" data-section="trace">
+    <section v-if="showFullTrace" class="mission-panel trace-panel" v-show="isSectionActive('trace')" data-section="trace">
       <header>
         <h2>{{ t('page.mission.control.page.text.c54e2b4723') }}</h2>
         <span>{{ formatCount('records', evidenceRows.length) }}</span>

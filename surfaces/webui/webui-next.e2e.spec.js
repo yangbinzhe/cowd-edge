@@ -238,3 +238,58 @@ test('composer model workspace and command controls are clickable', async ({ pag
   await expect(page.getByRole('heading', { name: 'Commands' })).toBeVisible();
   await expect(page.locator('.command-row, .modal-note').first()).toBeVisible();
 });
+
+test('all shell controls remain interactive while a conversation is running', async ({ page }) => {
+  const sessionId = 'interaction-running-session';
+  await page.route(/\/api\/sessions\?/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ sessions: [{ id: sessionId, title: 'Running interaction audit', status: 'active', model: 'test/model' }] }),
+    });
+  });
+  await page.route(`**/api/sessions/${sessionId}/messages?*`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ messages: [] }) });
+  });
+  await page.route(`**/api/sessions/${sessionId}/evidence`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session_id: sessionId, evidence_refs: [], turns: [], freshness: 'live' }) });
+  });
+  await page.route(`**/api/sessions/${sessionId}/execution`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session_id: sessionId, active_execution_ids: [] }) });
+  });
+  await page.route(`**/api/sessions/${sessionId}/messages`, async (route) => {
+    await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ execution: { graph_id: 'interaction-execution' } }) });
+  });
+  await page.route(`**/api/sessions/${sessionId}/cancel`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, status: 'cancelled' }) });
+  });
+
+  await page.goto('/index.html#/chat');
+  await expect(page.locator('.composer textarea')).toBeVisible();
+  await page.locator('.composer textarea').fill('Keep the interface interactive while this task runs');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.run-status')).toContainText(/queued|calling|preparing|排队|调用|准备/i);
+  await expect(page.getByRole('button', { name: /Stop|停止/ })).toBeVisible();
+
+  await page.locator('.status-strip button').click();
+  await expect(page.getByRole('heading', { name: 'Model and profile' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.composer-chip').first().click();
+  await expect(page.getByRole('heading', { name: 'Workspace picker' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: /Commands/ }).click();
+  await expect(page.getByRole('heading', { name: 'Commands' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.mode-switch button').nth(1).click();
+  await expect(page.locator('.composer-stats')).toBeVisible();
+  await page.locator('.mode-switch button').first().click();
+  await page.locator('.companion-toggle').click();
+  await page.locator('.companion-toggle').click();
+
+  await page.locator('.rail-button[title="Tools"]').click();
+  await expect(page).toHaveURL(/tools/);
+  await page.locator('.rail-button[title="Chat"]').click();
+  await expect(page.locator('.run-status')).toBeVisible();
+  await page.getByRole('button', { name: /Stop|停止/ }).click();
+  await expect(page.locator('.modal-scrim')).toHaveCount(0);
+});

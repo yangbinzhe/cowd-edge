@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Check, RefreshCw, Search } from 'lucide-vue-next';
@@ -191,7 +193,7 @@ onUnmounted(() => projections.release('context'));
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
 
-    <section class="metric-row" data-section="budget">
+    <section class="metric-row" v-show="isSectionActive('budget')" data-section="budget">
       <article class="metric-card">
         <span>{{ t('page.context.page.text.2109fa7d46') }}</span>
         <div class="context-budget-value">
@@ -213,7 +215,7 @@ onUnmounted(() => projections.release('context'));
     </section>
 
     <section class="context-grid">
-      <section class="management-panel context-panel wide" data-section="packet">
+      <section class="management-panel context-panel wide" v-show="isSectionActive('packet')" data-section="packet">
         <header>
           <h2>{{ t('page.context.page.text.00bcbce604') }}</h2>
           <StatusPill :status="envelope.__state || 'ready'" />
@@ -250,7 +252,7 @@ onUnmounted(() => projections.release('context'));
         <EvidenceTrace :items="contextEvidence" :title="t('page.context.page.title.97f9320e36')" />
       </section>
 
-      <section class="management-panel context-panel" data-section="evidence">
+      <section class="management-panel context-panel" v-show="isSectionActive('evidence')" data-section="evidence">
         <header>
           <h2>{{ t('page.context.page.text.a8dd41fa22') }}</h2>
           <span>{{ t('page.context.page.text.08cb9c66d5') }}</span>
@@ -264,7 +266,7 @@ onUnmounted(() => projections.release('context'));
         <ObjectInspectorDrawer :title="t('page.context.page.title.5f71074cfb')" :data="evidence" />
       </section>
 
-      <section class="management-panel context-panel" data-section="budget">
+      <section class="management-panel context-panel" v-show="isSectionActive('budget')" data-section="budget">
         <header>
           <h2>{{ t('page.context.page.text.92f813f7b1') }}</h2>
           <span>{{ envelopeId || t('page.context.page.inline.46721d3741') }}</span>
@@ -283,7 +285,7 @@ onUnmounted(() => projections.release('context'));
         <EmptyState v-else :title="t('page.context.page.title.e62d3fb566')" :detail="t('page.context.page.detail.dcd7576e63')" />
       </section>
 
-      <section class="management-panel context-panel wide" data-section="history">
+      <section class="management-panel context-panel wide" v-show="isSectionActive('history')" data-section="history">
         <header>
           <h2>{{ t('page.context.page.text.397af08f0b') }}</h2>
           <span>{{ historyRows.length }} history rows</span>

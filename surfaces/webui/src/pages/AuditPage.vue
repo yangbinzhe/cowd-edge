@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useCapabilitySection } from "../composables/useCapabilitySection";
+const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
@@ -613,7 +615,7 @@ onMounted(refresh);
     </section>
 
     <section class="gateway-grid">
-      <section class="management-panel gateway-panel wide" data-section="global-timeline">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('global-timeline')" data-section="global-timeline">
         <header>
           <h2>{{ t('page.audit.page.text.1604763dcd') }}</h2>
           <span>{{ t('page.audit.summary.correlatedRecords', { count: globalTimelineRows.length }) }}</span>
@@ -657,7 +659,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.audit.page.title.c8ee651d5f')" :detail="t('page.audit.page.detail.79d5d32b7b')" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="logs">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('logs')" data-section="logs">
         <header>
           <h2>{{ t('page.audit.page.text.5ea6f2de3b') }}</h2>
           <span>{{ t('common.totalCount', { count: state.audit?.total || 0 }) }}</span>
@@ -685,7 +687,7 @@ onMounted(refresh);
         <EvidenceTrace :items="auditEvidence" :title="t('page.audit.page.title.69b367b2b4')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="usage">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('usage')" data-section="usage">
         <header>
           <h2>{{ t('page.audit.page.text.c3d8bf1440') }}</h2>
           <span>{{ displayStatus(state.usage?.status || 'usage') }}</span>
@@ -702,7 +704,7 @@ onMounted(refresh);
         </dl>
       </section>
 
-      <section class="management-panel gateway-panel" data-section="release">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('release')" data-section="release">
         <header>
           <h2>{{ t('page.audit.page.text.052c0ae46a') }}</h2>
           <span>{{ releaseSurface }}</span>
@@ -720,7 +722,7 @@ onMounted(refresh);
         <DataTable v-if="releaseRows.length" searchable copyable :rows="releaseRows" :columns="['name', 'status', 'detail']" row-key="name" @row-click="selectedDetail = { ...$event, source: 'release', evidence: $event.name, summary: $event.detail }" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="harness-eval">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('harness-eval')" data-section="harness-eval">
         <header>
           <h2>{{ t('page.audit.page.text.c2a8e12d35') }}</h2>
           <span>{{ displayStatus(state.harnessEvalLatest?.status || 'reports') }}</span>
@@ -804,7 +806,7 @@ onMounted(refresh);
         </section>
       </section>
 
-      <section class="management-panel gateway-panel" data-section="harness-eval-runs">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('harness-eval-runs')" data-section="harness-eval-runs">
         <header>
           <h2>{{ t('page.audit.page.text.4444545e37') }}</h2>
           <span>{{ formatCount('runs', harnessEvalRuns.length) }}</span>
@@ -816,7 +818,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.audit.page.title.2029dfea2e')" :detail="t('page.audit.page.detail.d6935f4575')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="harness-eval-scenarios">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('harness-eval-scenarios')" data-section="harness-eval-scenarios">
         <header>
           <h2>{{ t('page.audit.page.text.171edf1adf') }}</h2>
           <span>{{ formatCount('scenarios', harnessEvalScenarios.length) }}</span>
@@ -825,7 +827,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.audit.page.title.1d4e669193')" :detail="t('page.audit.page.detail.4976a6366c')" />
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="evolution">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('evolution')" data-section="evolution">
         <header>
           <h2>{{ t('page.audit.evolution.title') }}</h2>
           <span>{{ t('page.audit.evolution.summary', { signals: evolutionSignals.length, diagnoses: evolutionDiagnoses.length, proposals: evolutionProposals.length, candidates: evolutionCandidates.length }) }}</span>
@@ -907,7 +909,7 @@ onMounted(refresh);
         </section>
       </section>
 
-      <section class="management-panel gateway-panel wide" data-section="evaluation-policy">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('evaluation-policy')" data-section="evaluation-policy">
           <header>
             <h2>{{ t('page.audit.evaluationPolicy.title') }}</h2>
             <span>{{ evaluationPolicy.policy_id || '-' }}@{{ evaluationPolicy.revision || '-' }}</span>
@@ -926,7 +928,7 @@ onMounted(refresh);
           </div>
       </section>
 
-      <section class="management-panel gateway-panel" data-section="approvals">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('approvals')" data-section="approvals">
         <header>
           <h2>{{ t('page.audit.page.text.c9312c41ba') }}</h2>
           <span>{{ t('common.shownCount', { count: approvalRows.length, unit: t('unit.records') }) }}</span>
@@ -935,7 +937,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.audit.page.title.292a2d77e6')" :detail="t('page.audit.page.detail.abb458c609')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="cross-plane">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('cross-plane')" data-section="cross-plane">
         <header>
           <h2>{{ t('page.audit.page.text.02318ae2d0') }}</h2>
           <span>{{ formatCount('records', crossPlaneRows.length) }}</span>
@@ -944,7 +946,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.audit.page.title.8f881836e9')" :detail="t('page.audit.page.detail.bc95f49231')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="cross-plane">
+      <section class="management-panel gateway-panel" v-show="isSectionActive('cross-plane')" data-section="cross-plane">
         <header>
           <h2>{{ t('page.audit.page.text.4e1a860d2d') }}</h2>
           <span>{{ formatCount('receipts', executionRows.length) }}</span>

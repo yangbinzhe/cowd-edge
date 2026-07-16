@@ -40,6 +40,7 @@ const pageReports = [];
 
 for (const [pageId, page] of Object.entries(pages)) {
   const pageText = read(path.join('src/pages', page.file));
+  const sectionTags = Array.from(pageText.matchAll(/<[^>]*data-section="([^"]+)"[^>]*>/gs));
   const actualSections = unique(Array.from(pageText.matchAll(/data-section="([^"]+)"/g))
     .map((match) => match[1])
     .filter((sectionId) => !sectionId.includes('${'))).sort();
@@ -48,18 +49,28 @@ for (const [pageId, page] of Object.entries(pages)) {
   const unexpectedInPage = actualSections.filter((sectionId) => !expectedSections.includes(sectionId));
   const missingInCapability = expectedSections.filter((sectionId) => !hasCapabilitySection(capabilityText, sectionId));
   const hasPageSpec = capabilityText.includes(`${pageId}: spec(`);
+  const missingVisibilityBindings = sectionTags.filter((match) => {
+    const sectionId = match[1];
+    if (pageId === 'mfg') {
+      return !/\bv-(?:if|else-if|else)\b/.test(match[0]);
+    }
+    return !match[0].includes(`v-show="isSectionActive('${sectionId}')"`);
+  }).map((match) => match[1]);
 
   if (!hasPageSpec) failures.push(`${pageId}: capability spec missing`);
   for (const sectionId of missingInPage) failures.push(`${pageId}: page missing data-section ${sectionId}`);
   for (const sectionId of unexpectedInPage) failures.push(`${pageId}: page has unregistered data-section ${sectionId}`);
   for (const sectionId of missingInCapability) failures.push(`${pageId}: capability spec missing section ${sectionId}`);
+  for (const sectionId of missingVisibilityBindings) failures.push(`${pageId}: section ${sectionId} is not owned by an explicit visibility binding`);
 
   pageReports.push({
     page: pageId,
     file: page.file,
     expected_sections: expectedSections,
     actual_sections: actualSections,
-    status: !missingInPage.length && !unexpectedInPage.length && !missingInCapability.length && hasPageSpec ? 'pass' : 'fail',
+    explicit_visibility_bindings: sectionTags.length - missingVisibilityBindings.length,
+    section_elements: sectionTags.length,
+    status: !missingInPage.length && !unexpectedInPage.length && !missingInCapability.length && !missingVisibilityBindings.length && hasPageSpec ? 'pass' : 'fail',
   });
 }
 
