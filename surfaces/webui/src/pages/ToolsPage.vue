@@ -8,7 +8,9 @@ import EmptyState from '../components/workbench/EmptyState.vue';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
 import { useAppStore } from '../stores/app';
+import { adaptToolOperationsGraph } from '../adapters/graph/toolOperations';
 
 const store = useAppStore();
 const loading = ref(false);
@@ -44,6 +46,7 @@ const checkpoints = computed(() => {
 const cacheStats = computed(() => state.value.cache?.data || state.value.cache || {});
 const timelineEvents = computed(() => Array.isArray(state.value.timeline?.events) ? state.value.timeline.events : []);
 const toolLedger = computed(() => timelineEvents.value.filter((event: any) => String(event.kind || '').includes('tool')));
+const toolOperationsGraph = computed(() => adaptToolOperationsGraph(result.value, checkpoints.value, toolLedger.value, t('page.tools.page.text.86c5ed2cc8')));
 
 const toolRows = computed(() => tools.value.map((tool: any) => ({
   name: tool.name,
@@ -340,6 +343,7 @@ onMounted(refresh);
           <h2>{{ t('page.tools.page.text.86c5ed2cc8') }}</h2>
           <span>{{ t('page.tools.page.text.6a1ed0bece') }}</span>
         </header>
+        <GraphSurface :model="toolOperationsGraph" :loading="loading" />
         <label class="field-line">
           {{ t('template.pages.toolspage.f41a6f7d28') }}
           <textarea v-model="plannerPrompt" rows="3" />

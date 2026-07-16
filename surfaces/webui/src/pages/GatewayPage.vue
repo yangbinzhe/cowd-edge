@@ -12,7 +12,10 @@ import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import GatewayRemediationList from '../components/workbench/GatewayRemediationList.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
+import TimelineList from '../components/workbench/TimelineList.vue';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptCrossPlaneGraph } from '../adapters/graph/crossPlane';
 
 const loading = ref(false);
 const error = ref('');
@@ -123,6 +126,37 @@ const configReloadRestartFields = computed(() => {
 const executions = computed(() => Array.isArray(state.value.executions?.executions) ? state.value.executions.executions : []);
 const identities = computed(() => Array.isArray(state.value.identities?.identities) ? state.value.identities.identities : []);
 const grants = computed(() => Array.isArray(state.value.grants?.grants) ? state.value.grants.grants : []);
+const crossPlaneGraph = computed(() => adaptCrossPlaneGraph({
+  identities: identities.value,
+  grants: grants.value,
+  executions: executions.value,
+  action: actionResult.value,
+}, t('page.gateway.page.text.edae12bca9')));
+const crossPlaneTimeline = computed(() => {
+  const action = actionResult.value?.data?.data || actionResult.value?.data || actionResult.value || {};
+  const stages = [
+    ['preflight', action.preflight || action.plan],
+    ['policy', action.policy || action.simulation || action.decision],
+    ['execute', action.execution || (action.execution_id ? action : null)],
+    ['audit', action.audit || (action.audit_ref ? { audit_ref: action.audit_ref, status: 'recorded' } : null)],
+  ].filter((entry) => entry[1]).map(([kind, stage]: any) => ({
+    id: `current:${kind}`,
+    title: kind,
+    status: stage.status || stage.result || 'recorded',
+    detail: stage.summary || stage.reason || stage.audit_ref || '',
+    at: stage.updated_at || stage.created_at || stage.timestamp,
+  }));
+  return [
+    ...stages,
+    ...executions.value.slice(0, 80).map((item: any) => ({
+      id: item.execution_id || item.id,
+      title: item.requested_capability || item.capability || item.mode || item.execution_id,
+      status: item.status || item.dispatch_status || 'recorded',
+      detail: item.summary || item.provider_account || item.resource_ref || '',
+      at: item.updated_at || item.created_at || item.timestamp,
+    })),
+  ];
+});
 const edgeRows = computed(() => [
   ...edgeMessageConnectors.value.map((item: any) => ({ ...item, edge_type: 'message' })),
   ...edgeSourceConnectors.value.map((item: any) => ({ ...item, edge_type: 'source' })),
@@ -1070,11 +1104,19 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.gateway.page.title.e0f40327a7')" :detail="t('page.gateway.page.detail.fe442047a7')" />
       </section>
 
-      <section class="management-panel gateway-panel" data-section="executions">
+      <section class="management-panel gateway-panel wide" data-section="executions">
         <header>
           <h2>{{ t('page.gateway.page.text.edae12bca9') }}</h2>
           <span>{{ displayStatus(state.crossPlane?.status || 'preflight') }}</span>
         </header>
+        <GraphSurface
+          :model="crossPlaneGraph"
+          :loading="loading"
+          :connection-state="state.crossPlane?.status || 'ready'"
+          @select-node="selectedDetail = $event.raw || $event"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
+        <TimelineList v-if="crossPlaneTimeline.length" :items="crossPlaneTimeline" live @select="selectedDetail = $event" />
         <label class="field-line">
           {{ t('page.tools.field.actor') }}
           <input v-model="actor" type="text" />

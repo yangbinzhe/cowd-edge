@@ -9,8 +9,11 @@ import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptEvolutionGraph } from '../adapters/graph/evolution';
+import { adaptHarnessEvalGraph } from '../adapters/graph/harnessEval';
 
 const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
 const loading = ref(false);
@@ -60,6 +63,20 @@ const evolutionCandidates = computed(() => items(state.value.evolutionCandidates
 const evolutionReviews = computed(() => items(state.value.evolutionReviews, 'reviews'));
 const evaluationPolicy = computed(() => state.value.evaluationPolicy || {});
 const evaluationPolicyReviews = computed(() => items(state.value.evaluationPolicyReviews, 'reviews'));
+const evolutionGraph = computed(() => adaptEvolutionGraph({
+  signals: evolutionSignals.value,
+  diagnoses: evolutionDiagnoses.value,
+  missions: evolutionMissions.value,
+  proposals: evolutionProposals.value,
+  candidates: evolutionCandidates.value,
+  reviews: evolutionReviews.value,
+}, t('page.audit.evolution.title')));
+const harnessEvalGraph = computed(() => adaptHarnessEvalGraph({
+  reports: harnessEvalReports.value,
+  runs: harnessEvalRuns.value,
+  scenarios: harnessEvalScenarios.value,
+  detail: evalReportDetail.value,
+}, t('page.audit.page.text.c2a8e12d35')));
 const auditRows = computed(() => auditRecords.value.slice(0, 18).map((record: any) => ({
   source: record.source || '-',
   id: record.id || '-',
@@ -708,6 +725,12 @@ onMounted(refresh);
           <h2>{{ t('page.audit.page.text.c2a8e12d35') }}</h2>
           <span>{{ displayStatus(state.harnessEvalLatest?.status || 'reports') }}</span>
         </header>
+        <GraphSurface
+          :model="harnessEvalGraph"
+          :loading="loading"
+          @select-node="selectedDetail = $event.raw || $event"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
         <div class="eval-control-grid">
           <label v-for="mode in evalRunModes" :key="mode.id" class="eval-mode-option" :class="{ active: evalLevel === mode.id }">
             <input v-model="evalLevel" type="radio" :value="mode.id" />
@@ -845,6 +868,12 @@ onMounted(refresh);
             <small>{{ t('page.audit.evolution.noMainlineWrite') }}</small>
           </article>
         </div>
+        <GraphSurface
+          :model="evolutionGraph"
+          :loading="loading"
+          @select-node="selectedDetail = $event.raw || $event"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
         <DataTable v-if="evolutionSignalRows.length" searchable copyable :rows="evolutionSignalRows" :columns="['id', 'type', 'severity', 'owner', 'continue', 'summary']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.signal', evidence: $event.id, status: $event.severity, summary: $event.summary }" />
         <DataTable v-if="evolutionDiagnosisRows.length" searchable copyable :rows="evolutionDiagnosisRows" :columns="['id', 'cause', 'owner', 'recurrence', 'candidate', 'gates', 'impact']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.diagnosis', evidence: $event.id, status: $event.cause, summary: $event.impact }" />
         <DataTable v-if="evolutionMissionRows.length" searchable copyable :rows="evolutionMissionRows" :columns="['id', 'status', 'owner', 'goals', 'signals', 'proposals', 'candidates']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.mission', evidence: $event.id, status: $event.status }" />

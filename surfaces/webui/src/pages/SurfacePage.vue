@@ -11,7 +11,10 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import SurfaceDiagnosticPlaybook from '../components/workbench/SurfaceDiagnosticPlaybook.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
+import TimelineList from '../components/workbench/TimelineList.vue';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptSurfaceTopology } from '../adapters/graph/surfaceTopology';
 
 const loading = ref(false);
 const error = ref('');
@@ -119,6 +122,21 @@ const failedTriggerEventItems = computed(() => {
   if (Array.isArray(snapshot)) return snapshot;
   return triggerEventItems.value.filter((item: any) => ['failed', 'dead_letter'].includes(String(item.status || '').toLowerCase()));
 });
+const surfaceTopologyGraph = computed(() => adaptSurfaceTopology({
+  surfaces: surfaces.value,
+  connectors: [...edgeMessageConnectors.value, ...edgeSourceConnectors.value, ...edgeAutomationConnectors.value],
+  endpoints: state.value.messageEndpoints?.endpoints || [],
+  routes: [...routeItems.value, ...(state.value.messageRoutes?.routes || [])],
+  bindings: state.value.messageBindings?.bindings || [],
+  selectedSurface: selectedSurface.value,
+}, t('page.surface.page.text.d0eb56ac2a')));
+const deliveryTimeline = computed(() => [
+  ...inboxItems.value.map((item: any) => ({ id: `inbox:${item.message_id || item.id}`, title: item.message_id || item.id || 'inbox', status: item.status || 'received', detail: item.last_error || item.sender_id || '', at: item.updated_at_ms || item.created_at_ms })),
+  ...outboxItems.value.map((item: any) => ({ id: `outbox:${item.delivery_id || item.id}`, title: item.delivery_id || item.id || 'outbox', status: item.status || 'queued', detail: item.last_error || item.recipient || '', at: item.updated_at_ms || item.created_at_ms })),
+  ...deliveryItems.value.map((item: any) => ({ id: `delivery:${item.delivery_id || item.message_id || item.created_at_ms}`, title: item.kind || item.delivery_id || 'delivery', status: item.status || 'recorded', detail: item.message_id || '', at: item.created_at_ms })),
+  ...triggerEventItems.value.map((item: any) => ({ id: `trigger:${item.idempotency_key}`, title: item.event_type || item.idempotency_key || 'trigger', status: item.status || 'received', detail: item.last_error || '', at: item.updated_at_ms || item.created_at_ms })),
+  ...deadLetterItems.value.map((item: any) => ({ id: `dead-letter:${item.delivery_id || item.id}`, title: item.delivery_id || item.id || 'dead letter', status: 'dead_letter', detail: item.last_error || item.reason || '', at: item.updated_at_ms || item.created_at_ms })),
+].sort((left: any, right: any) => Number(left.at || 0) - Number(right.at || 0)).slice(-80));
 const triggerEventRows = computed(() => triggerEventItems.value.slice(0, 32).map((item: any) => ({
   idempotency_key: item.idempotency_key || '-',
   event_type: item.event_type || item.trigger?.event_type || '-',
@@ -507,6 +525,13 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.d0eb56ac2a') }}</h2>
           <StatusPill :status="state.registry?.__state || 'ready'" />
         </header>
+        <GraphSurface
+          :model="surfaceTopologyGraph"
+          :loading="loading"
+          :connection-state="state.registry?.__state || state.edge?.health?.status || 'ready'"
+          @select-node="selectedDetail = $event.raw || $event"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
         <DataTable v-if="surfaceRows.length" searchable copyable row-key="id" :rows="surfaceRows" :columns="['runtime', 'id', 'name', 'kind', 'lifecycle', 'failures', 'restarts', 'circuit', 'routes', 'resources']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.surface.page.title.9e87656d55')" :detail="t('page.surface.page.detail.7941de7927')" />
         <SurfaceDiagnosticPlaybook :rows="surfaceDiagnosticRows" />
@@ -609,6 +634,7 @@ onMounted(refresh);
           <h2>{{ t('page.surface.page.text.c215d81d09') }}</h2>
           <span>{{ activeInboxItems.length + activeOutboxItems.length }} active · {{ inboxRows.length }} inbox · {{ outboxRows.length }} outbox · {{ deadLetterItems.length }} DLQ · {{ archivedOutboxItems.length }} archived</span>
         </header>
+        <TimelineList v-if="deliveryTimeline.length" :items="deliveryTimeline" :title="t('page.surface.page.text.c215d81d09')" live @select="selectedDetail = $event" />
         <p class="muted-line">message root: {{ messageRoot }}</p>
         <div class="button-row">
           <button class="ghost-action" type="button" :disabled="!retryCandidate" @click="retryDelivery">
