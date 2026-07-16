@@ -22,6 +22,7 @@ export function adaptContextFanout(envelope: Record<string, any> | null, title =
   const sources = new Set<string>();
   const selected = contextItems(envelope);
   const omitted = omissionItems(envelope);
+  const envelopeId = String(envelope?.envelope_id || envelope?.envelope?.id || 'context-fanout');
 
   [...selected, ...omitted].forEach((item: any, index) => {
     const omittedItem = index >= selected.length;
@@ -49,6 +50,8 @@ export function adaptContextFanout(envelope: Record<string, any> | null, title =
       group: omittedItem ? 'omitted' : 'selected',
       summary: String(item.text || item.content || item.summary || item.reason || id),
       evidenceRefs: refs(item.evidence_refs || item.refs),
+      correlationRefs: [envelopeId, item.session_id, item.turn_id, item.memory_id, item.matrix_ref].filter(Boolean).map(String),
+      href: `/context?section=packet&focus=${encodeURIComponent(nodeId)}`,
       badges: [item.authority, item.score != null ? `score ${item.score}` : ''].filter(Boolean).map(String),
       raw: item,
     });
@@ -63,7 +66,7 @@ export function adaptContextFanout(envelope: Record<string, any> | null, title =
   });
 
   return {
-    id: String(envelope?.envelope_id || envelope?.envelope?.id || 'context-fanout'),
+    id: envelopeId,
     title,
     revision: Number(envelope?.revision || envelope?.envelope?.revision || nodes.length),
     status: envelope?.__state || (selected.length ? 'ready' : 'idle'),

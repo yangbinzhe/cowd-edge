@@ -16,8 +16,12 @@ import GraphSurface from '../components/graph/GraphSurface.vue';
 import { useAppStore } from '../stores/app';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import { adaptContextFanout } from '../adapters/graph/contextFanout';
+import { useGraphQueryState } from '../composables/useGraphQueryState';
 
 const store = useAppStore();
+const graphQuery = useGraphQueryState();
+const graphFocus = graphQuery.focus;
+const graphFilter = graphQuery.filter;
 const projections = useProjectionRegistryStore();
 const selectedExecutionId = ref('');
 const loading = ref(false);
@@ -171,6 +175,17 @@ async function acknowledgeRecommendation() {
   recommendations.value = await api.contextRecommendations(sessionId.value);
 }
 
+async function selectContextNode(node: any) {
+  selectedDetail.value = node?.raw || node;
+  graphFocus.value = String(node?.id || '');
+  await graphQuery.sync({ section: 'packet' });
+}
+
+async function updateContextView(state: { filter: string }) {
+  graphFilter.value = state.filter;
+  await graphQuery.sync({ section: 'packet' });
+}
+
 onMounted(refresh);
 onUnmounted(() => projections.release('context'));
 </script>
@@ -241,9 +256,12 @@ onUnmounted(() => projections.release('context'));
         <GraphSurface
           v-if="contextGraph.nodes.length"
           :model="contextGraph"
+          :selected-node-id="graphFocus"
+          :search-query="graphFilter"
           :loading="loading"
           :connection-state="envelope.__state || contextStatus"
-          @select-node="selectedDetail = $event.raw || $event"
+          @view-state-change="updateContextView"
+          @select-node="selectContextNode"
           @select-edge="selectedDetail = $event.raw || $event"
         />
         <DataTable v-if="itemRows.length" searchable copyable :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" @row-click="selectedDetail = $event" />

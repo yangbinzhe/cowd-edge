@@ -127,6 +127,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       section('management', t('capability.section.reality.management.label'), t('capability.section.reality.management.description'), 'governance', 'inspect', 'reality.management'),
       section('core-map', t('data.capabilities.string.0c7f4647ac'), t('data.capabilities.string.5128dbe38c'), 'graph', 'inspect', 'reality.core-map'),
       section('overview', t('script.data.capabilities.label.0efc2e6be4'), t('capability.section.reality.overview.description'), 'summary', 'compact', 'reality.status'),
+      section('matrix', t('reality.matrix.title'), t('reality.matrix.description'), 'graph', 'inspect', 'matrix.graph'),
       section('fact-flow', t('data.capabilities.string.b15d445923'), t('data.capabilities.string.e55ef83e5e'), 'timeline', 'standard', 'fact.flow'),
       section('context-runtime', t('reality.contextRuntime.label'), t('memory.contextEnvelope.label'), 'summary', 'compact', 'reality.context-runtime'),
       section('evidence', t('script.data.capabilities.label.7ea014de7b'), t('capability.section.reality.evidence.description'), 'reader', 'inspect', 'reality.evidence'),

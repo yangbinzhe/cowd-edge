@@ -22,6 +22,9 @@ export function adaptEntityImpact(result: Record<string, any> | null, title = ''
       group: String(entity.entity_type || 'entity'),
       summary: String(entity.canonical_key || id),
       badges: [entity.confidence != null ? `confidence ${entity.confidence}` : ''].filter(Boolean),
+      evidenceRefs: Array.isArray(entity.evidence_refs) ? entity.evidence_refs.map(String) : [],
+      correlationRefs: [entity.source_ref, entity.version_id].filter(Boolean).map(String),
+      href: `/reality?section=matrix&focus=${encodeURIComponent(id)}`,
       raw: entity,
     });
   };
@@ -38,6 +41,8 @@ export function adaptEntityImpact(result: Record<string, any> | null, title = ''
       type: String(relation.relation_type || 'related_to'),
       label: String(relation.relation_type || 'related to').replace(/_/g, ' '),
       status: String(hop?.traversal_direction || 'recorded'),
+      evidenceRefs: Array.isArray(relation.evidence_refs) ? relation.evidence_refs.map(String) : [],
+      correlationRefs: [relation.source_ref, relation.version_id].filter(Boolean).map(String),
       raw: hop || relation,
     });
   };

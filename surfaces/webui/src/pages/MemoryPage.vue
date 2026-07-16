@@ -2,7 +2,7 @@
 import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Database, GitBranch, Network, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -18,9 +18,11 @@ import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptKnowledgeGraph } from '../adapters/graph/knowledge';
+import { useGraphQueryState } from '../composables/useGraphQueryState';
 
 const route = useRoute();
 const router = useRouter();
+const graphQuery = useGraphQueryState({ depth: 2 });
 const store = useAppStore();
 const loading = ref(false);
 const error = ref('');
@@ -32,10 +34,10 @@ const layerEntries = ref<any>({});
 const selectedEntryId = ref('');
 const query = ref('');
 const symbolQuery = ref('');
-const graphFocus = ref(String(route.query.focus || ''));
-const graphFilter = ref(String(route.query.filter || ''));
-const graphDepth = ref(Math.max(1, Math.min(6, Number(route.query.depth || 2))));
-const graphCursor = ref(Math.max(0, Number(route.query.cursor || 0)));
+const graphFocus = graphQuery.focus;
+const graphFilter = graphQuery.filter;
+const graphDepth = graphQuery.depth;
+const graphCursor = graphQuery.cursor;
 const searchResult = ref<any>({});
 const recallExplain = ref<any>({});
 const packet = ref<any>({});
@@ -65,6 +67,7 @@ const entryTags = ref('');
 const entryPriority = ref('normal');
 const sourceRef = ref('');
 const factType = ref('');
+let lastGraphRequest = '';
 
 const layerItems = computed(() => Array.isArray(layers.value?.layers) ? layers.value.layers : []);
 const entries = computed(() => Array.isArray(layerEntries.value?.entries) ? layerEntries.value.entries : []);
@@ -284,25 +287,26 @@ async function refresh() {
   }
 }
 
-async function loadKnowledgeGraph(cursor = 0) {
+async function loadKnowledgeGraph(cursor = 0, syncUrl = true) {
   graphCursor.value = Math.max(0, cursor);
-  const [nextGraph, nextClusters] = await Promise.all([
-    api.memoryGraph(graphFocus.value, graphDepth.value, graphFilter.value, 80, graphCursor.value),
-    api.memoryClusters(24, graphFocus.value, graphFilter.value, 0, graphDepth.value),
-  ]);
-  entities.value = nextGraph;
-  triples.value = nextGraph;
-  clusters.value = nextClusters;
-  await router.replace({
-    query: {
-      ...route.query,
-      section: 'graph',
-      focus: graphFocus.value || undefined,
-      filter: graphFilter.value || undefined,
-      depth: String(graphDepth.value),
-      cursor: graphCursor.value ? String(graphCursor.value) : undefined,
-    },
-  });
+  const signature = [graphFocus.value, graphFilter.value, graphDepth.value, graphCursor.value].join('|');
+  if (signature !== lastGraphRequest) {
+    lastGraphRequest = signature;
+    const [nextGraph, nextClusters] = await Promise.all([
+      api.memoryGraph(graphFocus.value, graphDepth.value, graphFilter.value, 80, graphCursor.value),
+      api.memoryClusters(24, graphFocus.value, graphFilter.value, 0, graphDepth.value),
+    ]);
+    entities.value = nextGraph;
+    triples.value = nextGraph;
+    clusters.value = nextClusters;
+  }
+  if (syncUrl) await graphQuery.sync({ section: 'graph' });
+}
+
+async function updateKnowledgeView(state: { filter: string }) {
+  graphFilter.value = state.filter;
+  graphCursor.value = 0;
+  await graphQuery.sync({ section: 'graph' });
 }
 
 async function selectKnowledgeNode(node: any) {
@@ -403,6 +407,14 @@ async function selectMemorySection(sectionId: string) {
 }
 
 onMounted(refresh);
+watch(
+  () => [route.query.focus, route.query.filter, route.query.depth, route.query.cursor, route.query.from, route.query.to],
+  async () => {
+    if (route.query.section !== 'graph') return;
+    await nextTick();
+    await loadKnowledgeGraph(graphCursor.value, false);
+  },
+);
 </script>
 
 <template>
@@ -645,8 +657,11 @@ onMounted(refresh);
           </div>
           <GraphSurface
             :model="knowledgeGraph"
+            :selected-node-id="graphFocus"
+            :search-query="graphFilter"
             :loading="loading"
             :connection-state="entities.enabled === false ? 'offline' : 'ready'"
+            @view-state-change="updateKnowledgeView"
             @select-node="selectKnowledgeNode"
             @select-edge="selectedDetail = $event.raw || $event"
           />

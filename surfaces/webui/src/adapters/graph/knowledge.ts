@@ -33,6 +33,9 @@ export function adaptKnowledgeGraph(
       group: fallbackType,
       summary: String(raw.summary || raw.content || raw.canonical_key || raw.source_type || id),
       badges: [raw.confidence != null ? `confidence ${raw.confidence}` : '', raw.frequency != null ? `frequency ${raw.frequency}` : ''].filter(Boolean),
+      evidenceRefs: Array.isArray(raw.evidence_refs) ? raw.evidence_refs.map((item: any) => String(item?.ref || item?.reference || item)).filter(Boolean) : [],
+      correlationRefs: [raw.memory_id, raw.namespace_id, raw.source_ref].filter(Boolean).map(String),
+      href: `/memory?section=graph&focus=${encodeURIComponent(id)}`,
       raw,
     });
   };
@@ -52,6 +55,8 @@ export function adaptKnowledgeGraph(
       type: predicate,
       label: predicate.replace(/_/g, ' '),
       status: String(triple.status || 'recorded'),
+      evidenceRefs: Array.isArray(triple.evidence_refs) ? triple.evidence_refs.map(String) : [],
+      correlationRefs: [triple.source_ref, triple.version_id].filter(Boolean).map(String),
       raw: triple,
     });
   });

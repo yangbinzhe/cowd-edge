@@ -2,8 +2,8 @@
 import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -17,9 +17,16 @@ import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptRealityFlow } from '../adapters/graph/realityFlow';
+import { adaptEntityImpact } from '../adapters/graph/entityImpact';
+import { adaptMetricLineage } from '../adapters/graph/metricLineage';
+import { useGraphQueryState } from '../composables/useGraphQueryState';
 
 const store = useAppStore();
 const route = useRoute();
+const router = useRouter();
+const graphQuery = useGraphQueryState();
+const graphFocus = graphQuery.focus;
+const graphFilter = graphQuery.filter;
 const loading = ref(false);
 const error = ref('');
 const status = ref<any>({});
@@ -27,6 +34,11 @@ const staticProjection = ref<any>({});
 const flow = ref<any>({});
 const promotions = ref<any>({});
 const boundaries = ref<any>({});
+const matrixHealth = ref<any>({});
+const matrixEntities = ref<any>({});
+const matrixMetrics = ref<any>({});
+const matrixEntityBundle = ref<any>({});
+const matrixMetricBundle = ref<any>({});
 const sessionFilter = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const fallbackManagement = [
@@ -99,12 +111,13 @@ const activeSessionId = computed(() => sessionFilter.value.trim() || store.activ
 const activeSection = computed(() => String(route.query.section || 'overview'));
 const sectionTabs = [
   { id: 'overview', label: t('script.pages.realitycorepage.label.0efc2e6be4') },
-  { id: 'memory', label: t('script.pages.realitycorepage.label.89c8a2851d') },
+  { id: 'core-map', label: t('data.capabilities.string.0c7f4647ac') },
   { id: 'matrix', label: t('script.pages.realitycorepage.label.58947ebc8f') },
   { id: 'context-runtime', label: t('reality.contextRuntime.label') },
   { id: 'fact-flow', label: t('script.pages.realitycorepage.label.33f62e7cc6') },
   { id: 'evidence', label: t('script.pages.realitycorepage.label.7ea014de7b') },
-  { id: 'audit', label: t('script.pages.realitycorepage.label.fa1703dd78') },
+  { id: 'promotions', label: t('data.capabilities.string.596a9b586c') },
+  { id: 'boundaries', label: t('data.capabilities.string.8a0afbc5db') },
 ];
 const realityContext = computed(() => [
   { label: t('script.pages.realitycorepage.label.f7f1997c6c'), value: activeSessionId.value || 'global' },
@@ -153,6 +166,10 @@ const factFlowRows = computed(() => {
   }));
 });
 const factFlowGraph = computed(() => adaptRealityFlow(flow.value, t('page.reality.core.page.text.608ba31424')));
+const matrixEntityRows = computed(() => Array.isArray(matrixEntities.value?.entities) ? matrixEntities.value.entities : []);
+const matrixMetricRows = computed(() => Array.isArray(matrixMetrics.value?.metrics) ? matrixMetrics.value.metrics : []);
+const matrixEntityGraph = computed(() => adaptEntityImpact(matrixEntityBundle.value, t('reality.matrix.entityGraph')));
+const matrixMetricGraph = computed(() => adaptMetricLineage(matrixMetricBundle.value, t('reality.matrix.metricGraph')));
 const promotionRows = computed(() => {
   const rows = promotions.value?.promotions || flow.value?.promotions || [];
   return (Array.isArray(rows) ? rows : []).slice(0, 80).map((promotion: any) => ({
@@ -285,18 +302,30 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [nextStatus, nextStatic, nextFlow, nextPromotions, nextBoundaries] = await Promise.all([
+    const [nextStatus, nextStatic, nextFlow, nextPromotions, nextBoundaries, nextMatrixHealth, nextMatrixEntities, nextMatrixMetrics] = await Promise.all([
       api.realityStatus(),
       api.realityStatic(),
       api.realityFlow(activeSessionId.value || undefined, 80),
       api.realityPromotions({ sessionId: activeSessionId.value || undefined, limit: 120 }),
       api.realityBoundaries(),
+      api.matrixHealth(),
+      api.matrixEntities(),
+      api.matrixMetrics(),
     ]);
     status.value = nextStatus;
     staticProjection.value = nextStatic;
     flow.value = nextFlow;
     promotions.value = nextPromotions;
     boundaries.value = nextBoundaries;
+    matrixHealth.value = nextMatrixHealth;
+    matrixEntities.value = nextMatrixEntities;
+    matrixMetrics.value = nextMatrixMetrics;
+    const entityRows = Array.isArray(nextMatrixEntities?.entities) ? nextMatrixEntities.entities : [];
+    const metricRows = Array.isArray(nextMatrixMetrics?.metrics) ? nextMatrixMetrics.metrics : [];
+    const requested = graphFocus.value;
+    const entityId = String(entityRows.find((item: any) => String(item.entity_id || item.id) === requested)?.entity_id || entityRows[0]?.entity_id || entityRows[0]?.id || '');
+    const metricId = String(metricRows.find((item: any) => String(item.metric_id || item.id) === requested)?.metric_id || metricRows[0]?.metric_id || metricRows[0]?.id || '');
+    await Promise.all([entityId ? loadMatrixFocus(entityId, 'entity') : Promise.resolve(), metricId ? loadMatrixFocus(metricId, 'metric') : Promise.resolve()]);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -304,11 +333,66 @@ async function refresh() {
   }
 }
 
+async function loadMatrixFocus(id: string, kind: 'entity' | 'metric') {
+  if (!id) return;
+  if (kind === 'entity') {
+    const [entity, relations, impact] = await Promise.all([api.matrixEntity(id), api.matrixEntityRelations(id), api.matrixEntityImpact(id)]);
+    matrixEntityBundle.value = { entity, relations, impact };
+    return;
+  }
+  const [detail, lineage] = await Promise.all([api.matrixMetric(id), api.matrixMetricLineage(id)]);
+  const definition = matrixMetricRows.value.find((item: any) => String(item.metric_id || item.id) === id) || {};
+  matrixMetricBundle.value = { detail: { ...detail, metric: definition }, lineage };
+}
+
+async function selectMatrixNode(node: any, kind: 'entity' | 'metric') {
+  selectedDetail.value = node?.raw || node;
+  const id = String(node?.id || '');
+  if (!id) return;
+  graphFocus.value = id;
+  await graphQuery.sync({ section: 'matrix', session_id: activeSessionId.value || undefined });
+  await loadMatrixFocus(id, kind);
+}
+
+async function selectRealityNode(node: any) {
+  selectedDetail.value = node?.raw || node;
+  graphFocus.value = String(node?.id || '');
+  await graphQuery.sync({ section: activeSection.value, session_id: activeSessionId.value || undefined });
+}
+
+async function updateRealityView(state: { filter: string }) {
+  graphFilter.value = state.filter;
+  await graphQuery.sync({ section: activeSection.value, session_id: activeSessionId.value || undefined });
+}
+
+async function applyRealityFilter() {
+  await router.replace({ query: { ...route.query, session_id: sessionFilter.value.trim() || undefined } });
+  await refresh();
+}
+
 onMounted(() => {
   const routedSession = typeof route.query.session_id === 'string' ? route.query.session_id : '';
   if (routedSession) sessionFilter.value = routedSession;
   refresh();
 });
+watch(
+  () => [route.query.section, route.query.focus, route.query.filter, route.query.from, route.query.to, route.query.session_id],
+  async ([section, focus, , , , routedSession], previous) => {
+    await nextTick();
+    const sessionChanged = String(routedSession || '') !== String(previous?.[5] || '');
+    sessionFilter.value = String(routedSession || '');
+    if (sessionChanged) {
+      await refresh();
+      return;
+    }
+    if (section !== 'matrix' || !focus) return;
+    const id = String(focus);
+    const entity = matrixEntityRows.value.some((item: any) => String(item.entity_id || item.id) === id);
+    const metric = matrixMetricRows.value.some((item: any) => String(item.metric_id || item.id) === id);
+    if (entity) await loadMatrixFocus(id, 'entity');
+    else if (metric) await loadMatrixFocus(id, 'metric');
+  },
+);
 </script>
 
 <template>
@@ -363,7 +447,7 @@ onMounted(() => {
       </nav>
       <label class="field-line">
         {{ t('page.reality.core.field.sessionFilter') }}
-        <input v-model="sessionFilter" type="text" :placeholder="t('page.reality.core.page.placeholder.0f3b345aac')" @keyup.enter="refresh" />
+        <input v-model="sessionFilter" type="text" :placeholder="t('page.reality.core.page.placeholder.0f3b345aac')" @keyup.enter="applyRealityFilter" />
       </label>
       <button class="ghost-action" type="button" @click="refresh">
         <Search :size="15" />
@@ -440,6 +524,40 @@ onMounted(() => {
         <ObjectInspectorDrawer :title="t('memory.knowledgeGovernance.recallQuality')" :data="knowledgeRecallQuality" />
       </section>
 
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('matrix')" data-section="matrix">
+        <header>
+          <h2>{{ t('reality.matrix.title') }}</h2>
+          <StatusPill :status="matrixHealth.status || matrixHealth.__state || 'unknown'" />
+        </header>
+        <div class="metric-row compact">
+          <article class="metric-card"><span>{{ t('reality.matrix.entities') }}</span><strong>{{ matrixEntityRows.length }}</strong><small>{{ matrixHealth.relation_count || 0 }} relations</small></article>
+          <article class="metric-card"><span>{{ t('reality.matrix.metrics') }}</span><strong>{{ matrixMetricRows.length }}</strong><small>{{ matrixHealth.metric_dependency_count || 0 }} dependencies</small></article>
+          <article class="metric-card"><span>{{ t('reality.matrix.quality') }}</span><strong>{{ matrixHealth.quality_gate_count || 0 }}</strong><small>{{ matrixHealth.evidence_count || 0 }} evidence</small></article>
+        </div>
+        <GraphSurface
+          v-if="matrixEntityGraph.nodes.length"
+          :model="matrixEntityGraph"
+          :selected-node-id="graphFocus"
+          :search-query="graphFilter"
+          @view-state-change="updateRealityView"
+          @select-node="selectMatrixNode($event, 'entity')"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
+        <GraphSurface
+          v-if="matrixMetricGraph.nodes.length"
+          :model="matrixMetricGraph"
+          :selected-node-id="graphFocus"
+          :search-query="graphFilter"
+          @view-state-change="updateRealityView"
+          @select-node="selectMatrixNode($event, 'metric')"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
+        <div class="memory-tabs">
+          <article><h3>{{ t('reality.matrix.entities') }}</h3><DataTable v-if="matrixEntityRows.length" searchable copyable row-key="entity_id" :rows="matrixEntityRows" @row-click="selectMatrixNode({ id: $event.entity_id || $event.id, raw: $event }, 'entity')" /><EmptyState v-else :title="t('reality.matrix.emptyEntities')" /></article>
+          <article><h3>{{ t('reality.matrix.metrics') }}</h3><DataTable v-if="matrixMetricRows.length" searchable copyable row-key="metric_id" :rows="matrixMetricRows" @row-click="selectMatrixNode({ id: $event.metric_id || $event.id, raw: $event }, 'metric')" /><EmptyState v-else :title="t('reality.matrix.emptyMetrics')" /></article>
+        </div>
+      </section>
+
       <section class="management-panel reality-panel wide" v-show="isSectionActive('fact-flow')" data-section="fact-flow">
         <header>
           <h2>{{ t('page.reality.core.page.text.608ba31424') }}</h2>
@@ -447,9 +565,12 @@ onMounted(() => {
         </header>
         <GraphSurface
           :model="factFlowGraph"
+          :selected-node-id="graphFocus"
+          :search-query="graphFilter"
           :loading="loading"
           :connection-state="flow.__state || flow.status || 'ready'"
-          @select-node="selectedDetail = $event.raw || $event"
+          @view-state-change="updateRealityView"
+          @select-node="selectRealityNode"
           @select-edge="selectedDetail = $event.raw || $event"
         />
         <TimelineList v-if="factFlowTimeline.length" :items="factFlowTimeline" />

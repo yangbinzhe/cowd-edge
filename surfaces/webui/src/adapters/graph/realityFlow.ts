@@ -12,6 +12,8 @@ export function adaptRealityFlow(flow: Record<string, any> | null, title = ''): 
     evidenceRefs: Array.isArray(stage.evidence_refs)
       ? stage.evidence_refs.map((item: any) => String(item?.ref || item?.reference || item || '')).filter(Boolean)
       : [],
+    correlationRefs: [flow?.flow_id, stage.source_ref, stage.target_ref, stage.correlation_ref, stage.session_id].filter(Boolean).map(String),
+    href: `/reality?section=fact-flow&focus=${encodeURIComponent(String(stage.id || stage.stage_id || `stage-${index}`))}`,
     badges: [stage.decision, stage.confidence_bp != null ? `${stage.confidence_bp} bp` : ''].filter(Boolean).map(String),
     raw: stage,
   }));
@@ -47,6 +49,8 @@ export function adaptRealityFlow(flow: Record<string, any> | null, title = ''): 
     type: String(edge.kind || edge.type || 'correlates'),
     label: String(edge.kind || edge.type || 'correlates').replace(/_/g, ' '),
     status: String(edge.status || 'recorded'),
+    evidenceRefs: Array.isArray(edge.evidence_refs) ? edge.evidence_refs.map(String) : [],
+    correlationRefs: [edge.correlation_ref, edge.source_ref, edge.target_ref].filter(Boolean).map(String),
     raw: edge,
   })) : fallbackEdges;
 

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Pin, RotateCcw, X } from 'lucide-vue-next';
+import { GitCompare, Link, Pin, RotateCcw, X } from 'lucide-vue-next';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
 import StatusPill from '../workbench/StatusPill.vue';
 import RawPayload from '../workbench/RawPayload.vue';
+import { evidenceBacklinks, evidenceComparison, evidenceDisplayState, evidenceSourceRoute } from './evidenceRuntime';
 
 const props = withDefaults(defineProps<{
   refs?: string[];
@@ -18,6 +19,8 @@ const error = ref('');
 const items = ref<any[]>([]);
 const pinnedRefs = ref<string[]>([]);
 const normalizedRefs = computed(() => Array.from(new Set(props.refs.map((item) => String(item).trim()).filter(Boolean))).slice(0, 100));
+const pinnedItems = computed(() => pinnedRefs.value.map((reference) => items.value.find((item) => item.ref === reference)).filter(Boolean));
+const compareRows = computed(() => evidenceComparison(pinnedItems.value));
 
 async function resolveAll() {
   if (!normalizedRefs.value.length) {
@@ -67,10 +70,26 @@ watch(normalizedRefs, resolveAll, { immediate: true });
           <p>{{ item.evidence?.summary || item.evidence?.reason || item.error || item.ref }}</p>
           <small>{{ item.evidence?.source || item.ref }}</small>
         </div>
-        <StatusPill :status="item.status || 'unknown'" />
+        <StatusPill :status="evidenceDisplayState(item)" />
+        <RouterLink v-if="evidenceSourceRoute(item)" class="icon-action" :to="evidenceSourceRoute(item)" :aria-label="t('graph.evidence.openSource')"><Link :size="14" /></RouterLink>
         <button class="icon-action" type="button" :aria-pressed="pinnedRefs.includes(item.ref)" @click="togglePin(item.ref)"><Pin :size="14" /></button>
+        <ul v-if="evidenceBacklinks(item).length" class="evidence-backlinks">
+          <li v-for="backlink in evidenceBacklinks(item)" :key="`${backlink.kind}:${backlink.label}`">
+            <RouterLink v-if="backlink.route" :to="backlink.route">{{ backlink.kind }} · {{ backlink.label }}</RouterLink>
+            <span v-else>{{ backlink.kind }} · {{ backlink.label }}</span>
+          </li>
+        </ul>
       </article>
     </div>
+    <section v-if="pinnedItems.length >= 2" class="evidence-compare" aria-live="polite">
+      <header><GitCompare :size="15" /><strong>{{ t('graph.evidence.compare') }}</strong></header>
+      <div class="data-table-shell">
+        <table class="data-table">
+          <thead><tr><th>{{ t('graph.evidence.field') }}</th><th v-for="item in pinnedItems" :key="item.ref">{{ item.ref }}</th></tr></thead>
+          <tbody><tr v-for="row in compareRows" :key="row.field"><th>{{ row.field }}</th><td v-for="(value, index) in row.values" :key="`${row.field}:${index}`">{{ value }}</td></tr></tbody>
+        </table>
+      </div>
+    </section>
     <RawPayload v-if="subject" :title="t('graph.inspector.raw')" :data="subject" />
   </aside>
 </template>

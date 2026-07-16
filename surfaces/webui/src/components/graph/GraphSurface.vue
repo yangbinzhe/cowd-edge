@@ -17,18 +17,21 @@ const props = withDefaults(defineProps<{
   selectedNodeId?: string;
   connectionState?: string;
   loading?: boolean;
-}>(), { selectedNodeId: '', connectionState: 'ready', loading: false });
+  searchQuery?: string;
+  statusQuery?: string;
+}>(), { selectedNodeId: '', connectionState: 'ready', loading: false, searchQuery: '', statusQuery: 'all' });
 
 const emit = defineEmits<{
   selectNode: [node: GraphNodeView];
   selectEdge: [edge: GraphEdgeView];
+  viewStateChange: [state: { filter: string; status: string }];
 }>();
 
 const elk = new ELK();
 const root = ref<HTMLElement | null>(null);
 const flow = ref<any>(null);
-const search = ref('');
-const statusFilter = ref('all');
+const search = ref(props.searchQuery);
+const statusFilter = ref(props.statusQuery);
 const direction = ref<GraphDirection>('RIGHT');
 const listMode = ref(false);
 const inspectorOpen = ref(false);
@@ -157,6 +160,10 @@ function exportGraph() {
   URL.revokeObjectURL(url);
 }
 
+function emitViewState() {
+  emit('viewStateChange', { filter: search.value, status: statusFilter.value });
+}
+
 function selectNode(event: any) {
   const node = event?.node?.data?.node as GraphNodeView | undefined;
   if (node) {
@@ -205,6 +212,8 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 watch([canvasNodes, canvasEdges, direction, showList, () => props.model.revision], layout, { immediate: true, deep: true });
+watch(() => props.searchQuery, (value) => { if (value !== search.value) search.value = value; });
+watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) statusFilter.value = value || 'all'; });
 </script>
 
 <template>
@@ -223,8 +232,8 @@ watch([canvasNodes, canvasEdges, direction, showList, () => props.model.revision
     </header>
     <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
     <div class="graph-toolbar">
-      <label class="search-field"><Search :size="14" /><input v-model="search" :placeholder="t('graph.action.search')" /></label>
-      <select v-model="statusFilter" :aria-label="t('graph.action.filterStatus')">
+      <label class="search-field"><Search :size="14" /><input v-model="search" :placeholder="t('graph.action.search')" @input="emitViewState" /></label>
+      <select v-model="statusFilter" :aria-label="t('graph.action.filterStatus')" @change="emitViewState">
         <option value="all">{{ t('graph.filter.all') }}</option>
         <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
       </select>

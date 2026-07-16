@@ -21,6 +21,9 @@ export function adaptMetricLineage(result: Record<string, any> | null, title = '
       group: id === focusId ? 'focus' : 'dependency',
       summary: String(raw.description || raw.notes || raw.formula || id),
       badges: [raw.unit, raw.confidence != null ? `confidence ${raw.confidence}` : ''].filter(Boolean).map(String),
+      evidenceRefs: Array.isArray(raw.evidence_refs) ? raw.evidence_refs.map(String) : [],
+      correlationRefs: [raw.source_ref, raw.formula_version, raw.quality_gate_id].filter(Boolean).map(String),
+      href: `/reality?section=matrix&focus=${encodeURIComponent(id)}`,
       raw,
     });
   };
@@ -37,6 +40,8 @@ export function adaptMetricLineage(result: Record<string, any> | null, title = '
       type: String(dependency.dependency_type || 'depends_on'),
       label: String(dependency.dependency_type || 'depends on').replace(/_/g, ' '),
       status: 'recorded',
+      evidenceRefs: Array.isArray(dependency.evidence_refs) ? dependency.evidence_refs.map(String) : [],
+      correlationRefs: [dependency.source_ref, dependency.version_id].filter(Boolean).map(String),
       raw: dependency,
     });
   };
