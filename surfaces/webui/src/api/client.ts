@@ -713,6 +713,9 @@ export const api = {
     body: JSON.stringify({ envelope_id: envelopeId, recommendation, action }),
   }),
   resolveEvidence: (ref: string) => read(`/api/evidence/resolve?ref=${encodeURIComponent(ref)}`, {}),
+  resolveEvidenceBatch: (refs: string[], sessionId?: string) => write('/api/evidence/resolve/batch', {
+    method: 'POST', body: JSON.stringify({ refs, session_id: sessionId || undefined }),
+  }),
   memoryStatus: () => read('/api/memory/status', {}),
   memoryContextEnvelope: (sessionId = '', limit = 20) => {
     const suffix = sessionId ? `/${encodeURIComponent(sessionId)}` : '';

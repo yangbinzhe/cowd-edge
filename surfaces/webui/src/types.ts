@@ -340,6 +340,7 @@ export interface CapabilitySection {
 export interface ChartPoint {
   name: string;
   value: number;
+  series?: string;
 }
 
 export interface CapabilitySpec {
