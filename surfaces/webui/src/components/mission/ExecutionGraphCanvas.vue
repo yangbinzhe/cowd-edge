@@ -6,6 +6,7 @@ import { adaptExecutionGraph } from '../../adapters/graph/execution';
 const props = defineProps<{
   graph: Record<string, any> | null;
   selectedNodeId?: string;
+  connectionState?: string;
 }>();
 
 const emit = defineEmits<{ select: [node: Record<string, any>] }>();
@@ -17,6 +18,7 @@ const model = computed(() => adaptExecutionGraph(props.graph));
     class="execution-graph-canvas"
     :model="model"
     :selected-node-id="selectedNodeId"
+    :connection-state="connectionState"
     @select-node="emit('select', $event.raw || $event)"
   />
 </template>

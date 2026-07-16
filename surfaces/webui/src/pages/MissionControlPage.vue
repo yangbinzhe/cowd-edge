@@ -84,17 +84,17 @@ const relationRows = computed(() => {
     summary: relation.summary || '-',
   })) : [];
 });
-const workgraphProjection = computed(() => controlProjection.value?.workgraphs || mission.value?.workgraph_projection || {});
-const workgraphRows = computed(() => {
-  const rows = workgraphProjection.value?.workgraphs || workgraphProjection.value?.items || [];
+const executionGraphCatalog = computed(() => controlProjection.value?.execution_graphs || mission.value?.execution_graph_projection || {});
+const executionGraphRows = computed(() => {
+  const rows = executionGraphCatalog.value?.execution_graphs || [];
   return Array.isArray(rows) ? rows.slice(0, 12).map((row: any) => ({
-    team: row.team_id || '-',
-    graph: row.workgraph_id || row.id || '-',
-    nodes: row.node_count ?? row.quality?.node_count ?? '-',
-    edges: row.edge_count ?? row.quality?.edge_count ?? '-',
-    ready: Array.isArray(row.ready_node_ids) ? row.ready_node_ids.length : 0,
-    blocked: Array.isArray(row.blocked_node_ids) ? row.blocked_node_ids.length : 0,
-    parallelism: row.max_parallelism || '-',
+    team: row.parent_execution?.parent_execution_id || '-',
+    graph: row.graph_id || '-',
+    nodes: Array.isArray(row.nodes) ? row.nodes.length : 0,
+    edges: Array.isArray(row.edges) ? row.edges.length : 0,
+    ready: Array.isArray(row.nodes) ? row.nodes.filter((node: any) => ['ready', 'planned'].includes(String(node.status))).length : 0,
+    blocked: Array.isArray(row.nodes) ? row.nodes.filter((node: any) => ['blocked', 'failed', 'error'].includes(String(node.status))).length : 0,
+    parallelism: Array.isArray(row.nodes) ? row.nodes.filter((node: any) => String(node.status) === 'running').length : 0,
   })) : [];
 });
 const conflictProjection = computed(() => controlProjection.value?.conflicts || mission.value?.conflict_projection || conflicts.value?.conflicts || {});
@@ -263,7 +263,7 @@ async function refresh() {
     }
     if (selectedSessionId.value && !missionSessionIds.value.has(selectedSessionId.value)) selectedSessionId.value = '';
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
-    const executionId = workgraphRows.value[0]?.graph;
+    const executionId = executionGraphRows.value[0]?.graph;
     if (executionId && executionId !== '-') {
       selectedExecutionId.value = String(executionId);
       projections.acquire(selectedExecutionId.value, 'mission', 'full');
@@ -420,7 +420,7 @@ onUnmounted(() => projections.release('mission'));
       </article>
       <article class="metric-card">
         <span>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
-        <strong>{{ workgraphRows.length }}</strong>
+        <strong>{{ executionGraphRows.length }}</strong>
         <small>{{ t('page.mission.control.runtimeV2.title') }}</small>
       </article>
     </div>
@@ -429,7 +429,7 @@ onUnmounted(() => projections.release('mission'));
       <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
       <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
       <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
-      <span><strong>{{ workgraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
+      <span><strong>{{ executionGraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
       <span><strong>{{ conflictItems.length }}</strong>{{ t('page.mission.control.runtimeV2.conflicts') }}</span>
       <span><strong>{{ cleanCounters.handoffs }}</strong>{{ t('unit.relations') }}</span>
     </div>
@@ -467,6 +467,7 @@ onUnmounted(() => projections.release('mission'));
         <ExecutionGraphCanvas
           :graph="executionGraph"
           :selected-node-id="String(selectedExecutionNode?.node_id || '')"
+          :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
           @select="selectedExecutionNode = $event"
         />
         <div v-if="executionCommandRows.length" class="button-row" :aria-label="t('runtime.execution.commandGroup')">
@@ -590,16 +591,16 @@ onUnmounted(() => projections.release('mission'));
           <StatusPill :status="missionHealth.status || (conflictItems.length ? 'degraded' : 'ready')" />
         </header>
         <div class="button-row">
-          <span class="mini-chip"><Workflow :size="14" />{{ t('page.mission.control.runtimeV2.workgraph') }} {{ workgraphRows.length }}</span>
+          <span class="mini-chip"><Workflow :size="14" />{{ t('page.mission.control.runtimeV2.workgraph') }} {{ executionGraphRows.length }}</span>
           <span class="mini-chip"><AlertTriangle :size="14" />{{ t('page.mission.control.runtimeV2.conflicts') }} {{ conflictItems.length }}</span>
           <span class="mini-chip"><Database :size="14" />{{ t('page.mission.control.runtimeV2.evidence') }} {{ missionEvidenceRows.length }}</span>
         </div>
         <DataTable
-          v-if="workgraphRows.length"
+          v-if="executionGraphRows.length"
           searchable
           copyable
           row-key="graph"
-          :rows="workgraphRows"
+          :rows="executionGraphRows"
           :columns="['team', 'graph', 'nodes', 'edges', 'ready', 'blocked', 'parallelism']"
         />
         <DataTable
@@ -626,7 +627,7 @@ onUnmounted(() => projections.release('mission'));
           :rows="executionNodeRows"
           :columns="['id', 'kind', 'status', 'executor', 'evidence']"
         />
-        <p v-if="!workgraphRows.length && !conflictItems.length && !actionContractRows.length" class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
+        <p v-if="!executionGraphRows.length && !conflictItems.length && !actionContractRows.length" class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
       </section>
     </div>
 

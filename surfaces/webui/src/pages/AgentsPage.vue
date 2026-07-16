@@ -10,6 +10,9 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
+import { adaptTeamTopology } from '../adapters/graph/teamTopology';
 import { displayStatus } from '../i18n/domain/status';
 import { useAppStore } from '../stores/app';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
@@ -137,6 +140,7 @@ const managedTargetOptions = computed(() => {
   return [...agentOptions, ...teamOptions];
 });
 const selectedTeamTemplate = computed(() => teamTemplateItems.value.find((template: any) => template?.revision_ref?.template_id === selectedTemplateId.value) || teamTemplateItems.value[0] || null);
+const teamTopologyModel = computed(() => adaptTeamTopology(selectedTeamTemplate.value, teamWorkingState.value));
 const selfModelRows = computed(() => (Array.isArray(selfModels.value?.items) ? selfModels.value.items : []).map((item: any) => ({
   definition: `${item.definition_id || '-'}@${item.definition_revision ?? '-'}`,
   environment: item.environment_fingerprint || '-',
@@ -165,11 +169,11 @@ const agentsWorkflow = computed(() => [
 ]);
 const agentEvidence = computed(() => [
   ...graphNodes.value.slice(0, 4).map((node: any) => ({
-    id: node.id,
-    kind: node.role || 'agent graph node',
+    id: node.node_id,
+    kind: node.kind || 'execution node',
     status: node.status || 'ready',
-    summary: node.objective || node.title || node.id,
-    source: node.assigned_agent || 'agent.graph',
+    summary: node.result_ref || node.node_id,
+    source: node.executor_kind || 'runtime.execution',
   })),
   ...runItems.value.slice(0, 3).map((run: any) => ({
     id: run.graph_id || run.run_id || run.id,
@@ -711,6 +715,12 @@ onUnmounted(() => projections.release('agents'));
               :columns="['kind', 'node_id', 'summary', 'confidence_milli', 'refs']"
               @row-click="selectedDetail = $event"
             />
+            <GraphSurface
+              v-if="teamTopologyModel.nodes.length"
+              :model="teamTopologyModel"
+              :selected-node-id="String(selectedDetail?.id || selectedDetail?.role_id || '')"
+              @select-node="selectedDetail = $event.raw || $event"
+            />
             <RequestReceipt :receipt="teamResult || teamWorkingState" :title="t('page.agents.teamTemplates.receipt')" />
           </main>
         </div>
@@ -953,7 +963,7 @@ onUnmounted(() => projections.release('agents'));
       <section class="management-panel agents-panel wide" data-section="graph">
         <header>
           <h2>{{ t('page.agents.page.text.74c44a4258') }}</h2>
-          <span><StatusPill :status="graph.status || 'offline'" /></span>
+          <span><StatusPill :status="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'offline'" /></span>
         </header>
         <div class="button-row">
           <button class="ghost-action" type="button" :disabled="!selectedTask" @click="loadGraph">
@@ -961,14 +971,13 @@ onUnmounted(() => projections.release('agents'));
             {{ t('template.pages.agentspage.b991bd4651') }}
           </button>
         </div>
-        <div class="agent-graph-lanes">
-          <article v-for="node in graphNodes" :key="node.id" role="button" tabindex="0" @click="selectedDetail = node" @keydown.enter.prevent="selectedDetail = node">
-            <strong>{{ node.title }}</strong>
-            <StatusPill :status="node.status" />
-            <p>{{ node.objective }}</p>
-            <small>{{ node.role }} · {{ node.assigned_agent || 'unassigned' }} · depends {{ (node.depends_on || []).join(', ') || '-' }}</small>
-          </article>
-        </div>
+        <ExecutionGraphCanvas
+          v-if="graphNodes.length"
+          :graph="graph"
+          :selected-node-id="String(selectedDetail?.node_id || '')"
+          :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
+          @select="selectedDetail = $event"
+        />
         <EmptyState v-if="!graphNodes.length" :title="t('page.agents.page.title.731f196b87')" :detail="t('page.agents.page.detail.5722274f98')" />
         <DataTable
           v-if="executionNodeRows.length"

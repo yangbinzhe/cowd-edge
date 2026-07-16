@@ -385,7 +385,7 @@ onMounted(refresh);
           <h2>{{ t('page.runtime.page.text.f3558aafc0') }}</h2>
           <StatusPill :status="timeline.__state || 'ready'" />
         </header>
-        <TimelineList v-if="timelineListItems.length" :items="timelineListItems" />
+        <TimelineList v-if="timelineListItems.length" :items="timelineListItems" live @select="selectedDetail = $event" />
         <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.16b97cb353')" :detail="t('page.runtime.page.detail.059281d68e')" />
       </section>
