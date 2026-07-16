@@ -10,8 +10,10 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
 import { useAppStore } from '../stores/app';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
+import { adaptContextFanout } from '../adapters/graph/contextFanout';
 
 const store = useAppStore();
 const projections = useProjectionRegistryStore();
@@ -30,7 +32,7 @@ const recommendationText = ref('Context recommendation acknowledged from WebUI.'
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const sessionId = computed(() => store.activeSessionId || 'api-context');
 const contextItems = computed(() => {
-  const direct = envelope.value?.envelope?.items || envelope.value?.items || envelope.value?.context?.items;
+  const direct = envelope.value?.envelope?.selected || envelope.value?.selected || envelope.value?.envelope?.items || envelope.value?.items || envelope.value?.context?.items;
   return Array.isArray(direct) ? direct : [];
 });
 const itemRows = computed(() => contextItems.value.slice(0, 16).map((item: any) => ({
@@ -60,6 +62,35 @@ const recommendationRows = computed(() => {
 });
 const envelopeId = computed(() => envelope.value?.envelope_id || envelope.value?.envelope?.id || historyRows.value[0]?.envelope || '');
 const contextStatus = computed(() => envelope.value?.__state && envelope.value.__state !== 'ready' ? 'blocked' : itemRows.value.length ? 'ready' : 'idle');
+const contextGraph = computed(() => adaptContextFanout(envelope.value, t('page.context.page.text.00bcbce604')));
+const contextUsage = computed(() => {
+  const budget = envelope.value?.budget || envelope.value?.envelope?.budget || {};
+  const direct = Number(budget.used_ratio ?? envelope.value?.used_ratio);
+  if (Number.isFinite(direct)) return Math.max(0, Math.min(100, direct <= 1 ? direct * 100 : direct));
+  const used = Number(budget.used ?? budget.used_tokens ?? envelope.value?.used_tokens ?? 0);
+  const total = Number(budget.total ?? budget.token_budget ?? envelope.value?.token_budget ?? 0);
+  return total > 0 ? Math.max(0, Math.min(100, (used / total) * 100)) : null;
+});
+const contextUsageLabel = computed(() => contextUsage.value == null ? t('status.unknown') : `${Math.round(contextUsage.value)}%`);
+const historyDiffRows = computed(() => {
+  const envelopes = Array.isArray(history.value?.envelopes) ? history.value.envelopes : [];
+  if (envelopes.length < 2) return [];
+  const selectedIds = (event: any) => new Set(
+    (Array.isArray(event?.envelope?.selected) ? event.envelope.selected : [])
+      .map((item: any) => String(item.id || item.ref || ''))
+      .filter(Boolean),
+  );
+  const current = selectedIds(envelopes[0]);
+  const previous = selectedIds(envelopes[1]);
+  const added = [...current].filter((id) => !previous.has(id));
+  const removed = [...previous].filter((id) => !current.has(id));
+  const retained = [...current].filter((id) => previous.has(id));
+  return [
+    { change: t('context.history.added'), count: added.length, items: added.join(', ') || '-' },
+    { change: t('context.history.removed'), count: removed.length, items: removed.join(', ') || '-' },
+    { change: t('context.history.retained'), count: retained.length, items: retained.join(', ') || '-' },
+  ];
+});
 const contextBar = computed(() => [
   { label: t('script.pages.contextpage.label.f7f1997c6c'), value: sessionId.value },
   { label: t('script.pages.contextpage.label.ff4fc0276e'), value: profile.value },
@@ -68,7 +99,7 @@ const contextBar = computed(() => [
 ]);
 const contextWorkflow = computed(() => [
   { id: 'packet', label: t('script.pages.contextpage.label.83c6d723cb'), status: contextStatus.value, count: itemRows.value.length },
-  { id: 'budget', label: t('script.pages.contextpage.label.7aeba4cd15'), status: envelope.value?.budget ? 'ready' : 'idle', description: envelope.value?.budget?.total || t('store.app.string.18eb606335') },
+  { id: 'budget', label: t('script.pages.contextpage.label.7aeba4cd15'), status: (envelope.value?.budget || envelope.value?.envelope?.budget) ? 'ready' : 'idle', description: envelope.value?.budget?.total_tokens || envelope.value?.envelope?.budget?.total_tokens || t('store.app.string.18eb606335') },
   { id: 'evidence', label: t('script.pages.contextpage.label.7ea014de7b'), status: evidence.value?.__state && evidence.value.__state !== 'ready' ? 'blocked' : evidence.value?.kind ? 'ready' : 'idle', description: evidenceRef.value },
   { id: 'history', label: t('script.pages.contextpage.label.90ccd64974'), status: historyRows.value.length ? 'ready' : 'idle', count: historyRows.value.length },
 ]);
@@ -163,7 +194,10 @@ onUnmounted(() => projections.release('context'));
     <section class="metric-row" data-section="budget">
       <article class="metric-card">
         <span>{{ t('page.context.page.text.2109fa7d46') }}</span>
-        <strong>{{ itemRows.length }}</strong>
+        <div class="context-budget-value">
+          <span class="context-ring" :style="{ '--context-progress': `${contextUsage ?? 0}%` }" :aria-label="contextUsageLabel"><i>{{ contextUsage == null ? '—' : contextUsageLabel }}</i></span>
+          <strong>{{ itemRows.length }}</strong>
+        </div>
         <small>{{ envelope.source || envelope.mode || t('page.context.page.inline.a7b40b78ae') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
@@ -202,9 +236,17 @@ onUnmounted(() => projections.release('context'));
           <Search :size="15" />
           {{ t('template.pages.contextpage.2e16e8d2e9') }}
         </button>
+        <GraphSurface
+          v-if="contextGraph.nodes.length"
+          :model="contextGraph"
+          :loading="loading"
+          :connection-state="envelope.__state || contextStatus"
+          @select-node="selectedDetail = $event.raw || $event"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
         <DataTable v-if="itemRows.length" searchable copyable :rows="itemRows" :columns="['role', 'source', 'authority', 'score', 'text']" @row-click="selectedDetail = $event" />
         <DataTable v-if="projectionContextRows.length" searchable copyable row-key="id" :rows="projectionContextRows" :columns="['id', 'kind', 'status', 'summary', 'evidence']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else :title="t('page.context.page.title.3e00f7b727')" :detail="t('page.context.page.detail.0f6e3d1ebe')" />
+        <EmptyState v-if="!itemRows.length && !projectionContextRows.length" :title="t('page.context.page.title.3e00f7b727')" :detail="t('page.context.page.detail.0f6e3d1ebe')" />
         <EvidenceTrace :items="contextEvidence" :title="t('page.context.page.title.97f9320e36')" />
       </section>
 
@@ -247,6 +289,7 @@ onUnmounted(() => projections.release('context'));
           <span>{{ historyRows.length }} history rows</span>
         </header>
         <DataTable v-if="historyRows.length" searchable copyable :rows="historyRows" :columns="['envelope', 'kind', 'created', 'summary']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="historyDiffRows.length" searchable copyable :rows="historyDiffRows" :columns="['change', 'count', 'items']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.context.page.title.fae4d2126c')" :detail="t('page.context.page.detail.56aba34430')" />
         <DetailDrawer :title="t('page.context.page.title.66cb55e17d')" :row="selectedDetail" @close="selectedDetail = null" />
         <ObjectInspectorDrawer :title="t('page.context.page.title.b8176568a4')" :data="executionProjection || envelope" />

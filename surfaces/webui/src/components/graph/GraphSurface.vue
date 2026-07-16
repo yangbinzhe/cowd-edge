@@ -31,6 +31,7 @@ const statusFilter = ref('all');
 const direction = ref<GraphDirection>('RIGHT');
 const listMode = ref(false);
 const inspectorOpen = ref(false);
+const internalSelectedNodeId = ref('');
 const laidOutNodes = ref<any[]>([]);
 let layoutEpoch = 0;
 
@@ -45,7 +46,7 @@ const visibleNodes = computed(() => {
 });
 const visibleNodeIds = computed(() => new Set(visibleNodes.value.map((node) => node.id)));
 const visibleEdges = computed(() => props.model.edges.filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target)));
-const selectedNode = computed(() => props.model.nodes.find((node) => node.id === props.selectedNodeId) || null);
+const selectedNode = computed(() => props.model.nodes.find((node) => node.id === (props.selectedNodeId || internalSelectedNodeId.value)) || null);
 const selectedEvidenceRefs = computed(() => selectedNode.value?.evidenceRefs || []);
 const listRows = computed(() => visibleNodes.value.map((node) => ({
   id: node.id,
@@ -90,7 +91,7 @@ async function layout() {
       id: node.id,
       position: { x: position.x || 0, y: position.y || 0 },
       data: { label: node.label, node, status: node.status },
-      class: `graph-node graph-node-${node.type} status-${node.status}${props.selectedNodeId === node.id ? ' selected' : ''}`,
+      class: `graph-node graph-node-${node.type} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}`,
       draggable: false,
       connectable: false,
     };
@@ -102,6 +103,7 @@ async function layout() {
 function selectNode(event: any) {
   const node = event?.node?.data?.node as GraphNodeView | undefined;
   if (node) {
+    internalSelectedNodeId.value = node.id;
     inspectorOpen.value = true;
     emit('selectNode', node);
   }
@@ -115,6 +117,7 @@ function selectEdge(event: any) {
 function selectListRow(row: Record<string, unknown>) {
   const node = props.model.nodes.find((item) => item.id === row.id);
   if (node) {
+    internalSelectedNodeId.value = node.id;
     inspectorOpen.value = true;
     emit('selectNode', node);
   }
@@ -132,7 +135,7 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key === '0') flow.value?.fitView?.({ padding: 0.2 });
 }
 
-watch([visibleNodes, visibleEdges, direction, () => props.model.revision], layout, { immediate: true, deep: true });
+watch([visibleNodes, visibleEdges, direction, internalSelectedNodeId, () => props.model.revision], layout, { immediate: true, deep: true });
 </script>
 
 <template>
@@ -141,6 +144,7 @@ watch([visibleNodes, visibleEdges, direction, () => props.model.revision], layou
       <div>
         <h3>{{ model.title || t('graph.title.default') }}</h3>
         <small>{{ t('graph.summary', { nodes: visibleNodes.length, edges: visibleEdges.length }) }}</small>
+        <small v-if="model.truncated" class="graph-truncated">{{ t('graph.state.truncated') }}</small>
       </div>
       <StatusPill :status="connectionState || model.status || 'ready'" />
     </header>

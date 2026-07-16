@@ -11,9 +11,11 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptKnowledgeGraph } from '../adapters/graph/knowledge';
 
 const route = useRoute();
 const router = useRouter();
@@ -28,6 +30,10 @@ const layerEntries = ref<any>({});
 const selectedEntryId = ref('');
 const query = ref('');
 const symbolQuery = ref('');
+const graphFocus = ref(String(route.query.focus || ''));
+const graphFilter = ref(String(route.query.filter || ''));
+const graphDepth = ref(Math.max(1, Math.min(6, Number(route.query.depth || 2))));
+const graphCursor = ref(Math.max(0, Number(route.query.cursor || 0)));
 const searchResult = ref<any>({});
 const recallExplain = ref<any>({});
 const packet = ref<any>({});
@@ -87,6 +93,13 @@ const symbolRows = computed(() => {
     summary: item.summary || item.reason || item.path || '-',
   }));
 });
+const knowledgeGraph = computed(() => adaptKnowledgeGraph(
+  entities.value,
+  triples.value,
+  symbolLinks.value,
+  clusters.value,
+  t('page.memory.page.text.8af20392f9'),
+));
 const structuredRows = computed(() => {
   const facts = Array.isArray(structured.value?.facts?.facts) ? structured.value.facts.facts : Array.isArray(structured.value?.facts?.items) ? structured.value.facts.items : [];
   const sources = Array.isArray(structured.value?.sources?.sources) ? structured.value.sources.sources : [];
@@ -211,8 +224,7 @@ async function refresh() {
       nextLayers,
       nextLinks,
       nextClusters,
-      nextEntities,
-      nextTriples,
+      nextGraph,
       nextMaintenance,
       nextPerformance,
       nextRuntime,
@@ -230,9 +242,8 @@ async function refresh() {
       api.memoryStats(),
       api.memoryLayers(),
       api.memoryLinks(),
-      api.memoryClusters(),
-      api.memoryEntities(),
-      api.memoryTriples(),
+      api.memoryClusters(24, graphFocus.value, graphFilter.value, 0, graphDepth.value),
+      api.memoryGraph(graphFocus.value, graphDepth.value, graphFilter.value, 80, graphCursor.value),
       api.memoryMaintenance(),
       api.memoryPerformance(),
       api.memoryRuntime(),
@@ -251,8 +262,8 @@ async function refresh() {
     layers.value = nextLayers;
     links.value = nextLinks;
     clusters.value = nextClusters;
-    entities.value = nextEntities;
-    triples.value = nextTriples;
+    entities.value = nextGraph;
+    triples.value = nextGraph;
     maintenance.value = nextMaintenance;
     performance.value = nextPerformance;
     runtime.value = nextRuntime;
@@ -269,6 +280,36 @@ async function refresh() {
   } finally {
     loading.value = false;
   }
+}
+
+async function loadKnowledgeGraph(cursor = 0) {
+  graphCursor.value = Math.max(0, cursor);
+  const [nextGraph, nextClusters] = await Promise.all([
+    api.memoryGraph(graphFocus.value, graphDepth.value, graphFilter.value, 80, graphCursor.value),
+    api.memoryClusters(24, graphFocus.value, graphFilter.value, 0, graphDepth.value),
+  ]);
+  entities.value = nextGraph;
+  triples.value = nextGraph;
+  clusters.value = nextClusters;
+  await router.replace({
+    query: {
+      ...route.query,
+      section: 'graph',
+      focus: graphFocus.value || undefined,
+      filter: graphFilter.value || undefined,
+      depth: String(graphDepth.value),
+      cursor: graphCursor.value ? String(graphCursor.value) : undefined,
+    },
+  });
+}
+
+async function selectKnowledgeNode(node: any) {
+  selectedDetail.value = node?.raw || node;
+  if (!['entity', 'inferred-entity'].includes(String(node?.group || ''))) return;
+  const id = String(node?.raw?.id || node?.raw?.entity_id || node?.id || '');
+  if (!id) return;
+  graphFocus.value = id;
+  await loadKnowledgeGraph(0);
 }
 
 async function loadLayer() {
@@ -583,6 +624,35 @@ onMounted(refresh);
             <h2>{{ t('page.memory.page.text.8af20392f9') }}</h2>
             <span>{{ t('common.shownCount', { count: entityRows.length, unit: t('unit.entities') }) }}</span>
           </header>
+          <div class="filter-row">
+            <label class="field-line">
+              {{ t('memory.graph.focus') }}
+              <input v-model="graphFocus" type="search" @keydown.enter.prevent="loadKnowledgeGraph(0)" />
+            </label>
+            <label class="field-line">
+              {{ t('memory.graph.filter') }}
+              <input v-model="graphFilter" type="search" @keydown.enter.prevent="loadKnowledgeGraph(0)" />
+            </label>
+            <label class="field-line">
+              {{ t('memory.graph.depth') }}
+              <select v-model.number="graphDepth" @change="loadKnowledgeGraph(0)">
+                <option v-for="depth in [1, 2, 3, 4, 5, 6]" :key="depth" :value="depth">{{ depth }}</option>
+              </select>
+            </label>
+            <button class="ghost-action" type="button" @click="loadKnowledgeGraph(0)">{{ t('graph.action.search') }}</button>
+          </div>
+          <GraphSurface
+            :model="knowledgeGraph"
+            :loading="loading"
+            :connection-state="entities.enabled === false ? 'offline' : 'ready'"
+            @select-node="selectKnowledgeNode"
+            @select-edge="selectedDetail = $event.raw || $event"
+          />
+          <div class="button-row">
+            <button class="ghost-action" type="button" :disabled="graphCursor === 0" @click="loadKnowledgeGraph(Math.max(0, graphCursor - 80))">{{ t('memory.graph.previous') }}</button>
+            <button class="ghost-action" type="button" :disabled="entities.next_cursor == null" @click="loadKnowledgeGraph(Number(entities.next_cursor))">{{ t('memory.graph.next') }}</button>
+            <span v-if="entities.truncated">{{ t('memory.graph.truncated') }}</span>
+          </div>
           <div class="memory-tabs">
             <article>
               <h3>{{ t('page.memory.page.text.4629e42c4f') }}</h3>

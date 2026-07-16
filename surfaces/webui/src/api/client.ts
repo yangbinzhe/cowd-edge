@@ -730,10 +730,21 @@ export const api = {
   memoryLayer: (layer: string) => read(`/api/memory/${encodeURIComponent(layer)}`, { entries: [] }),
   memoryRuntime: () => read('/api/memory/runtime', {}),
   memoryLifecycle: (id: string) => read(`/api/memory/lifecycle/${encodeURIComponent(id)}`, {}),
-  memoryClusters: (limit = 24) => read(`/api/memory/clusters?limit=${limit}`, { clusters: [] }),
+  memoryClusters: (limit = 24, focus = '', filter = '', cursor = 0, depth = 1) => {
+    const query = new URLSearchParams({ limit: String(limit), cursor: String(cursor), depth: String(depth) });
+    if (focus.trim()) query.set('focus', focus.trim());
+    if (filter.trim()) query.set('filter', filter.trim());
+    return read(`/api/memory/clusters?${query.toString()}`, { clusters: [], truncated: false, next_cursor: null });
+  },
   memoryLinks: () => read('/api/memory/links', { links: [] }),
   memoryEntities: () => read('/api/memory/entities', { entities: [] }),
   memoryTriples: () => read('/api/memory/triples', { triples: [] }),
+  memoryGraph: (focus = '', depth = 2, filter = '', limit = 80, cursor = 0) => {
+    const query = new URLSearchParams({ depth: String(depth), limit: String(limit), cursor: String(cursor) });
+    if (focus.trim()) query.set('focus', focus.trim());
+    if (filter.trim()) query.set('filter', filter.trim());
+    return read(`/api/memory/graph?${query.toString()}`, { entities: [], triples: [], truncated: false, next_cursor: null });
+  },
   memoryPerformance: () => read('/api/memory/performance', {}),
   memoryMaintenance: (status = '', kind = '', limit = 100) => {
     const query = new URLSearchParams();
@@ -745,7 +756,7 @@ export const api = {
   memorySearch: (q: string) => read(`/api/memory/search?q=${encodeURIComponent(q)}`, {}),
   memoryRecallExplain: (q: string, limit = 10) => read(`/api/memory/recall/explain?q=${encodeURIComponent(q)}&limit=${limit}`, { results: [] }),
   memoryPacket: (q: string, maxItems = 12, maxTokens = 2000) => read(`/api/memory/packet?q=${encodeURIComponent(q)}&max_items=${maxItems}&max_tokens=${maxTokens}`, {}),
-  memorySymbolLinks: (symbol: string) => read(`/api/memory/symbol-links?q=${encodeURIComponent(symbol)}`, { entries: [] }),
+  memorySymbolLinks: (symbol: string, limit = 80, cursor = 0) => read(`/api/memory/symbol-links?q=${encodeURIComponent(symbol)}&limit=${limit}&cursor=${cursor}`, { entries: [], truncated: false, next_cursor: null }),
   createMemorySymbolLink: (body: Record<string, unknown>) => write('/api/memory/symbol-links', {
     method: 'POST',
     body: JSON.stringify(body),

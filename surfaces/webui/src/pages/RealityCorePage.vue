@@ -10,9 +10,11 @@ import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import TimelineList from '../components/workbench/TimelineList.vue';
+import GraphSurface from '../components/graph/GraphSurface.vue';
 import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptRealityFlow } from '../adapters/graph/realityFlow';
 
 const store = useAppStore();
 const route = useRoute();
@@ -148,6 +150,7 @@ const factFlowRows = computed(() => {
     summary: stage.summary || stage.reason || '-',
   }));
 });
+const factFlowGraph = computed(() => adaptRealityFlow(flow.value, t('page.reality.core.page.text.608ba31424')));
 const promotionRows = computed(() => {
   const rows = promotions.value?.promotions || flow.value?.promotions || [];
   return (Array.isArray(rows) ? rows : []).slice(0, 80).map((promotion: any) => ({
@@ -440,6 +443,13 @@ onMounted(() => {
           <h2>{{ t('page.reality.core.page.text.608ba31424') }}</h2>
           <span>{{ flow.source || 'growth.promotions' }}</span>
         </header>
+        <GraphSurface
+          :model="factFlowGraph"
+          :loading="loading"
+          :connection-state="flow.__state || flow.status || 'ready'"
+          @select-node="selectedDetail = $event.raw || $event"
+          @select-edge="selectedDetail = $event.raw || $event"
+        />
         <TimelineList v-if="factFlowTimeline.length" :items="factFlowTimeline" />
         <DataTable v-if="factFlowRows.length" :rows="factFlowRows" :columns="['kind', 'status', 'decision', 'target', 'confidence', 'summary']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.reality.core.page.title.615c073377')" :detail="t('page.reality.core.page.detail.2d3cb4ec7e')" />

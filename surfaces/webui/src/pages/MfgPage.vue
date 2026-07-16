@@ -11,8 +11,11 @@ import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import mfgWriteContracts from '../data/mfgWriteContracts.json';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptEntityImpact } from '../adapters/graph/entityImpact';
+import { adaptMetricLineage } from '../adapters/graph/metricLineage';
 
 const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue'));
+const GraphSurface = defineAsyncComponent(() => import('../components/graph/GraphSurface.vue'));
 const store = useAppStore();
 const loading = ref(false);
 const error = ref('');
@@ -76,6 +79,8 @@ const contractSummary = computed(() => ({
   domains: Array.from(new Set((mfgWriteContracts as any[]).map((contract) => displayContractDomain(contract.domain)))).join('、'),
   governed: (mfgWriteContracts as any[]).filter((contract) => Boolean(contract.live_policy)).length,
 }));
+const entityImpactGraph = computed(() => adaptEntityImpact(entityResult.value, t('page.mfg.page.text.e7fdeee24b')));
+const metricLineageGraph = computed(() => adaptMetricLineage(metricResult.value, t('page.mfg.page.text.ca57911109')));
 
 const contractDomainKeys: Record<string, string> = {
   'Data Plane': 'mfg.contract.domain.dataPlane',
@@ -442,6 +447,10 @@ async function inspectEntity() {
   entityResult.value = { entity, relations, impact };
 }
 
+function selectEntityGraphNode(node: any) {
+  selectedEntityId.value = String(node?.raw?.entity_id || node?.id || selectedEntityId.value);
+}
+
 async function resolveEntitySourceKey(payload: Record<string, unknown> = entityGovernedPayload()) {
   const sourceSystem = sourcePackIdFor(payload);
   const sourceKey = requiredValue(payload.source_key || payload.entity_id || selectedEntityId.value, t('template.pages.mfgpage.acf9148cce'));
@@ -469,6 +478,10 @@ async function inspectMetric() {
     api.mfgMetricLineage(selectedMetricId.value),
   ]);
   metricResult.value = { detail, lineage };
+}
+
+function selectMetricGraphNode(node: any) {
+  selectedMetricId.value = String(node?.raw?.metric_id || node?.id || selectedMetricId.value);
 }
 
 async function materializeMetricSnapshot() {
@@ -899,6 +912,11 @@ onMounted(refresh);
         </div>
         <button class="ghost-action mfg-governed-action" data-mfg-risk="mfgRelationUpsert" type="button" :disabled="!selectedEntityId || !relationTargetId || !relationType" @click="upsertRelation">{{ t('page.mfg.page.text.e91fcaef8f') }}</button>
         <DataTable v-if="entities.length" searchable copyable :rows="entities.slice(0, 8)" :columns="['entity_id', 'entity_type', 'canonical_key', 'display_name']" row-key="entity_id" @row-click="selectedEntityId = $event.entity_id || ''" />
+        <GraphSurface
+          v-if="entityImpactGraph.nodes.length"
+          :model="entityImpactGraph"
+          @select-node="selectEntityGraphNode"
+        />
         <RequestReceipt :receipt="entityResult" :title="t('page.mfg.page.title.d69adeadb8')" />
         <GovernedActionPanel
           :contract="contract('entity-upsert')"
@@ -942,6 +960,11 @@ onMounted(refresh);
           <button class="ghost-action mfg-governed-action" data-mfg-risk="mfgComputeJobRun" type="button" :disabled="!computeJobId" @click="runComputeJob">{{ t('page.mfg.page.text.d67e6249c5') }}</button>
           <button class="ghost-action" type="button" @click="recomputeMetrics">{{ t('page.mfg.page.text.891d6b15bd') }}</button>
         </div>
+        <GraphSurface
+          v-if="metricLineageGraph.nodes.length"
+          :model="metricLineageGraph"
+          @select-node="selectMetricGraphNode"
+        />
         <RequestReceipt :receipt="metricResult" :title="t('page.mfg.page.title.0d0bf08469')" />
         <GovernedActionPanel
           :contract="contract('metric-compute-run')"
