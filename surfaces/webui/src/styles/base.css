@@ -8,9 +8,9 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 
 .app-shell { position: relative; display: grid; grid-template-columns: 56px var(--session-sidebar-width, 280px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; min-width: 0; overflow: hidden; background: var(--bg); }
+.app-shell[data-shell="chat-clean"] { grid-template-columns: 56px var(--session-sidebar-width, 280px) minmax(0, 1fr); }
 .app-shell[data-shell="chat-panorama"],
 .app-shell[data-companion="open"] { grid-template-columns: 56px var(--session-sidebar-width, 280px) minmax(0, 1fr) var(--companion-width, 384px); }
-.app-shell[data-shell="chat-clean"] { grid-template-columns: 56px var(--session-sidebar-width, 280px) minmax(0, 1fr); }
 .app-shell[data-shell="settings"] { grid-template-columns: 56px minmax(0, 1fr); }
 .rail { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 8px; background: var(--rail); border-right: 1px solid var(--border); }
 .rail-button { width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-muted); }
@@ -839,6 +839,10 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .workspace-tree-main { min-height: 38px; }
   .workspace-inline-action { grid-template-columns: minmax(0, 1fr); }
   .workspace-context-menu button { min-height: 44px; }
+}
+
+@media (max-width: 420px) {
+  .composer { max-height: calc(100dvh - 65px); overflow-y: auto; overscroll-behavior: contain; }
 }
 
 html[data-locale="zh-CN"] .page-header p,

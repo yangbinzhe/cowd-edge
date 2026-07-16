@@ -54,6 +54,7 @@ const requiredSource = [
   ['frontend', 'surfaces/webui/src/components/mfg/MfgCockpitWorkspace.vue', 'beginDirectManipulation'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgCockpitWorkspace.vue', 'saveAsCopy'],
   ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'refreshWidget'],
+  ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'cancelWidgetRefresh'],
   ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'activeProjectionFilters'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgFocusWorkspace.vue', 'conditionThreshold'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgFocusWorkspace.vue', 'conditionWindowMinutes'],
@@ -67,6 +68,8 @@ const requiredSource = [
   ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'openIncidentFromReality'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'qualityDecision.required_actions'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'api.mfgReports'],
+  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'reportDeliveryState.dead_lettered'],
+  ['frontend', 'surfaces/webui/src/pages/MfgPage.vue', 'overflow: auto'],
   ['frontend', 'surfaces/webui/src/adapters/graph/mfgDecisionTrace.ts', 'adaptMfgDecisionTrace'],
   ['frontend', 'surfaces/webui/src/components/workbench/DataTable.vue', 'pagedRows'],
   ['frontend', 'surfaces/webui/src/api/client.ts', '/widgets/${encodeURIComponent(instanceId)}/projection'],
@@ -74,6 +77,8 @@ const requiredSource = [
   ['backend', 'crates/gateway/src/api_routes/mfg_routes.rs', '/api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection'],
   ['backend', 'crates/gateway/src/api_routes/mfg_routes/cockpit.rs', 'mfg_revision_conflict'],
   ['backend', 'crates/app-mfg/src/cockpit.rs', 'mfg.cockpit.filters.widget_overrides.v1'],
+  ['backend', 'crates/app-mfg/src/cockpit.rs', 'retry_attempt_count'],
+  ['backend', 'crates/app-mfg/src/cockpit.rs', 'delivery_dead_lettered'],
   ['backend', 'crates/app-mfg/src/repository.rs', 'effective_cockpit_profile'],
   ['backend', 'crates/app-mfg/src/repository.rs', 'attention_matches_alert_condition'],
   ['backend', 'crates/app-mfg/src/repository.rs', 'window_minutes'],
@@ -147,8 +152,11 @@ if (final) {
           && candidate.started_at
           && candidate.finished_at
           && candidate.data_source
+          && Array.isArray(candidate.checks)
+          && candidate.checks.length
           && Array.isArray(candidate.artifacts)
-          && candidate.artifacts.length);
+          && candidate.artifacts.length
+          && candidate.artifacts.every((artifact) => fs.existsSync(artifact)));
         if (!result) failures.push(`${entry.id} lacks a passed ${entry.min_evidence} result with matching provenance and artifacts`);
         else accepted.push({ id: entry.id, level: result.level, artifacts: result.artifacts });
       }

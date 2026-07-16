@@ -142,6 +142,7 @@ function compactTime(session: SessionSummary) {
 
 export const useAppStore = defineStore('app', () => {
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
+  let bootPromise: Promise<void> | null = null;
   const booted = ref(false);
   const health = ref<any>(null);
   const settings = ref<any>(null);
@@ -328,65 +329,74 @@ export const useAppStore = defineStore('app', () => {
     return activitySummary(turn);
   }
 
-  async function boot() {
-    if (booted.value) return;
-    busy.value = true;
-    const [
-      manifest,
-      sessionData,
-      config,
-      runtime,
-      providerData,
-      reloadStatus,
-      profileData,
-      commandData,
-      workspace,
-      approvals,
-      capabilityContract,
-      openApi,
-      openAiTools,
-    ] = await Promise.all([
-      api.health(),
-      api.sessions(),
-      api.settings(),
-      api.runtimeControlPlane(),
-      api.providers(),
-      api.configReloadStatus(),
-      api.profiles(),
-      api.commands(),
-      api.workspace(),
-      api.approvalConfig(),
-      api.gatewayCapabilityContract(),
-      api.gatewayOpenApi(),
-      api.gatewayOpenAiTools(),
-    ]);
-    health.value = manifest;
-    settings.value = config;
-    controlPlane.value = runtime;
-    providers.value = providerData;
-    configReloadStatus.value = reloadStatus;
-    profiles.value = profileData.profiles || [];
-    commands.value = commandData.commands || [];
-    approvalConfig.value = approvals;
-    gatewayCapabilityContract.value = capabilityContract;
-    gatewayOpenApi.value = openApi;
-    gatewayOpenAiTools.value = openAiTools;
-    gatewayContractError.value = [capabilityContract.__error, openApi.__error, openAiTools.__error].filter(Boolean).join(' · ');
-    const reportedModel = runtime.configured_model || config.model || '';
-    selectedModel.value = reportedModel && reportedModel !== 'unknown' ? reportedModel : selectedModel.value;
-    selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
-    sessions.value = sessionData.sessions;
-    sessionOffset.value = sessions.value.length;
-    sessionHasMore.value = sessions.value.length >= sessionPageLimit.value;
-    if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
-    workspaceRoot.value = workspace.workspace_canonical || workspace.workspace_root || '';
-    await Promise.all([
-      activeSessionId.value ? loadMessages(activeSessionId.value) : Promise.resolve(),
-      loadWorkspace(''),
-    ]);
-    busy.value = false;
-    booted.value = true;
-    startConfigReloadPolling();
+  function boot() {
+    if (booted.value) return Promise.resolve();
+    if (bootPromise) return bootPromise;
+    bootPromise = (async () => {
+      busy.value = true;
+      try {
+        const [
+          manifest,
+          sessionData,
+          config,
+          runtime,
+          providerData,
+          reloadStatus,
+          profileData,
+          commandData,
+          workspace,
+          approvals,
+          capabilityContract,
+          openApi,
+          openAiTools,
+        ] = await Promise.all([
+          api.health(),
+          api.sessions(),
+          api.settings(),
+          api.runtimeControlPlane(),
+          api.providers(),
+          api.configReloadStatus(),
+          api.profiles(),
+          api.commands(),
+          api.workspace(),
+          api.approvalConfig(),
+          api.gatewayCapabilityContract(),
+          api.gatewayOpenApi(),
+          api.gatewayOpenAiTools(),
+        ]);
+        health.value = manifest;
+        settings.value = config;
+        controlPlane.value = runtime;
+        providers.value = providerData;
+        configReloadStatus.value = reloadStatus;
+        profiles.value = profileData.profiles || [];
+        commands.value = commandData.commands || [];
+        approvalConfig.value = approvals;
+        gatewayCapabilityContract.value = capabilityContract;
+        gatewayOpenApi.value = openApi;
+        gatewayOpenAiTools.value = openAiTools;
+        gatewayContractError.value = [capabilityContract.__error, openApi.__error, openAiTools.__error].filter(Boolean).join(' · ');
+        const reportedModel = runtime.configured_model || config.model || '';
+        selectedModel.value = reportedModel && reportedModel !== 'unknown' ? reportedModel : selectedModel.value;
+        selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
+        sessions.value = sessionData.sessions;
+        sessionOffset.value = sessions.value.length;
+        sessionHasMore.value = sessions.value.length >= sessionPageLimit.value;
+        if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
+        workspaceRoot.value = workspace.workspace_canonical || workspace.workspace_root || '';
+        await Promise.all([
+          activeSessionId.value ? loadMessages(activeSessionId.value) : Promise.resolve(),
+          loadWorkspace(''),
+        ]);
+        booted.value = true;
+        startConfigReloadPolling();
+      } finally {
+        busy.value = false;
+      }
+    })().finally(() => {
+      bootPromise = null;
+    });
+    return bootPromise;
   }
 
   function startConfigReloadPolling() {

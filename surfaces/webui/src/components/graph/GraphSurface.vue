@@ -71,7 +71,10 @@ const listRows = computed(() => visibleNodes.value.map((node) => ({
   evidence: node.evidenceRefs?.length || 0,
   summary: node.summary || node.label,
 })));
-const flowEdges = computed(() => canvasEdges.value.map((edge) => ({
+const laidOutNodeIds = computed(() => new Set(laidOutNodes.value.map((node) => node.id)));
+const flowEdges = computed(() => canvasEdges.value
+  .filter((edge) => laidOutNodeIds.value.has(edge.source) && laidOutNodeIds.value.has(edge.target))
+  .map((edge) => ({
   id: edge.id,
   source: edge.source,
   target: edge.target,

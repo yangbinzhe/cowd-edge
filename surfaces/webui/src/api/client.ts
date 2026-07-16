@@ -1314,9 +1314,9 @@ export const api = {
     const params = new URLSearchParams(filters);
     return read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection${params.size ? `?${params.toString()}` : ''}`, {});
   },
-  mfgCockpitWidgetProjection: (profileId: string, instanceId: string, filters: Record<string, string> = {}) => {
+  mfgCockpitWidgetProjection: (profileId: string, instanceId: string, filters: Record<string, string> = {}, signal?: AbortSignal) => {
     const params = new URLSearchParams(filters);
-    return read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/widgets/${encodeURIComponent(instanceId)}/projection${params.size ? `?${params.toString()}` : ''}`, {});
+    return read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/widgets/${encodeURIComponent(instanceId)}/projection${params.size ? `?${params.toString()}` : ''}`, {}, { signal });
   },
   mfgDeleteCockpitProfile: (profileId: string, expectedRevision: number, idempotencyKey = mfgIdempotencyKey('cockpit-delete')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${encodeURIComponent(expectedRevision)}&idempotency_key=${encodeURIComponent(idempotencyKey)}`, { method: 'DELETE' }),
   mfgCloneCockpitProfile: (profileId: string, body: Record<string, unknown> = {}, idempotencyKey = mfgIdempotencyKey('cockpit-clone')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/clone`, { method: 'POST', body: JSON.stringify({ ...body, idempotency_key: idempotencyKey }) }),

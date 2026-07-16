@@ -659,8 +659,18 @@ describe('Cowd Vue WebUI shell', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    const router = createRouter({
+      history: createWebHashHistory(),
+      routes: [{ path: '/audit', component: AuditPage }],
+    });
+    await router.push('/audit');
+    await router.isReady();
+
     const wrapper = mount(AuditPage, {
-      global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
+      global: {
+        plugins: [router],
+        stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      },
     });
     await settleAsync();
     await settleAsync();
@@ -782,6 +792,32 @@ describe('Cowd Vue WebUI shell', () => {
     registry.release('consumer-0');
     expect(registry.entries[`budget-${MAX_ACTIVE_PROJECTION_STREAMS}`].connectionState).toBe('connecting');
     for (let index = 1; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) registry.release(`consumer-${index}`);
+    vi.unstubAllGlobals();
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
+  });
+
+  it('closes a projection stream when Gateway cannot materialize its initial snapshot', async () => {
+    const closed: string[] = [];
+    class FakeEventSource {
+      constructor(readonly url: string) {}
+      addEventListener() {}
+      close() { closed.push(this.url); }
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('missing execution', { status: 404 }))));
+    setActivePinia(createPinia());
+    const registry = useProjectionRegistryStore();
+
+    registry.acquire('missing-execution', 'chat:missing-session', 'full');
+
+    await vi.waitFor(() => {
+      expect(registry.entries['missing-execution'].connectionState).toBe('error');
+      expect(registry.activeStreamCount).toBe(0);
+    });
+    expect(closed).toEqual([
+      '/api/runtime/executions/missing-execution/events?cursor=0&detail_scope=full',
+    ]);
+    registry.release('chat:missing-session');
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
   });

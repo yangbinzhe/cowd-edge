@@ -1,6 +1,7 @@
 import { t } from '../index';
 
 const unitKeys: Record<string, string> = {
+  agents: 'unit.agents',
   bytes: 'unit.bytes',
   chars: 'unit.chars',
   contracts: 'unit.contracts',
@@ -39,6 +40,7 @@ const unitKeys: Record<string, string> = {
   surfaces: 'unit.surfaces',
   tasks: 'unit.tasks',
   tools: 'unit.tools',
+  tokens: 'unit.tokens',
   turns: 'unit.turns',
   vectors: 'unit.vectors',
 };

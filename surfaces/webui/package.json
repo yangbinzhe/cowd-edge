@@ -20,6 +20,8 @@
     "test:visual-audit": "node scripts/visual-audit.mjs",
     "test:acceptance": "node scripts/acceptance-gate.mjs --gate",
     "test:acceptance:final": "node scripts/acceptance-gate.mjs --final --gate",
+    "test:acceptance:assemble": "node scripts/assemble-acceptance-results.mjs --final",
+    "test:evidence:record": "node scripts/record-evidence-command.mjs --final",
     "test:e2e": "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-/snap/bin/chromium} playwright test --browser=chromium"
   },
   "devDependencies": {

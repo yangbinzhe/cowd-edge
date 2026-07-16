@@ -447,6 +447,10 @@ async function retryWidget(instanceId: string) {
   catch (cause) { operationError.value = cause instanceof Error ? cause.message : String(cause); }
 }
 
+function cancelWidgetRefresh(instanceId: string) {
+  cockpit.cancelWidgetRefresh(instanceId);
+}
+
 async function cloneProfile() {
   if (!cockpit.selectedProfile) return;
   operationError.value = '';
@@ -611,7 +615,7 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
     </form>
 
     <div v-if="working" ref="gridEl" class="mfg-cockpit__grid" :style="{ gridTemplateColumns: `repeat(${working.layout.columns || 12}, minmax(0, 1fr))`, gap: `${working.layout.gap || 12}px` }">
-      <article v-for="instance in displayedWidgets" :key="instance.instance_id" class="mfg-widget" :class="{ 'has-layout-conflict': layoutConflicts.has(instance.instance_id), 'is-manipulating': dragState?.instance.instance_id === instance.instance_id, 'is-hidden-widget': instance.visible === false, 'is-url-focus': route.query.widget === instance.instance_id }" :data-status="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading' ? 'loading' : widgetData(instance)?.status || 'unknown'" :style="{ gridColumn: `${instance.placement.x + 1} / span ${instance.placement.width}`, gridRow: `${instance.placement.y + 1} / span ${instance.placement.height}` }">
+      <article v-for="instance in displayedWidgets" :key="instance.instance_id" class="mfg-widget" :class="{ 'has-layout-conflict': layoutConflicts.has(instance.instance_id), 'is-manipulating': dragState?.instance.instance_id === instance.instance_id, 'is-hidden-widget': instance.visible === false, 'is-url-focus': route.query.widget === instance.instance_id }" :data-status="['loading', 'error'].includes(cockpit.widgetRefreshState[instance.instance_id]?.status || '') ? cockpit.widgetRefreshState[instance.instance_id]?.status : widgetData(instance)?.status || 'unknown'" :style="{ gridColumn: `${instance.placement.x + 1} / span ${instance.placement.width}`, gridRow: `${instance.placement.y + 1} / span ${instance.placement.height}` }">
         <header><div><span>{{ widgetData(instance)?.definition_id || instance.definition_id }}</span><h3>{{ widgetData(instance)?.title || instance.definition_id }}</h3></div><strong>{{ compactWidgetValue(instance) }}</strong></header>
         <p v-if="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading'" class="mfg-widget__state" role="status">{{ t('mfg.cockpit.refreshingWidget') }}</p>
         <p v-if="widgetData(instance)?.error || cockpit.widgetRefreshState[instance.instance_id]?.error" class="mfg-widget__error">{{ cockpit.widgetRefreshState[instance.instance_id]?.error || widgetData(instance)?.error }}</p>
@@ -620,7 +624,10 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
           <RouterLink v-for="source in widgetData(instance)?.source_refs" :key="source" :to="sourceHref(source, instance.instance_id)">{{ source }}</RouterLink>
         </nav>
         <small v-if="widgetFreshness(instance)" class="mfg-widget__freshness">{{ widgetFreshness(instance)?.status || 'current' }} · {{ widgetFreshness(instance)?.generated_at || cockpit.projection?.generated_at }}</small>
-        <button v-if="widgetData(instance)?.error || cockpit.widgetRefreshState[instance.instance_id]?.status === 'error'" class="ghost-action mfg-widget__retry" type="button" :disabled="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading'" @click="retryWidget(instance.instance_id)"><RotateCw :size="14" />{{ t('mfg.cockpit.retryWidget') }}</button>
+        <div class="mfg-widget__request-actions">
+          <button v-if="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading'" class="ghost-action mfg-widget__retry" type="button" @click="cancelWidgetRefresh(instance.instance_id)">{{ t('mfg.cockpit.cancelWidgetRefresh') }}</button>
+          <button v-else class="ghost-action mfg-widget__retry" type="button" @click="retryWidget(instance.instance_id)"><RotateCw :size="14" />{{ widgetData(instance)?.error || cockpit.widgetRefreshState[instance.instance_id]?.status === 'error' ? t('mfg.cockpit.retryWidget') : t('mfg.cockpit.refreshWidget') }}</button>
+        </div>
         <footer v-if="editMode" class="mfg-widget__controls">
           <button class="mfg-widget__drag" type="button" :aria-label="t('mfg.cockpit.dragWidget')" @pointerdown="beginDirectManipulation($event, instance, 'move')"><Grip :size="14" /></button>
           <button type="button" :aria-label="t('mfg.cockpit.moveLeft')" @click="moveWidget(instance, 'x', -1)">←</button><button type="button" :aria-label="t('mfg.cockpit.moveRight')" @click="moveWidget(instance, 'x', 1)">→</button><button type="button" :aria-label="t('mfg.cockpit.moveUp')" @click="moveWidget(instance, 'y', -1)">↑</button><button type="button" :aria-label="t('mfg.cockpit.moveDown')" @click="moveWidget(instance, 'y', 1)">↓</button>

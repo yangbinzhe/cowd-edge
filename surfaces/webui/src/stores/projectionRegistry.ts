@@ -65,13 +65,19 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     const entry = ensureEntry(id);
     const scope = requestedScope || desiredScope(entry);
     const epoch = ++entry.requestEpoch;
-    if (!entry.projection) entry.connectionState = 'connecting';
+    if (!entry.projection && !entry.degradedReason) entry.connectionState = 'connecting';
     try {
       const projection = await api.executionProjection(id, scope);
       if (entry.requestEpoch !== epoch) return entry.projection;
       if (projection.__state && projection.__state !== 'ready') {
         entry.connectionState = entry.projection ? 'stale' : 'error';
         entry.lastError = String(projection.__error || projection.__state);
+        // A receipt can reference an execution before Gateway has materialized
+        // its projection, or it can reference an execution that no longer
+        // exists. Keeping EventSource alive in that state creates an immediate
+        // 404 reconnect loop in Chromium and can starve every shell control.
+        // A later acquire/load can reconnect after a valid snapshot exists.
+        if (!entry.projection) closeStream(id);
         return entry.projection;
       }
       if (projection.execution_id !== id) return entry.projection;

@@ -85,7 +85,7 @@ test('runtime and context pages expose real workbench controls', async ({ page }
 
   await page.goto('/index.html#/context');
   await expect(page.getByRole('heading', { name: 'Context Builder', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Context builder', exact: true })).toBeVisible();
+  await expect(page.locator('[data-section="packet"] > header h2', { hasText: 'Context builder' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Build packet' })).toBeVisible();
   await page.locator('.section-row').filter({ hasText: 'Evidence' }).click();
   await expect(page.getByRole('heading', { name: 'Evidence resolve' })).toBeVisible();
@@ -172,9 +172,9 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
   await expect(page.getByRole('button', { name: 'Create rule' })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=collaboration');
   await expect(page.locator('[data-section="collaboration"] .mfg-collaboration')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Assign task' })).toBeVisible();
-  await expect(page.getByText('SLA minutes')).toBeVisible();
-  await expect(page.getByText('Assignee type')).toBeVisible();
+  await expect(page.locator('[data-section="collaboration"]').getByRole('button', { name: 'Assign task' }).first()).toBeVisible();
+  await expect(page.getByText('SLA minutes', { exact: true })).toBeVisible();
+  await expect(page.getByText('Assignee type', { exact: true })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=data');
   await expect(page.locator('[data-section="data"]')).toContainText('Data configuration');
   await expect(page.getByRole('button', { name: 'Save source pack' })).toBeVisible();
@@ -192,7 +192,7 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
   await page.goto('/index.html#/apps/mfg?section=operations');
   await expect(page.locator('[data-section="operations"]')).toContainText('Incidents and execution');
   await expect(page.getByRole('button', { name: 'Create incident' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Decision trace' })).toBeVisible();
+  await expect(page.locator('[data-section="operations"]').getByRole('heading', { name: 'Decision trace', exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Record feedback' })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=skills');
   await expect(page.locator('[data-section="skills"]')).toContainText('Skill execution');
@@ -201,7 +201,7 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
   await page.goto('/index.html#/apps/mfg?section=reports');
   await expect(page.locator('[data-section="reports"]')).toContainText('Reports and delivery');
   await expect(page.getByRole('button', { name: 'Generate report' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Decision trace' })).toBeVisible();
+  await expect(page.locator('[data-section="reports"]').getByRole('heading', { name: 'Decision trace' })).toBeVisible();
 });
 
 test('real gateway closes MFG profile, filter, alert, assignment and report contracts', async ({ page }) => {
@@ -262,7 +262,9 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   await page.getByRole('button', { name: 'Plan ingest' }).click();
   const ingestPlanResponse = await ingestPlanResponsePromise;
   expect(ingestPlanResponse.ok()).toBeTruthy();
-  expect((await ingestPlanResponse.json()).plan).toMatchObject({ source_ref: `source-pack://${sourcePackId}`, affected_metric_ids: [] });
+  const ingestPlan = (await ingestPlanResponse.json()).plan;
+  expect(ingestPlan.source_ref).toBe(`source-pack://${sourcePackId}`);
+  expect(ingestPlan.affected_metric_ids).toEqual(expect.arrayContaining(['manufacturing_event_count']));
 
   await page.getByLabel('Connector resource reference').fill(`file:///tmp/${sourcePackId}.json`);
   const connectorPlanResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/reality/source-packs/${sourcePackId}/connector-runs/plan`) && response.request().method() === 'POST');
@@ -293,10 +295,167 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   expect(reportsResponse.ok()).toBeTruthy();
   expect((await reportsResponse.json()).items.map((item) => item.report_id)).toContain(report.report_id);
 
+  await page.goto('/index.html#/apps/mfg?section=reports');
+  await page.getByLabel('Report ID').fill(report.report_id);
+  await page.getByRole('button', { name: 'Inspect report' }).click();
+  await expect(page.locator('.object-inspector').filter({ hasText: 'Delivery state' })).toContainText('not_delivered');
+  await expect(page.locator('[data-section="reports"] .graph-surface')).toBeVisible();
+  const deliveryResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/reports/${report.report_id}/deliver`) && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Deliver report' }).click();
+  expect((await deliveryResponsePromise).ok()).toBeTruthy();
+  await expect(page.locator('.object-inspector').filter({ hasText: 'Delivery state' })).toContainText('policy_blocked');
+  await expect(page.getByRole('button', { name: 'Retry delivery' })).toBeDisabled();
+
   const deleteResponse = await page.request.delete(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${savedProfile.revision}&idempotency_key=e2e-delete-${suffix}`);
   expect(deleteResponse.ok()).toBeTruthy();
   const completeTaskResponse = await page.request.post(`/api/tasks/${encodeURIComponent(task.id)}/complete`);
   expect(completeTaskResponse.ok()).toBeTruthy();
+});
+
+test('report delivery exposes exhausted retry state and disables automatic retry', async ({ page }) => {
+  const reportId = 'controlled-dead-letter-report';
+  await page.route('**/api/apps/mfg/**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    if (path === `/api/apps/mfg/cockpit/reports/${reportId}`) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ report: { report_id: reportId, profile_id: 'controlled-profile', cadence: 'daily', status: 'delivery_blocked', created_at: '2026-07-16T00:00:00Z' } }),
+      });
+      return;
+    }
+    if (path === `/api/apps/mfg/cockpit/reports/${reportId}/delivery-state`) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          delivery_state: {
+            report_id: reportId,
+            report_status: 'delivery_blocked',
+            attempt_count: 4,
+            retry_attempt_count: 3,
+            max_attempts: 3,
+            dead_lettered: true,
+            classification: 'delivery_dead_lettered',
+            retryable: false,
+            recommended_mode: 'manual_review',
+            reasons: ['delivery:dead_lettered', 'delivery:retry_attempts_exhausted:3'],
+          },
+        }),
+      });
+      return;
+    }
+    if (path === '/api/apps/mfg/decision-trace') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'ready', rows: [], objects: {} }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) });
+  });
+  await page.route('**/api/surfaces/*/outbox', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ outbox: [], dead_letters: [] }) });
+  });
+
+  await page.goto('/index.html#/apps/mfg?section=reports');
+  await page.getByLabel('Report ID').fill(reportId);
+  await page.getByRole('button', { name: 'Inspect report' }).click();
+  const deliveryState = page.locator('.object-inspector').filter({ hasText: 'Delivery state' });
+  await expect(deliveryState).toContainText('delivery_dead_lettered');
+  await expect(deliveryState).toContainText('4');
+  await expect(deliveryState).toContainText('3 / 3');
+  await expect(deliveryState).toContainText('yes');
+  await expect(page.getByRole('button', { name: 'Retry delivery' })).toBeDisabled();
+});
+
+test('real gateway cockpit editing and concurrent observers close without silent overwrite', async ({ page }) => {
+  test.skip(!realGateway, 'requires a real cowd gateway');
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const profileId = `e2e-cockpit-conflict-${suffix}`;
+  const createResponse = await page.request.post('/api/apps/mfg/cockpit/profiles/upsert', {
+    data: {
+      idempotency_key: `e2e-cockpit-create-${suffix}`,
+      profile: {
+        profile_id: profileId,
+        owner_ref: 'client-value-is-ignored',
+        display_name: 'E2E editable cockpit',
+        focus_refs: ['entity:e2e-line'],
+        focus_metric_ids: ['manufacturing_event_count'],
+        thresholds: {},
+        template_id: 'mfg.default_ops',
+        cadence: 'daily',
+        scope: { kind: 'personal' },
+        layout: { columns: 12, row_height: 72, gap: 12 },
+        global_filters: {},
+        widget_instances: [],
+        sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] },
+      },
+    },
+  });
+  expect(createResponse.ok()).toBeTruthy();
+
+  await page.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`);
+  await expect(page.locator('.mfg-widget')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Edit layout' }).click();
+  const firstWidget = page.locator('.mfg-widget').first();
+  await firstWidget.getByRole('button', { name: 'Reduce widget width' }).click();
+  await firstWidget.getByRole('button', { name: 'Move widget right' }).click();
+  await firstWidget.getByRole('button', { name: 'Configure widget' }).click();
+  await expect(firstWidget.locator('.mfg-widget__settings')).toBeVisible();
+  await firstWidget.getByRole('button', { name: 'Hide widget' }).click();
+  await expect(firstWidget).toHaveClass(/is-hidden-widget/);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(firstWidget).not.toHaveClass(/is-hidden-widget/);
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect(firstWidget).toHaveClass(/is-hidden-widget/);
+  await page.getByRole('button', { name: 'Undo' }).click();
+
+  const widgetSelect = page.locator('.mfg-cockpit__add-widget select');
+  await widgetSelect.selectOption({ index: 1 });
+  await page.locator('.mfg-cockpit__add-widget').getByRole('button', { name: 'Add' }).click();
+  await expect(page.locator('.mfg-widget')).toHaveCount(5);
+  await page.locator('.mfg-widget').last().getByRole('button', { name: 'Remove widget' }).click();
+  await expect(page.locator('.mfg-widget')).toHaveCount(4);
+
+  const nameInput = page.locator('.mfg-cockpit__editor > label input').first();
+  await nameInput.fill('E2E saved cockpit');
+  const saveResponsePromise = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Save cockpit' }).click();
+  expect((await saveResponsePromise).ok()).toBeTruthy();
+  await page.getByRole('button', { name: 'Edit layout' }).click();
+  await nameInput.fill('Unsaved local title');
+  await page.getByRole('button', { name: 'Revert saved version' }).click();
+  await expect(nameInput).toHaveValue('E2E saved cockpit');
+  await page.getByRole('button', { name: 'Finish editing' }).click();
+  const cloneResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/clone`) && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Clone' }).click();
+  expect((await cloneResponsePromise).ok()).toBeTruthy();
+
+  const observer = await page.context().newPage();
+  await observer.addInitScript(() => localStorage.setItem('cowd.webui.locale', 'en-US'));
+  await Promise.all([
+    page.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
+    observer.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
+  ]);
+  await Promise.all([
+    page.getByRole('button', { name: 'Edit layout' }).click(),
+    observer.getByRole('button', { name: 'Edit layout' }).click(),
+  ]);
+  const firstName = page.locator('.mfg-cockpit__editor > label input').first();
+  const secondName = observer.locator('.mfg-cockpit__editor > label input').first();
+  await firstName.fill('Observer one committed');
+  await secondName.fill('Observer two stale draft');
+  const firstSave = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Save cockpit' }).click();
+  expect((await firstSave).ok()).toBeTruthy();
+  const staleSave = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+  await observer.getByRole('button', { name: 'Save cockpit' }).click();
+  expect((await staleSave).status()).toBe(409);
+  await expect(observer.locator('.mfg-cockpit__conflict')).toBeVisible();
+  await expect(observer.locator('.mfg-cockpit__conflict-compare')).toContainText('display_name');
+  const saveAsResponse = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+  await observer.getByRole('button', { name: 'Save as new cockpit' }).click();
+  expect((await saveAsResponse).ok()).toBeTruthy();
+  await observer.close();
 });
 
 test('audit page exposes usage and release gate governance controls', async ({ page }) => {
@@ -363,11 +522,34 @@ test('all shell controls remain interactive while a conversation is running', as
   await page.route(`**/api/sessions/${sessionId}/execution`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session_id: sessionId, active_execution_ids: [] }) });
   });
+  await page.route(`**/api/sessions/${sessionId}/stream`, async (route) => {
+    // HTTP 204 tells EventSource not to reconnect. This fixture session lives
+    // only inside this test, so letting its SSE request hit the real Gateway
+    // would create an artificial 404 reconnect loop unrelated to shell input.
+    await route.fulfill({ status: 204 });
+  });
   await page.route(`**/api/sessions/${sessionId}/messages`, async (route) => {
     await route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ execution: { graph_id: 'interaction-execution' } }) });
   });
   await page.route(`**/api/sessions/${sessionId}/cancel`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, status: 'cancelled' }) });
+  });
+  await page.route('**/api/runtime/executions/interaction-execution/events?*', async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/runtime/executions/interaction-execution?*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        schema_version: 1,
+        execution_id: 'interaction-execution',
+        revision: 1,
+        cursor: 0,
+        live: { status: 'queued', status_detail: 'message accepted by runtime' },
+        graph: {}, goals: [], agents: [], teams: [], relations: [], approvals: [], interventions: [], usage: [], context: [], evidence: [], health: [], recovery: [], available_commands: [],
+      }),
+    });
   });
 
   await page.goto('/index.html#/chat');
@@ -386,11 +568,12 @@ test('all shell controls remain interactive while a conversation is running', as
   await page.getByRole('button', { name: /Commands/ }).click();
   await expect(page.getByRole('heading', { name: 'Commands' })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.companion-tabs').getByRole('button', { name: 'Workspace' }).click();
   await page.locator('.mode-switch button').nth(1).click();
   await expect(page.locator('.composer-stats')).toBeVisible();
+  await page.locator('.companion-toggle').click();
+  await page.locator('.companion-toggle').click();
   await page.locator('.mode-switch button').first().click();
-  await page.locator('.companion-toggle').click();
-  await page.locator('.companion-toggle').click();
 
   await page.locator('.rail-button[title="Tools"]').click();
   await expect(page).toHaveURL(/tools/);

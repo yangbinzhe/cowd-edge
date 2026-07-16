@@ -23,6 +23,8 @@ describe('WebUI i18n', () => {
     setLocale('zh-CN');
     expect(formatCount('events', 12)).toBe('12 事件');
     expect(formatCount('tools', 3)).toBe('3 工具');
+    expect(formatCount('agents', 2)).toBe('2 Agent');
+    expect(formatCount('tokens', 128)).toBe('128 Token');
     expect(displayStatus('running')).toBe('运行中');
   });
 });

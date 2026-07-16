@@ -162,11 +162,13 @@ async function submit() {
   sending.value = true;
   draft.value = '';
   try {
-    if (store.activeSessionId) {
-      const input = store.composeChatInput(text);
-      const accepted = await chat.send(store.activeSessionId, text, input);
-      if (accepted) store.clearSubmittedResourceAttachments(input.resourceIds);
-    }
+    await store.boot();
+    if (!store.activeSessionId) await store.createSession();
+    const sessionId = store.activeSessionId;
+    if (!sessionId) return;
+    const input = store.composeChatInput(text);
+    const accepted = await chat.send(sessionId, text, input);
+    if (accepted) store.clearSubmittedResourceAttachments(input.resourceIds);
   } finally {
     sending.value = false;
     await nextTick();

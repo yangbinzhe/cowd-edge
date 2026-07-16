@@ -616,6 +616,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/apps/mfg/cockpit/profiles/{id}/widgets/{instance_id}/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * mfg GET /api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection
+         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection` handled by `mfg_cockpit_widget_projection_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id_widgets_by_instance_id_projection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * mfg GET /api/apps/mfg/cockpit/reports
+         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/reports` handled by `mfg_cockpit_report_list_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_reports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/apps/mfg/cockpit/reports/schedules/run": {
         parameters: {
             query?: never;
@@ -12473,6 +12517,95 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id_widgets_by_instance_id_projection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                instance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_mfg_get_api_apps_mfg_cockpit_reports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Gateway response */
             200: {

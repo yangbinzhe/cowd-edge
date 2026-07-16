@@ -110,4 +110,27 @@ describe('MFG cockpit store', () => {
       expect.any(Object),
     );
   });
+
+  it('aborts an in-flight widget refresh without degrading sibling state', async () => {
+    let requestSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      requestSignal = init?.signal || undefined;
+      requestSignal?.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')), { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const store = useMfgCockpitStore();
+    store.selectedProfileId = 'profile-1';
+    store.projection = projection();
+    const sibling = store.projection.widgets[1];
+
+    const pending = store.refreshWidget('a');
+    expect(store.widgetRefreshState.a.status).toBe('loading');
+    store.cancelWidgetRefresh('a');
+    await pending;
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(store.widgetRefreshState.a.status).toBe('idle');
+    expect(store.projection?.widgets[0].status).toBe('unavailable');
+    expect(store.projection?.widgets[1]).toBe(sibling);
+  });
 });

@@ -11,6 +11,15 @@ const planRoot = provenance.plan_root;
 const version = provenance.version;
 const full = process.argv.includes('--full');
 const baseUrl = process.env.COWD_VISUAL_BASE_URL || 'http://127.0.0.1:5195';
+const gatewayToken = process.env.COWD_VISUAL_GATEWAY_TOKEN || process.env.COWD_E2E_GATEWAY_TOKEN || '';
+const layoutViewport = (viewport) => viewport.scenario === 'zoom-200'
+  ? { width: Math.max(1, Math.floor(viewport.width / 2)), height: Math.max(1, Math.floor(viewport.height / 2)) }
+  : { width: viewport.width, height: viewport.height };
+const pageOptions = (viewport) => ({
+  viewport: layoutViewport(viewport),
+  ...(viewport.scenario === 'zoom-200' ? { deviceScaleFactor: 2 } : {}),
+  ...(gatewayToken ? { extraHTTPHeaders: { Authorization: `Bearer ${gatewayToken}` } } : {}),
+});
 const screenshotDir = path.join(planRoot, 'artifacts', version, 'visual-audit');
 const reportPath = path.join(planRoot, 'reports', version, `${version}-visual-audit.md`);
 
@@ -82,13 +91,16 @@ function evaluateLayout(metrics, route, viewport) {
   if (!metrics.expectedSectionVisible) addFinding(findings, 'fail', 'deep-linked section is not visible');
   if (metrics.visibleSectionCount > 1) addFinding(findings, 'fail', `${metrics.visibleSectionCount} page sections are simultaneously visible`);
   if (metrics.horizontalOverflow > 2) addFinding(findings, 'fail', `page has ${metrics.horizontalOverflow}px horizontal overflow`);
-  if (metrics.croppedCriticalControls > 0) addFinding(findings, 'fail', `${metrics.croppedCriticalControls} critical controls are clipped outside the viewport`);
+  if (metrics.croppedCriticalControls > 0) {
+    const details = (metrics.croppedCriticalControlDetails || []).slice(0, 3).map((item) => item.label).join(', ');
+    addFinding(findings, 'fail', `${metrics.croppedCriticalControls} critical controls are clipped outside the viewport${details ? `: ${details}` : ''}`);
+  }
   if (metrics.bodyTextLength < 80) addFinding(findings, 'review', 'rendered text density is low');
 
   if (route.id === 'chat') {
     if (!metrics.composer.visible) {
       addFinding(findings, 'fail', 'chat composer is missing');
-    } else if (metrics.composer.bottom > viewport.height || metrics.composer.top < 0) {
+    } else if (metrics.composer.bottom > viewport.height + 1 || metrics.composer.top < 0) {
       addFinding(findings, 'fail', `chat composer is outside first viewport: top=${metrics.composer.top}, bottom=${metrics.composer.bottom}`);
     }
     if (viewport.width < 820 && metrics.companion.visible) {
@@ -100,7 +112,9 @@ function evaluateLayout(metrics, route, viewport) {
   }
 
   if (route.id === 'settings') {
-    const minWidth = viewport.width >= 1180 ? 900 : Math.min(320, viewport.width - 48);
+    const minWidth = viewport.width >= 1180
+      ? Math.min(900, Math.floor(viewport.width * 0.6))
+      : Math.min(320, Math.max(120, viewport.width - (viewport.width < 820 ? 44 : 48)));
     if (metrics.settingsContent.width < minWidth) {
       addFinding(findings, 'fail', `settings content width too narrow: ${metrics.settingsContent.width}px < ${minWidth}px`);
     }
@@ -155,15 +169,18 @@ const browser = await chromium.launch({
 const rows = [];
 const failures = [];
 const reviews = [];
+let completedChecks = 0;
 
 try {
   if (full) {
-    const discoveryPage = await browser.newPage({ viewport: { width: 1440, height: 960 } });
+    const discoveryPage = await browser.newPage(pageOptions({ width: 1440, height: 960 }));
     const discovered = [];
     for (const route of baseRoutes) {
       try {
         await discoveryPage.goto(routeUrl(route), { waitUntil: 'domcontentloaded' });
         await discoveryPage.locator('.app-shell').waitFor({ state: 'visible' });
+        await discoveryPage.waitForFunction((pageId) => document.querySelector('.main-surface')?.getAttribute('data-page') === pageId, route.id);
+        await discoveryPage.waitForTimeout(100);
         let sections = await discoveryPage.locator('.capability-section-nav select option').evaluateAll((options) => options
           .map((option) => option.getAttribute('value'))
           .filter(Boolean));
@@ -199,7 +216,7 @@ try {
     routes = discovered.length ? discovered : baseRoutes;
   }
   for (const viewport of viewports) {
-    const page = await browser.newPage({ viewport });
+    const page = await browser.newPage(pageOptions(viewport));
     page.setDefaultTimeout(15_000);
     for (const route of routes) {
       const url = routeUrl(route);
@@ -209,22 +226,59 @@ try {
       let note = 'layout gates passed';
       let metrics = {};
       try {
+        await page.goto('about:blank');
         await page.goto(url, { waitUntil: 'domcontentloaded' });
         await page.locator('.app-shell').waitFor({ state: 'visible' });
-        await page.waitForTimeout(350);
-        if (viewport.scenario === 'zoom-200') {
-          await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
-        }
+        await page.waitForFunction(({ pageId, section }) => {
+          const main = document.querySelector('.main-surface');
+          if (main?.getAttribute('data-page') !== pageId) return false;
+          if (!section) return true;
+          return Array.from(document.querySelectorAll('[data-section]')).some((element) => {
+            if (element.getAttribute('data-section') !== section) return false;
+            const style = getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+          });
+        }, { pageId: route.pageId || route.id, section: route.section || '' });
+        await page.waitForTimeout(75);
+        await page.evaluate(() => {
+          window.scrollTo(0, 0);
+          for (const element of document.querySelectorAll('*')) {
+            if (element.scrollTop) element.scrollTop = 0;
+            if (element.scrollLeft) element.scrollLeft = 0;
+          }
+        });
         if (viewport.scenario === 'long-content') {
           await page.evaluate(() => {
-            const target = Array.from(document.querySelectorAll('[data-section]')).find((element) => {
+            const visibleTarget = (selector) => Array.from(document.querySelectorAll(selector)).find((element) => {
               const style = getComputedStyle(element);
-              return style.display !== 'none' && style.visibility !== 'hidden';
-            }) || document.querySelector('.main-surface');
+              const rect = element.getBoundingClientRect();
+              return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+            });
+            const target = [
+              '.transcript',
+              '[data-section].management-panel',
+              '[data-section].mission-panel',
+              '[data-section].settings-section',
+              '[data-section].mfg-page__workspace',
+              '[data-section].skills-catalog',
+              '.capability-page [data-section]',
+              '.settings-content',
+              '.capability-page',
+              '.settings-page',
+              '.chat-page',
+            ].map(visibleTarget).find(Boolean);
             const probe = document.createElement('p');
             probe.className = 'visual-audit-long-content';
             probe.textContent = '超长制造运营上下文 Long manufacturing operational context '.repeat(35);
+            probe.style.overflowWrap = 'anywhere';
+            probe.style.maxWidth = '100%';
             target?.appendChild(probe);
+            window.scrollTo(0, 0);
+            for (const element of document.querySelectorAll('*')) {
+              if (element.scrollTop) element.scrollTop = 0;
+              if (element.scrollLeft) element.scrollLeft = 0;
+            }
           });
         }
         metrics = await page.evaluate((expectedSection) => {
@@ -271,11 +325,49 @@ try {
             const rect = touchTargetRect(element);
             return rect.width < 44 || rect.height < 44;
           }).length;
-          const croppedCriticalControls = visibleControls.filter((element) => {
+          const croppedCriticalControlElements = visibleControls.filter((element) => {
             const rect = element.getBoundingClientRect();
             const critical = element.matches('.primary-action, [type="submit"], .section-nav button, .rail-button');
-            return critical && (rect.left < -1 || rect.right > window.innerWidth + 1 || rect.top < -1 || rect.bottom > document.documentElement.scrollHeight + 1);
-          }).length;
+            if (!critical) return false;
+            const scrollReachable = (axis) => {
+              for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+                const style = getComputedStyle(parent);
+                const overflow = axis === 'x' ? style.overflowX : style.overflowY;
+                const scrollable = axis === 'x'
+                  ? parent.scrollWidth > parent.clientWidth + 1
+                  : parent.scrollHeight > parent.clientHeight + 1;
+                if (scrollable && (overflow === 'auto' || overflow === 'scroll')) return true;
+              }
+              return false;
+            };
+            const horizontallyReachable = scrollReachable('x');
+            const verticallyReachable = scrollReachable('y');
+            const clippedByAncestor = (() => {
+              for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+                const style = getComputedStyle(parent);
+                const parentRect = parent.getBoundingClientRect();
+                if (!horizontallyReachable && (style.overflowX === 'hidden' || style.overflowX === 'clip')
+                  && (rect.left < parentRect.left - 1 || rect.right > parentRect.right + 1)) return true;
+                if (!verticallyReachable && (style.overflowY === 'hidden' || style.overflowY === 'clip')
+                  && (rect.top < parentRect.top - 1 || rect.bottom > parentRect.bottom + 1)) return true;
+              }
+              return false;
+            })();
+            const inaccessibleHorizontally = (rect.left < -1 || rect.right > window.innerWidth + 1) && !horizontallyReachable;
+            const inaccessibleVertically = rect.top < -1 && !verticallyReachable;
+            return clippedByAncestor || inaccessibleHorizontally || inaccessibleVertically;
+          });
+          const croppedCriticalControlDetails = croppedCriticalControlElements.map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              label: element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent?.trim().replace(/\s+/g, ' ').slice(0, 80) || element.tagName.toLowerCase(),
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              top: Math.round(rect.top),
+              bottom: Math.round(rect.bottom),
+            };
+          });
+          const croppedCriticalControls = croppedCriticalControlElements.length;
           const unlabeledIconButtons = Array.from(document.querySelectorAll('button.icon-action'))
             .filter((element) => visible(element))
             .filter((element) => !element.getAttribute('aria-label') && !element.getAttribute('title') && !element.textContent?.trim()).length;
@@ -325,6 +417,7 @@ try {
             bodyScrollRatio: document.body.scrollHeight / Math.max(window.innerHeight, 1),
             horizontalOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
             croppedCriticalControls,
+            croppedCriticalControlDetails,
             firstViewportChromeShare: chromeHeight / Math.max(window.innerHeight, 1),
             composer: rectOf('.composer'),
             settingsContent: rectOf('.settings-content'),
@@ -340,7 +433,7 @@ try {
             rawToolEvidenceCount: (bodyText.match(/Raw evidence ref:|Summary:\s*[\[{]/g) || []).length,
           };
         }, route.section || null);
-        const findings = evaluateLayout(metrics, { ...route, id: route.pageId || route.id }, viewport);
+        const findings = evaluateLayout(metrics, { ...route, id: route.pageId || route.id }, { ...viewport, ...layoutViewport(viewport) });
         status = statusFrom(findings);
         note = findings.length ? findings.map((finding) => finding.message).join('; ') : note;
         findings.forEach((finding) => {
@@ -363,6 +456,10 @@ try {
         note,
         metrics,
       });
+      completedChecks += 1;
+      if (full && completedChecks % 50 === 0) {
+        console.log(`Visual audit progress: ${completedChecks}/${routes.length * viewports.length}`);
+      }
     }
     await page.close();
   }

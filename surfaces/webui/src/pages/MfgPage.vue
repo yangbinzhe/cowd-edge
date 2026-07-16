@@ -81,7 +81,7 @@ watch(
 </template>
 
 <style scoped>
-.mfg-page { display: grid; min-width: 0; gap: 16px; padding: 2px 0 24px; }
+.mfg-page { display: grid; min-width: 0; min-height: 0; height: 100%; align-content: start; gap: 16px; overflow: auto; padding: 2px 0 24px; }
 .mfg-page__header { display: flex; align-items: start; justify-content: space-between; gap: 16px; padding: 0 0 14px; border-bottom: 1px solid var(--border); }
 .mfg-page__header h1 { margin: 0; color: var(--text); font-size: clamp(20px, 2vw, 27px); letter-spacing: -0.025em; }
 .mfg-page__header p { max-width: 76ch; margin: 6px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.55; }

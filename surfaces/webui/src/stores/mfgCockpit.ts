@@ -35,6 +35,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   let refreshInFlight = false;
   let refreshQueued = false;
   const widgetEpochs = new Map<string, number>();
+  const widgetControllers = new Map<string, AbortController>();
   const profiles = ref<MfgCockpitProfile[]>([]);
   const catalog = ref<MfgWidgetDefinition[]>([]);
   const globalFilterSchema = ref<MfgCockpitCatalogContract['global_filter_schema']>();
@@ -178,12 +179,16 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     if (!profileId) throw new Error('mfg.cockpit.profile_required');
     const widgetEpoch = (widgetEpochs.get(instanceId) || 0) + 1;
     widgetEpochs.set(instanceId, widgetEpoch);
+    widgetControllers.get(instanceId)?.abort();
+    const controller = new AbortController();
+    widgetControllers.set(instanceId, controller);
     widgetRefreshState.value = {
       ...widgetRefreshState.value,
       [instanceId]: { status: 'loading' },
     };
     try {
-      const result = await api.mfgCockpitWidgetProjection(profileId, instanceId, activeProjectionFilters.value);
+      const result = await api.mfgCockpitWidgetProjection(profileId, instanceId, activeProjectionFilters.value, controller.signal);
+      if (controller.signal.aborted || widgetEpochs.get(instanceId) !== widgetEpoch) return undefined;
       if (result?.__state && result.__state !== 'ready') {
         throw new Error(String(result.__error || result.__state));
       }
@@ -209,14 +214,26 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
       };
       return next;
     } catch (cause) {
-      if (widgetEpochs.get(instanceId) !== widgetEpoch) return undefined;
+      if (controller.signal.aborted || widgetEpochs.get(instanceId) !== widgetEpoch) return undefined;
       const message = cause instanceof Error ? cause.message : String(cause);
       widgetRefreshState.value = {
         ...widgetRefreshState.value,
         [instanceId]: { status: 'error', error: message },
       };
       throw cause;
+    } finally {
+      if (widgetControllers.get(instanceId) === controller) widgetControllers.delete(instanceId);
     }
+  }
+
+  function cancelWidgetRefresh(instanceId: string) {
+    widgetEpochs.set(instanceId, (widgetEpochs.get(instanceId) || 0) + 1);
+    widgetControllers.get(instanceId)?.abort();
+    widgetControllers.delete(instanceId);
+    widgetRefreshState.value = {
+      ...widgetRefreshState.value,
+      [instanceId]: { status: 'idle' },
+    };
   }
 
   function addWidget(profile: MfgCockpitProfile, definitionId: string) {
@@ -315,6 +332,6 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   return {
     profiles, catalog, globalFilterSchema, filterMergePolicy, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch, activeProjectionFilters, widgetRefreshState,
     selectedProfile, widgetsByInstance, attentionAlerts, activeAssignments,
-    refresh, loadProfile, loadForecasts, saveProfile, refreshWidget, addWidget, commandAlert, commandAssignment, startLive, stopLive,
+    refresh, loadProfile, loadForecasts, saveProfile, refreshWidget, cancelWidgetRefresh, addWidget, commandAlert, commandAssignment, startLive, stopLive,
   };
 });
