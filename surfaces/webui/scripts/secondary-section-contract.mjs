@@ -2,6 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
+
+const provenance = evidenceContext('secondary-section-contract');
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const gate = process.argv.includes('--gate');
@@ -10,7 +13,7 @@ const pages = {
   runtime: { file: 'RuntimePage.vue', sections: ['overview', 'mission-link', 'runs', 'policy', 'timeline', 'growth'] },
   mission: { file: 'MissionControlPage.vue', sections: ['overview', 'sessions', 'teams', 'agents', 'routes', 'runtime-v2', 'relations', 'approvals', 'trace'] },
   context: { file: 'ContextPage.vue', sections: ['packet', 'budget', 'evidence', 'history'] },
-  reality: { file: 'RealityCorePage.vue', sections: ['management', 'core-map', 'overview', 'fact-flow', 'context-runtime', 'evidence', 'promotions', 'boundaries'] },
+  reality: { file: 'RealityCorePage.vue', sections: ['management', 'core-map', 'overview', 'matrix', 'fact-flow', 'context-runtime', 'evidence', 'promotions', 'boundaries'] },
   memory: { file: 'MemoryPage.vue', sections: ['layers', 'recall', 'graph', 'context-envelope', 'knowledge-governance', 'maintenance', 'structured-core'] },
   skills: { file: 'SkillsPage.vue', sections: ['catalog', 'projection', 'files', 'runs', 'governance'] },
   agents: { file: 'AgentsPage.vue', sections: ['catalog', 'discovery', 'managed-agents', 'tasks', 'reviews', 'graph', 'runs'] },
@@ -75,6 +78,7 @@ for (const [pageId, page] of Object.entries(pages)) {
 }
 
 const report = {
+  provenance,
   status: failures.length ? 'fail' : 'pass',
   pages: pageReports,
   failures,

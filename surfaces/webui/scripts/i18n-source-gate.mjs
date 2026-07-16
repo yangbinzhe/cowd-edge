@@ -2,6 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
+
+const provenance = evidenceContext('i18n-source-gate');
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const srcRoot = path.join(webuiRoot, 'src');
@@ -85,7 +88,9 @@ function scanVisibleScriptStrings(file, text) {
   return failures;
 }
 
-const files = sourceRoots.flatMap(walk).filter((file) => /\.(vue|ts)$/.test(file));
+const files = sourceRoots
+  .flatMap(walk)
+  .filter((file) => /\.(vue|ts)$/.test(file) && !/\.(?:test|spec)\.ts$/.test(file));
 const failures = [];
 
 if (fs.existsSync(path.join(srcRoot, 'i18n/catalog.ts'))) {
@@ -105,6 +110,7 @@ for (const file of files) {
 }
 
 const report = {
+  provenance,
   status: failures.length ? 'fail' : 'pass',
   checked_files: files.length,
   failures,

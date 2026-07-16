@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const surfaceRoot = path.resolve(webuiRoot, '../..');
@@ -15,9 +16,10 @@ const backendRoot = process.env.COWD_BACKEND_REPO
     fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/mod.rs'))
   ))
   || surfaceRoot;
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
-const reportDir = path.join(planRoot, 'reports');
-const version = process.env.COWD_VERSION || 'v0.9.245';
+const provenance = evidenceContext('capability-parity');
+const planRoot = provenance.plan_root;
+const reportDir = path.join(planRoot, 'reports', provenance.version);
+const version = provenance.version;
 const gate = process.argv.includes('--gate');
 
 const modules = [
@@ -309,6 +311,7 @@ const blocking = [
 ];
 
 const report = {
+  provenance,
   version,
   generated_at: new Date().toISOString(),
   status: blocking.length ? 'fail' : 'pass',

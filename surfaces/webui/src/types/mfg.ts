@@ -119,12 +119,14 @@ export interface MfgAssignment {
   workflow_node_id?: string | null;
   incident_id?: string | null;
   assignee_ref: string;
+  assignee_kind: string;
   watcher_refs: string[];
   priority: string;
   status: string;
   visibility: string;
   revision: number;
   due_at?: string | null;
+  sla_minutes?: number | null;
   notification_targets?: Array<{ surface: string; recipient: string; thread?: string | null }>;
 }
 

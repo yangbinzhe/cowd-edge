@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const surfaceRoot = path.resolve(webuiRoot, '../..');
@@ -16,9 +17,10 @@ const backendRoot = process.env.COWD_BACKEND_REPO
     || fs.existsSync(path.join(candidate, 'crates/cowd-cli/src/api_routes/system_routes.rs'))
   ))
   || surfaceRoot;
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
-const reportDir = path.join(planRoot, 'reports');
-const version = process.env.COWD_VERSION || 'v0.9.246';
+const provenance = evidenceContext('tool-operations-gate');
+const planRoot = provenance.plan_root;
+const reportDir = path.join(planRoot, 'reports', provenance.version);
+const version = provenance.version;
 const gate = process.argv.includes('--gate');
 
 function read(file) {
@@ -153,8 +155,14 @@ for (const section of requiredSections) {
   if (!capabilitiesText.includes(`id: '${section}'`)) failures.push(`capabilities missing section ${section}`);
   if (!pageText.includes(`data-section="${section}"`)) failures.push(`ToolsPage missing data-section ${section}`);
 }
-if (!appText.includes("querySelectorAll<HTMLElement>('.main-surface [data-section]')")) failures.push('generic section visibility controller missing in App.vue');
-if (!appText.includes('panel.hidden = hidden')) failures.push('generic section visibility must use hidden attribute');
+if (!appText.includes('provide(activeCapabilitySectionKey, readonly(activeSection))')) failures.push('App.vue must provide the canonical active section state');
+if (appText.includes("querySelectorAll<HTMLElement>('.main-surface [data-section]')") || appText.includes('panel.hidden = hidden')) {
+  failures.push('legacy global DOM section visibility controller must not return');
+}
+if (!pageText.includes('useCapabilitySection()')) failures.push('ToolsPage must consume the canonical section owner');
+for (const section of requiredSections) {
+  if (!pageText.includes(`v-show="isSectionActive('${section}')"`)) failures.push(`ToolsPage section ${section} must use declarative visibility`);
+}
 if (fs.existsSync(files.workflowStrip)) failures.push('obsolete WorkflowStrip implementation must not remain active');
 if (stylesText.includes('data-active-section="registry"')) failures.push('legacy per-section CSS whitelist should not be restored');
 for (const heading of hasAll(pageEvidenceText, requiredHeadings)) failures.push(`ToolsPage missing heading ${heading}`);
@@ -221,6 +229,7 @@ const requiredTuiStateTerms = [
 for (const term of hasAll(tuiStateText, requiredTuiStateTerms)) failures.push(`TUI state missing ${term}`);
 
 const report = {
+  provenance,
   version,
   generated_at: new Date().toISOString(),
   status: failures.length ? 'fail' : 'pass',

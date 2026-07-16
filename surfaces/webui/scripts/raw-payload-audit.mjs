@@ -2,13 +2,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const surfaceRoot = path.resolve(webuiRoot, '../..');
 const workspaceRoot = path.resolve(surfaceRoot, '..');
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
-const reportDir = path.join(planRoot, 'reports');
-const version = process.env.COWD_VERSION || 'v0.9.245';
+const provenance = evidenceContext('raw-payload-audit');
+const planRoot = provenance.plan_root;
+const reportDir = path.join(planRoot, 'reports', provenance.version);
+const version = provenance.version;
 const gate = process.argv.includes('--gate');
 
 const allowTitleTerms = [
@@ -175,6 +177,7 @@ for (const requirement of pageRequirements) {
 }
 
 const report = {
+  provenance,
   version,
   generated_at: new Date().toISOString(),
   status: failures.length ? 'fail' : 'pass',

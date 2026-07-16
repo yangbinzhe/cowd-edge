@@ -7,7 +7,7 @@
     "build": "vite build && cp dist/index.dev.html dist/index.html && cp dist/index.dev.html index.html && rm -rf assets/app && mkdir -p assets && cp -R dist/assets/app assets/app",
     "preview": "vite preview --host 127.0.0.1",
     "generate:api": "node scripts/generate-api.mjs",
-    "test": "vitest run && npm run test:i18n && node scripts/api-matrix.mjs --gate && node scripts/mfg-write-contracts.mjs && node scripts/capability-parity.mjs --gate && node scripts/secondary-section-contract.mjs --gate && node scripts/raw-payload-audit.mjs --gate && node scripts/tool-operations-gate.mjs --gate && node scripts/command-actions-gate.mjs --gate",
+    "test": "vitest run && npm run test:i18n && node scripts/api-matrix.mjs --gate && node scripts/mfg-write-contracts.mjs && node scripts/capability-parity.mjs --gate && node scripts/secondary-section-contract.mjs --gate && node scripts/raw-payload-audit.mjs --gate && node scripts/tool-operations-gate.mjs --gate && node scripts/command-actions-gate.mjs --gate && node scripts/acceptance-gate.mjs --gate",
     "test:unit": "vitest run",
     "test:i18n": "node scripts/i18n-source-gate.mjs --gate && node scripts/i18n-coverage-gate.mjs --gate",
     "test:api-matrix": "node scripts/api-matrix.mjs --gate",
@@ -18,6 +18,8 @@
     "test:tool-ops": "node scripts/tool-operations-gate.mjs --gate",
     "test:command-actions": "node scripts/command-actions-gate.mjs --gate",
     "test:visual-audit": "node scripts/visual-audit.mjs",
+    "test:acceptance": "node scripts/acceptance-gate.mjs --gate",
+    "test:acceptance:final": "node scripts/acceptance-gate.mjs --final --gate",
     "test:e2e": "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=${PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:-/snap/bin/chromium} playwright test --browser=chromium"
   },
   "devDependencies": {

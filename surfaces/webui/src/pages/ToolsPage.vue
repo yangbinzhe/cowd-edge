@@ -147,7 +147,6 @@ function parseJsonArray(text: string, label: string) {
 
 function actionPayload() {
   return {
-    actor_principal: actor.value,
     actor_identity_ref: `user:${actor.value}`,
     source_channel: 'channel://webui/tools',
     session_id: 'webui-tools',

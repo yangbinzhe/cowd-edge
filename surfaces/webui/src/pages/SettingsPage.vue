@@ -9,8 +9,11 @@ import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import { displayBoolean, displayStatus } from '../i18n/domain/status';
+import { useRoute, useRouter } from 'vue-router';
 
 const store = useAppStore();
+const route = useRoute();
+const router = useRouter();
 const { locale, setLocale } = useI18n();
 const profileName = ref('');
 const defaultModel = ref('');
@@ -57,8 +60,16 @@ const settingsSections = computed(() => [
   { id: 'receipts', label: t('settings.nav.receipts'), description: t('settings.nav.receipts.desc'), status: settingsReceipt.value ? t('status.ready') : t('status.waiting') },
 ]);
 const activeSettingsSection = computed({
-  get: () => store.activeSectionByPage.settings || 'ui',
-  set: (value: string) => store.selectSection('settings', value),
+  get: () => {
+    const querySection = typeof route.query.section === 'string' ? route.query.section : '';
+    return settingsSections.value.some((section) => section.id === querySection)
+      ? querySection
+      : store.activeSectionByPage.settings || 'ui';
+  },
+  set: (value: string) => {
+    store.selectSection('settings', value);
+    void router.replace({ query: { ...route.query, section: value } });
+  },
 });
 const currentSettingsSection = computed(() => settingsSections.value.find((section) => section.id === activeSettingsSection.value) || settingsSections.value[0]);
 const modelConfigContract = computed(() => ({

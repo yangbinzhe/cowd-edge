@@ -518,7 +518,6 @@ const grantRevokeContract = computed(() => ({
 
 function crossPlaneAction() {
   return {
-    actor_principal: actor.value,
     actor_identity_ref: identityRef.value || null,
     source_channel: 'channel://webui/local',
     session_id: 'webui-gateway',
@@ -742,7 +741,6 @@ async function executeConnectorServiceTool() {
   if (!connectorServiceId.value || !connectorServiceToolId.value) return;
   const resourceId = (resourceRef.value || 'webui-doc').split('/').filter(Boolean).pop() || 'webui-doc';
   actionResult.value = await api.connectorServiceExecute(connectorServiceId.value, {
-    actor_principal: actor.value,
     actor_identity_ref: identityRef.value || null,
     source_channel: 'channel://webui/local',
     session_id: 'webui-gateway',

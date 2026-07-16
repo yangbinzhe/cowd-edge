@@ -2,6 +2,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
+
+const provenance = evidenceContext('i18n-coverage-gate');
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const srcRoot = path.join(webuiRoot, 'src');
@@ -88,6 +91,7 @@ for (const [key, locations] of collectI18nKeys()) {
 }
 
 const report = {
+  provenance,
   status: failures.length ? 'fail' : 'pass',
   zh_keys: zh.entries.size,
   en_keys: en.entries.size,

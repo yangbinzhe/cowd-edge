@@ -1,15 +1,17 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { evidenceContext } from './evidence-context.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const surfaceRoot = resolve(__dirname, '..', '..');
 const workspaceRoot = resolve(surfaceRoot, '..');
 const webuiRoot = resolve(__dirname, '..');
-const planRoot = process.env.COWD_PLAN_ROOT || resolve(workspaceRoot, 'plan', '0617-最终目标收口');
-const version = process.env.COWD_VERSION || 'v0.9.243';
+const provenance = evidenceContext('mfg-write-contracts');
+const planRoot = provenance.plan_root;
+const version = provenance.version;
 const sourcePath = resolve(webuiRoot, 'src', 'data', 'mfgWriteContracts.json');
-const reportPath = resolve(planRoot, 'reports', `${version}-mfg-write-contracts.json`);
+const reportPath = resolve(planRoot, 'reports', version, `${version}-mfg-write-contracts.json`);
 
 const contracts = JSON.parse(await readFile(sourcePath, 'utf8'));
 
@@ -45,6 +47,7 @@ for (const domain of requiredDomains) {
 }
 
 const report = {
+  provenance,
   version,
   generated_at: new Date().toISOString(),
   source: sourcePath,

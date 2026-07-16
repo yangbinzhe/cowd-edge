@@ -86,6 +86,12 @@ function mfgIdempotencyKey(scope: string) {
   return `webui-mfg-${scope}-${nonce}`;
 }
 
+function withoutServerActor(value: Record<string, unknown>, fields = ['actor_principal']): Record<string, unknown> {
+  const sanitized = { ...value };
+  for (const field of fields) delete sanitized[field];
+  return sanitized;
+}
+
 async function parseResponse(response: Response, path = '') {
   const text = await response.text();
   if (!text) return {};
@@ -994,7 +1000,7 @@ export const api = {
   connectorServiceTools: (serviceId: string) => read(`/api/connectors/services/${encodeURIComponent(serviceId)}/tools`, { tools: [] }),
   connectorServiceExecute: (serviceId: string, body: Record<string, unknown>) => writeWithReceipt(`/api/connectors/services/${encodeURIComponent(serviceId)}/execute`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body)),
   }),
   connectorRevalidateResource: (reference: string) => write('/api/connectors/resources/revalidate', {
     method: 'POST',
@@ -1022,15 +1028,15 @@ export const api = {
   crossPlaneExecutions: () => read('/api/cross-plane/action/executions', {}),
   crossPlanePolicySimulate: (body: Record<string, unknown>) => write('/api/cross-plane/policy/simulate', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body)),
   }),
   crossPlanePreflight: (body: Record<string, unknown>) => write('/api/cross-plane/action/preflight', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body)),
   }),
   crossPlaneExecute: (action: Record<string, unknown>, mode = 'dry_run', idempotency_key?: string) => writeWithReceipt('/api/cross-plane/action/execute', {
     method: 'POST',
-    body: JSON.stringify({ action, mode, idempotency_key }),
+    body: JSON.stringify({ action: withoutServerActor(action), mode, idempotency_key }),
   }),
   crossPlaneResolveIdentity: (identity_ref: string) => write('/api/cross-plane/identity/resolve', {
     method: 'POST',
@@ -1269,7 +1275,7 @@ export const api = {
   mfgPlaybook: (id: string) => read(`/api/apps/mfg/playbooks/${encodeURIComponent(id)}`, {}),
   mfgPlaybookUpsert: (body: Record<string, unknown>) => write('/api/apps/mfg/playbooks/upsert', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ playbook: body, session_id: 'webui-mfg' }),
   }),
   mfgRecommendPlaybooks: (id: string, limit = 5) => write(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/playbooks/recommend`, {
     method: 'POST',
@@ -1286,16 +1292,17 @@ export const api = {
   mfgSkillRuns: (id: string) => read(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/skills`, {}),
   mfgExecuteAction: (analysisId: string, actionId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/analyses/${encodeURIComponent(analysisId)}/actions/${encodeURIComponent(actionId)}/execute`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body, ['operator_id', 'actor_principal', 'actor_ref'])),
   }),
   mfgExecutionBridge: (executionId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/executions/${encodeURIComponent(executionId)}/cross-plane/execute`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body)),
   }),
   mfgExecutionFeedback: (executionId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/executions/${encodeURIComponent(executionId)}/feedback`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body, ['actor_ref', 'actor_principal', 'operator_id'])),
   }),
+  mfgExecution: (executionId: string) => read(`/api/apps/mfg/executions/${encodeURIComponent(executionId)}`, {}),
   mfgUpsertProfile: (profile: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('cockpit-profile')) => write('/api/apps/mfg/cockpit/profiles/upsert', {
     method: 'POST',
     body: JSON.stringify({ profile, idempotency_key: idempotencyKey }),
@@ -1303,8 +1310,14 @@ export const api = {
   mfgCockpitProfiles: (cadence?: string) => read(`/api/apps/mfg/cockpit/profiles${cadence ? `?cadence=${encodeURIComponent(cadence)}` : ''}`, { items: [] }),
   mfgCockpitProfile: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}`, {}),
   mfgCockpitWidgetCatalog: () => read('/api/apps/mfg/cockpit/widget-catalog', { items: [] }),
-  mfgCockpitProjection: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection`, {}),
-  mfgCockpitWidgetProjection: (profileId: string, instanceId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/widgets/${encodeURIComponent(instanceId)}/projection`, {}),
+  mfgCockpitProjection: (profileId: string, filters: Record<string, string> = {}) => {
+    const params = new URLSearchParams(filters);
+    return read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection${params.size ? `?${params.toString()}` : ''}`, {});
+  },
+  mfgCockpitWidgetProjection: (profileId: string, instanceId: string, filters: Record<string, string> = {}) => {
+    const params = new URLSearchParams(filters);
+    return read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/widgets/${encodeURIComponent(instanceId)}/projection${params.size ? `?${params.toString()}` : ''}`, {});
+  },
   mfgDeleteCockpitProfile: (profileId: string, expectedRevision: number, idempotencyKey = mfgIdempotencyKey('cockpit-delete')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${encodeURIComponent(expectedRevision)}&idempotency_key=${encodeURIComponent(idempotencyKey)}`, { method: 'DELETE' }),
   mfgCloneCockpitProfile: (profileId: string, body: Record<string, unknown> = {}, idempotencyKey = mfgIdempotencyKey('cockpit-clone')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/clone`, { method: 'POST', body: JSON.stringify({ ...body, idempotency_key: idempotencyKey }) }),
   mfgShareCockpitProfile: (profileId: string, body: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('cockpit-share')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/share`, { method: 'POST', body: JSON.stringify({ ...body, idempotency_key: idempotencyKey }) }),
@@ -1328,15 +1341,16 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ report }),
   }),
+  mfgReports: (profileId?: string) => read(`/api/apps/mfg/cockpit/reports${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ''}`, { items: [] }),
   mfgReportDeliveryState: (reportId: string) => read(`/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/delivery-state`, {}),
   mfgReport: (reportId: string) => read(`/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}`, {}),
   mfgDeliverReport: (reportId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/deliver`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body)),
   }),
   mfgRetryReportDelivery: (reportId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/delivery/retry`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withoutServerActor(body)),
   }),
   mfgRunReportSchedule: (body: Record<string, unknown>) => write('/api/apps/mfg/cockpit/reports/schedules/run', {
     method: 'POST',

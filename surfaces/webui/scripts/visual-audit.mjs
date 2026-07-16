@@ -3,15 +3,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright';
+import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(webuiRoot, '../../..', 'plan/0701-webui-interaction-audit');
-const version = process.env.COWD_VERSION || 'webui-interaction-current';
+const provenance = evidenceContext('visual-audit');
+const planRoot = provenance.plan_root;
+const version = provenance.version;
+const full = process.argv.includes('--full');
 const baseUrl = process.env.COWD_VISUAL_BASE_URL || 'http://127.0.0.1:5195';
-const screenshotDir = path.join(planRoot, 'screenshots', version);
-const reportPath = path.join(planRoot, 'reports', `${version}-visual-audit.md`);
+const screenshotDir = path.join(planRoot, 'artifacts', version, 'visual-audit');
+const reportPath = path.join(planRoot, 'reports', version, `${version}-visual-audit.md`);
 
-const routes = [
+const baseRoutes = [
   { id: 'chat', path: '/#/chat' },
   { id: 'runtime', path: '/#/runtime' },
   { id: 'mission', path: '/#/mission' },
@@ -28,12 +31,26 @@ const routes = [
   { id: 'settings', path: '/#/settings' },
 ];
 
-const viewports = [
-  { id: 'mobile', width: 375, height: 812 },
+const baseViewports = full ? [
+  { id: 'mobile-360', width: 360, height: 800 },
+  { id: 'mobile-390', width: 390, height: 844 },
   { id: 'tablet', width: 768, height: 1024 },
+  { id: 'breakpoint-before', width: 1179, height: 900 },
+  { id: 'breakpoint-at', width: 1180, height: 900 },
   { id: 'desktop', width: 1440, height: 960 },
   { id: 'wide', width: 1920, height: 1080 },
+] : [
+  { id: 'mobile-390', width: 390, height: 844 },
+  { id: 'breakpoint-at', width: 1180, height: 900 },
+  { id: 'desktop', width: 1440, height: 960 },
 ];
+const scenarios = full ? ['normal', 'zoom-200', 'long-content'] : ['normal'];
+const viewports = baseViewports.flatMap((viewport) => scenarios.map((scenario) => ({
+  ...viewport,
+  id: `${viewport.id}-${scenario}`,
+  scenario,
+})));
+let routes = [...baseRoutes];
 
 fs.mkdirSync(screenshotDir, { recursive: true });
 fs.mkdirSync(path.dirname(reportPath), { recursive: true });
@@ -62,6 +79,10 @@ function routeUrl(route) {
 function evaluateLayout(metrics, route, viewport) {
   const findings = [];
   if (!metrics.shellVisible || !metrics.mainVisible) addFinding(findings, 'fail', 'app shell or main surface is not visible');
+  if (!metrics.expectedSectionVisible) addFinding(findings, 'fail', 'deep-linked section is not visible');
+  if (metrics.visibleSectionCount > 1) addFinding(findings, 'fail', `${metrics.visibleSectionCount} page sections are simultaneously visible`);
+  if (metrics.horizontalOverflow > 2) addFinding(findings, 'fail', `page has ${metrics.horizontalOverflow}px horizontal overflow`);
+  if (metrics.croppedCriticalControls > 0) addFinding(findings, 'fail', `${metrics.croppedCriticalControls} critical controls are clipped outside the viewport`);
   if (metrics.bodyTextLength < 80) addFinding(findings, 'review', 'rendered text density is low');
 
   if (route.id === 'chat') {
@@ -136,6 +157,47 @@ const failures = [];
 const reviews = [];
 
 try {
+  if (full) {
+    const discoveryPage = await browser.newPage({ viewport: { width: 1440, height: 960 } });
+    const discovered = [];
+    for (const route of baseRoutes) {
+      try {
+        await discoveryPage.goto(routeUrl(route), { waitUntil: 'domcontentloaded' });
+        await discoveryPage.locator('.app-shell').waitFor({ state: 'visible' });
+        let sections = await discoveryPage.locator('.capability-section-nav select option').evaluateAll((options) => options
+          .map((option) => option.getAttribute('value'))
+          .filter(Boolean));
+        if (!sections.length && route.id === 'settings') {
+          const settingsButtons = discoveryPage.locator('.settings-nav button');
+          const count = await settingsButtons.count();
+          sections = [];
+          for (let index = 0; index < count; index += 1) {
+            await settingsButtons.nth(index).click();
+            const active = await discoveryPage.locator('.settings-content').getAttribute('data-active-section');
+            if (active) sections.push(active);
+          }
+        }
+        if (!sections.length) {
+          sections = await discoveryPage.evaluate(() => Array.from(document.querySelectorAll('[data-section]'))
+            .map((element) => element.getAttribute('data-section'))
+            .filter(Boolean));
+        }
+        for (const section of new Set(sections)) {
+          discovered.push({
+            id: `${route.id}--${section}`,
+            pageId: route.id,
+            section,
+            path: `${route.path}${route.path.includes('?') ? '&' : '?'}section=${encodeURIComponent(section)}`,
+          });
+        }
+        if (!sections.length) discovered.push(route);
+      } catch (error) {
+        failures.push(`${route.id}/section-discovery: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    await discoveryPage.close();
+    routes = discovered.length ? discovered : baseRoutes;
+  }
   for (const viewport of viewports) {
     const page = await browser.newPage({ viewport });
     page.setDefaultTimeout(15_000);
@@ -150,7 +212,22 @@ try {
         await page.goto(url, { waitUntil: 'domcontentloaded' });
         await page.locator('.app-shell').waitFor({ state: 'visible' });
         await page.waitForTimeout(350);
-        metrics = await page.evaluate(() => {
+        if (viewport.scenario === 'zoom-200') {
+          await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+        }
+        if (viewport.scenario === 'long-content') {
+          await page.evaluate(() => {
+            const target = Array.from(document.querySelectorAll('[data-section]')).find((element) => {
+              const style = getComputedStyle(element);
+              return style.display !== 'none' && style.visibility !== 'hidden';
+            }) || document.querySelector('.main-surface');
+            const probe = document.createElement('p');
+            probe.className = 'visual-audit-long-content';
+            probe.textContent = '超长制造运营上下文 Long manufacturing operational context '.repeat(35);
+            target?.appendChild(probe);
+          });
+        }
+        metrics = await page.evaluate((expectedSection) => {
           const visible = (element) => {
             if (!element) return false;
             const style = getComputedStyle(element);
@@ -170,6 +247,8 @@ try {
             };
           };
           const bodyText = document.body.innerText.trim();
+          const sectionElements = Array.from(document.querySelectorAll('[data-section]'));
+          const visibleSections = new Set(sectionElements.filter((element) => visible(element)).map((element) => element.getAttribute('data-section')));
           const firstViewportChrome = [
             '.page-header',
             '.primary-context-bar',
@@ -191,6 +270,11 @@ try {
           const smallTouchTargetCount = visibleControls.filter((element) => {
             const rect = touchTargetRect(element);
             return rect.width < 44 || rect.height < 44;
+          }).length;
+          const croppedCriticalControls = visibleControls.filter((element) => {
+            const rect = element.getBoundingClientRect();
+            const critical = element.matches('.primary-action, [type="submit"], .section-nav button, .rail-button');
+            return critical && (rect.left < -1 || rect.right > window.innerWidth + 1 || rect.top < -1 || rect.bottom > document.documentElement.scrollHeight + 1);
           }).length;
           const unlabeledIconButtons = Array.from(document.querySelectorAll('button.icon-action'))
             .filter((element) => visible(element))
@@ -235,8 +319,12 @@ try {
           return {
             shellVisible: visible(document.querySelector('.app-shell')),
             mainVisible: visible(document.querySelector('.main-surface')),
+            expectedSectionVisible: !expectedSection || sectionElements.some((element) => element.getAttribute('data-section') === expectedSection && visible(element)),
+            visibleSectionCount: visibleSections.length,
             bodyTextLength: bodyText.length,
             bodyScrollRatio: document.body.scrollHeight / Math.max(window.innerHeight, 1),
+            horizontalOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+            croppedCriticalControls,
             firstViewportChromeShare: chromeHeight / Math.max(window.innerHeight, 1),
             composer: rectOf('.composer'),
             settingsContent: rectOf('.settings-content'),
@@ -251,8 +339,8 @@ try {
             rawI18nKeyCount: (bodyText.match(/\b(?:status|unit|page|component|script|template|common)\.[a-zA-Z0-9_.-]+|\bstore\.app\.[a-zA-Z0-9_.-]+/g) || []).length,
             rawToolEvidenceCount: (bodyText.match(/Raw evidence ref:|Summary:\s*[\[{]/g) || []).length,
           };
-        });
-        const findings = evaluateLayout(metrics, route, viewport);
+        }, route.section || null);
+        const findings = evaluateLayout(metrics, { ...route, id: route.pageId || route.id }, viewport);
         status = statusFrom(findings);
         note = findings.length ? findings.map((finding) => finding.message).join('; ') : note;
         findings.forEach((finding) => {
@@ -269,7 +357,7 @@ try {
       }
       rows.push({
         route: route.id,
-        viewport: `${viewport.width}x${viewport.height}`,
+        viewport: `${viewport.width}x${viewport.height}/${viewport.scenario}`,
         status,
         screenshot: path.relative(planRoot, filePath),
         note,
@@ -286,6 +374,9 @@ const markdown = [
   `# ${version} Visual Audit`,
   '',
   `Generated: ${new Date().toISOString()}`,
+  `Mode: ${full ? 'full' : 'quick'}`,
+  `Frontend commit: ${provenance.frontend.commit}`,
+  `Backend commit: ${provenance.backend.commit}`,
   `Base URL: ${baseUrl}`,
   '',
   `Status: ${failures.length ? 'fail' : 'pass'}`,
@@ -296,9 +387,9 @@ const markdown = [
   '',
   '## Layout Metrics',
   '',
-  '| Route | Viewport | Chrome Share | Body Scroll | Composer | Settings Width | Workflow Min | Main Data | Tree | Raw Keys | Raw Tool | Small Targets | Unlabeled Icons |',
-  '|---|---:|---:|---:|---|---:|---:|---|---|---:|---:|---:|---:|',
-  ...rows.map((row) => `| ${row.route} | ${row.viewport} | ${Math.round((row.metrics.firstViewportChromeShare || 0) * 100)}% | ${(row.metrics.bodyScrollRatio || 0).toFixed(1)}x | ${row.metrics.composer?.visible ? `${row.metrics.composer.top}-${row.metrics.composer.bottom}` : '-'} | ${row.metrics.settingsContent?.width || 0} | ${row.metrics.visibleWorkflowCount ? row.metrics.minWorkflowHeight : '-'} | ${row.metrics.mainDataVisible ? 'yes' : 'no'} | ${row.metrics.workspaceTreeVisible ? 'yes' : '-'} | ${row.metrics.rawI18nKeyCount ?? 0} | ${row.metrics.rawToolEvidenceCount ?? 0} | ${row.metrics.smallTouchTargetCount ?? 0} | ${row.metrics.unlabeledIconButtons ?? 0} |`),
+  '| Route | Viewport | Chrome Share | Body Scroll | H Overflow | Cropped Actions | Composer | Settings Width | Workflow Min | Main Data | Tree | Raw Keys | Raw Tool | Small Targets | Unlabeled Icons |',
+  '|---|---:|---:|---:|---:|---:|---|---:|---:|---|---|---:|---:|---:|---:|',
+  ...rows.map((row) => `| ${row.route} | ${row.viewport} | ${Math.round((row.metrics.firstViewportChromeShare || 0) * 100)}% | ${(row.metrics.bodyScrollRatio || 0).toFixed(1)}x | ${row.metrics.horizontalOverflow || 0} | ${row.metrics.croppedCriticalControls || 0} | ${row.metrics.composer?.visible ? `${row.metrics.composer.top}-${row.metrics.composer.bottom}` : '-'} | ${row.metrics.settingsContent?.width || 0} | ${row.metrics.visibleWorkflowCount ? row.metrics.minWorkflowHeight : '-'} | ${row.metrics.mainDataVisible ? 'yes' : 'no'} | ${row.metrics.workspaceTreeVisible ? 'yes' : '-'} | ${row.metrics.rawI18nKeyCount ?? 0} | ${row.metrics.rawToolEvidenceCount ?? 0} | ${row.metrics.smallTouchTargetCount ?? 0} | ${row.metrics.unlabeledIconButtons ?? 0} |`),
   '',
   '## Failures',
   '',

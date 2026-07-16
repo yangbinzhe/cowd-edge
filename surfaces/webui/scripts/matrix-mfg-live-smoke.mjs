@@ -2,12 +2,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const workspaceRoot = path.resolve(webuiRoot, '..');
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0617-最终目标收口');
-const reportDir = path.join(planRoot, 'reports');
-const version = process.env.COWD_VERSION || 'v0.9.276';
+const provenance = evidenceContext('matrix-mfg-live-smoke');
+const planRoot = provenance.plan_root;
+const reportDir = path.join(planRoot, 'reports', provenance.version);
+const version = provenance.version;
 const baseUrl = process.env.COWD_GATEWAY_URL || 'http://127.0.0.1:8642';
 
 function readTokenFromConfig() {
@@ -209,6 +211,7 @@ if (reportId) {
 const failed = steps.filter((step) => step.status === 'fail');
 const degraded = steps.filter((step) => step.status === 'degraded');
 const report = {
+  provenance,
   version,
   generated_at: new Date().toISOString(),
   base_url: baseUrl,

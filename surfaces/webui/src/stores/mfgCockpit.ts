@@ -34,6 +34,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
   let refreshInFlight = false;
   let refreshQueued = false;
+  const widgetEpochs = new Map<string, number>();
   const profiles = ref<MfgCockpitProfile[]>([]);
   const catalog = ref<MfgWidgetDefinition[]>([]);
   const globalFilterSchema = ref<MfgCockpitCatalogContract['global_filter_schema']>();
@@ -53,14 +54,18 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   const liveStatus = ref<'connecting' | 'live' | 'reconnecting' | 'stopped'>('stopped');
   const lastUpdatedAt = ref('');
   const requestEpoch = ref(0);
+  const activeProjectionFilters = ref<Record<string, string>>({});
   const widgetRefreshState = ref<Record<string, { status: 'idle' | 'loading' | 'ready' | 'error'; error?: string; updated_at?: string }>>({});
 
-  const selectedProfile = computed(() => profiles.value.find((profile) => profile.profile_id === selectedProfileId.value) || projection.value?.profile || null);
+  const selectedProfile = computed(() => projection.value?.profile?.profile_id === selectedProfileId.value
+    ? projection.value.profile
+    : profiles.value.find((profile) => profile.profile_id === selectedProfileId.value) || null);
   const widgetsByInstance = computed(() => new Map((projection.value?.widgets || []).map((widget) => [widget.instance_id, widget])));
   const attentionAlerts = computed(() => alerts.value.filter((item) => !['resolved', 'snoozed'].includes(String(item.status))));
   const activeAssignments = computed(() => assignments.value.filter((item) => !['unassigned', 'resolved', 'done'].includes(String(item.status))));
 
-  async function refresh() {
+  async function refresh(filters?: Record<string, string>) {
+    if (filters) activeProjectionFilters.value = { ...filters };
     if (refreshInFlight) {
       refreshQueued = true;
       return;
@@ -90,7 +95,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
         selectedProfileId.value = profiles.value[0]?.profile_id || '';
         if (!selectedProfileId.value) projection.value = null;
       }
-      if (selectedProfileId.value) await loadProfile(selectedProfileId.value, epoch);
+      if (selectedProfileId.value) await loadProfile(selectedProfileId.value, epoch, activeProjectionFilters.value);
       if (epoch !== requestEpoch.value) return;
       await loadForecasts();
       if (epoch !== requestEpoch.value) return;
@@ -107,13 +112,14 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     }
   }
 
-  async function loadProfile(profileId: string, inheritedEpoch?: number) {
+  async function loadProfile(profileId: string, inheritedEpoch?: number, filters?: Record<string, string>) {
+    if (filters) activeProjectionFilters.value = { ...filters };
     const epoch = inheritedEpoch ?? ++requestEpoch.value;
     error.value = '';
     try {
       selectedProfileId.value = profileId;
       const [profileResult, projectionResult] = await Promise.all([
-        api.mfgCockpitProfile(profileId), api.mfgCockpitProjection(profileId),
+        api.mfgCockpitProfile(profileId), api.mfgCockpitProjection(profileId, activeProjectionFilters.value),
       ]);
       const failure = readError(profileResult, projectionResult);
       if (failure) throw new Error(failure);
@@ -133,9 +139,9 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     }
   }
 
-  async function loadForecasts(metricRefs?: string[]) {
+  async function loadForecasts(metricRefs?: string[], horizon = 'next_period') {
     const refs = metricRefs || selectedProfile.value?.focus_metric_ids || [];
-    const result = await api.mfgForecasts(refs);
+    const result = await api.mfgForecasts(refs, horizon);
     const failure = readError(result);
     if (failure) throw new Error(failure);
     forecasts.value = collection(result);
@@ -170,12 +176,14 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   async function refreshWidget(instanceId: string) {
     const profileId = selectedProfileId.value;
     if (!profileId) throw new Error('mfg.cockpit.profile_required');
+    const widgetEpoch = (widgetEpochs.get(instanceId) || 0) + 1;
+    widgetEpochs.set(instanceId, widgetEpoch);
     widgetRefreshState.value = {
       ...widgetRefreshState.value,
       [instanceId]: { status: 'loading' },
     };
     try {
-      const result = await api.mfgCockpitWidgetProjection(profileId, instanceId);
+      const result = await api.mfgCockpitWidgetProjection(profileId, instanceId, activeProjectionFilters.value);
       if (result?.__state && result.__state !== 'ready') {
         throw new Error(String(result.__error || result.__state));
       }
@@ -183,6 +191,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
       if (failure) throw new Error(failure);
       const next = (result?.projection?.widget || result?.widget) as MfgCockpitWidget | undefined;
       if (!next?.instance_id) throw new Error('mfg.cockpit.invalid_widget_projection_response');
+      if (widgetEpochs.get(instanceId) !== widgetEpoch) return next;
       if (projection.value?.profile.profile_id === profileId) {
         const widgets = [...projection.value.widgets];
         const index = widgets.findIndex((widget) => widget.instance_id === instanceId);
@@ -200,6 +209,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
       };
       return next;
     } catch (cause) {
+      if (widgetEpochs.get(instanceId) !== widgetEpoch) return undefined;
       const message = cause instanceof Error ? cause.message : String(cause);
       widgetRefreshState.value = {
         ...widgetRefreshState.value,
@@ -241,10 +251,11 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     profile.widget_instances.push(instance);
   }
 
-  async function commandAlert(occurrence: MfgAlertOccurrence, command: string, until?: string) {
+  async function commandAlert(occurrence: MfgAlertOccurrence, command: string, until?: string, reason?: string) {
     const result = await api.mfgAlertCommand(occurrence.occurrence_id, {
       command, expected_revision: occurrence.revision, idempotency_key: `webui-alert-${occurrence.occurrence_id}-${occurrence.revision}-${command}`,
       ...(until ? { until } : {}),
+      ...(reason ? { reason } : {}),
     });
     const next = result?.occurrence || occurrence;
     const index = alerts.value.findIndex((item) => item.occurrence_id === next.occurrence_id);
@@ -252,10 +263,11 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     return result;
   }
 
-  async function commandAssignment(assignment: MfgAssignment, command: string, targetRef?: string) {
+  async function commandAssignment(assignment: MfgAssignment, command: string, targetRef?: string, reason?: string) {
     const result = await api.mfgAssignmentCommand(assignment.assignment_id, {
       command, target_ref: targetRef, expected_revision: assignment.revision,
       idempotency_key: `webui-assignment-${assignment.assignment_id}-${assignment.revision}-${command}`,
+      ...(reason ? { reason } : {}),
     });
     const next = result?.assignment || assignment;
     const index = assignments.value.findIndex((item) => item.assignment_id === next.assignment_id);
@@ -301,7 +313,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   }
 
   return {
-    profiles, catalog, globalFilterSchema, filterMergePolicy, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch, widgetRefreshState,
+    profiles, catalog, globalFilterSchema, filterMergePolicy, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch, activeProjectionFilters, widgetRefreshState,
     selectedProfile, widgetsByInstance, attentionAlerts, activeAssignments,
     refresh, loadProfile, loadForecasts, saveProfile, refreshWidget, addWidget, commandAlert, commandAssignment, startLive, stopLive,
   };

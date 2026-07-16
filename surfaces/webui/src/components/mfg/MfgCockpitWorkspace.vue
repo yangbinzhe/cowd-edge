@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Copy, Grip, LayoutGrid, Maximize2, Plus, Redo2, RefreshCw, RotateCw, Save, Settings2, Share2, Trash2, Undo2 } from 'lucide-vue-next';
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 import { api, ApiWriteError } from '../../api/client';
 import { t } from '../../i18n';
 import { useMfgCockpitStore } from '../../stores/mfgCockpit';
@@ -8,6 +9,8 @@ import type { MfgCockpitProfile, MfgJsonSchema, MfgWidgetDefinition, MfgWidgetIn
 import RequestReceipt from '../workbench/RequestReceipt.vue';
 
 const cockpit = useMfgCockpitStore();
+const route = useRoute();
+const router = useRouter();
 const editMode = ref(false);
 const newWidgetId = ref('');
 const working = ref<MfgCockpitProfile | null>(null);
@@ -40,6 +43,39 @@ function copyProfile(profile: MfgCockpitProfile | null) {
   return profile ? JSON.parse(JSON.stringify(profile)) as MfgCockpitProfile : null;
 }
 
+function queryString(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+const cockpitFilterQueryKeys: Record<string, string> = {
+  entity_refs: 'entity',
+  metric_ids: 'metric',
+  severities: 'severity',
+  statuses: 'status',
+  from: 'from',
+  to: 'to',
+};
+
+function cockpitQuery(profile: MfgCockpitProfile | null, widgetId?: string, focus?: string): LocationQueryRaw {
+  const query: LocationQueryRaw = {
+    ...route.query,
+    profile: profile?.profile_id || undefined,
+    widget: widgetId || undefined,
+    focus: focus || queryString(route.query.focus) || undefined,
+  };
+  for (const [filterKey, queryKey] of Object.entries(cockpitFilterQueryKeys)) {
+    const value = profile?.global_filters?.[filterKey];
+    query[queryKey] = Array.isArray(value)
+      ? value.join(',') || undefined
+      : typeof value === 'string' ? value || undefined : undefined;
+  }
+  return query;
+}
+
+async function syncCockpitUrl(profile = working.value, widgetId = queryString(route.query.widget)) {
+  await router.replace({ query: cockpitQuery(profile, widgetId) });
+}
+
 watch(() => cockpit.selectedProfile, (profile) => {
   if (editMode.value && profile?.profile_id === working.value?.profile_id) return;
   working.value = copyProfile(profile);
@@ -47,7 +83,21 @@ watch(() => cockpit.selectedProfile, (profile) => {
   shareVisibility.value = profile?.sharing_policy?.visibility || 'private';
   shareViewers.value = (profile?.sharing_policy?.viewer_refs || []).join(', ');
   shareEditors.value = (profile?.sharing_policy?.editor_refs || []).join(', ');
+  const requestedProfile = queryString(route.query.profile);
+  const requestedExists = cockpit.profiles.some((item) => item.profile_id === requestedProfile);
+  if (profile && (!requestedProfile || !requestedExists)) void syncCockpitUrl(profile, '');
 }, { immediate: true });
+
+watch(
+  [() => queryString(route.query.widget), () => working.value?.profile_id, () => working.value?.widget_instances.length],
+  ([widgetId]) => {
+    const requestedProfile = queryString(route.query.profile);
+    if (requestedProfile && requestedProfile !== working.value?.profile_id) return;
+    const exists = Boolean(widgetId && working.value?.widget_instances.some((widget) => widget.instance_id === widgetId));
+    openWidgetSettings.value = exists ? { [widgetId]: true } : {};
+  },
+  { immediate: true },
+);
 
 const displayedWidgets = computed(() => (working.value?.widget_instances || []).filter((widget) => editMode.value || widget.visible !== false));
 const definitionOptions = computed(() => cockpit.catalog);
@@ -73,7 +123,7 @@ const layoutConflicts = computed(() => {
 });
 const conflictDifferences = computed(() => {
   if (!conflict.value?.remote) return [];
-  const keys: Array<keyof MfgCockpitProfile> = ['display_name', 'focus_refs', 'focus_metric_ids', 'global_filters', 'layout', 'widget_instances', 'sharing_policy'];
+  const keys: Array<keyof MfgCockpitProfile> = ['display_name', 'focus_refs', 'focus_metric_ids', 'thresholds', 'scope', 'template_id', 'global_filters', 'layout', 'widget_instances', 'sharing_policy'];
   return keys.filter((key) => JSON.stringify(conflict.value?.draft[key]) !== JSON.stringify(conflict.value?.remote?.[key]));
 });
 
@@ -122,10 +172,15 @@ function revert() {
   undoStack.value = [];
   redoStack.value = [];
   conflict.value = null;
+  void syncCockpitUrl(working.value);
 }
 
 async function selectProfile(event: Event) {
-  try { await cockpit.loadProfile((event.target as HTMLSelectElement).value); }
+  try {
+    await cockpit.loadProfile((event.target as HTMLSelectElement).value);
+    openWidgetSettings.value = {};
+    await syncCockpitUrl(cockpit.selectedProfile, '');
+  }
   catch { /* store error is rendered by the workspace shell */ }
 }
 
@@ -153,6 +208,7 @@ function createProfile() {
   baseProfile.value = null;
   conflict.value = null;
   editMode.value = true;
+  void router.replace({ query: cockpitQuery(null) });
 }
 
 function addWidget() {
@@ -261,11 +317,29 @@ function updateSchemaValue(instance: MfgWidgetInstance, scope: 'config' | 'query
   if (target.value === '') delete container[key];
   else container[key] = value;
   instance[scope] = container;
+  void syncCockpitUrl(working.value, instance.instance_id);
 }
 
 function globalFilterValue(key: string) {
   const value = working.value?.global_filters?.[key];
   return Array.isArray(value) ? value.join(', ') : value ?? '';
+}
+
+function thresholdValue(metricId: string) {
+  const value = working.value?.thresholds?.[metricId];
+  if (typeof value === 'number') return value;
+  if (value && typeof value === 'object' && 'critical' in value) return Number((value as Record<string, unknown>).critical);
+  return '';
+}
+
+function updateThreshold(metricId: string, event: Event) {
+  if (!working.value) return;
+  rememberEdit();
+  const target = event.target as HTMLInputElement;
+  const thresholds = { ...(working.value.thresholds || {}) };
+  if (!target.value) delete thresholds[metricId];
+  else thresholds[metricId] = { critical: Number(target.value) };
+  working.value.thresholds = thresholds;
 }
 
 function updateGlobalFilter(key: string, schema: MfgJsonSchema, event: Event) {
@@ -276,6 +350,13 @@ function updateGlobalFilter(key: string, schema: MfgJsonSchema, event: Event) {
   if (!target.value) delete filters[key];
   else filters[key] = schema.type === 'array' ? commaList(target.value) : target.value;
   working.value.global_filters = filters;
+  void syncCockpitUrl(working.value);
+}
+
+function toggleWidgetSettings(instanceId: string) {
+  const next = !openWidgetSettings.value[instanceId];
+  openWidgetSettings.value = next ? { [instanceId]: true } : {};
+  void syncCockpitUrl(working.value, next ? instanceId : '');
 }
 
 function parseConflict(cause: unknown) {
@@ -292,6 +373,7 @@ function profileFromResponse(value: any): MfgCockpitProfile | null {
 async function save() {
   if (!working.value) return;
   operationError.value = '';
+  if (working.value.scope.kind === 'personal') working.value.scope.scope_ref = null;
   working.value.sharing_policy = {
     visibility: shareVisibility.value,
     viewer_refs: commaList(shareViewers.value),
@@ -306,6 +388,7 @@ async function save() {
     undoStack.value = [];
     redoStack.value = [];
     conflict.value = null;
+    await syncCockpitUrl(saved);
   } catch (cause) {
     const payload = parseConflict(cause);
     if (payload?.code === 'mfg_revision_conflict' && working.value) {
@@ -336,6 +419,7 @@ async function reloadLatest() {
   conflict.value = null;
   undoStack.value = [];
   redoStack.value = [];
+  await syncCockpitUrl(working.value);
 }
 
 async function saveAsCopy() {
@@ -356,7 +440,10 @@ async function saveAsCopy() {
 
 async function retryWidget(instanceId: string) {
   operationError.value = '';
-  try { await cockpit.refreshWidget(instanceId); }
+  try {
+    await cockpit.refreshWidget(instanceId);
+    await syncCockpitUrl(working.value, instanceId);
+  }
   catch (cause) { operationError.value = cause instanceof Error ? cause.message : String(cause); }
 }
 
@@ -388,6 +475,7 @@ async function deleteProfile() {
     receipt.value = await api.mfgDeleteCockpitProfile(cockpit.selectedProfile.profile_id, cockpit.selectedProfile.revision);
     cockpit.selectedProfileId = '';
     await cockpit.refresh();
+    await syncCockpitUrl(cockpit.selectedProfile, '');
   } catch (cause) { operationError.value = cause instanceof Error ? cause.message : String(cause); }
 }
 
@@ -399,12 +487,38 @@ function widgetFreshness(instance: MfgWidgetInstance) {
   return widgetData(instance)?.freshness as Record<string, unknown> | null | undefined;
 }
 
-function sourceHref(sourceRef: string) {
-  const focus = encodeURIComponent(sourceRef);
-  if (sourceRef.startsWith('matrix:')) return `/reality?section=matrix&focus=${focus}`;
-  if (sourceRef.startsWith('mfg:incident:')) return `/apps/mfg?section=incidents&focus=${focus}`;
-  if (sourceRef.startsWith('mfg:workflow:')) return `/apps/mfg?section=workflows&focus=${focus}`;
-  return `/audit?focus=${focus}`;
+function workflowIncidentId(sourceRef: string, instanceId: string) {
+  if (!sourceRef.startsWith('mfg:workflow:')) return '';
+  const instance = working.value?.widget_instances.find((item) => item.instance_id === instanceId);
+  if (!instance) return '';
+  const workflowId = sourceRef.slice('mfg:workflow:'.length);
+  const data = widgetData(instance)?.data as any;
+  const match = Array.isArray(data?.items)
+    ? data.items.find((item: any) => String(item?.workflow_id) === workflowId)
+    : null;
+  return String(match?.incident_id || '');
+}
+
+function sourceHref(sourceRef: string, instanceId: string) {
+  const query = cockpitQuery(working.value, instanceId, sourceRef);
+  query.return_section = 'dashboard';
+  if (sourceRef.startsWith('matrix:')) return { path: '/reality', query: { ...query, section: 'matrix' } };
+  if (sourceRef.startsWith('mfg:incident:')) {
+    return {
+      path: '/apps/mfg',
+      query: { ...query, section: 'operations', incident: sourceRef.slice('mfg:incident:'.length) },
+    };
+  }
+  if (sourceRef.startsWith('mfg:workflow:')) {
+    return {
+      path: '/apps/mfg',
+      query: { ...query, section: 'collaboration', incident: workflowIncidentId(sourceRef, instanceId) || undefined },
+    };
+  }
+  if (sourceRef.startsWith('mfg:cockpit-profile:')) {
+    return { path: '/apps/mfg', query: { ...query, section: 'reports' } };
+  }
+  return { path: '/audit', query };
 }
 
 function compactWidgetValue(instance: MfgWidgetInstance) {
@@ -447,9 +561,16 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
 
     <form v-if="editMode && working" class="mfg-cockpit__editor" @submit.prevent="save">
       <label><span>{{ t('mfg.cockpit.name') }}</span><input v-model="working.display_name" required @focus="rememberEdit" /></label>
+      <label><span>{{ t('mfg.cockpit.template') }}</span><input v-model="working.template_id" @focus="rememberEdit" /></label>
+      <label><span>{{ t('mfg.cockpit.scopeKind') }}</span><select v-model="working.scope.kind" @focus="rememberEdit"><option value="personal">personal</option><option value="team">team</option><option value="role">role</option><option value="organization">organization</option></select></label>
+      <label v-if="working.scope.kind !== 'personal'"><span>{{ t('mfg.cockpit.scopeRef') }}</span><input v-model="working.scope.scope_ref" required @focus="rememberEdit" /></label>
       <label><span>{{ t('mfg.cockpit.metrics') }}</span><input :value="working.focus_metric_ids.join(', ')" @focus="rememberEdit" @input="working.focus_metric_ids = commaList(($event.target as HTMLInputElement).value)" /></label>
       <label><span>{{ t('mfg.cockpit.entities') }}</span><input :value="working.focus_refs.join(', ')" @focus="rememberEdit" @input="working.focus_refs = commaList(($event.target as HTMLInputElement).value)" /></label>
       <label><span>{{ t('mfg.cockpit.cadence') }}</span><select v-model="working.cadence" @focus="rememberEdit"><option value="daily">daily</option><option value="weekly">weekly</option><option value="on_demand">{{ t('mfg.cockpit.cadence.onDemand') }}</option></select></label>
+      <fieldset v-if="working.focus_metric_ids.length" class="mfg-cockpit__thresholds">
+        <legend>{{ t('mfg.cockpit.thresholds') }}</legend>
+        <label v-for="metricId in working.focus_metric_ids" :key="metricId"><span>{{ metricId }}</span><input type="number" step="any" :value="thresholdValue(metricId)" :placeholder="t('mfg.cockpit.criticalThreshold')" @change="updateThreshold(metricId, $event)" /></label>
+      </fieldset>
       <fieldset v-if="schemaFields(cockpit.globalFilterSchema).length" class="mfg-cockpit__filters">
         <legend>{{ t('mfg.cockpit.globalFilters') }}</legend>
         <label v-for="field in schemaFields(cockpit.globalFilterSchema)" :key="field.key">
@@ -490,13 +611,13 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
     </form>
 
     <div v-if="working" ref="gridEl" class="mfg-cockpit__grid" :style="{ gridTemplateColumns: `repeat(${working.layout.columns || 12}, minmax(0, 1fr))`, gap: `${working.layout.gap || 12}px` }">
-      <article v-for="instance in displayedWidgets" :key="instance.instance_id" class="mfg-widget" :class="{ 'has-layout-conflict': layoutConflicts.has(instance.instance_id), 'is-manipulating': dragState?.instance.instance_id === instance.instance_id, 'is-hidden-widget': instance.visible === false }" :data-status="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading' ? 'loading' : widgetData(instance)?.status || 'unknown'" :style="{ gridColumn: `${instance.placement.x + 1} / span ${instance.placement.width}`, gridRow: `${instance.placement.y + 1} / span ${instance.placement.height}` }">
+      <article v-for="instance in displayedWidgets" :key="instance.instance_id" class="mfg-widget" :class="{ 'has-layout-conflict': layoutConflicts.has(instance.instance_id), 'is-manipulating': dragState?.instance.instance_id === instance.instance_id, 'is-hidden-widget': instance.visible === false, 'is-url-focus': route.query.widget === instance.instance_id }" :data-status="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading' ? 'loading' : widgetData(instance)?.status || 'unknown'" :style="{ gridColumn: `${instance.placement.x + 1} / span ${instance.placement.width}`, gridRow: `${instance.placement.y + 1} / span ${instance.placement.height}` }">
         <header><div><span>{{ widgetData(instance)?.definition_id || instance.definition_id }}</span><h3>{{ widgetData(instance)?.title || instance.definition_id }}</h3></div><strong>{{ compactWidgetValue(instance) }}</strong></header>
         <p v-if="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading'" class="mfg-widget__state" role="status">{{ t('mfg.cockpit.refreshingWidget') }}</p>
         <p v-if="widgetData(instance)?.error || cockpit.widgetRefreshState[instance.instance_id]?.error" class="mfg-widget__error">{{ cockpit.widgetRefreshState[instance.instance_id]?.error || widgetData(instance)?.error }}</p>
         <dl v-else class="mfg-widget__details"><template v-for="(value, key) in (widgetData(instance)?.data || {})" :key="String(key)"><dt v-if="typeof value !== 'object'">{{ key }}</dt><dd v-if="typeof value !== 'object'">{{ value }}</dd></template></dl>
         <nav v-if="widgetData(instance)?.source_refs?.length" class="mfg-widget__sources" :aria-label="t('mfg.cockpit.sources')">
-          <RouterLink v-for="source in widgetData(instance)?.source_refs" :key="source" :to="sourceHref(source)">{{ source }}</RouterLink>
+          <RouterLink v-for="source in widgetData(instance)?.source_refs" :key="source" :to="sourceHref(source, instance.instance_id)">{{ source }}</RouterLink>
         </nav>
         <small v-if="widgetFreshness(instance)" class="mfg-widget__freshness">{{ widgetFreshness(instance)?.status || 'current' }} · {{ widgetFreshness(instance)?.generated_at || cockpit.projection?.generated_at }}</small>
         <button v-if="widgetData(instance)?.error || cockpit.widgetRefreshState[instance.instance_id]?.status === 'error'" class="ghost-action mfg-widget__retry" type="button" :disabled="cockpit.widgetRefreshState[instance.instance_id]?.status === 'loading'" @click="retryWidget(instance.instance_id)"><RotateCw :size="14" />{{ t('mfg.cockpit.retryWidget') }}</button>
@@ -504,7 +625,7 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
           <button class="mfg-widget__drag" type="button" :aria-label="t('mfg.cockpit.dragWidget')" @pointerdown="beginDirectManipulation($event, instance, 'move')"><Grip :size="14" /></button>
           <button type="button" :aria-label="t('mfg.cockpit.moveLeft')" @click="moveWidget(instance, 'x', -1)">←</button><button type="button" :aria-label="t('mfg.cockpit.moveRight')" @click="moveWidget(instance, 'x', 1)">→</button><button type="button" :aria-label="t('mfg.cockpit.moveUp')" @click="moveWidget(instance, 'y', -1)">↑</button><button type="button" :aria-label="t('mfg.cockpit.moveDown')" @click="moveWidget(instance, 'y', 1)">↓</button>
           <button type="button" :aria-label="t('mfg.cockpit.narrower')" @click="resizeWidget(instance, 'width', -1)">−W</button><button type="button" :aria-label="t('mfg.cockpit.wider')" @click="resizeWidget(instance, 'width', 1)">+W</button><button type="button" :aria-label="t('mfg.cockpit.shorter')" @click="resizeWidget(instance, 'height', -1)">−H</button><button type="button" :aria-label="t('mfg.cockpit.taller')" @click="resizeWidget(instance, 'height', 1)">+H</button>
-          <button type="button" :aria-label="t('mfg.cockpit.configureWidget')" @click="openWidgetSettings[instance.instance_id] = !openWidgetSettings[instance.instance_id]"><Settings2 :size="14" /></button><button type="button" :aria-label="instance.visible === false ? t('mfg.cockpit.showWidget') : t('mfg.cockpit.hideWidget')" @click="toggleWidgetVisibility(instance)">{{ instance.visible === false ? '○' : '●' }}</button><button type="button" :aria-label="t('mfg.cockpit.removeWidget')" @click="removeWidget(instance.instance_id)"><Trash2 :size="14" /></button>
+          <button type="button" :aria-label="t('mfg.cockpit.configureWidget')" @click="toggleWidgetSettings(instance.instance_id)"><Settings2 :size="14" /></button><button type="button" :aria-label="instance.visible === false ? t('mfg.cockpit.showWidget') : t('mfg.cockpit.hideWidget')" @click="toggleWidgetVisibility(instance)">{{ instance.visible === false ? '○' : '●' }}</button><button type="button" :aria-label="t('mfg.cockpit.removeWidget')" @click="removeWidget(instance.instance_id)"><Trash2 :size="14" /></button>
         </footer>
         <section v-if="editMode && openWidgetSettings[instance.instance_id]" class="mfg-widget__settings">
           <fieldset v-if="schemaFields(definitionFor(instance)?.config_schema).length">
@@ -549,8 +670,8 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
 .mfg-cockpit__editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
 .mfg-cockpit__add-widget { grid-column: 1 / -1; flex-wrap: wrap; }
 .mfg-cockpit__add-widget select { min-width: min(100%, 280px); }
-.mfg-cockpit__sharing, .mfg-cockpit__filters { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; }
-.mfg-cockpit__sharing legend, .mfg-cockpit__filters legend, .mfg-widget__settings legend { padding: 0 5px; color: var(--text-muted); font-size: 12px; }
+.mfg-cockpit__sharing, .mfg-cockpit__filters, .mfg-cockpit__thresholds { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; }
+.mfg-cockpit__sharing legend, .mfg-cockpit__filters legend, .mfg-cockpit__thresholds legend, .mfg-widget__settings legend { padding: 0 5px; color: var(--text-muted); font-size: 12px; }
 .mfg-cockpit__sharing button { align-self: end; }
 .mfg-cockpit__filters p { grid-column: 1 / -1; margin: 0; color: var(--text-faint); font-size: 11px; }
 .mfg-cockpit__history { flex-wrap: wrap; }
@@ -565,8 +686,9 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
 .mfg-cockpit__compare-head > *, .mfg-cockpit__compare-row > * { min-width: 0; margin: 0; padding: 7px; border-right: 1px solid var(--border); overflow-wrap: anywhere; font-size: 11px; }
 .mfg-cockpit__compare-row > span { color: var(--text-muted); font-family: var(--font-mono); }
 .mfg-cockpit__grid { display: grid; grid-auto-rows: 46px; min-width: 0; }
-.mfg-widget { position: relative; min-width: 0; overflow: auto; display: grid; align-content: start; gap: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px; }
+.mfg-widget { position: relative; min-width: 0; overflow: auto; display: grid; align-content: start; gap: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px; content-visibility: auto; contain-intrinsic-size: 280px; }
 .mfg-widget.has-layout-conflict { border-color: var(--danger); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 35%, transparent); }
+.mfg-widget.is-url-focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
 .mfg-widget.is-manipulating { opacity: .82; box-shadow: 0 10px 28px color-mix(in srgb, var(--text) 14%, transparent); }
 .mfg-widget.is-hidden-widget { opacity: .5; border-style: dashed; }
 .mfg-widget[data-status="critical"], .mfg-widget[data-status="fail"], .mfg-widget[data-status="escalated"] { border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); }
@@ -593,5 +715,5 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
 .mfg-widget__settings input, .mfg-widget__settings select { min-width: 0; min-height: 30px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); padding: 0 7px; }
 .mfg-widget__resize-handle { position: absolute; right: 4px; bottom: 4px; width: 24px; height: 24px; display: grid; place-items: center; border: 0; background: transparent; color: var(--text-faint); }
 .mfg-cockpit__empty { margin: 0; padding: 24px; color: var(--text-muted); border: 1px dashed var(--border-2); border-radius: 10px; }
-@media (max-width: 820px) { .mfg-cockpit__toolbar select, .mfg-cockpit__editor input, .mfg-cockpit__editor select { min-width: 44px; min-height: 44px; } .mfg-cockpit__editor, .mfg-cockpit__sharing, .mfg-cockpit__filters, .mfg-widget__settings fieldset { grid-template-columns: 1fr; } .mfg-cockpit__grid { grid-template-columns: 1fr !important; grid-auto-rows: auto; } .mfg-widget { grid-column: 1 !important; grid-row: auto !important; min-height: 180px; } .mfg-widget__drag, .mfg-widget__resize-handle { display: none; } .mfg-cockpit__compare-head, .mfg-cockpit__compare-row { grid-template-columns: 1fr; } }
+@media (max-width: 820px) { .mfg-cockpit__toolbar select, .mfg-cockpit__editor input, .mfg-cockpit__editor select { min-width: 44px; min-height: 44px; } .mfg-cockpit__editor, .mfg-cockpit__sharing, .mfg-cockpit__filters, .mfg-cockpit__thresholds, .mfg-widget__settings fieldset { grid-template-columns: 1fr; } .mfg-cockpit__grid { grid-template-columns: 1fr !important; grid-auto-rows: auto; } .mfg-widget { grid-column: 1 !important; grid-row: auto !important; min-height: 180px; } .mfg-widget__drag, .mfg-widget__resize-handle { display: none; } .mfg-cockpit__compare-head, .mfg-cockpit__compare-row { grid-template-columns: 1fr; } }
 </style>

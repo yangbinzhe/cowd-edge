@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
 import { useRoute } from 'vue-router';
 import { t } from '../i18n';
@@ -14,15 +14,40 @@ import MfgFocusWorkspace from '../components/mfg/MfgFocusWorkspace.vue';
 const route = useRoute();
 const app = useAppStore();
 const cockpit = useMfgCockpitStore();
-const activeSection = computed(() => typeof route.query.section === 'string' ? route.query.section : app.activeSectionByPage.mfg || 'dashboard');
+const mfgSections = new Set(['dashboard', 'focus', 'collaboration', 'data', 'reality', 'evidence', 'operations', 'skills', 'reports']);
+const activeSection = computed(() => {
+  const requested = typeof route.query.section === 'string' ? route.query.section : app.activeSectionByPage.mfg;
+  return requested && mfgSections.has(requested) ? requested : 'dashboard';
+});
+
+function projectionFiltersFromRoute() {
+  const filters: Record<string, string> = {};
+  for (const key of ['entity', 'metric', 'severity', 'status', 'from', 'to']) {
+    const value = route.query[key];
+    if (typeof value === 'string' && value) filters[key] = value;
+  }
+  return filters;
+}
+
+async function restoreProfileFromRoute() {
+  const profileId = typeof route.query.profile === 'string' ? route.query.profile : '';
+  if (!profileId) return;
+  if (!cockpit.profiles.some((profile) => profile.profile_id === profileId)) return;
+  await cockpit.loadProfile(profileId, undefined, projectionFiltersFromRoute());
+}
 
 async function refresh() {
-  await cockpit.refresh();
+  await cockpit.refresh(projectionFiltersFromRoute());
+  await restoreProfileFromRoute();
   cockpit.startLive();
 }
 
 onMounted(() => { void refresh(); });
 onBeforeUnmount(() => cockpit.stopLive());
+watch(
+  () => [route.query.profile, route.query.entity, route.query.metric, route.query.severity, route.query.status, route.query.from, route.query.to],
+  () => { void restoreProfileFromRoute(); },
+);
 </script>
 
 <template>
@@ -51,7 +76,7 @@ onBeforeUnmount(() => cockpit.stopLive());
     <section v-else-if="activeSection === 'evidence'" class="mfg-page__workspace" data-section="evidence"><MfgDomainWorkspace section="evidence" /></section>
     <section v-else-if="activeSection === 'operations'" class="mfg-page__workspace" data-section="operations"><MfgDomainWorkspace section="operations" /></section>
     <section v-else-if="activeSection === 'skills'" class="mfg-page__workspace" data-section="skills"><MfgDomainWorkspace section="skills" /></section>
-    <section v-else class="mfg-page__workspace" data-section="reports"><MfgDomainWorkspace section="reports" /></section>
+    <section v-else-if="activeSection === 'reports'" class="mfg-page__workspace" data-section="reports"><MfgDomainWorkspace section="reports" /></section>
   </div>
 </template>
 

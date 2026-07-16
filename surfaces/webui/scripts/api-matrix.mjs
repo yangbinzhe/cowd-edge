@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const surfaceRoot = path.resolve(webuiRoot, '../..');
@@ -17,6 +18,8 @@ const backendRoot = process.env.COWD_BACKEND_REPO
   || surfaceRoot;
 const args = process.argv.slice(2);
 const gate = args.includes('--gate');
+const probe = args.includes('--probe');
+const probeBaseUrl = (process.env.COWD_PROBE_BASE_URL || 'http://127.0.0.1:8643').replace(/\/$/, '');
 
 function argValue(name, fallback) {
   const index = args.indexOf(name);
@@ -32,9 +35,11 @@ function argValues(name) {
   return values;
 }
 
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0702-Edge治理终态落地方案');
-const reportDir = path.resolve(argValue('--report-dir', process.env.COWD_REPORT_DIR || path.join(planRoot, 'reports')));
-const version = argValue('--version', process.env.COWD_VERSION || 'v0.9.444');
+const provenance = evidenceContext('api-matrix');
+const planRoot = provenance.plan_root;
+const reportDir = path.resolve(argValue('--report-dir', process.env.COWD_REPORT_DIR || path.join(planRoot, 'reports', provenance.version)));
+const version = argValue('--version', provenance.version).replace(/^v/, '');
+if (version !== provenance.version) throw new Error(`api matrix version ${version} does not match provenance ${provenance.version}`);
 const requiredRoutes = argValues('--require');
 
 const clientPath = path.join(webuiRoot, 'src/api/client.ts');
@@ -65,14 +70,26 @@ const criticalMethods = {
   matrixSourceSnapshotPlan: { criticality: 'p0', page: 'gateway' },
   matrixSourceSnapshotRun: { criticality: 'p0', page: 'gateway' },
   mfgSourcePackUpsert: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgSourcePackValidate: { criticality: 'p1', page: 'mfg' },
+  mfgSourcePackDeltaPlan: { criticality: 'p1', page: 'mfg' },
+  mfgSourcePackConnectorPlan: { criticality: 'p1', page: 'mfg' },
+  mfgSourcePackConnectorRun: { criticality: 'p0', page: 'mfg' },
+  mfgComputeJobPlan: { criticality: 'p1', page: 'mfg' },
+  mfgComputeJobRun: { criticality: 'p0', page: 'mfg' },
+  mfgEvidenceQualityGate: { criticality: 'p1', page: 'mfg' },
+  mfgDecisionTrace: { criticality: 'p1', page: 'mfg' },
+  mfgRecommendPlaybooks: { criticality: 'p1', page: 'mfg' },
   mfgIngestFact: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgExecuteAction: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgExecutionBridge: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgExecutionFeedback: { criticality: 'p1', page: 'mfg' },
   mfgRetryReportDelivery: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgUpsertProfile: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgDeleteCockpitProfile: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
   mfgCloneCockpitProfile: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
   mfgShareCockpitProfile: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
+  mfgCockpitWidgetProjection: { criticality: 'p1', page: 'mfg' },
+  mfgReports: { criticality: 'p1', page: 'mfg' },
   mfgUpsertAlertRule: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
   mfgAlertCommand: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgUpsertAlertSubscription: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
@@ -321,9 +338,48 @@ const entries = clientEntries.map((entry) => {
   };
 });
 
+const probeFixtures = (() => {
+  try { return JSON.parse(process.env.COWD_PROBE_FIXTURES || '{}'); }
+  catch { throw new Error('COWD_PROBE_FIXTURES must be a JSON object'); }
+})();
+const probeResults = [];
+if (probe) {
+  for (const entry of entries.filter((item) => item.operation === 'read')) {
+    const hasParameter = entry.normalized_path.includes(':param') || /:[a-z_]+/.test(entry.normalized_path);
+    const fixture = probeFixtures[entry.client_method];
+    if (hasParameter && !fixture) {
+      probeResults.push({ client_method: entry.client_method, status: 'not_probed_missing_fixture', evidence_level: null });
+      continue;
+    }
+    const probePath = entry.normalized_path.replace(/:param|:[a-z_]+/g, () => encodeURIComponent(String(fixture || 'acceptance-probe')));
+    const startedAt = new Date().toISOString();
+    try {
+      const response = await fetch(`${probeBaseUrl}${probePath}`, {
+        headers: process.env.COWD_API_TOKEN ? { Authorization: `Bearer ${process.env.COWD_API_TOKEN}` } : undefined,
+      });
+      probeResults.push({
+        client_method: entry.client_method,
+        path: probePath,
+        http_status: response.status,
+        status: [200, 204, 400, 401, 403].includes(response.status) ? 'route_reached' : 'probe_failed',
+        evidence_level: 'integration-local',
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      probeResults.push({ client_method: entry.client_method, path: probePath, status: 'probe_failed', evidence_level: null, error: error instanceof Error ? error.message : String(error), started_at: startedAt, finished_at: new Date().toISOString() });
+    }
+  }
+}
+
 const blocking = [];
 for (const entry of entries.filter((item) => item.has_ui_call)) {
   if (!entry.has_backend_route) blocking.push(`${entry.client_method}: missing backend route for ${entry.method} ${entry.path}`);
+}
+if (probe) {
+  for (const result of probeResults.filter((item) => item.status === 'probe_failed')) {
+    blocking.push(`${result.client_method}: real HTTP probe failed${result.http_status ? ` with ${result.http_status}` : ''}`);
+  }
 }
 for (const entry of entries.filter((item) => item.criticality === 'p0' || item.criticality === 'p1')) {
   if (!entry.has_ui_call) blocking.push(`${entry.client_method}: missing UI call`);
@@ -349,7 +405,10 @@ fs.mkdirSync(reportDir, { recursive: true });
 const matrixPath = path.join(reportDir, `${version}-api-matrix.json`);
 const gatePath = path.join(reportDir, `${version}-api-matrix-gate.md`);
 fs.writeFileSync(matrixPath, JSON.stringify({
+  provenance,
   version,
+  mode: probe ? 'source_mapping_and_real_get_probe' : 'source_mapping',
+  evidence_level: probe ? 'integration-local' : 'static',
   generated_at: new Date().toISOString(),
   totals: {
     client_methods: entries.length,
@@ -363,11 +422,14 @@ fs.writeFileSync(matrixPath, JSON.stringify({
     present: !requiredFindings.includes(`required route missing: ${route}`),
   })),
   entries,
+  probes: probeResults,
 }, null, 2));
 fs.writeFileSync(gatePath, [
   `# ${version} API Matrix Gate`,
   '',
   `Generated: ${new Date().toISOString()}`,
+  `Frontend commit: ${provenance.frontend.commit}`,
+  `Backend commit: ${provenance.backend.commit}`,
   '',
   `Client methods: ${entries.length}`,
   `Backend routes: ${routes.length}`,

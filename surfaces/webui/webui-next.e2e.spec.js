@@ -173,24 +173,130 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
   await page.goto('/index.html#/apps/mfg?section=collaboration');
   await expect(page.locator('[data-section="collaboration"] .mfg-collaboration')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Assign task' })).toBeVisible();
+  await expect(page.getByText('SLA minutes')).toBeVisible();
+  await expect(page.getByText('Assignee type')).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=data');
   await expect(page.locator('[data-section="data"]')).toContainText('Data configuration');
   await expect(page.getByRole('button', { name: 'Save source pack' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Ingest facts' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Validate source pack' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Plan connector' })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=reality');
   await expect(page.locator('[data-section="reality"]')).toContainText('Reality and metrics');
+  await expect(page.getByRole('button', { name: 'Materialize snapshot' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run compute' })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=evidence');
   await expect(page.locator('[data-section="evidence"]')).toContainText('Evidence center');
   await expect(page.getByRole('button', { name: 'Build evidence packet' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Evaluate quality' })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=operations');
   await expect(page.locator('[data-section="operations"]')).toContainText('Incidents and execution');
   await expect(page.getByRole('button', { name: 'Create incident' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Decision trace' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Record feedback' })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=skills');
   await expect(page.locator('[data-section="skills"]')).toContainText('Skill execution');
   await expect(page.getByRole('button', { name: 'Plan skills' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Inspect skill run' })).toBeVisible();
   await page.goto('/index.html#/apps/mfg?section=reports');
   await expect(page.locator('[data-section="reports"]')).toContainText('Reports and delivery');
   await expect(page.getByRole('button', { name: 'Generate report' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Decision trace' })).toBeVisible();
+});
+
+test('real gateway closes MFG profile, filter, alert, assignment and report contracts', async ({ page }) => {
+  test.skip(!realGateway, 'requires a real cowd gateway');
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const profileId = `e2e-cockpit-${suffix}`;
+  const profileResponse = await page.request.post('/api/apps/mfg/cockpit/profiles/upsert', {
+    data: {
+      idempotency_key: `e2e-profile-${suffix}`,
+      profile: {
+        profile_id: profileId,
+        owner_ref: 'client-value-is-ignored',
+        display_name: 'E2E terminal cockpit',
+        focus_refs: ['entity:e2e-line'],
+        focus_metric_ids: ['metric:e2e-output'],
+        thresholds: { 'metric:e2e-output': { critical: 0.8 } },
+        template_id: 'mfg.default_ops',
+        cadence: 'daily',
+        scope: { kind: 'personal' },
+        layout: { columns: 12, row_height: 72, gap: 12 },
+        global_filters: {},
+        widget_instances: [],
+        sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] },
+      },
+    },
+  });
+  expect(profileResponse.ok()).toBeTruthy();
+  const savedProfile = (await profileResponse.json()).profile;
+  expect(savedProfile.owner_ref).not.toBe('client-value-is-ignored');
+  expect(savedProfile.widget_instances).toHaveLength(4);
+
+  await page.goto(`/index.html#/apps/mfg?profile=${encodeURIComponent(profileId)}&entity=${encodeURIComponent('entity:e2e-line')}&metric=${encodeURIComponent('metric:e2e-output')}&from=${encodeURIComponent('2026-07-01T00:00:00Z')}`);
+  await page.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByLabel('entity_refs')).toHaveValue('entity:e2e-line');
+  await expect(page.getByLabel('metric_ids')).toHaveValue('metric:e2e-output');
+  await expect(page.getByLabel('from')).toHaveValue('2026-07-01T00:00:00Z');
+
+  const alertResponse = await page.request.post('/api/apps/mfg/focus/alert-rules', {
+    data: {
+      idempotency_key: `e2e-alert-${suffix}`,
+      rule: { owner_ref: 'ignored', name: 'E2E output risk', metric_refs: ['metric:e2e-output'], entity_refs: ['entity:e2e-line'], condition: { field: 'priority_score', operator: 'gte', threshold: 0.8 }, severity: 'critical', enabled: true },
+    },
+  });
+  expect(alertResponse.ok()).toBeTruthy();
+  expect((await alertResponse.json()).rule.condition).toMatchObject({ operator: 'gte', threshold: 0.8 });
+
+  const sourcePackId = `e2e-source-pack-${suffix}`;
+  await page.goto('/index.html#/apps/mfg?section=data');
+  await page.getByLabel('Source pack ID').fill(sourcePackId);
+  const sourcePackResponsePromise = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/reality/source-packs/upsert') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Save source pack' }).click();
+  const sourcePackUiResponse = await sourcePackResponsePromise;
+  expect(sourcePackUiResponse.ok()).toBeTruthy();
+  const sourcePackUiJson = await sourcePackUiResponse.json();
+  expect(sourcePackUiJson.source_pack).toMatchObject({ source_pack_id: sourcePackId, source_name: sourcePackId, owner: 'manufacturing-ops' });
+
+  const ingestPlanResponsePromise = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/reality/data-plane/ingest-plan') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Plan ingest' }).click();
+  const ingestPlanResponse = await ingestPlanResponsePromise;
+  expect(ingestPlanResponse.ok()).toBeTruthy();
+  expect((await ingestPlanResponse.json()).plan).toMatchObject({ source_ref: `source-pack://${sourcePackId}`, affected_metric_ids: [] });
+
+  await page.getByLabel('Connector resource reference').fill(`file:///tmp/${sourcePackId}.json`);
+  const connectorPlanResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/reality/source-packs/${sourcePackId}/connector-runs/plan`) && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Plan connector' }).click();
+  const connectorPlanResponse = await connectorPlanResponsePromise;
+  expect(connectorPlanResponse.ok()).toBeTruthy();
+  expect((await connectorPlanResponse.json()).run).toMatchObject({ source_pack_id: sourcePackId, status: 'planned' });
+
+  const taskResponse = await page.request.post('/api/tasks/start', {
+    data: { objective: `E2E MFG assignment ${suffix}`, yolo_mode: false },
+  });
+  expect(taskResponse.ok()).toBeTruthy();
+  const task = await taskResponse.json();
+
+  const assignmentResponse = await page.request.post('/api/apps/mfg/assignments', {
+    data: {
+      idempotency_key: `e2e-assignment-${suffix}`,
+      assignment: { task_ref: `task:${task.id}`, assignee_ref: 'user:e2e-owner', assignee_kind: 'user', watcher_refs: ['role:operations'], priority: 'high', sla_minutes: 30, visibility: 'team' },
+    },
+  });
+  expect(assignmentResponse.ok()).toBeTruthy();
+  expect((await assignmentResponse.json()).assignment).toMatchObject({ priority: 'high', sla_minutes: 30 });
+
+  const reportResponse = await page.request.post(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/reports/generate`, { data: { report: { cadence: 'daily' } } });
+  expect(reportResponse.ok()).toBeTruthy();
+  const report = (await reportResponse.json()).report;
+  const reportsResponse = await page.request.get(`/api/apps/mfg/cockpit/reports?profile_id=${encodeURIComponent(profileId)}`);
+  expect(reportsResponse.ok()).toBeTruthy();
+  expect((await reportsResponse.json()).items.map((item) => item.report_id)).toContain(report.report_id);
+
+  const deleteResponse = await page.request.delete(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${savedProfile.revision}&idempotency_key=e2e-delete-${suffix}`);
+  expect(deleteResponse.ok()).toBeTruthy();
+  const completeTaskResponse = await page.request.post(`/api/tasks/${encodeURIComponent(task.id)}/complete`);
+  expect(completeTaskResponse.ok()).toBeTruthy();
 });
 
 test('audit page exposes usage and release gate governance controls', async ({ page }) => {

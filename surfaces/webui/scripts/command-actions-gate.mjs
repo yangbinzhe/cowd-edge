@@ -2,13 +2,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const surfaceRoot = path.resolve(webuiRoot, '../..');
 const workspaceRoot = path.resolve(surfaceRoot, '..');
-const planRoot = process.env.COWD_PLAN_ROOT || path.resolve(workspaceRoot, 'plan/0618-架构最终重构路线');
-const reportDir = path.join(planRoot, 'reports');
-const version = process.env.COWD_VERSION || 'v0.9.294';
+const provenance = evidenceContext('command-actions-gate');
+const planRoot = provenance.plan_root;
+const reportDir = path.join(planRoot, 'reports', provenance.version);
+const version = provenance.version;
 const gate = process.argv.includes('--gate');
 
 function read(file) {
@@ -70,6 +72,7 @@ if (!capabilitiesText.includes('/api/tools')) {
 }
 
 const report = {
+  provenance,
   version,
   generated_at: new Date().toISOString(),
   status: failures.length ? 'fail' : 'pass',

@@ -69,6 +69,13 @@ async function settleAsync() {
 }
 
 describe('Cowd Vue WebUI shell', () => {
+  it('restores the Settings section from the route query', async () => {
+    const wrapper = await mountApp('/settings?section=policy');
+    await settleAsync();
+    expect(wrapper.find('[data-section="policy"]').exists()).toBe(true);
+    expect(wrapper.find('[data-section="ui"]').exists()).toBe(false);
+  });
+
   it('registers MFG as a pluggable page without a legacy nav item', async () => {
     const plugin = webuiPagePlugins.find((item) => item.id === 'mfg');
     expect(plugin).toBeTruthy();
@@ -968,22 +975,49 @@ describe('Cowd Vue WebUI shell', () => {
   it('calls critical MFG write endpoints with explicit request bodies', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
-    await api.mfgSourcePackUpsert({ source_pack_id: 'sp-1' });
+    const sourcePack = {
+      source_pack_id: 'sp-1', source_name: 'MES events', owner: 'operations', access_mode: 'file', refresh_mode: 'incremental',
+      entity_mappings: [], fact_mappings: [{ source_table: 'events', fact_type: 'manufacturing.event', metric_key: 'event_count', dedup_key: 'event_id', delta_signature: 'updated_at' }],
+    };
+    await api.mfgSourcePackUpsert(sourcePack);
+    await api.mfgSourcePackValidate('sp-1');
+    await api.mfgSourcePackDeltaPlan('sp-1');
+    await api.mfgDataPlaneIngestPlan({ source_ref: 'source-pack://sp-1', fact_type: 'manufacturing.event', metric_ids: ['event_count'] });
+    await api.mfgSourcePackConnectorPlan('sp-1', { resource_ref: 'file:///tmp/events.json', expected_rows: 10 });
+    await api.mfgSourcePackConnectorRun('sp-1', { resource_ref: 'file:///tmp/events.json', expected_rows: 10 });
+    await api.mfgAttentionPlan({ trigger_fact_type: 'manufacturing.event', entity_scope: 'line:a' });
+    await api.mfgComputeJobPlan({ trigger_fact_type: 'manufacturing.event', metric_ids: ['event_count'] });
     await api.mfgEntityUpsert({ entity_id: 'entity-1' });
     await api.mfgRelationUpsert({ relation_type: 'feeds' });
+    const playbook = { playbook_id: 'playbook-1', domain: 'manufacturing', scenario: 'Recover line', quality_gate_policy: 'required', cross_plane_policy: 'governed', created_at: '2026-07-16T00:00:00Z', updated_at: '2026-07-16T00:00:00Z' };
+    await api.mfgPlaybookUpsert(playbook);
+    await api.mfgEvidenceQualityGate('evidence-1');
+    await api.mfgRecommendPlaybooks('incident-1', 5);
     await api.mfgComputeJobRun('job-1');
-    await api.mfgExecuteAction('analysis-1', 'action-1', { mode: 'dry_run' });
-    await api.mfgExecutionBridge('exec-1', { mode: 'dry_run' });
+    await api.mfgExecuteAction('analysis-1', 'action-1', { mode: 'dry_run', operator_id: 'forged' });
+    await api.mfgExecutionBridge('exec-1', { mode: 'dry_run', actor_principal: 'forged' });
+    await api.mfgExecutionFeedback('exec-1', { outcome: 'resolved', note: 'verified', actor_ref: 'forged' });
     await api.mfgRetryReportDelivery('report-1', { mode: 'dry_run' });
     await api.mfgIngestFact([{ fact_type: 'quality', source_ref: 'source-pack://sp-1' }]);
     await api.mfgSeedDomain();
     await api.mfgSeedOntology();
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/upsert', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/upsert', expect.objectContaining({ method: 'POST', body: JSON.stringify({ source_pack: sourcePack, session_id: 'webui-mfg' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/sp-1/validate', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/sp-1/delta-plan', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/data-plane/ingest-plan', expect.objectContaining({ body: JSON.stringify({ ingest: { source_ref: 'source-pack://sp-1', fact_type: 'manufacturing.event', metric_ids: ['event_count'] }, session_id: 'webui-mfg' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/sp-1/connector-runs/plan', expect.objectContaining({ body: JSON.stringify({ run: { resource_ref: 'file:///tmp/events.json', expected_rows: 10 }, session_id: 'webui-mfg' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/sp-1/connector-runs/run', expect.objectContaining({ body: JSON.stringify({ run: { resource_ref: 'file:///tmp/events.json', expected_rows: 10 }, session_id: 'webui-mfg' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/metrics/attention-plan', expect.objectContaining({ body: JSON.stringify({ trigger_fact_type: 'manufacturing.event', entity_scope: 'line:a' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/compute/jobs/plan', expect.objectContaining({ body: JSON.stringify({ job: { trigger_fact_type: 'manufacturing.event', metric_ids: ['event_count'] }, session_id: 'webui-mfg' }) }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/entities/upsert', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/relations/upsert', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/playbooks/upsert', expect.objectContaining({ body: JSON.stringify({ playbook, session_id: 'webui-mfg' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/evidence/evidence-1/quality-gate', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/incidents/incident-1/playbooks/recommend', expect.objectContaining({ body: JSON.stringify({ limit: 5 }) }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/compute/jobs/job-1/run', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/analyses/analysis-1/actions/action-1/execute', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/executions/exec-1/cross-plane/execute', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/analyses/analysis-1/actions/action-1/execute', expect.objectContaining({ method: 'POST', body: JSON.stringify({ mode: 'dry_run' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/executions/exec-1/cross-plane/execute', expect.objectContaining({ method: 'POST', body: JSON.stringify({ mode: 'dry_run' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/executions/exec-1/feedback', expect.objectContaining({ body: JSON.stringify({ outcome: 'resolved', note: 'verified' }) }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/reports/report-1/delivery/retry', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/facts/ingest', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/domain/server-manufacturing/seed', expect.objectContaining({ method: 'POST' }));
@@ -1024,7 +1058,7 @@ describe('Cowd Vue WebUI shell', () => {
     await api.mfgAlertCommand('alert-1', { command: 'acknowledge', expected_revision: 1, idempotency_key: 'alert-ack-1' });
     await api.mfgUpsertAlertSubscription({ subscription_id: 'subscription-1', rule_id: 'rule-1', revision: 1 }, 'alert-subscription-upsert-1');
     await api.mfgUpsertAssignment({ assignment_id: 'assignment-1', task_ref: 'task-1', assignee_ref: 'operator-1', revision: 1 }, 'assignment-upsert-1');
-    await api.mfgAssignmentCommand('assignment-1', { command: 'acknowledge', expected_revision: 1, idempotency_key: 'assignment-ack-1' });
+    await api.mfgAssignmentCommand('assignment-1', { command: 'claim', expected_revision: 1, idempotency_key: 'assignment-claim-1' });
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/upsert', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ profile: { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 }, idempotency_key: 'profile-upsert-1' }),
@@ -1296,6 +1330,7 @@ describe('Cowd Vue WebUI shell', () => {
     await api.crossPlaneCreateIdentity({ id: 'idb-1', principal_id: 'webui-operator', identity_ref: 'user:webui-operator' });
     await api.crossPlaneCreateGrant({ id: 'grant-1', principal_id: 'webui-operator', capability: 'service.read' });
     await api.crossPlanePolicySimulate(action);
+    await api.crossPlanePreflight(action);
     await api.crossPlaneExecute(action, 'dry_run', 'key-1');
     await api.crossPlaneRevokeIdentity('idb-1');
     await api.crossPlaneRevokeGrant('grant-1');
@@ -1308,9 +1343,13 @@ describe('Cowd Vue WebUI shell', () => {
       body: JSON.stringify({ id: 'grant-1', principal_id: 'webui-operator', capability: 'service.read' }),
     }));
     expect(fetchMock).toHaveBeenCalledWith('/api/cross-plane/policy/simulate', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/cross-plane/action/preflight', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ requested_capability: 'service.read', risk: 'medium', data_classification: 'internal', identity_trust: 'unknown' }),
+    }));
     expect(fetchMock).toHaveBeenCalledWith('/api/cross-plane/action/execute', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ action, mode: 'dry_run', idempotency_key: 'key-1' }),
+      body: JSON.stringify({ action: { requested_capability: 'service.read', risk: 'medium', data_classification: 'internal', identity_trust: 'unknown' }, mode: 'dry_run', idempotency_key: 'key-1' }),
     }));
     expect(fetchMock).toHaveBeenCalledWith('/api/cross-plane/identities/idb-1', expect.objectContaining({ method: 'DELETE' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/cross-plane/grants/grant-1', expect.objectContaining({ method: 'DELETE' }));

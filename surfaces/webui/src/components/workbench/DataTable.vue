@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Copy } from 'lucide-vue-next';
 import { displayColumn } from '../../i18n/domain/columns';
 import StatusPill from './StatusPill.vue';
@@ -21,6 +21,7 @@ const props = withDefaults(defineProps<{
   copyable?: boolean;
   loading?: boolean;
   rowActions?: RowAction[];
+  pageSize?: number;
 }>(), {
   searchable: false,
   rowKey: '',
@@ -29,6 +30,7 @@ const props = withDefaults(defineProps<{
   copyable: false,
   loading: false,
   rowActions: () => [],
+  pageSize: 25,
 });
 
 const emit = defineEmits<{
@@ -41,6 +43,7 @@ const query = ref('');
 const sortColumn = ref('');
 const sortDirection = ref<'asc' | 'desc'>('asc');
 const selectedKeys = ref<Set<string | number>>(new Set());
+const page = ref(1);
 
 const visibleColumns = computed(() => props.columns || Object.keys(props.rows[0] || {}));
 const filteredRows = computed(() => {
@@ -56,8 +59,16 @@ const filteredRows = computed(() => {
   });
 });
 const hasActions = computed(() => props.copyable || props.rowActions.length > 0);
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / Math.max(1, props.pageSize))));
+const pageOffset = computed(() => (page.value - 1) * Math.max(1, props.pageSize));
+const pagedRows = computed(() => filteredRows.value.slice(pageOffset.value, pageOffset.value + Math.max(1, props.pageSize)));
 const selectedRows = computed(() => filteredRows.value.filter((row, index) => selectedKeys.value.has(keyFor(row, index))));
 const allVisibleSelected = computed(() => filteredRows.value.length > 0 && selectedRows.value.length === filteredRows.value.length);
+
+watch([query, sortColumn, sortDirection, () => props.rows.length, () => props.pageSize], () => {
+  page.value = Math.min(page.value, totalPages.value);
+  if (query.value || sortColumn.value) page.value = 1;
+});
 
 function toggleSort(column: string) {
   if (sortColumn.value === column) {
@@ -197,21 +208,21 @@ function fullCell(value: unknown) {
           </td>
         </tr>
         <tr
-          v-for="(row, index) in filteredRows"
+          v-for="(row, index) in pagedRows"
           v-else
-          :key="keyFor(row, index)"
-          :data-selected="selectedKeys.has(keyFor(row, index))"
+          :key="keyFor(row, pageOffset + index)"
+          :data-selected="selectedKeys.has(keyFor(row, pageOffset + index))"
           tabindex="0"
           @click="emit('rowClick', row)"
-          @keydown="handleRowKeydown($event, row, index)"
+          @keydown="handleRowKeydown($event, row, pageOffset + index)"
         >
           <td v-if="selectable" class="data-table-select" @click.stop>
             <label class="data-table-checkbox">
               <input
                 type="checkbox"
                 :aria-label="t('component.workbench.data.table.selectRow')"
-                :checked="selectedKeys.has(keyFor(row, index))"
-                @change="toggleRow(row, index)"
+                :checked="selectedKeys.has(keyFor(row, pageOffset + index))"
+                @change="toggleRow(row, pageOffset + index)"
               />
             </label>
           </td>
@@ -239,5 +250,14 @@ function fullCell(value: unknown) {
         </tr>
       </tbody>
     </table>
+    <nav v-if="totalPages > 1" class="data-table-pagination" :aria-label="t('component.workbench.data.table.pagination')">
+      <button class="ghost-action" type="button" :disabled="page <= 1" @click="page -= 1">{{ t('component.workbench.data.table.previous') }}</button>
+      <span>{{ t('component.workbench.data.table.page', { page, total: totalPages }) }}</span>
+      <button class="ghost-action" type="button" :disabled="page >= totalPages" @click="page += 1">{{ t('component.workbench.data.table.next') }}</button>
+    </nav>
   </div>
 </template>
+
+<style scoped>
+.data-table-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 9px 0 0; color: var(--text-muted); font-size: 12px; }
+</style>
