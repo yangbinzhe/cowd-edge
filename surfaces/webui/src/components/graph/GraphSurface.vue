@@ -34,6 +34,7 @@ const inspectorOpen = ref(false);
 const internalSelectedNodeId = ref('');
 const laidOutNodes = ref<any[]>([]);
 let layoutEpoch = 0;
+const graphNodeLimit = 220;
 
 const statuses = computed(() => Array.from(new Set(props.model.nodes.map((node) => node.status))).filter(Boolean));
 const visibleNodes = computed(() => {
@@ -46,6 +47,12 @@ const visibleNodes = computed(() => {
 });
 const visibleNodeIds = computed(() => new Set(visibleNodes.value.map((node) => node.id)));
 const visibleEdges = computed(() => props.model.edges.filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target)));
+const graphIsAggregated = computed(() => visibleNodes.value.length > graphNodeLimit);
+const canvasNodes = computed(() => graphIsAggregated.value ? visibleNodes.value.slice(0, graphNodeLimit) : visibleNodes.value);
+const canvasNodeIds = computed(() => new Set(canvasNodes.value.map((node) => node.id)));
+const canvasEdges = computed(() => visibleEdges.value.filter((edge) => canvasNodeIds.value.has(edge.source) && canvasNodeIds.value.has(edge.target)));
+const showList = computed(() => listMode.value || graphIsAggregated.value);
+const summaryId = computed(() => `graph-summary-${String(props.model.id || 'default').replace(/[^a-z0-9_-]/gi, '-')}`);
 const selectedNode = computed(() => props.model.nodes.find((node) => node.id === (props.selectedNodeId || internalSelectedNodeId.value)) || null);
 const selectedEvidenceRefs = computed(() => selectedNode.value?.evidenceRefs || []);
 const listRows = computed(() => visibleNodes.value.map((node) => ({
@@ -56,7 +63,7 @@ const listRows = computed(() => visibleNodes.value.map((node) => ({
   evidence: node.evidenceRefs?.length || 0,
   summary: node.summary || node.label,
 })));
-const flowEdges = computed(() => visibleEdges.value.map((edge) => ({
+const flowEdges = computed(() => canvasEdges.value.map((edge) => ({
   id: edge.id,
   source: edge.source,
   target: edge.target,
@@ -68,7 +75,7 @@ const flowEdges = computed(() => visibleEdges.value.map((edge) => ({
 
 async function layout() {
   const epoch = ++layoutEpoch;
-  if (!visibleNodes.value.length) {
+  if (!canvasNodes.value.length || showList.value) {
     laidOutNodes.value = [];
     return;
   }
@@ -80,11 +87,11 @@ async function layout() {
       'elk.spacing.nodeNode': '42',
       'elk.layered.spacing.nodeNodeBetweenLayers': '82',
     },
-    children: visibleNodes.value.map((node) => ({ id: node.id, width: 196, height: 76 })),
-    edges: visibleEdges.value.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
+    children: canvasNodes.value.map((node) => ({ id: node.id, width: 196, height: 76 })),
+    edges: canvasEdges.value.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
   });
   if (epoch !== layoutEpoch) return;
-  const byId = new Map(visibleNodes.value.map((node) => [node.id, node]));
+  const byId = new Map(canvasNodes.value.map((node) => [node.id, node]));
   laidOutNodes.value = (graph.children || []).map((position) => {
     const node = byId.get(position.id)!;
     return {
@@ -130,24 +137,37 @@ async function toggleFullscreen() {
 }
 
 function onKeydown(event: KeyboardEvent) {
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLButtonElement) return;
   if (event.key === '+' || event.key === '=') flow.value?.zoomIn?.();
   if (event.key === '-') flow.value?.zoomOut?.();
   if (event.key === '0') flow.value?.fitView?.({ padding: 0.2 });
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    const nodes = visibleNodes.value;
+    if (!nodes.length) return;
+    const current = nodes.findIndex((node) => node.id === (props.selectedNodeId || internalSelectedNodeId.value));
+    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
+    const next = nodes[(current + delta + nodes.length) % nodes.length]!;
+    internalSelectedNodeId.value = next.id;
+    inspectorOpen.value = true;
+    emit('selectNode', next);
+  }
 }
 
-watch([visibleNodes, visibleEdges, direction, internalSelectedNodeId, () => props.model.revision], layout, { immediate: true, deep: true });
+watch([canvasNodes, canvasEdges, direction, showList, () => props.model.revision], layout, { immediate: true, deep: true });
 </script>
 
 <template>
-  <section ref="root" class="graph-surface" tabindex="0" @keydown="onKeydown">
+  <section ref="root" class="graph-surface" role="region" tabindex="0" :aria-describedby="summaryId" @keydown="onKeydown">
     <header class="graph-surface-header">
       <div>
         <h3>{{ model.title || t('graph.title.default') }}</h3>
-        <small>{{ t('graph.summary', { nodes: visibleNodes.length, edges: visibleEdges.length }) }}</small>
+        <small :id="summaryId">{{ t('graph.summary', { nodes: visibleNodes.length, edges: visibleEdges.length }) }}</small>
         <small v-if="model.truncated" class="graph-truncated">{{ t('graph.state.truncated') }}</small>
       </div>
       <StatusPill :status="connectionState || model.status || 'ready'" />
     </header>
+    <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
     <div class="graph-toolbar">
       <label class="search-field"><Search :size="14" /><input v-model="search" :placeholder="t('graph.action.search')" /></label>
       <select v-model="statusFilter" :aria-label="t('graph.action.filterStatus')">
@@ -161,9 +181,10 @@ watch([visibleNodes, visibleEdges, direction, internalSelectedNodeId, () => prop
       <button class="ghost-action" type="button" :aria-pressed="listMode" @click="listMode = !listMode"><List :size="14" />{{ t('graph.action.list') }}</button>
       <button class="ghost-action" type="button" @click="toggleFullscreen"><Expand :size="14" />{{ t('graph.action.fullscreen') }}</button>
     </div>
+    <p v-if="graphIsAggregated" class="empty-note">{{ t('graph.state.aggregated', { limit: graphNodeLimit, total: visibleNodes.length }) }}</p>
     <p v-if="loading" class="empty-note">{{ t('graph.state.loading') }}</p>
     <p v-else-if="!visibleNodes.length" class="empty-note">{{ t('graph.state.empty') }}</p>
-    <DataTable v-else-if="listMode" :rows="listRows" :columns="['id', 'type', 'status', 'group', 'evidence', 'summary']" row-key="id" searchable copyable @row-click="selectListRow" />
+    <DataTable v-else-if="showList" :rows="listRows" :columns="['id', 'type', 'status', 'group', 'evidence', 'summary']" row-key="id" searchable copyable @row-click="selectListRow" />
     <VueFlow
       v-else
       class="graph-flow"
@@ -194,3 +215,9 @@ watch([visibleNodes, visibleEdges, direction, internalSelectedNodeId, () => prop
     />
   </section>
 </template>
+
+<style scoped>
+@media (prefers-reduced-motion: reduce) {
+  .graph-surface :deep(.vue-flow__edge-path), .graph-surface :deep(.vue-flow__node) { transition: none !important; animation: none !important; }
+}
+</style>

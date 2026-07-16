@@ -22,7 +22,6 @@ import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
 import { useProjectionRegistryStore } from './stores/projectionRegistry';
-import mfgWriteContracts from './data/mfgWriteContracts.json';
 import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
 import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
@@ -1001,7 +1000,36 @@ describe('Cowd Vue WebUI shell', () => {
     }));
   });
 
-  it('renders MFG governed action chains from the write contract source', async () => {
+  it('calls revisioned MFG cockpit, alert, and assignment write endpoints', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: 'test.receipt' }), { status: 200 })));
+    vi.stubGlobal('fetch', fetchMock);
+    await api.mfgUpsertProfile({ profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 }, 'profile-upsert-1');
+    await api.mfgDeleteCockpitProfile('profile-1', 1, 'profile-delete-1');
+    await api.mfgCloneCockpitProfile('profile-1', {}, 'profile-clone-1');
+    await api.mfgShareCockpitProfile('profile-1', {
+      expected_revision: 1,
+      sharing_policy: { visibility: 'team', viewer_refs: ['viewer-1'], editor_refs: [] },
+    }, 'profile-share-1');
+    await api.mfgUpsertAlertRule({ rule_id: 'rule-1', name: 'Line A deviation', revision: 1 }, 'alert-rule-upsert-1');
+    await api.mfgAlertCommand('alert-1', { command: 'acknowledge', expected_revision: 1, idempotency_key: 'alert-ack-1' });
+    await api.mfgUpsertAlertSubscription({ subscription_id: 'subscription-1', rule_id: 'rule-1', revision: 1 }, 'alert-subscription-upsert-1');
+    await api.mfgUpsertAssignment({ assignment_id: 'assignment-1', task_ref: 'task-1', assignee_ref: 'operator-1', revision: 1 }, 'assignment-upsert-1');
+    await api.mfgAssignmentCommand('assignment-1', { command: 'acknowledge', expected_revision: 1, idempotency_key: 'assignment-ack-1' });
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/upsert', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ profile: { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 }, idempotency_key: 'profile-upsert-1' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1?expected_revision=1&idempotency_key=profile-delete-1', expect.objectContaining({ method: 'DELETE' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/clone', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/share', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alert-rules', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alerts/alert-1/command', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alert-subscriptions', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/assignments', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/assignments/assignment-1/command', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('renders the revisioned MFG cockpit workspaces from live projection contracts', async () => {
     const fetchMock = vi.fn((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
@@ -1014,53 +1042,26 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
       if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
       if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
-      if (url === '/api/apps/mfg/reality/health') return Promise.resolve(new Response(JSON.stringify({ status: 'ready', fact_count: 2, schema_version: 'test' })));
-      if (url === '/api/apps/mfg/reality/metrics') return Promise.resolve(new Response(JSON.stringify({ metrics: [{ metric_id: 'torque_deviation_rate', name: 'Torque deviation', unit: '%' }] })));
-      if (url === '/api/apps/mfg/reality/entities') return Promise.resolve(new Response(JSON.stringify({ entities: [{ entity_id: 'line-a', entity_type: 'manufacturing_line', canonical_key: 'line:A', display_name: 'Line A' }] })));
-      if (url === '/api/apps/mfg/decision-trace') return Promise.resolve(new Response(JSON.stringify({
-        kind: 'mfg.decision_trace',
-        chain: 'source -> fact -> metric -> evidence -> incident -> action -> report',
-        rows: [
-          { stage: 'source', ref: 'source-pack://line-a', domain: 'Matrix data plane', signal: 'mes', next: 'fact' },
-          { stage: 'fact', ref: 'fact-1', domain: 'cowd structured core', signal: 'manufacturing_quality_event', next: 'metric' },
-          { stage: 'action', ref: 'action-1', domain: 'MFG + cross-plane', signal: 'recommended', next: 'report' },
-        ],
-      })));
-      if (url === '/api/apps/mfg/incidents') return Promise.resolve(new Response(JSON.stringify({ items: [{ incident_id: 'incident-1', title: 'Line A deviation' }] })));
-      if (url === '/api/apps/mfg/skills') return Promise.resolve(new Response(JSON.stringify({ items: [{ skill_id: 'skill-1', name: 'Root cause analysis' }] })));
-      if (url === '/api/apps/mfg/incidents/incident-1/room') return Promise.resolve(new Response(JSON.stringify({ analysis: { recommended_actions: [{ action_id: 'action-1', title: 'Notify QA' }] }, executions: [] })));
+      if (url === '/api/apps/mfg/cockpit/profiles') return Promise.resolve(new Response(JSON.stringify({ items: [{ profile_id: 'profile-1', owner_ref: 'webui', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }] })));
+      if (url === '/api/apps/mfg/cockpit/widget-catalog') return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      if (url === '/api/apps/mfg/focus/alert-rules' || url === '/api/apps/mfg/focus/alerts' || url === '/api/apps/mfg/focus/alert-subscriptions' || url.startsWith('/api/apps/mfg/focus/forecasts')) return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      if (url === '/api/apps/mfg/assignments') return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      if (url === '/api/apps/mfg/live') return Promise.resolve(new Response(JSON.stringify({ kind: 'snapshot', cursor: 1, recoverable: true, snapshot: {} })));
+      if (url === '/api/apps/mfg/cockpit/profiles/profile-1') return Promise.resolve(new Response(JSON.stringify({ profile: { profile_id: 'profile-1', owner_ref: 'webui', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } } })));
+      if (url === '/api/apps/mfg/cockpit/profiles/profile-1/projection') return Promise.resolve(new Response(JSON.stringify({ projection_id: 'projection-1', profile: { profile_id: 'profile-1', owner_ref: 'webui', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }, widgets: [], summary: 'ready', generated_at: '2026-07-16T00:00:00Z' })));
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
     const wrapper = await mountApp('/mfg');
     await settleAsync();
     await settleAsync();
-    const domains = new Set((mfgWriteContracts as any[]).map((contract) => contract.domain));
-    expect(domains).toEqual(new Set(['Cockpit', 'Data Plane', 'Entities', 'Evidence', 'Facts', 'Incidents', 'Metrics']));
-    expect(wrapper.findAll('.governed-action-panel').length).toBeGreaterThanOrEqual(7);
-    expect(wrapper.text()).toContain('现实输入');
-    expect(wrapper.text()).toContain('现实核心投影');
-    expect(wrapper.text()).toContain('/api/apps/mfg/reality/*');
-    expect(wrapper.text()).toContain('现实核心管理事实、记忆、矩阵');
-    expect(wrapper.text()).toContain('MFG 管理制造工作流');
-    expect(wrapper.text()).not.toContain('打开现实核心');
-    expect(wrapper.text()).toContain('源数据包写入');
-    expect(wrapper.text()).toContain('制造事实摄入');
-    expect(wrapper.text()).toContain('指标计算运行');
-    expect(wrapper.text()).toContain('决策链路');
-    expect(wrapper.text()).toContain('source -> fact -> metric -> evidence -> incident -> action -> report');
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/decision-trace', expect.any(Object));
-    expect(wrapper.text()).toContain('Matrix 将结构化制造信号转化为事实');
-    expect(wrapper.text()).toContain('cowd structured core');
-    expect(wrapper.text()).toContain('MFG + cross-plane');
-    const dataPlane = wrapper.get('[data-section="data-plane"]');
-    await dataPlane.get('input').setValue('source-pack-real');
-    await dataPlane.get('button[data-mfg-risk="mfgSourcePackUpsert"]').trigger('click');
-    await settleAsync();
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/upsert', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ source_pack: { source_pack_id: 'source-pack-real' }, session_id: 'webui-mfg' }),
-    }));
+    expect(wrapper.get('[data-section="dashboard"]').exists()).toBe(true);
+    expect(wrapper.find('.mfg-cockpit').exists()).toBe(true);
+    expect(wrapper.text()).toContain('制造运营工作台');
+    expect(wrapper.text()).toContain('Plant cockpit');
+    expect(wrapper.text()).toContain('独立的制造应用');
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/live', expect.any(Object));
   });
 
   it('loads audit, usage, and release gate from real governance endpoints', async () => {

@@ -27,13 +27,11 @@ function readError(...values: any[]) {
   return failed?.__error ? String(failed.__error) : '';
 }
 
-function cloneProfile(profile: MfgCockpitProfile): MfgCockpitProfile {
-  return JSON.parse(JSON.stringify(profile)) as MfgCockpitProfile;
-}
-
 export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   let stream: EventSource | null = null;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshInFlight = false;
+  let refreshQueued = false;
   const profiles = ref<MfgCockpitProfile[]>([]);
   const catalog = ref<MfgWidgetDefinition[]>([]);
   const selectedProfileId = ref('');
@@ -44,6 +42,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   const forecasts = ref<any[]>([]);
   const assignments = ref<MfgAssignment[]>([]);
   const live = ref<MfgLiveProjection | null>(null);
+  const lastReceipt = ref<any>(null);
   const loading = ref(false);
   const saving = ref(false);
   const error = ref('');
@@ -57,6 +56,11 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   const activeAssignments = computed(() => assignments.value.filter((item) => !['unassigned', 'resolved', 'done'].includes(String(item.status))));
 
   async function refresh() {
+    if (refreshInFlight) {
+      refreshQueued = true;
+      return;
+    }
+    refreshInFlight = true;
     const epoch = ++requestEpoch.value;
     loading.value = true;
     error.value = '';
@@ -87,6 +91,11 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
       error.value = cause instanceof Error ? cause.message : String(cause);
     } finally {
       loading.value = false;
+      refreshInFlight = false;
+      if (refreshQueued) {
+        refreshQueued = false;
+        scheduleRefresh();
+      }
     }
   }
 
@@ -135,6 +144,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
       });
       const next = profileFrom(result);
       if (!next) throw new Error('mfg.cockpit.invalid_profile_response');
+      lastReceipt.value = result?.receipt || null;
       selectedProfileId.value = next.profile_id;
       const index = profiles.value.findIndex((item) => item.profile_id === next.profile_id);
       if (index >= 0) profiles.value.splice(index, 1, next);
@@ -218,11 +228,14 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   function stopLive() {
     stream?.close();
     stream = null;
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = null;
+    refreshQueued = false;
     liveStatus.value = 'stopped';
   }
 
   return {
-    profiles, catalog, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch,
+    profiles, catalog, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch,
     selectedProfile, widgetsByInstance, attentionAlerts, activeAssignments,
     refresh, loadProfile, loadForecasts, saveProfile, addWidget, commandAlert, commandAssignment, startLive, stopLive,
   };

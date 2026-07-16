@@ -419,7 +419,7 @@ onUnmounted(() => projections.release('mission'));
         <small>{{ t('page.mission.control.page.text.3d3e8b0be9') }}</small>
       </article>
       <article class="metric-card">
-        <span>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
+        <span>{{ t('page.mission.control.runtimeV2.executionGraph') }}</span>
         <strong>{{ executionGraphRows.length }}</strong>
         <small>{{ t('page.mission.control.runtimeV2.title') }}</small>
       </article>
@@ -429,7 +429,7 @@ onUnmounted(() => projections.release('mission'));
       <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
       <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
       <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
-      <span><strong>{{ executionGraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.workgraph') }}</span>
+      <span><strong>{{ executionGraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.executionGraph') }}</span>
       <span><strong>{{ conflictItems.length }}</strong>{{ t('page.mission.control.runtimeV2.conflicts') }}</span>
       <span><strong>{{ cleanCounters.handoffs }}</strong>{{ t('unit.relations') }}</span>
     </div>
@@ -591,7 +591,7 @@ onUnmounted(() => projections.release('mission'));
           <StatusPill :status="missionHealth.status || (conflictItems.length ? 'degraded' : 'ready')" />
         </header>
         <div class="button-row">
-          <span class="mini-chip"><Workflow :size="14" />{{ t('page.mission.control.runtimeV2.workgraph') }} {{ executionGraphRows.length }}</span>
+          <span class="mini-chip"><Workflow :size="14" />{{ t('page.mission.control.runtimeV2.executionGraph') }} {{ executionGraphRows.length }}</span>
           <span class="mini-chip"><AlertTriangle :size="14" />{{ t('page.mission.control.runtimeV2.conflicts') }} {{ conflictItems.length }}</span>
           <span class="mini-chip"><Database :size="14" />{{ t('page.mission.control.runtimeV2.evidence') }} {{ missionEvidenceRows.length }}</span>
         </div>

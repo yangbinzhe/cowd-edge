@@ -254,7 +254,7 @@ export const useAppStore = defineStore('app', () => {
       ['governance', ['approval', 'policy', 'risk']],
       ['task', ['task']],
       ['execution', ['tool', 'scheduler']],
-      ['agent', ['agent', 'workgraph']],
+      ['agent', ['agent', 'execution_graph']],
       ['channel', ['channel', 'platform', 'cross_plane']],
     ];
     return stageIds.map(([id, needles]) => {

@@ -17,7 +17,7 @@ const pages = {
   tools: { file: 'ToolsPage.vue', sections: ['registry', 'operations', 'mutations', 'checkpoints', 'cache', 'ledger', 'risk'] },
   surfaces: { file: 'SurfacePage.vue', sections: ['health', 'registry', 'routes', 'dispatch', 'delivery', 'trigger-events', 'events'] },
   gateway: { file: 'GatewayPage.vue', sections: ['alignment', 'connectors', 'resources', 'executions', 'identities'] },
-  mfg: { file: 'MfgPage.vue', sections: ['overview', 'data-plane', 'source-pack', 'entities', 'metrics', 'evidence', 'incident-room', 'actions', 'skills', 'reports'] },
+  mfg: { file: 'MfgPage.vue', sections: ['dashboard', 'focus', 'collaboration', 'data', 'reality', 'evidence', 'operations', 'skills', 'reports'] },
   audit: { file: 'AuditPage.vue', sections: ['global-timeline', 'logs', 'usage', 'release', 'harness-eval', 'harness-eval-runs', 'harness-eval-scenarios', 'evolution', 'evaluation-policy', 'approvals', 'cross-plane'] },
 };
 

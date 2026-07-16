@@ -102,7 +102,7 @@ const failures = [];
 const pageRequirements = [
   {
     file: 'src/pages/MfgPage.vue',
-    terms: ['Decision Trace', 'source -> fact -> action', 'Matrix turns structured manufacturing signals', 'api.mfgDecisionTrace', '<DataTable :rows="decisionTraceRows"'],
+    terms: ['MfgCockpitWorkspace', 'MfgFocusWorkspace', 'MfgCollaborationWorkspace', 'MfgDomainWorkspace', 'data-section="dashboard"', 'data-section="collaboration"', 'data-section="reports"'],
   },
   {
     file: 'src/pages/MemoryPage.vue',

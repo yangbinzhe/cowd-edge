@@ -81,6 +81,11 @@ function headers(init: RequestInit = {}) {
   return headers;
 }
 
+function mfgIdempotencyKey(scope: string) {
+  const nonce = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `webui-mfg-${scope}-${nonce}`;
+}
+
 async function parseResponse(response: Response, path = '') {
   const text = await response.text();
   if (!text) return {};
@@ -1283,23 +1288,23 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  mfgUpsertProfile: (profile: Record<string, unknown>) => write('/api/apps/mfg/cockpit/profiles/upsert', {
+  mfgUpsertProfile: (profile: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('cockpit-profile')) => write('/api/apps/mfg/cockpit/profiles/upsert', {
     method: 'POST',
-    body: JSON.stringify({ profile }),
+    body: JSON.stringify({ profile, idempotency_key: idempotencyKey }),
   }),
   mfgCockpitProfiles: (cadence?: string) => read(`/api/apps/mfg/cockpit/profiles${cadence ? `?cadence=${encodeURIComponent(cadence)}` : ''}`, { items: [] }),
   mfgCockpitProfile: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}`, {}),
   mfgCockpitWidgetCatalog: () => read('/api/apps/mfg/cockpit/widget-catalog', { items: [] }),
   mfgCockpitProjection: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection`, {}),
-  mfgDeleteCockpitProfile: (profileId: string, expectedRevision: number) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${encodeURIComponent(expectedRevision)}`, { method: 'DELETE' }),
-  mfgCloneCockpitProfile: (profileId: string, body: Record<string, unknown> = {}) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/clone`, { method: 'POST', body: JSON.stringify(body) }),
-  mfgShareCockpitProfile: (profileId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/share`, { method: 'POST', body: JSON.stringify(body) }),
+  mfgDeleteCockpitProfile: (profileId: string, expectedRevision: number, idempotencyKey = mfgIdempotencyKey('cockpit-delete')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${encodeURIComponent(expectedRevision)}&idempotency_key=${encodeURIComponent(idempotencyKey)}`, { method: 'DELETE' }),
+  mfgCloneCockpitProfile: (profileId: string, body: Record<string, unknown> = {}, idempotencyKey = mfgIdempotencyKey('cockpit-clone')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/clone`, { method: 'POST', body: JSON.stringify({ ...body, idempotency_key: idempotencyKey }) }),
+  mfgShareCockpitProfile: (profileId: string, body: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('cockpit-share')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/share`, { method: 'POST', body: JSON.stringify({ ...body, idempotency_key: idempotencyKey }) }),
   mfgAlertRules: () => read('/api/apps/mfg/focus/alert-rules', { items: [] }),
-  mfgUpsertAlertRule: (rule: Record<string, unknown>) => write('/api/apps/mfg/focus/alert-rules', { method: 'POST', body: JSON.stringify({ rule }) }),
+  mfgUpsertAlertRule: (rule: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('alert-rule')) => write('/api/apps/mfg/focus/alert-rules', { method: 'POST', body: JSON.stringify({ rule, idempotency_key: idempotencyKey }) }),
   mfgAlertOccurrences: (status?: string) => read(`/api/apps/mfg/focus/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`, { items: [] }),
   mfgAlertCommand: (occurrenceId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/focus/alerts/${encodeURIComponent(occurrenceId)}/command`, { method: 'POST', body: JSON.stringify(body) }),
   mfgAlertSubscriptions: () => read('/api/apps/mfg/focus/alert-subscriptions', { items: [] }),
-  mfgUpsertAlertSubscription: (subscription: Record<string, unknown>) => write('/api/apps/mfg/focus/alert-subscriptions', { method: 'POST', body: JSON.stringify({ subscription }) }),
+  mfgUpsertAlertSubscription: (subscription: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('alert-subscription')) => write('/api/apps/mfg/focus/alert-subscriptions', { method: 'POST', body: JSON.stringify({ subscription, idempotency_key: idempotencyKey }) }),
   mfgForecasts: (metricRefs: string[] = [], horizon = 'next_period') => read(`/api/apps/mfg/focus/forecasts?metric_refs=${encodeURIComponent(metricRefs.join(','))}&horizon=${encodeURIComponent(horizon)}`, { items: [] }),
   mfgAssignments: (query: Record<string, string> = {}) => {
     const params = new URLSearchParams(query);
@@ -1307,7 +1312,7 @@ export const api = {
     return read(`/api/apps/mfg/assignments${suffix}`, { items: [] });
   },
   mfgAssignment: (assignmentId: string) => read(`/api/apps/mfg/assignments/${encodeURIComponent(assignmentId)}`, {}),
-  mfgUpsertAssignment: (assignment: Record<string, unknown>) => write('/api/apps/mfg/assignments', { method: 'POST', body: JSON.stringify({ assignment }) }),
+  mfgUpsertAssignment: (assignment: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('assignment')) => write('/api/apps/mfg/assignments', { method: 'POST', body: JSON.stringify({ assignment, idempotency_key: idempotencyKey }) }),
   mfgAssignmentCommand: (assignmentId: string, body: Record<string, unknown>) => write(`/api/apps/mfg/assignments/${encodeURIComponent(assignmentId)}/command`, { method: 'POST', body: JSON.stringify(body) }),
   mfgLive: (cursor?: number) => read(`/api/apps/mfg/live${cursor === undefined ? '' : `?cursor=${encodeURIComponent(cursor)}`}`, {}),
   mfgGenerateReport: (profileId: string, report: Record<string, unknown>) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/reports/generate`, {

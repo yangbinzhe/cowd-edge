@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { useMfgCockpitStore } from '../../stores/mfgCockpit';
 import type { MfgCockpitProfile, MfgWidgetInstance } from '../../types/mfg';
+import RequestReceipt from '../workbench/RequestReceipt.vue';
 
 const cockpit = useMfgCockpitStore();
 const editMode = ref(false);
@@ -17,6 +18,7 @@ const undoStack = ref<MfgCockpitProfile[]>([]);
 const redoStack = ref<MfgCockpitProfile[]>([]);
 const conflict = ref(false);
 const operationError = ref('');
+const receipt = ref<any>(null);
 
 function copyProfile(profile: MfgCockpitProfile | null) {
   return profile ? JSON.parse(JSON.stringify(profile)) as MfgCockpitProfile : null;
@@ -121,6 +123,7 @@ async function save() {
   if (!working.value) return;
   try {
     const saved = await cockpit.saveProfile(working.value);
+    receipt.value = cockpit.lastReceipt;
     working.value = copyProfile(saved);
     editMode.value = false;
     undoStack.value = [];
@@ -135,7 +138,7 @@ async function cloneProfile() {
   if (!cockpit.selectedProfile) return;
   operationError.value = '';
   try {
-    await api.mfgCloneCockpitProfile(cockpit.selectedProfile.profile_id, {});
+    receipt.value = await api.mfgCloneCockpitProfile(cockpit.selectedProfile.profile_id, {});
     await cockpit.refresh();
   } catch (cause) { operationError.value = cause instanceof Error ? cause.message : String(cause); }
 }
@@ -144,7 +147,7 @@ async function shareProfile() {
   if (!cockpit.selectedProfile) return;
   operationError.value = '';
   try {
-    await api.mfgShareCockpitProfile(cockpit.selectedProfile.profile_id, {
+    receipt.value = await api.mfgShareCockpitProfile(cockpit.selectedProfile.profile_id, {
       expected_revision: cockpit.selectedProfile.revision,
       sharing_policy: { visibility: shareVisibility.value, viewer_refs: commaList(shareViewers.value), editor_refs: commaList(shareEditors.value) },
     });
@@ -156,7 +159,7 @@ async function deleteProfile() {
   if (!cockpit.selectedProfile) return;
   operationError.value = '';
   try {
-    await api.mfgDeleteCockpitProfile(cockpit.selectedProfile.profile_id, cockpit.selectedProfile.revision);
+    receipt.value = await api.mfgDeleteCockpitProfile(cockpit.selectedProfile.profile_id, cockpit.selectedProfile.revision);
     cockpit.selectedProfileId = '';
     await cockpit.refresh();
   } catch (cause) { operationError.value = cause instanceof Error ? cause.message : String(cause); }
@@ -190,6 +193,7 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
       </div>
     </header>
     <p v-if="operationError" class="settings-alert">{{ operationError }}</p>
+    <RequestReceipt :receipt="receipt" :title="t('mfg.domain.receipt')" />
 
     <div class="mfg-cockpit__toolbar">
       <label>

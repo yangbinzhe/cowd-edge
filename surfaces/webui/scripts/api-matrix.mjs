@@ -66,14 +66,18 @@ const criticalMethods = {
   matrixSourceSnapshotRun: { criticality: 'p0', page: 'gateway' },
   mfgSourcePackUpsert: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgIngestFact: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
-  mfgEntityUpsert: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
-  mfgRelationUpsert: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
-  mfgComputeJobRun: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
-  mfgSeedDomain: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
-  mfgSeedOntology: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgExecuteAction: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgExecutionBridge: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
   mfgRetryReportDelivery: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgUpsertProfile: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgDeleteCockpitProfile: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
+  mfgCloneCockpitProfile: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
+  mfgShareCockpitProfile: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
+  mfgUpsertAlertRule: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
+  mfgAlertCommand: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgUpsertAlertSubscription: { criticality: 'p1', page: 'mfg', governedReceiptRequired: true },
+  mfgUpsertAssignment: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
+  mfgAssignmentCommand: { criticality: 'p0', page: 'mfg', governedReceiptRequired: true },
 };
 
 function read(file) {
@@ -89,9 +93,28 @@ function walk(target) {
   return fs.readdirSync(target).flatMap((entry) => walk(path.join(target, entry)));
 }
 
+function stripTemplateExpressions(route) {
+  let result = '';
+  for (let index = 0; index < route.length; index += 1) {
+    if (route[index] !== '$' || route[index + 1] !== '{') {
+      result += route[index];
+      continue;
+    }
+    if (result.endsWith('/')) result += ':param';
+    let depth = 1;
+    index += 2;
+    while (index < route.length && depth > 0) {
+      if (route[index] === '{') depth += 1;
+      if (route[index] === '}') depth -= 1;
+      index += 1;
+    }
+    index -= 1;
+  }
+  return result;
+}
+
 function normalizeRoute(route) {
-  return route
-    .replace(/\$\{[^`'"]+?\}/g, (match, offset, input) => (input[offset - 1] === '/' ? ':param' : ''))
+  return stripTemplateExpressions(route)
     .replace(/\?.*$/, '')
     .replace(/:id/g, ':param')
     .replace(/:name/g, ':param')
@@ -99,6 +122,33 @@ function normalizeRoute(route) {
     .replace(/:run_id/g, ':param')
     .replace(/:phase_id/g, ':param')
     .replace(/\/+/g, '/');
+}
+
+function firstRequestRoute(body) {
+  const call = /(?:read|write|writeWithReceipt|readText)\s*(?:<[^>]+>)?\s*\(\s*/.exec(body);
+  if (!call) return null;
+  const start = call.index + call[0].length;
+  const quote = body[start];
+  if (!quote || !['`', "'", '"'].includes(quote)) return null;
+  if (quote !== '`') {
+    const end = body.indexOf(quote, start + 1);
+    return end < 0 ? null : body.slice(start + 1, end);
+  }
+  let interpolationDepth = 0;
+  for (let index = start + 1; index < body.length; index += 1) {
+    if (body[index] === '$' && body[index + 1] === '{') {
+      interpolationDepth += 1;
+      index += 1;
+      continue;
+    }
+    if (interpolationDepth > 0) {
+      if (body[index] === '{') interpolationDepth += 1;
+      else if (body[index] === '}') interpolationDepth -= 1;
+      continue;
+    }
+    if (body[index] === '`') return body.slice(start + 1, index);
+  }
+  return null;
 }
 
 function inferMethod(body) {
@@ -112,14 +162,19 @@ function extractClientMethods() {
   const text = read(clientPath);
   const apiStart = text.indexOf('export const api = {');
   const apiText = text.slice(apiStart);
-  const methodRegex = /^\s{2}([A-Za-z0-9_]+):\s*(?:async\s*)?\([^)]*\)\s*=>\s*([\s\S]*?)(?=\n\s{2}[A-Za-z0-9_]+:\s*(?:async\s*)?\([^)]*\)\s*=>|\n};)/gm;
+  const members = Array.from(apiText.matchAll(/^\s{2}([A-Za-z0-9_]+):/gm));
   const entries = [];
-  let match;
-  while ((match = methodRegex.exec(apiText))) {
-    const [, name, body] = match;
-    const pathMatch = body.match(/(?:read|write|writeWithReceipt|readText)\s*(?:<[^>]+>)?\(\s*([`'"])([\s\S]*?)\1/);
-    if (!pathMatch) continue;
-    const route = pathMatch[2].trim();
+  for (let index = 0; index < members.length; index += 1) {
+    const member = members[index];
+    const [, name] = member;
+    const memberStart = member.index;
+    const memberEnd = members[index + 1]?.index ?? apiText.indexOf('\n};', memberStart);
+    const memberText = apiText.slice(memberStart, memberEnd < 0 ? apiText.length : memberEnd);
+    const arrow = memberText.indexOf('=>');
+    if (arrow < 0) continue;
+    const body = memberText.slice(arrow + 2);
+    const route = firstRequestRoute(body)?.trim();
+    if (!route) continue;
     entries.push({
       client_method: name,
       method: inferMethod(body),
@@ -233,9 +288,15 @@ function routeMatches(entry, route) {
 
 function hasGovernedReceiptEvidence(entry) {
   if (!entry.governed_receipt_required) return true;
-  const mfgPath = path.join(webuiRoot, 'src/pages/MfgPage.vue');
-  const text = read(mfgPath);
-  return text.includes(`data-mfg-risk="${entry.client_method}"`) && text.includes('mfg-governed-action');
+  const sources = [
+    read(path.join(webuiRoot, 'src/components/mfg/MfgCockpitWorkspace.vue')),
+    read(path.join(webuiRoot, 'src/components/mfg/MfgFocusWorkspace.vue')),
+    read(path.join(webuiRoot, 'src/components/mfg/MfgCollaborationWorkspace.vue')),
+    read(path.join(webuiRoot, 'src/components/mfg/MfgDomainWorkspace.vue')),
+    read(path.join(webuiRoot, 'src/stores/mfgCockpit.ts')),
+  ].join('\n');
+  const hasReceiptOrTerminalState = /RequestReceipt|cockpit\.saving|operationError|\bbusy\b/.test(sources);
+  return sources.includes(entry.client_method) && hasReceiptOrTerminalState;
 }
 
 const clientEntries = extractClientMethods();

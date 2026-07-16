@@ -220,6 +220,11 @@ try {
             '.mfg-workbench',
             '.mfg-lanes',
             '.mfg-layout',
+            '.mfg-page',
+            '.mfg-cockpit',
+            '.mfg-focus',
+            '.mfg-collaboration',
+            '.mfg-domain',
             '.audit-grid',
             '.transcript',
           ].some((selector) => {

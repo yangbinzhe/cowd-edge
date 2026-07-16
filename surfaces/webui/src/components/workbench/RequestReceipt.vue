@@ -45,6 +45,14 @@ function value(key: string) {
       <dd>{{ value('error') || value('message') || '-' }}</dd>
       <dt>{{ t('requestReceipt.payload') }}</dt>
       <dd>{{ value('payload_summary') || '-' }}</dd>
+      <dt>{{ t('requestReceipt.command') }}</dt>
+      <dd>{{ value('command') || '-' }}</dd>
+      <dt>{{ t('requestReceipt.revision') }}</dt>
+      <dd>{{ value('current_revision') === undefined ? '-' : `${value('previous_revision') ?? 0} → ${value('current_revision')}` }}</dd>
+      <dt>{{ t('requestReceipt.idempotencyKey') }}</dt>
+      <dd>{{ value('idempotency_key') || '-' }}</dd>
+      <dt>{{ t('requestReceipt.auditRef') }}</dt>
+      <dd>{{ value('audit_ref') || '-' }}</dd>
     </dl>
   </section>
 </template>
