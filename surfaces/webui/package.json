@@ -17,7 +17,7 @@
     "test:raw-payload": "node scripts/raw-payload-audit.mjs --gate",
     "test:tool-ops": "node scripts/tool-operations-gate.mjs --gate",
     "test:command-actions": "node scripts/command-actions-gate.mjs --gate",
-    "test:visual-audit": "node scripts/visual-audit.mjs",
+    "test:visual-audit": "node scripts/visual-audit.mjs --full",
     "test:acceptance": "node scripts/acceptance-gate.mjs --gate",
     "test:acceptance:final": "node scripts/acceptance-gate.mjs --final --gate",
     "test:acceptance:assemble": "node scripts/assemble-acceptance-results.mjs --final",

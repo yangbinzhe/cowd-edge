@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { useMfgCockpitStore } from '../../stores/mfgCockpit';
+import { createMfgMutationIntent } from '../../stores/mutationIntents';
 import type { GraphViewModel } from '../../types/graph';
 import DataTable from '../workbench/DataTable.vue';
 import EmptyState from '../workbench/EmptyState.vue';
@@ -51,6 +52,7 @@ const workflowGraph = computed<GraphViewModel>(() => {
 });
 
 const assignmentRows = computed(() => cockpit.assignments.map((assignment) => ({ assignment_id: assignment.assignment_id, task_ref: assignment.task_ref, assignee_ref: assignment.assignee_ref, assignee_kind: assignment.assignee_kind, priority: assignment.priority, status: assignment.status, due_at: assignment.due_at || '', sla_minutes: assignment.sla_minutes || '', watchers: assignment.watcher_refs.join(', '), incident_id: assignment.incident_id || '', revision: assignment.revision })));
+const canManageAssignments = computed(() => cockpit.grantedCapabilities.has('mfg.assignment.manage'));
 
 function list(value: string) { return value.split(',').map((item) => item.trim()).filter(Boolean); }
 
@@ -74,22 +76,32 @@ async function openRoom() {
 }
 
 async function createAssignment() {
-  if (!taskRef.value.trim() || !assigneeRef.value.trim()) return;
+  if (!taskRef.value.trim() || !assigneeRef.value.trim() || !canManageAssignments.value) return;
   busy.value = true;
   error.value = '';
   try {
-    receipt.value = await api.mfgUpsertAssignment({
+    const payload = {
       task_ref: taskRef.value.trim(), incident_id: selectedIncidentId.value || undefined, workflow_id: room.value?.workflow_graph?.workflow_id,
       workflow_node_id: workflowNodeId.value || undefined,
       assignee_ref: assigneeRef.value.trim(), assignee_kind: assigneeKind.value, watcher_refs: list(watcherRefs.value), priority: priority.value, visibility: visibility.value,
       due_at: dueAt.value ? new Date(dueAt.value).toISOString() : undefined, sla_minutes: Number(slaMinutes.value) || undefined,
       notification_targets: surface.value && recipient.value ? [{ surface: surface.value, recipient: recipient.value }] : [],
-    });
+    };
+    const intent = createMfgMutationIntent(
+      'mfg.assignment.create',
+      `mfg:assignment:${taskRef.value.trim()}:${assigneeRef.value.trim()}`,
+      payload,
+      { risk: 'medium' },
+    );
+    receipt.value = await api.mfgUpsertAssignment(payload, intent);
     await cockpit.refresh();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause); } finally { busy.value = false; }
 }
 
 async function command(assignment: any, action: string) {
+  if (!canManageAssignments.value) return;
+  if (['transfer', 'escalate', 'unassign'].includes(action)
+    && !window.confirm(`${assignment.assignment_id} @ revision ${assignment.revision}`)) return;
   busy.value = true;
   error.value = '';
   try { receipt.value = await cockpit.commandAssignment(assignment, action, targetRef.value || undefined, commandReason.value || undefined); } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause); } finally { busy.value = false; }
@@ -133,7 +145,7 @@ watch([() => route.query.incident, () => route.query.focus], () => { void restor
           <label><span>{{ t('mfg.collaboration.visibility') }}</span><select v-model="visibility"><option value="private">private</option><option value="team">team</option><option value="public">public</option></select></label>
           <label><span>{{ t('mfg.collaboration.surface') }}</span><input v-model="surface" /></label>
           <label><span>{{ t('mfg.collaboration.recipient') }}</span><input v-model="recipient" /></label>
-          <button class="primary-action" type="submit" :disabled="busy"><UserPlus :size="15" />{{ t('mfg.collaboration.assign') }}</button>
+          <button class="primary-action" type="submit" :disabled="busy || !canManageAssignments"><UserPlus :size="15" />{{ t('mfg.collaboration.assign') }}</button>
         </form>
         <RequestReceipt :receipt="receipt" :title="t('mfg.domain.receipt')" />
       </article>
@@ -147,7 +159,7 @@ watch([() => route.query.incident, () => route.query.focus], () => { void restor
         <header><UsersRound :size="16" /><h3>{{ t('mfg.collaboration.assignments') }}</h3></header>
         <DataTable v-if="assignmentRows.length" :rows="assignmentRows" :columns="['assignment_id', 'task_ref', 'assignee_ref', 'assignee_kind', 'priority', 'status', 'due_at', 'sla_minutes', 'watchers', 'incident_id', 'revision']" row-key="assignment_id" @row-click="inspectAssignment($event.assignment_id || '')" />
         <EmptyState v-else :title="t('mfg.collaboration.noAssignments')" :detail="t('mfg.collaboration.noAssignmentsDetail')" />
-        <div v-if="cockpit.assignments.length" class="mfg-collaboration__assignment-actions"><article v-for="assignment in cockpit.assignments" :key="assignment.assignment_id"><strong>{{ assignment.task_ref }}</strong><span>{{ assignment.assignee_ref }} · {{ assignment.status }} · {{ assignment.due_at || t('mfg.collaboration.noDueAt') }}</span><div><button class="ghost-action" type="button" :disabled="busy" @click="command(assignment, 'assign')">{{ t('mfg.collaboration.assign') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="command(assignment, 'claim')">{{ t('mfg.collaboration.claim') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="command(assignment, 'watch')"><Eye :size="14" />{{ t('mfg.collaboration.watch') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="command(assignment, 'request_update')"><Send :size="14" />{{ t('mfg.collaboration.requestUpdate') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="command(assignment, 'transfer')">{{ t('mfg.collaboration.transfer') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="command(assignment, 'escalate')">{{ t('mfg.collaboration.escalate') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="command(assignment, 'unassign')">{{ t('mfg.collaboration.unassign') }}</button></div></article></div>
+        <div v-if="cockpit.assignments.length" class="mfg-collaboration__assignment-actions"><article v-for="assignment in cockpit.assignments" :key="assignment.assignment_id"><strong>{{ assignment.task_ref }}</strong><span>{{ assignment.assignee_ref }} · {{ assignment.status }} · {{ assignment.due_at || t('mfg.collaboration.noDueAt') }}</span><div><button class="ghost-action" type="button" :disabled="busy || !canManageAssignments" @click="command(assignment, 'assign')">{{ t('mfg.collaboration.assign') }}</button><button class="ghost-action" type="button" :disabled="busy || !canManageAssignments" @click="command(assignment, 'claim')">{{ t('mfg.collaboration.claim') }}</button><button class="ghost-action" type="button" :disabled="busy || !canManageAssignments" @click="command(assignment, 'watch')"><Eye :size="14" />{{ t('mfg.collaboration.watch') }}</button><button class="ghost-action" type="button" :disabled="busy || !canManageAssignments" @click="command(assignment, 'request_update')"><Send :size="14" />{{ t('mfg.collaboration.requestUpdate') }}</button><button class="ghost-action" type="button" :disabled="busy || !canManageAssignments" @click="command(assignment, 'transfer')">{{ t('mfg.collaboration.transfer') }}</button><button class="ghost-action" type="button" :disabled="busy || !canManageAssignments" @click="command(assignment, 'escalate')">{{ t('mfg.collaboration.escalate') }}</button><button class="ghost-action" type="button" :disabled="busy || !canManageAssignments" @click="command(assignment, 'unassign')">{{ t('mfg.collaboration.unassign') }}</button></div></article></div>
         <ObjectInspectorDrawer v-if="selectedAssignment" :title="t('mfg.collaboration.assignmentDetail')" :data="selectedAssignment" />
       </article>
       <article class="mfg-collaboration__panel mfg-collaboration__panel--wide">

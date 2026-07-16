@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, onScopeDispose, ref } from 'vue';
 import { api } from '../api/client';
+import { createMfgMutationIntent } from './mutationIntents';
 import type {
   MfgAlertOccurrence,
   MfgAssignment,
@@ -9,6 +10,9 @@ import type {
   MfgCockpitProjection,
   MfgCockpitWidget,
   MfgLiveProjection,
+  MfgEntitlementProjection,
+  MfgFrontendContract,
+  MfgReportDeliveryReview,
   MfgWidgetDefinition,
   MfgWidgetInstance,
 } from '../types/mfg';
@@ -29,6 +33,10 @@ function readError(...values: any[]) {
   return failed?.__error ? String(failed.__error) : '';
 }
 
+function readable(value: any) {
+  return !value?.__state || value.__state === 'ready' || value.__state === 'stale';
+}
+
 export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   let stream: EventSource | null = null;
   let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -37,6 +45,8 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   const widgetEpochs = new Map<string, number>();
   const widgetControllers = new Map<string, AbortController>();
   const profiles = ref<MfgCockpitProfile[]>([]);
+  const contract = ref<MfgFrontendContract | null>(null);
+  const entitlement = ref<MfgEntitlementProjection | null>(null);
   const catalog = ref<MfgWidgetDefinition[]>([]);
   const globalFilterSchema = ref<MfgCockpitCatalogContract['global_filter_schema']>();
   const filterMergePolicy = ref<MfgCockpitCatalogContract['filter_merge_policy']>();
@@ -47,6 +57,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   const alertSubscriptions = ref<any[]>([]);
   const forecasts = ref<any[]>([]);
   const assignments = ref<MfgAssignment[]>([]);
+  const reviews = ref<MfgReportDeliveryReview[]>([]);
   const live = ref<MfgLiveProjection | null>(null);
   const lastReceipt = ref<any>(null);
   const loading = ref(false);
@@ -64,6 +75,20 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   const widgetsByInstance = computed(() => new Map((projection.value?.widgets || []).map((widget) => [widget.instance_id, widget])));
   const attentionAlerts = computed(() => alerts.value.filter((item) => !['resolved', 'snoozed'].includes(String(item.status))));
   const activeAssignments = computed(() => assignments.value.filter((item) => !['unassigned', 'resolved', 'done'].includes(String(item.status))));
+  const grantedCapabilities = computed(() => new Set(entitlement.value?.granted || []));
+  const availableActions = computed(() => new Set(
+    (contract.value?.actions || [])
+      .filter((action) => action.availability === 'active')
+      .filter((action) => (action.required_capabilities || []).every((capability) => grantedCapabilities.value.has(capability)))
+      .map((action) => action.action_id),
+  ));
+  const handleEntitlementStale = () => { void refresh(); };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('cowd:mfg-entitlement-stale', handleEntitlementStale);
+    onScopeDispose(() => {
+      window.removeEventListener('cowd:mfg-entitlement-stale', handleEntitlementStale);
+    });
+  }
 
   async function refresh(filters?: Record<string, string>) {
     if (filters) activeProjectionFilters.value = { ...filters };
@@ -76,29 +101,37 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     loading.value = true;
     error.value = '';
     try {
-      const [profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, liveResult] = await Promise.all([
-        api.mfgCockpitProfiles(), api.mfgCockpitWidgetCatalog(), api.mfgAlertRules(), api.mfgAlertOccurrences(), api.mfgAlertSubscriptions(), api.mfgAssignments(), api.mfgLive(),
+      const [contractResult, authResult, profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, reviewResult, liveResult] = await Promise.all([
+        api.mfgContract(), api.authVerify(), api.mfgCockpitProfiles(), api.mfgCockpitWidgetCatalog(), api.mfgAlertRules(), api.mfgAlertOccurrences(), api.mfgAlertSubscriptions(), api.mfgAssignments(), api.mfgReportReviews(), api.mfgLive(),
       ]);
-      const failure = readError(profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, liveResult);
-      if (failure) throw new Error(failure);
+      const failure = readError(contractResult, authResult, profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, reviewResult, liveResult);
       if (epoch !== requestEpoch.value) return;
-      profiles.value = collection(profileResult).map(profileFrom).filter(Boolean) as MfgCockpitProfile[];
-      const catalogContract = catalogResult as MfgCockpitCatalogContract;
-      catalog.value = collection(catalogContract) as MfgWidgetDefinition[];
-      globalFilterSchema.value = catalogContract.global_filter_schema;
-      filterMergePolicy.value = catalogContract.filter_merge_policy;
-      alertRules.value = collection(ruleResult);
-      alerts.value = collection(alertResult) as MfgAlertOccurrence[];
-      alertSubscriptions.value = collection(subscriptionResult);
-      assignments.value = collection(assignmentResult) as MfgAssignment[];
-      live.value = liveResult as MfgLiveProjection;
+      error.value = failure;
+      if (readable(contractResult)) contract.value = contractResult as MfgFrontendContract;
+      if (readable(authResult)) entitlement.value = authResult.entitlement || null;
+      if (readable(profileResult)) profiles.value = collection(profileResult).map(profileFrom).filter(Boolean) as MfgCockpitProfile[];
+      if (readable(catalogResult)) {
+        const catalogContract = catalogResult as MfgCockpitCatalogContract;
+        catalog.value = collection(catalogContract) as MfgWidgetDefinition[];
+        globalFilterSchema.value = catalogContract.global_filter_schema;
+        filterMergePolicy.value = catalogContract.filter_merge_policy;
+      }
+      if (readable(ruleResult)) alertRules.value = collection(ruleResult);
+      if (readable(alertResult)) alerts.value = collection(alertResult) as MfgAlertOccurrence[];
+      if (readable(subscriptionResult)) alertSubscriptions.value = collection(subscriptionResult);
+      if (readable(assignmentResult)) assignments.value = collection(assignmentResult) as MfgAssignment[];
+      if (readable(reviewResult)) reviews.value = collection(reviewResult) as MfgReportDeliveryReview[];
+      if (readable(liveResult)) live.value = liveResult as MfgLiveProjection;
       if (!profiles.value.some((profile) => profile.profile_id === selectedProfileId.value)) {
         selectedProfileId.value = profiles.value[0]?.profile_id || '';
         if (!selectedProfileId.value) projection.value = null;
       }
-      if (selectedProfileId.value) await loadProfile(selectedProfileId.value, epoch, activeProjectionFilters.value);
+      if (selectedProfileId.value) {
+        await loadProfile(selectedProfileId.value, epoch, activeProjectionFilters.value)
+          .catch(() => undefined);
+      }
       if (epoch !== requestEpoch.value) return;
-      await loadForecasts();
+      await loadForecasts().catch(() => undefined);
       if (epoch !== requestEpoch.value) return;
       lastUpdatedAt.value = new Date().toISOString();
     } catch (cause) {
@@ -152,11 +185,19 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     saving.value = true;
     error.value = '';
     try {
-      const result = await api.mfgUpsertProfile({
+      const exists = profiles.value.some((item) => item.profile_id === profile.profile_id);
+      const payload = {
         ...profile,
-        expected_revision: profiles.value.some((item) => item.profile_id === profile.profile_id) ? profile.revision : undefined,
-        owner_ref: profile.owner_ref || 'webui',
-      });
+        expected_revision: exists ? profile.revision : undefined,
+        owner_ref: '',
+      };
+      const intent = createMfgMutationIntent(
+        exists ? 'mfg.cockpit.profile.update' : 'mfg.cockpit.profile.create',
+        `mfg:cockpit-profile:${profile.profile_id}`,
+        payload,
+        { expectedRevision: exists ? profile.revision : undefined, risk: 'medium' },
+      );
+      const result = await api.mfgUpsertProfile(payload, intent);
       const next = profileFrom(result);
       if (!next) throw new Error('mfg.cockpit.invalid_profile_response');
       lastReceipt.value = result?.receipt || null;
@@ -269,11 +310,18 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   }
 
   async function commandAlert(occurrence: MfgAlertOccurrence, command: string, until?: string, reason?: string) {
-    const result = await api.mfgAlertCommand(occurrence.occurrence_id, {
-      command, expected_revision: occurrence.revision, idempotency_key: `webui-alert-${occurrence.occurrence_id}-${occurrence.revision}-${command}`,
+    const payload = {
+      command, expected_revision: occurrence.revision,
       ...(until ? { until } : {}),
       ...(reason ? { reason } : {}),
-    });
+    };
+    const intent = createMfgMutationIntent(
+      `mfg.alert.${command}`,
+      `mfg:alert:${occurrence.occurrence_id}`,
+      payload,
+      { expectedRevision: occurrence.revision, risk: command === 'escalate' ? 'high' : 'medium' },
+    );
+    const result = await api.mfgAlertCommand(occurrence.occurrence_id, payload, intent);
     const next = result?.occurrence || occurrence;
     const index = alerts.value.findIndex((item) => item.occurrence_id === next.occurrence_id);
     if (index >= 0) alerts.value.splice(index, 1, next);
@@ -281,11 +329,17 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   }
 
   async function commandAssignment(assignment: MfgAssignment, command: string, targetRef?: string, reason?: string) {
-    const result = await api.mfgAssignmentCommand(assignment.assignment_id, {
+    const payload = {
       command, target_ref: targetRef, expected_revision: assignment.revision,
-      idempotency_key: `webui-assignment-${assignment.assignment_id}-${assignment.revision}-${command}`,
       ...(reason ? { reason } : {}),
-    });
+    };
+    const intent = createMfgMutationIntent(
+      `mfg.assignment.${command}`,
+      `mfg:assignment:${assignment.assignment_id}`,
+      payload,
+      { expectedRevision: assignment.revision, risk: ['transfer', 'unassign', 'escalate', 'start', 'complete'].includes(command) ? 'high' : 'medium' },
+    );
+    const result = await api.mfgAssignmentCommand(assignment.assignment_id, payload, intent);
     const next = result?.assignment || assignment;
     const index = assignments.value.findIndex((item) => item.assignment_id === next.assignment_id);
     if (index >= 0) assignments.value.splice(index, 1, next);
@@ -330,8 +384,8 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   }
 
   return {
-    profiles, catalog, globalFilterSchema, filterMergePolicy, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch, activeProjectionFilters, widgetRefreshState,
-    selectedProfile, widgetsByInstance, attentionAlerts, activeAssignments,
+    profiles, contract, entitlement, catalog, globalFilterSchema, filterMergePolicy, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, reviews, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch, activeProjectionFilters, widgetRefreshState,
+    selectedProfile, widgetsByInstance, attentionAlerts, activeAssignments, grantedCapabilities, availableActions,
     refresh, loadProfile, loadForecasts, saveProfile, refreshWidget, cancelWidgetRefresh, addWidget, commandAlert, commandAssignment, startLive, stopLive,
   };
 });

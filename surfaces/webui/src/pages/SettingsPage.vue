@@ -325,7 +325,7 @@ async function verifyAuth() {
 
 async function loginGateway() {
   await run('auth-login', async () => {
-    await api.authLogin(authCredential.value);
+    await store.login(authCredential.value);
     authCredential.value = '';
     authResult.value = await store.verifyAuth();
   });

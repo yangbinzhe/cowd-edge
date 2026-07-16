@@ -19,6 +19,17 @@ const activeSection = computed(() => {
   const requested = typeof route.query.section === 'string' ? route.query.section : app.activeSectionByPage.mfg;
   return requested && mfgSections.has(requested) ? requested : 'dashboard';
 });
+const contractVersion = computed(() => {
+  const version = cockpit.contract?.contract_version;
+  if (!version) return 'contract unavailable';
+  if (typeof version === 'string') return version;
+  return `${version.major ?? 0}.${version.minor ?? 0}`;
+});
+const profileSummary = computed(() => [
+  cockpit.entitlement?.core_profile_id,
+  cockpit.entitlement?.mfg_profile_id,
+].filter(Boolean).join(' / ') || 'profile unavailable');
+const capabilitySummary = computed(() => `${cockpit.entitlement?.granted?.length || 0} granted · ${cockpit.entitlement?.denied?.length || 0} denied`);
 
 function projectionFiltersFromRoute() {
   const filters: Record<string, string> = {};
@@ -56,6 +67,12 @@ watch(
       <div>
         <h1>{{ t('mfg.shell.title') }}</h1>
         <p>{{ t('mfg.shell.summary') }}</p>
+        <dl class="mfg-page__diagnostics" aria-label="MFG contract and permission diagnostics">
+          <div><dt>Contract</dt><dd>{{ contractVersion }}</dd></div>
+          <div><dt>Profile</dt><dd>{{ profileSummary }}</dd></div>
+          <div><dt>Permissions</dt><dd>{{ capabilitySummary }}</dd></div>
+          <div><dt>Freshness</dt><dd>{{ cockpit.lastUpdatedAt || cockpit.liveStatus }}</dd></div>
+        </dl>
       </div>
       <button class="ghost-action" type="button" :disabled="cockpit.loading" @click="refresh"><RefreshCw :size="15" />{{ t('mfg.shell.refresh') }}</button>
     </header>
@@ -85,6 +102,11 @@ watch(
 .mfg-page__header { display: flex; align-items: start; justify-content: space-between; gap: 16px; padding: 0 0 14px; border-bottom: 1px solid var(--border); }
 .mfg-page__header h1 { margin: 0; color: var(--text); font-size: clamp(20px, 2vw, 27px); letter-spacing: -0.025em; }
 .mfg-page__header p { max-width: 76ch; margin: 6px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.55; }
+.mfg-page__diagnostics { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; }
+.mfg-page__diagnostics div { display: inline-flex; min-width: 0; gap: 5px; font: 11px var(--font-mono); }
+.mfg-page__diagnostics dt { color: var(--text-faint); }
+.mfg-page__diagnostics dd { min-width: 0; margin: 0; color: var(--text-muted); overflow-wrap: anywhere; }
 .mfg-page__workspace { min-width: 0; }
 @media (max-width: 820px) { .mfg-page__header { align-items: stretch; flex-direction: column; } .mfg-page__header .ghost-action { align-self: start; } }
+@media (pointer: coarse) { .mfg-page__header .ghost-action { min-width: 44px; min-height: 44px; } }
 </style>

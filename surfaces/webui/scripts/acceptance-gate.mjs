@@ -13,20 +13,28 @@ function range(prefix, start, end) {
   return Array.from({ length: end - start + 1 }, (_, index) => `${prefix}-${String(start + index).padStart(2, '0')}`);
 }
 
-const expectedIds = [
-  ...range('UX', 1, 6),
-  ...range('LIVE', 1, 7),
-  ...range('G', 1, 14),
-  ...range('E', 1, 6),
-  ...range('M', 1, 18),
-  ...range('S', 1, 8),
-  ...range('P', 1, 8),
-];
+const acceptanceClassifications = {
+  UX: 6,
+  LIVE: 7,
+  G: 14,
+  E: 6,
+  M: 18,
+  MC: 6,
+  MR: 8,
+  TUI: 8,
+  MUX: 8,
+  MLIVE: 9,
+  STR: 11,
+  S: 8,
+  P: 8,
+};
+const expectedIds = Object.entries(acceptanceClassifications)
+  .flatMap(([prefix, end]) => range(prefix, 1, end));
 const allowedLevels = new Set(manifest.allowed_levels || []);
 const failures = [];
 const ids = new Set();
 
-if (manifest.schema_version !== 1) failures.push('acceptance manifest schema_version must be 1');
+if (manifest.schema_version !== 2) failures.push('acceptance manifest schema_version must be 2');
 for (const entry of manifest.entries || []) {
   if (!entry.id || ids.has(entry.id)) failures.push(`duplicate or missing acceptance id: ${entry.id || '<missing>'}`);
   ids.add(entry.id);
@@ -56,6 +64,10 @@ const requiredSource = [
   ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'refreshWidget'],
   ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'cancelWidgetRefresh'],
   ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'activeProjectionFilters'],
+  ['frontend', 'surfaces/webui/src/stores/mutationIntents.ts', 'retry_same_intent'],
+  ['frontend', 'surfaces/webui/src/components/mfg/RecoveryActions.vue', 'recovery_actions'],
+  ['frontend', 'surfaces/webui/src/components/mfg/MfgReportReviewDrawer.vue', 'mfgDecideReportReview'],
+  ['frontend', 'surfaces/webui/src/types/mfg.ts', 'temporary_generated_api_adapter'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgFocusWorkspace.vue', 'conditionThreshold'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgFocusWorkspace.vue', 'conditionWindowMinutes'],
   ['frontend', 'surfaces/webui/src/components/mfg/MfgCollaborationWorkspace.vue', "command(assignment, 'unassign')"],

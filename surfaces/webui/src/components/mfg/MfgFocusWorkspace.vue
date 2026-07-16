@@ -4,6 +4,7 @@ import { Bell, BellRing, Check, Clock3, Plus, TrendingUp } from 'lucide-vue-next
 import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { useMfgCockpitStore } from '../../stores/mfgCockpit';
+import { createMfgMutationIntent } from '../../stores/mutationIntents';
 import DataTable from '../workbench/DataTable.vue';
 import EmptyState from '../workbench/EmptyState.vue';
 import EvidenceTrace from '../workbench/EvidenceTrace.vue';
@@ -31,34 +32,50 @@ const error = ref('');
 const alertEvidence = computed(() => cockpit.attentionAlerts.flatMap((alert) => (alert.evidence_refs || []).map((ref) => ({ id: ref, kind: 'mfg.alert.evidence', status: alert.status, summary: alert.summary, source: alert.occurrence_id }))));
 const forecastRows = computed(() => cockpit.forecasts.map((forecast: any) => ({ metric_ref: forecast.metric_ref, status: forecast.status, confidence: forecast.confidence, horizon: forecast.horizon, interval: forecast.interval, method: forecast.method, expires_at: forecast.expires_at, unavailable_reason: forecast.unavailable_reason })));
 const ruleRows = computed(() => cockpit.alertRules.map((rule: any) => ({ ...rule, condition_summary: rule.condition?.field ? `${rule.condition.field} ${rule.condition.operator} ${rule.condition.threshold}` : t('mfg.focus.allMatchingAttention') })));
+const canManageAlerts = computed(() => cockpit.grantedCapabilities.has('mfg.alert.manage'));
+const canRespondAlerts = computed(() => cockpit.grantedCapabilities.has('mfg.alert.respond'));
 
 function list(value: string) { return value.split(',').map((item) => item.trim()).filter(Boolean); }
 
 async function createRule() {
-  if (!ruleName.value.trim()) return;
+  if (!ruleName.value.trim() || !canManageAlerts.value) return;
   busy.value = true;
   error.value = '';
   try {
-    receipt.value = await api.mfgUpsertAlertRule({
-      owner_ref: 'webui',
+    const payload = {
+      owner_ref: '',
       name: ruleName.value.trim(),
       metric_refs: list(metricRefs.value),
       entity_refs: list(entityRefs.value),
       condition: { field: conditionField.value, operator: conditionOperator.value, threshold: Number(conditionThreshold.value), window_minutes: Number(conditionWindowMinutes.value) },
       severity: severity.value,
       enabled: true,
-    });
+    };
+    const intent = createMfgMutationIntent(
+      'mfg.alert_rule.create',
+      `mfg:alert-rule:${ruleName.value.trim()}`,
+      payload,
+      { risk: 'medium' },
+    );
+    receipt.value = await api.mfgUpsertAlertRule(payload, intent);
     ruleName.value = '';
     await cockpit.refresh();
   } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause); } finally { busy.value = false; }
 }
 
 async function subscribe() {
-  if (!subscriptionRuleId.value) return;
+  if (!subscriptionRuleId.value || !canManageAlerts.value) return;
   busy.value = true;
   error.value = '';
   try {
-    receipt.value = await api.mfgUpsertAlertSubscription({ rule_id: subscriptionRuleId.value, channels: list(subscriptionChannels.value), enabled: true });
+    const payload = { rule_id: subscriptionRuleId.value, channels: list(subscriptionChannels.value), enabled: true };
+    const intent = createMfgMutationIntent(
+      'mfg.alert_subscription.create',
+      `mfg:alert-subscription:${subscriptionRuleId.value}`,
+      payload,
+      { risk: 'medium' },
+    );
+    receipt.value = await api.mfgUpsertAlertSubscription(payload, intent);
   } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause); } finally { busy.value = false; }
 }
 
@@ -71,6 +88,8 @@ async function refreshForecasts() {
 }
 
 async function alertCommand(alert: any, command: string) {
+  if (!canRespondAlerts.value) return;
+  if (command === 'escalate' && !window.confirm(`${alert.occurrence_id} @ revision ${alert.revision}`)) return;
   busy.value = true;
   error.value = '';
   try {
@@ -100,7 +119,7 @@ async function alertCommand(alert: any, command: string) {
           <label><span>{{ t('mfg.focus.conditionOperator') }}</span><select v-model="conditionOperator"><option value="gt">&gt;</option><option value="gte">≥</option><option value="lt">&lt;</option><option value="lte">≤</option><option value="eq">=</option></select></label>
           <label><span>{{ t('mfg.focus.conditionThreshold') }}</span><input v-model.number="conditionThreshold" type="number" min="0" max="1" step="0.01" /></label>
           <label><span>{{ t('mfg.focus.conditionWindow') }}</span><input v-model.number="conditionWindowMinutes" type="number" min="1" max="10080" step="1" /></label>
-          <button class="primary-action" type="submit" :disabled="busy"><Plus :size="15" />{{ t('mfg.focus.createRule') }}</button>
+          <button class="primary-action" type="submit" :disabled="busy || !canManageAlerts"><Plus :size="15" />{{ t('mfg.focus.createRule') }}</button>
         </form>
         <DataTable v-if="ruleRows.length" :rows="ruleRows" :columns="['rule_id', 'name', 'condition_summary', 'severity', 'enabled', 'revision']" row-key="rule_id" @row-click="subscriptionRuleId = $event.rule_id" />
         <EmptyState v-else :title="t('mfg.focus.noRules')" :detail="t('mfg.focus.noRulesDetail')" />
@@ -120,7 +139,7 @@ async function alertCommand(alert: any, command: string) {
         <div v-if="cockpit.alerts.length" class="mfg-alert-list">
           <article v-for="alert in cockpit.alerts" :key="alert.occurrence_id" class="mfg-alert" :data-severity="alert.severity">
             <div><strong>{{ alert.summary }}</strong><span>{{ alert.status }} · {{ alert.rule_id }}</span></div>
-            <div class="mfg-alert__actions"><button class="ghost-action" type="button" :disabled="busy" @click="alertCommand(alert, 'acknowledge')">{{ t('mfg.focus.acknowledge') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="alertCommand(alert, 'snooze')">{{ t('mfg.focus.snooze') }}</button><button class="ghost-action" type="button" :disabled="busy" @click="alertCommand(alert, 'escalate')">{{ t('mfg.focus.escalate') }}</button><button class="primary-action" type="button" :disabled="busy" @click="alertCommand(alert, 'resolve')"><Check :size="15" />{{ t('mfg.focus.resolve') }}</button></div>
+            <div class="mfg-alert__actions"><button class="ghost-action" type="button" :disabled="busy || !canRespondAlerts" @click="alertCommand(alert, 'acknowledge')">{{ t('mfg.focus.acknowledge') }}</button><button class="ghost-action" type="button" :disabled="busy || !canRespondAlerts" @click="alertCommand(alert, 'snooze')">{{ t('mfg.focus.snooze') }}</button><button class="ghost-action" type="button" :disabled="busy || !canRespondAlerts" @click="alertCommand(alert, 'escalate')">{{ t('mfg.focus.escalate') }}</button><button class="primary-action" type="button" :disabled="busy || !canRespondAlerts" @click="alertCommand(alert, 'resolve')"><Check :size="15" />{{ t('mfg.focus.resolve') }}</button></div>
           </article>
         </div>
         <EmptyState v-else :title="t('mfg.focus.noAlerts')" :detail="t('mfg.focus.noAlertsDetail')" />
@@ -132,7 +151,7 @@ async function alertCommand(alert: any, command: string) {
         <form class="mfg-focus__form" @submit.prevent="subscribe">
           <label><span>{{ t('mfg.focus.rule') }}</span><select v-model="subscriptionRuleId"><option value="">{{ t('mfg.focus.selectRule') }}</option><option v-for="rule in cockpit.alertRules" :key="rule.rule_id" :value="rule.rule_id">{{ rule.name || rule.rule_id }}</option></select></label>
           <label><span>{{ t('mfg.focus.channels') }}</span><input v-model="subscriptionChannels" /></label>
-          <button class="ghost-action" type="submit" :disabled="busy || !subscriptionRuleId"><Bell :size="15" />{{ t('mfg.focus.saveSubscription') }}</button>
+          <button class="ghost-action" type="submit" :disabled="busy || !subscriptionRuleId || !canManageAlerts"><Bell :size="15" />{{ t('mfg.focus.saveSubscription') }}</button>
         </form>
         <RequestReceipt :receipt="receipt" :title="t('mfg.domain.receipt')" />
         <DataTable v-if="cockpit.alertSubscriptions.length" :rows="cockpit.alertSubscriptions" :columns="['subscription_id', 'rule_id', 'channels', 'enabled', 'revision']" row-key="subscription_id" />

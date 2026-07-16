@@ -2,9 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { Activity, Database, FileCheck2, Play, RefreshCw, Send, Wrench } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '../../api/client';
+import { api, ApiWriteError } from '../../api/client';
 import { t } from '../../i18n';
 import { useMfgCockpitStore } from '../../stores/mfgCockpit';
+import { createMfgMutationIntent } from '../../stores/mutationIntents';
 import { adaptEntityImpact } from '../../adapters/graph/entityImpact';
 import { adaptMetricLineage } from '../../adapters/graph/metricLineage';
 import { adaptMfgDecisionTrace } from '../../adapters/graph/mfgDecisionTrace';
@@ -14,6 +15,9 @@ import EvidenceTrace from '../workbench/EvidenceTrace.vue';
 import GraphSurface from '../graph/GraphSurface.vue';
 import ObjectInspectorDrawer from '../workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../workbench/RequestReceipt.vue';
+import MfgReportReviewDrawer from './MfgReportReviewDrawer.vue';
+import RecoveryActions from './RecoveryActions.vue';
+import type { MfgApiErrorV1, MfgRecoveryAction } from '../../types/mfg';
 
 const props = defineProps<{ section: 'data' | 'reality' | 'evidence' | 'operations' | 'skills' | 'reports' }>();
 const route = useRoute();
@@ -21,6 +25,7 @@ const router = useRouter();
 const cockpit = useMfgCockpitStore();
 const loading = ref(false);
 const error = ref('');
+const operationApiError = ref<MfgApiErrorV1 | null>(null);
 const receipt = ref<any>(null);
 const operationStatus = ref<'idle' | 'running' | 'succeeded' | 'failed'>('idle');
 const operationName = ref('');
@@ -72,6 +77,7 @@ const feedbackOutcome = ref('resolved');
 const feedbackNote = ref('');
 const feedbackMetricDelta = ref<number | null>(null);
 const reportId = ref('');
+const reviewOpen = ref(false);
 const caseQuery = ref('');
 const selectedCaseId = ref('');
 const selectedPlaybookId = ref('');
@@ -100,8 +106,29 @@ const evidencePacket = computed(() => data.value.evidence?.packet?.packet || dat
 const evidenceContextItem = computed(() => data.value.evidence?.context?.context_item || data.value.evidence?.context || {});
 const qualityDecision = computed(() => data.value.qualityGate?.gate || data.value.qualityGate?.quality_gate || data.value.qualityGate || {});
 const reportDeliveryState = computed(() => data.value.delivery?.delivery_state || data.value.delivery?.after_state || data.value.delivery || {});
+const reportSnapshot = computed(() => data.value.report?.report || data.value.report || {});
+const canReviewReports = computed(() => cockpit.grantedCapabilities.has('mfg.report.review')
+  && cockpit.grantedCapabilities.has('approval.respond'));
+const canManageData = computed(() => cockpit.grantedCapabilities.has('mfg.data.manage'));
+const canOperateIncidents = computed(() => cockpit.grantedCapabilities.has('mfg.incident.operate'));
+const canManagePlaybooks = computed(() => cockpit.grantedCapabilities.has('mfg.playbook.manage'));
+const canRunSkills = computed(() => cockpit.grantedCapabilities.has('mfg.skill.run'));
+const canOperateExecution = computed(() => cockpit.grantedCapabilities.has('mfg.execution.operate'));
+const canRecordFeedback = computed(() => cockpit.grantedCapabilities.has('mfg.execution.feedback'));
+const canGenerateReports = computed(() => cockpit.grantedCapabilities.has('mfg.report.generate'));
+const canDeliverReports = computed(() => cockpit.grantedCapabilities.has('mfg.report.deliver'));
 
 function items(value: any, key: string) { return Array.isArray(value?.[key]) ? value[key] : Array.isArray(value?.items) ? value.items : Array.isArray(value) ? value : []; }
+
+function mutationIntent(
+  actionId: string,
+  resourceRef: string,
+  payload: unknown,
+  expectedRevision?: number,
+  risk: 'low' | 'medium' | 'high' = 'medium',
+) {
+  return createMfgMutationIntent(actionId, resourceRef, payload, { expectedRevision, risk });
+}
 
 async function execute<T>(action: () => Promise<T>, name = props.section, retryable = false): Promise<T | null> {
   const epoch = ++operationEpoch;
@@ -114,6 +141,7 @@ async function execute<T>(action: () => Promise<T>, name = props.section, retrya
   inFlightOperations += 1;
   loading.value = true;
   error.value = '';
+  operationApiError.value = null;
   try {
     const result = await action();
     if (epoch === operationEpoch) {
@@ -124,6 +152,18 @@ async function execute<T>(action: () => Promise<T>, name = props.section, retrya
   } catch (cause) {
     if (epoch === operationEpoch) {
       error.value = cause instanceof Error ? cause.message : String(cause);
+      if (cause instanceof ApiWriteError) {
+        operationApiError.value = cause.apiError || {
+          code: cause.code,
+          message: cause.message,
+          http_status: cause.status,
+          details: cause.details,
+          retryable: cause.retryable,
+          recovery_actions: cause.recoveryActions,
+          request_id: cause.requestId,
+        };
+        if (cause.status === 403) void cockpit.refresh();
+      }
       operationStatus.value = 'failed';
       operationUpdatedAt.value = new Date().toISOString();
     }
@@ -148,9 +188,23 @@ async function retryLastOperation() {
   await execute(lastOperation, lastOperationName || props.section, true);
 }
 
+async function recoverOperation(action: MfgRecoveryAction) {
+  if (action.kind === 'retry_same_intent' && lastOperation) {
+    await execute(lastOperation, lastOperationName || props.section, true);
+    return;
+  }
+  if (action.kind === 'reload' || action.kind === 'compare') {
+    await refresh();
+    return;
+  }
+  if (['reauthenticate', 'request_access'].includes(action.kind) && action.target) {
+    window.location.assign(action.target);
+  }
+}
+
 async function upsertSourcePack() {
-  if (!sourcePackId.value.trim()) return;
-  receipt.value = await execute(() => api.mfgSourcePackUpsert({
+  if (!sourcePackId.value.trim() || !canManageData.value) return;
+  const payload = {
     source_pack_id: sourcePackId.value.trim(),
     source_name: sourceName.value.trim() || sourcePackId.value.trim(),
     owner: sourceOwner.value.trim(),
@@ -161,7 +215,13 @@ async function upsertSourcePack() {
     reconciliation_rules: ['deduplicate_by_source_key'],
     quality_rules: ['required_identifiers_present'],
     metadata: { configured_by: 'webui-mfg' },
-  }));
+  };
+  const intent = mutationIntent(
+    'mfg.reality.source_pack.create',
+    `mfg:source-pack:${sourcePackId.value.trim()}`,
+    payload,
+  );
+  receipt.value = await execute(() => api.mfgSourcePackUpsert(payload, intent));
   if (!receipt.value) return;
   await refresh();
 }
@@ -182,7 +242,14 @@ async function inspectSourcePack() {
 }
 
 async function initializeKernel() {
-  const result = await execute(() => Promise.all([api.mfgSeedDomain(), api.mfgSeedOntology()]));
+  if (!canManageData.value
+    || !window.confirm('server-manufacturing domain and ontology kernel')) return;
+  const domainIntent = mutationIntent('mfg.domain.server_manufacturing.seed', 'mfg:domain:server-manufacturing', {}, undefined, 'high');
+  const ontologyIntent = mutationIntent('mfg.ontology.server_manufacturing.seed', 'mfg:ontology:server-manufacturing', {}, undefined, 'high');
+  const result = await execute(() => Promise.all([
+    api.mfgSeedDomain(domainIntent),
+    api.mfgSeedOntology(ontologyIntent),
+  ]));
   if (result) {
     receipt.value = { domain: result[0], ontology: result[1] };
     await refresh();
@@ -195,16 +262,21 @@ async function planSourceDelta() {
 }
 
 async function planConnectorRun() {
-  if (!sourcePackId.value.trim() || !connectorResourceRef.value.trim()) return;
-  const result = await execute(() => api.mfgSourcePackConnectorPlan(sourcePackId.value.trim(), { resource_ref: connectorResourceRef.value.trim(), expected_rows: connectorExpectedRows.value || undefined }));
+  if (!sourcePackId.value.trim() || !connectorResourceRef.value.trim() || !canManageData.value) return;
+  const payload = { resource_ref: connectorResourceRef.value.trim(), expected_rows: connectorExpectedRows.value || undefined };
+  const intent = mutationIntent('mfg.reality.connector_run.plan', `mfg:source-pack:${sourcePackId.value.trim()}`, payload);
+  const result = await execute(() => api.mfgSourcePackConnectorPlan(sourcePackId.value.trim(), payload, intent));
   if (!result) return;
   connectorRunId.value = String((result as any)?.run?.run_id || connectorRunId.value);
   data.value = { ...data.value, sourcePackResult: result };
 }
 
 async function runConnector() {
-  if (!sourcePackId.value.trim() || !connectorResourceRef.value.trim()) return;
-  const result = await execute(() => api.mfgSourcePackConnectorRun(sourcePackId.value.trim(), { resource_ref: connectorResourceRef.value.trim(), expected_rows: connectorExpectedRows.value || undefined }));
+  if (!sourcePackId.value.trim() || !connectorResourceRef.value.trim() || !canManageData.value) return;
+  if (!window.confirm(`${sourcePackId.value.trim()} → ${connectorResourceRef.value.trim()}`)) return;
+  const payload = { resource_ref: connectorResourceRef.value.trim(), expected_rows: connectorExpectedRows.value || undefined };
+  const intent = mutationIntent('mfg.reality.connector_run.execute', `mfg:source-pack:${sourcePackId.value.trim()}`, payload, undefined, 'high');
+  const result = await execute(() => api.mfgSourcePackConnectorRun(sourcePackId.value.trim(), payload, intent));
   if (!result) return;
   connectorRunId.value = String((result as any)?.run?.run_id || connectorRunId.value);
   data.value = { ...data.value, sourcePackResult: result };
@@ -216,9 +288,21 @@ async function inspectConnectorRun() {
 }
 
 async function ingestFacts() {
+  if (!canManageData.value) return;
   let facts: any[] = [];
   try { const parsed = JSON.parse(factPayload.value); facts = Array.isArray(parsed) ? parsed : [parsed]; } catch { error.value = t('mfg.domain.invalidJson'); return; }
-  receipt.value = await execute(() => sourcePackId.value.trim() ? api.mfgSourcePackIngestFile(sourcePackId.value.trim(), facts) : api.mfgIngestFact(facts));
+  if (!window.confirm(`${sourcePackId.value.trim() || 'direct fact ingest'} · ${facts.length} facts`)) return;
+  const sourcePack = sourcePackId.value.trim();
+  const intent = mutationIntent(
+    sourcePack ? 'mfg.reality.source_pack.ingest_file' : 'mfg.reality.fact.ingest',
+    sourcePack ? `mfg:source-pack:${sourcePack}` : `mfg:fact-batch:${facts.length}`,
+    facts,
+    undefined,
+    'high',
+  );
+  receipt.value = await execute(() => sourcePack
+    ? api.mfgSourcePackIngestFile(sourcePack, facts, intent)
+    : api.mfgIngestFact(facts, intent));
   if (!receipt.value) return;
   await refresh();
 }
@@ -233,8 +317,16 @@ async function inspectEntity(entityId = selectedEntityId.value) {
 }
 
 async function upsertEntity() {
-  if (!selectedEntityId.value.trim()) return;
-  receipt.value = await execute(() => api.mfgEntityUpsert({ entity_id: selectedEntityId.value.trim(), canonical_key: selectedEntityId.value.trim(), display_name: entityDisplayName.value.trim() || selectedEntityId.value.trim(), entity_type: entityType.value }));
+  if (!selectedEntityId.value.trim() || !canManageData.value) return;
+  const payload = { entity_id: selectedEntityId.value.trim(), canonical_key: selectedEntityId.value.trim(), display_name: entityDisplayName.value.trim() || selectedEntityId.value.trim(), entity_type: entityType.value };
+  const existing = data.value.entities.find((entity: any) => entity.entity_id === selectedEntityId.value.trim());
+  const intent = mutationIntent(
+    existing ? 'mfg.reality.entity.update' : 'mfg.reality.entity.create',
+    `mfg:entity:${selectedEntityId.value.trim()}`,
+    payload,
+    existing?.revision,
+  );
+  receipt.value = await execute(() => api.mfgEntityUpsert(payload, intent));
   if (receipt.value) await inspectEntity();
 }
 
@@ -244,8 +336,10 @@ async function resolveEntity() {
 }
 
 async function upsertRelation() {
-  if (!selectedEntityId.value || !relationTargetId.value.trim() || !relationType.value.trim()) return;
-  receipt.value = await execute(() => api.mfgRelationUpsert({ relation_type: relationType.value.trim(), from_entity_id: selectedEntityId.value, to_entity_id: relationTargetId.value.trim() }));
+  if (!selectedEntityId.value || !relationTargetId.value.trim() || !relationType.value.trim() || !canManageData.value) return;
+  const payload = { relation_type: relationType.value.trim(), from_entity_id: selectedEntityId.value, to_entity_id: relationTargetId.value.trim() };
+  const intent = mutationIntent('mfg.reality.relation.create', `mfg:relation:${selectedEntityId.value}:${relationType.value.trim()}:${relationTargetId.value.trim()}`, payload);
+  receipt.value = await execute(() => api.mfgRelationUpsert(payload, intent));
   if (receipt.value) await inspectEntity();
 }
 
@@ -259,8 +353,10 @@ async function inspectMetric(metricId = selectedMetricId.value) {
 }
 
 async function materializeMetricSnapshot() {
-  if (!selectedMetricId.value) return;
-  receipt.value = await execute(() => api.mfgMetricSnapshotMaterialize([selectedMetricId.value], selectedEntityId.value || undefined));
+  if (!selectedMetricId.value || !canManageData.value) return;
+  const payload = { metric_ids: [selectedMetricId.value], scope_ref: selectedEntityId.value || undefined };
+  const intent = mutationIntent('mfg.reality.metric_snapshot.materialize', `mfg:metric:${selectedMetricId.value}`, payload);
+  receipt.value = await execute(() => api.mfgMetricSnapshotMaterialize(payload.metric_ids, payload.scope_ref, intent));
 }
 
 async function planMetricAttention() {
@@ -269,16 +365,20 @@ async function planMetricAttention() {
 }
 
 async function planComputeJob() {
-  if (!triggerFactType.value.trim()) return;
-  const result = await execute(() => api.mfgComputeJobPlan({ trigger_fact_type: triggerFactType.value.trim(), metric_ids: selectedMetricId.value ? [selectedMetricId.value] : [], entity_scope: selectedEntityId.value || undefined }));
+  if (!triggerFactType.value.trim() || !canManageData.value) return;
+  const payload = { trigger_fact_type: triggerFactType.value.trim(), metric_ids: selectedMetricId.value ? [selectedMetricId.value] : [], entity_scope: selectedEntityId.value || undefined };
+  const intent = mutationIntent('mfg.reality.compute_job.plan', `mfg:compute-plan:${triggerFactType.value.trim()}`, payload);
+  const result = await execute(() => api.mfgComputeJobPlan(payload, intent));
   if (!result) return;
   computeJobId.value = String((result as any)?.job?.job_id || (result as any)?.plan?.job?.job_id || computeJobId.value);
   data.value = { ...data.value, computeResult: result };
 }
 
 async function runComputeJob() {
-  if (!computeJobId.value) return;
-  data.value = { ...data.value, computeResult: await execute(() => api.mfgComputeJobRun(computeJobId.value)) };
+  if (!computeJobId.value || !canManageData.value) return;
+  if (!window.confirm(`compute job ${computeJobId.value}`)) return;
+  const intent = mutationIntent('mfg.reality.compute_job.execute', `mfg:compute-job:${computeJobId.value}`, {}, undefined, 'high');
+  data.value = { ...data.value, computeResult: await execute(() => api.mfgComputeJobRun(computeJobId.value, intent)) };
   await refresh();
 }
 
@@ -288,14 +388,17 @@ async function inspectComputeJob() {
 }
 
 async function recomputeMetrics() {
-  if (!window.confirm(t('mfg.domain.reality.confirmRecompute'))) return;
-  receipt.value = await execute(() => api.mfgMetricRecompute());
+  if (!canManageData.value || !window.confirm(t('mfg.domain.reality.confirmRecompute'))) return;
+  const intent = mutationIntent('mfg.reality.metric.recompute', 'mfg:metrics', {}, undefined, 'high');
+  receipt.value = await execute(() => api.mfgMetricRecompute(intent));
   if (receipt.value) await refresh();
 }
 
 async function buildEvidence() {
-  if (!selectedAttentionId.value) return;
-  receipt.value = await execute(() => api.mfgEvidenceBuild({ attention_id: selectedAttentionId.value, problem_statement: incidentTitle.value || undefined }));
+  if (!selectedAttentionId.value || !canManageData.value) return;
+  const payload = { attention_id: selectedAttentionId.value, problem_statement: incidentTitle.value || undefined };
+  const intent = mutationIntent('mfg.reality.evidence.build', `mfg:attention:${selectedAttentionId.value}`, payload);
+  receipt.value = await execute(() => api.mfgEvidenceBuild(payload, intent));
   if (!receipt.value) return;
   evidenceId.value = receipt.value?.packet?.packet_id || receipt.value?.evidence_packet?.packet_id || evidenceId.value;
   await inspectEvidence();
@@ -310,8 +413,9 @@ async function inspectEvidence() {
 }
 
 async function evaluateEvidenceQuality() {
-  if (!evidenceId.value) return;
-  const result = await execute(() => api.mfgEvidenceQualityGate(evidenceId.value));
+  if (!evidenceId.value || !canManageData.value) return;
+  const intent = mutationIntent('mfg.reality.evidence.quality_gate', `mfg:evidence:${evidenceId.value}`, {});
+  const result = await execute(() => api.mfgEvidenceQualityGate(evidenceId.value, intent));
   if (!result) return;
   qualityGateId.value = String((result as any)?.quality_gate?.gate_id || (result as any)?.gate?.gate_id || qualityGateId.value);
   data.value = { ...data.value, qualityGate: result };
@@ -332,8 +436,10 @@ async function openIncidentRoom() {
 }
 
 async function createIncident() {
-  if (!incidentTitle.value.trim()) return;
-  receipt.value = await execute(() => api.mfgCreateIncident({ title: incidentTitle.value.trim(), attention_id: selectedAttentionId.value || undefined }));
+  if (!incidentTitle.value.trim() || !canOperateIncidents.value) return;
+  const payload = { title: incidentTitle.value.trim(), attention_id: selectedAttentionId.value || undefined };
+  const intent = mutationIntent('mfg.incident.create', `mfg:incident-draft:${incidentTitle.value.trim()}`, payload);
+  receipt.value = await execute(() => api.mfgCreateIncident(payload, intent));
   if (!receipt.value) return;
   selectedIncidentId.value = receipt.value?.incident?.incident_id || selectedIncidentId.value;
   await openIncidentRoom();
@@ -342,17 +448,20 @@ async function createIncident() {
 
 async function openIncidentFromReality() {
   const subject = selectedEntityId.value || selectedMetricId.value || selectedAttentionId.value;
-  if (!subject) return;
+  if (!subject || !canOperateIncidents.value) return;
   incidentTitle.value = t('mfg.domain.reality.incidentTitle', { subject });
-  const result = await execute(() => api.mfgCreateIncident({ title: incidentTitle.value, attention_id: selectedAttentionId.value || undefined }));
+  const payload = { title: incidentTitle.value, attention_id: selectedAttentionId.value || undefined };
+  const intent = mutationIntent('mfg.incident.create', `mfg:incident-draft:${subject}`, payload);
+  const result = await execute(() => api.mfgCreateIncident(payload, intent));
   const incidentId = String((result as any)?.incident?.incident_id || '');
   if (!incidentId) return;
   await router.push({ path: '/apps/mfg', query: { ...route.query, section: 'operations', incident: incidentId, focus: `mfg:incident:${incidentId}` } });
 }
 
 async function analyzeIncident() {
-  if (!selectedIncidentId.value) return;
-  receipt.value = await execute(() => api.mfgAnalyzeIncident(selectedIncidentId.value));
+  if (!selectedIncidentId.value || !canOperateIncidents.value) return;
+  const intent = mutationIntent('mfg.incident.analyze', `mfg:incident:${selectedIncidentId.value}`, {});
+  receipt.value = await execute(() => api.mfgAnalyzeIncident(selectedIncidentId.value, intent));
   if (!receipt.value) return;
   await openIncidentRoom();
 }
@@ -371,8 +480,16 @@ async function planSkills() {
 }
 
 async function runSkill() {
-  if (!selectedIncidentId.value || !selectedSkillId.value) return;
-  receipt.value = await execute(() => api.mfgRunSkill(selectedIncidentId.value, selectedSkillId.value));
+  if (!selectedIncidentId.value || !selectedSkillId.value || !canRunSkills.value) return;
+  if (!window.confirm(`${selectedIncidentId.value} → ${selectedSkillId.value}`)) return;
+  const intent = mutationIntent(
+    'mfg.skill.run',
+    `mfg:incident:${selectedIncidentId.value}:skill:${selectedSkillId.value}`,
+    {},
+    undefined,
+    'high',
+  );
+  receipt.value = await execute(() => api.mfgRunSkill(selectedIncidentId.value, selectedSkillId.value, intent));
   if (!receipt.value) return;
   selectedSkillRunId.value = String(receipt.value?.skill_run?.run_id || receipt.value?.run_id || selectedSkillRunId.value);
   await openIncidentRoom();
@@ -425,9 +542,18 @@ async function planAction() {
 
 async function executeAction() {
   if (!analysisId.value || !selectedActionId.value) return;
+  if (executionMode.value === 'commit' && !canOperateExecution.value) return;
   if (executionMode.value === 'commit' && !window.confirm(t('mfg.domain.operations.confirmCommit'))) return;
   if (!data.value.actionLoop?.preflight) await planAction();
-  receipt.value = await execute(() => api.mfgExecuteAction(analysisId.value, selectedActionId.value, { mode: executionMode.value, note: 'executed from WebUI MFG workspace' }));
+  const payload = { mode: executionMode.value, note: 'executed from WebUI MFG workspace' };
+  const intent = mutationIntent(
+    executionMode.value === 'commit' ? 'mfg.analysis.action.commit' : 'mfg.analysis.action.dry_run',
+    `mfg:analysis:${analysisId.value}:action:${selectedActionId.value}`,
+    payload,
+    undefined,
+    executionMode.value === 'commit' ? 'high' : 'low',
+  );
+  receipt.value = await execute(() => api.mfgExecuteAction(analysisId.value, selectedActionId.value, payload, intent));
   if (!receipt.value) return;
   executionId.value = String(receipt.value?.execution?.execution_id || executionId.value);
   const execution = executionId.value ? await execute(() => api.mfgExecution(executionId.value), 'action.execution', true) : null;
@@ -437,8 +563,17 @@ async function executeAction() {
 
 async function bridgeExecution() {
   if (!executionId.value) return;
+  if (executionMode.value === 'commit' && !canOperateExecution.value) return;
   if (executionMode.value === 'commit' && !window.confirm(t('mfg.domain.operations.confirmCommit'))) return;
-  receipt.value = await execute(() => api.mfgExecutionBridge(executionId.value, { mode: executionMode.value, source_channel: 'channel://webui/mfg', requested_capability: 'channel.chat.send_text' }));
+  const payload = { mode: executionMode.value, source_channel: 'channel://webui/mfg', requested_capability: 'channel.chat.send_text' };
+  const intent = mutationIntent(
+    executionMode.value === 'commit' ? 'mfg.execution.cross_plane.commit' : 'mfg.execution.cross_plane.dry_run',
+    `mfg:execution:${executionId.value}`,
+    payload,
+    undefined,
+    executionMode.value === 'commit' ? 'high' : 'low',
+  );
+  receipt.value = await execute(() => api.mfgExecutionBridge(executionId.value, payload, intent));
   if (receipt.value) {
     const execution = await execute(() => api.mfgExecution(executionId.value), 'action.bridge_result', true);
     data.value = { ...data.value, actionLoop: { ...(data.value.actionLoop || {}), after: execution || receipt.value } };
@@ -446,8 +581,10 @@ async function bridgeExecution() {
 }
 
 async function recordExecutionFeedback() {
-  if (!executionId.value || !feedbackNote.value.trim()) return;
-  receipt.value = await execute(() => api.mfgExecutionFeedback(executionId.value, { outcome: feedbackOutcome.value, note: feedbackNote.value.trim(), metric_delta: feedbackMetricDelta.value }));
+  if (!executionId.value || !feedbackNote.value.trim() || !canRecordFeedback.value) return;
+  const payload = { outcome: feedbackOutcome.value, note: feedbackNote.value.trim(), metric_delta: feedbackMetricDelta.value };
+  const intent = mutationIntent('mfg.execution.feedback.create', `mfg:execution:${executionId.value}`, payload);
+  receipt.value = await execute(() => api.mfgExecutionFeedback(executionId.value, payload, intent));
   if (receipt.value) {
     const execution = await execute(() => api.mfgExecution(executionId.value), 'action.feedback_result', true);
     data.value = { ...data.value, actionLoop: { ...(data.value.actionLoop || {}), after: execution || receipt.value } };
@@ -456,8 +593,9 @@ async function recordExecutionFeedback() {
 }
 
 async function promoteCase() {
-  if (!selectedIncidentId.value) return;
-  receipt.value = await execute(() => api.mfgPromoteIncidentCase(selectedIncidentId.value));
+  if (!selectedIncidentId.value || !canOperateIncidents.value) return;
+  const intent = mutationIntent('mfg.incident.case.promote', `mfg:incident:${selectedIncidentId.value}`, {});
+  receipt.value = await execute(() => api.mfgPromoteIncidentCase(selectedIncidentId.value, intent));
   selectedCaseId.value = String(receipt.value?.case?.case_id || receipt.value?.case_id || selectedCaseId.value);
 }
 
@@ -472,12 +610,12 @@ async function inspectPlaybook() {
 }
 
 async function upsertPlaybook() {
-  if (!selectedPlaybookId.value) return;
+  if (!selectedPlaybookId.value || !canManagePlaybooks.value) return;
   let payload: Record<string, unknown>;
   try { payload = playbookPayload.value.trim() ? JSON.parse(playbookPayload.value) : {}; }
   catch { error.value = t('mfg.domain.invalidJson'); return; }
   const now = new Date().toISOString();
-  receipt.value = await execute(() => api.mfgPlaybookUpsert({
+  const body = {
     domain: 'manufacturing',
     scenario: incidentTitle.value.trim() || selectedIncidentId.value || selectedPlaybookId.value,
     trigger_fact_types: [],
@@ -492,7 +630,15 @@ async function upsertPlaybook() {
     updated_at: now,
     ...payload,
     playbook_id: selectedPlaybookId.value,
-  }));
+  };
+  const existing = data.value.playbook?.playbook || data.value.playbook;
+  const intent = mutationIntent(
+    existing?.playbook_id === selectedPlaybookId.value ? 'mfg.playbook.update' : 'mfg.playbook.create',
+    `mfg:playbook:${selectedPlaybookId.value}`,
+    body,
+    existing?.revision,
+  );
+  receipt.value = await execute(() => api.mfgPlaybookUpsert(body, intent));
 }
 
 async function loadDecisionTrace() {
@@ -501,8 +647,10 @@ async function loadDecisionTrace() {
 }
 
 async function generateReport() {
-  if (!cockpit.selectedProfileId) return;
-  receipt.value = await execute(() => api.mfgGenerateReport(cockpit.selectedProfileId, { report_id: reportId.value || undefined }));
+  if (!cockpit.selectedProfileId || !canGenerateReports.value) return;
+  const payload = { report_id: reportId.value || undefined };
+  const intent = mutationIntent('mfg.report.generate', `mfg:cockpit-profile:${cockpit.selectedProfileId}`, payload);
+  receipt.value = await execute(() => api.mfgGenerateReport(cockpit.selectedProfileId, payload, intent));
   if (!receipt.value) return;
   reportId.value = receipt.value?.report?.report_id || reportId.value;
   await inspectReport();
@@ -517,20 +665,32 @@ async function inspectReport() {
   await loadDecisionTrace();
 }
 
+async function reviewUpdated() {
+  await inspectReport();
+  await cockpit.refresh();
+}
+
 async function deliverReport() {
-  if (!reportId.value) return;
-  receipt.value = await execute(() => api.mfgDeliverReport(reportId.value, { mode: 'dry_run', source_channel: 'mfg.report.delivery' }));
+  if (!reportId.value || !canDeliverReports.value) return;
+  const payload = { mode: 'dry_run', source_channel: 'mfg.report.delivery' };
+  const intent = mutationIntent('mfg.report.deliver.dry_run', `mfg:report:${reportId.value}`, payload, undefined, 'low');
+  receipt.value = await execute(() => api.mfgDeliverReport(reportId.value, payload, intent));
   if (receipt.value) await inspectReport();
 }
 
 async function retryReport() {
-  if (!reportId.value) return;
-  receipt.value = await execute(() => api.mfgRetryReportDelivery(reportId.value, { mode: 'dry_run', force: true, source_channel: 'mfg.report.retry' }));
+  if (!reportId.value || !canDeliverReports.value) return;
+  const payload = { mode: 'dry_run', source_channel: 'mfg.report.retry' };
+  const intent = mutationIntent('mfg.report.delivery.retry_dry_run', `mfg:report:${reportId.value}`, payload, undefined, 'low');
+  receipt.value = await execute(() => api.mfgRetryReportDelivery(reportId.value, payload, intent));
   if (receipt.value) await inspectReport();
 }
 
 async function runReportSchedule() {
-  receipt.value = await execute(() => api.mfgRunReportSchedule({ cadence: cockpit.selectedProfile?.cadence || 'daily', deliver: false, actor_identity_ref: 'webui-operator', source_channel: 'webui.mfg' }));
+  if (!canGenerateReports.value) return;
+  const payload = { cadence: cockpit.selectedProfile?.cadence || 'daily', deliver: false, source_channel: 'webui.mfg' };
+  const intent = mutationIntent('mfg.report.schedule.generate_only', 'mfg:report-schedule', payload);
+  receipt.value = await execute(() => api.mfgRunReportSchedule(payload, intent));
   if (receipt.value) await refresh();
 }
 
@@ -551,12 +711,24 @@ function routeIncidentId() {
 async function restoreSectionDeepLink() {
   const incidentId = props.section === 'operations' ? routeIncidentId() : '';
   if (incidentId) selectedIncidentId.value = incidentId;
+  if (props.section === 'reports') {
+    const requestedReport = routeString(route.query.report);
+    if (requestedReport) reportId.value = requestedReport;
+    if (routeString(route.query.review)) reviewOpen.value = true;
+  }
   await refresh();
   if (incidentId) await openIncidentRoom();
+  if (props.section === 'reports' && reportId.value) await inspectReport();
 }
 
 watch(
-  [() => props.section, () => route.query.focus, () => route.query.incident],
+  [
+    () => props.section,
+    () => route.query.focus,
+    () => route.query.incident,
+    () => route.query.report,
+    () => route.query.review,
+  ],
   () => { void restoreSectionDeepLink(); },
 );
 onMounted(() => { void restoreSectionDeepLink(); });
@@ -566,26 +738,27 @@ onMounted(() => { void restoreSectionDeepLink(); });
   <section class="mfg-domain" :aria-label="t('mfg.domain.aria', { title: t(titleKey) })">
     <header class="mfg-workspace-header"><div><h2>{{ t(titleKey) }}</h2><p>{{ t(summaryKey) }}</p></div><div class="mfg-domain__operation"><span v-if="operationStatus !== 'idle'" role="status" :data-status="operationStatus">{{ operationStatusLabel }} · {{ operationName }}<small>{{ operationUpdatedAt }}</small></span><button v-if="operationStatus === 'failed' && lastOperationRetryable" class="ghost-action" type="button" @click="retryLastOperation">{{ t('mfg.domain.operation.retry') }}</button><button class="ghost-action" type="button" :disabled="loading" @click="refresh"><RefreshCw :size="15" />{{ t('mfg.domain.refresh') }}</button></div></header>
     <p v-if="error" class="settings-alert">{{ error }}</p>
+    <RecoveryActions :error="operationApiError" @action="recoverOperation" />
 
     <div v-if="section === 'data'" class="mfg-domain__grid">
-      <article class="mfg-domain__panel"><header><Database :size="16" /><h3>{{ t('mfg.domain.data.sourcePacks') }}</h3></header><dl class="mfg-kv"><dt>{{ t('mfg.domain.data.facts') }}</dt><dd>{{ health.fact_count || 0 }}</dd><dt>{{ t('mfg.domain.data.watermarks') }}</dt><dd>{{ health.data_plane_watermark_count || 0 }}</dd><dt>{{ t('mfg.domain.data.connectors') }}</dt><dd>{{ health.connector_run_count || 0 }}</dd><dt>{{ t('mfg.domain.data.dataPlane') }}</dt><dd>{{ data.dataPlaneHealth?.status || data.dataPlaneHealth?.kind || '—' }}</dd></dl><div class="mfg-domain__form-grid"><label class="mfg-field"><span>{{ t('mfg.domain.data.sourcePackId') }}</span><input v-model="sourcePackId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceName') }}</span><input v-model="sourceName" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.owner') }}</span><input v-model="sourceOwner" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.accessMode') }}</span><select v-model="sourceAccessMode"><option value="file">file</option><option value="api">api</option><option value="db_view">db_view</option><option value="manual">manual</option></select></label><label class="mfg-field"><span>{{ t('mfg.domain.data.refreshMode') }}</span><select v-model="sourceRefreshMode"><option value="manual">manual</option><option value="scheduled">scheduled</option><option value="incremental">incremental</option></select></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceTable') }}</span><input v-model="sourceTable" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.factType') }}</span><input v-model="factType" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.metricKey') }}</span><input v-model="metricKey" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.dedupKey') }}</span><input v-model="dedupKey" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.deltaSignature') }}</span><input v-model="deltaSignature" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceEntity') }}</span><input v-model="sourceEntity" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.matrixEntityType') }}</span><input v-model="matrixEntityType" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceKeyField') }}</span><input v-model="sourceKeyField" /></label></div><div class="button-row"><button class="primary-action" type="button" @click="upsertSourcePack"><Database :size="15" />{{ t('mfg.domain.data.saveSourcePack') }}</button><button class="ghost-action" type="button" @click="inspectSourcePack">{{ t('mfg.domain.data.inspectSourcePack') }}</button><button class="ghost-action" type="button" @click="validateSourcePack">{{ t('mfg.domain.data.validateSourcePack') }}</button><button class="ghost-action" type="button" @click="planSourceDelta">{{ t('mfg.domain.data.deltaPlan') }}</button><button class="ghost-action" type="button" @click="planDataPlaneIngest">{{ t('mfg.domain.data.ingestPlan') }}</button><button class="ghost-action" type="button" @click="initializeKernel">{{ t('mfg.domain.data.seedKernel') }}</button></div><ObjectInspectorDrawer :title="t('mfg.domain.data.sourcePacks')" :data="data.sourcePackResult || data.dataPlaneHealth || {}" /></article>
-      <article class="mfg-domain__panel"><header><Activity :size="16" /><h3>{{ t('mfg.domain.data.connectorRun') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.data.resourceRef') }}</span><input v-model="connectorResourceRef" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.expectedRows') }}</span><input v-model.number="connectorExpectedRows" type="number" min="0" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.runId') }}</span><input v-model="connectorRunId" /></label><div class="button-row"><button class="ghost-action" type="button" @click="planConnectorRun">{{ t('mfg.domain.data.planConnector') }}</button><button class="primary-action" type="button" @click="runConnector">{{ t('mfg.domain.data.runConnector') }}</button><button class="ghost-action" type="button" @click="inspectConnectorRun">{{ t('mfg.domain.data.inspectConnector') }}</button></div><ObjectInspectorDrawer :title="t('mfg.domain.data.connectors')" :data="data.sourcePackResult || {}" /></article>
-      <article class="mfg-domain__panel mfg-domain__panel--wide"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.data.ingest') }}</h3></header><textarea v-model="factPayload" rows="9" class="json-input" :placeholder="t('mfg.domain.data.factPayload')" /><button class="primary-action" type="button" @click="ingestFacts"><Send :size="15" />{{ t('mfg.domain.data.ingestFacts') }}</button><RequestReceipt :receipt="receipt" :title="t('mfg.domain.receipt')" /></article>
+      <article class="mfg-domain__panel"><header><Database :size="16" /><h3>{{ t('mfg.domain.data.sourcePacks') }}</h3></header><dl class="mfg-kv"><dt>{{ t('mfg.domain.data.facts') }}</dt><dd>{{ health.fact_count || 0 }}</dd><dt>{{ t('mfg.domain.data.watermarks') }}</dt><dd>{{ health.data_plane_watermark_count || 0 }}</dd><dt>{{ t('mfg.domain.data.connectors') }}</dt><dd>{{ health.connector_run_count || 0 }}</dd><dt>{{ t('mfg.domain.data.dataPlane') }}</dt><dd>{{ data.dataPlaneHealth?.status || data.dataPlaneHealth?.kind || '—' }}</dd></dl><div class="mfg-domain__form-grid"><label class="mfg-field"><span>{{ t('mfg.domain.data.sourcePackId') }}</span><input v-model="sourcePackId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceName') }}</span><input v-model="sourceName" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.owner') }}</span><input v-model="sourceOwner" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.accessMode') }}</span><select v-model="sourceAccessMode"><option value="file">file</option><option value="api">api</option><option value="db_view">db_view</option><option value="manual">manual</option></select></label><label class="mfg-field"><span>{{ t('mfg.domain.data.refreshMode') }}</span><select v-model="sourceRefreshMode"><option value="manual">manual</option><option value="scheduled">scheduled</option><option value="incremental">incremental</option></select></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceTable') }}</span><input v-model="sourceTable" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.factType') }}</span><input v-model="factType" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.metricKey') }}</span><input v-model="metricKey" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.dedupKey') }}</span><input v-model="dedupKey" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.deltaSignature') }}</span><input v-model="deltaSignature" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceEntity') }}</span><input v-model="sourceEntity" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.matrixEntityType') }}</span><input v-model="matrixEntityType" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.sourceKeyField') }}</span><input v-model="sourceKeyField" /></label></div><div class="button-row"><button class="primary-action" type="button" :disabled="!canManageData" @click="upsertSourcePack"><Database :size="15" />{{ t('mfg.domain.data.saveSourcePack') }}</button><button class="ghost-action" type="button" @click="inspectSourcePack">{{ t('mfg.domain.data.inspectSourcePack') }}</button><button class="ghost-action" type="button" @click="validateSourcePack">{{ t('mfg.domain.data.validateSourcePack') }}</button><button class="ghost-action" type="button" @click="planSourceDelta">{{ t('mfg.domain.data.deltaPlan') }}</button><button class="ghost-action" type="button" @click="planDataPlaneIngest">{{ t('mfg.domain.data.ingestPlan') }}</button><button class="ghost-action" type="button" :disabled="!canManageData" @click="initializeKernel">{{ t('mfg.domain.data.seedKernel') }}</button></div><ObjectInspectorDrawer :title="t('mfg.domain.data.sourcePacks')" :data="data.sourcePackResult || data.dataPlaneHealth || {}" /></article>
+      <article class="mfg-domain__panel"><header><Activity :size="16" /><h3>{{ t('mfg.domain.data.connectorRun') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.data.resourceRef') }}</span><input v-model="connectorResourceRef" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.expectedRows') }}</span><input v-model.number="connectorExpectedRows" type="number" min="0" /></label><label class="mfg-field"><span>{{ t('mfg.domain.data.runId') }}</span><input v-model="connectorRunId" /></label><div class="button-row"><button class="ghost-action" type="button" :disabled="!canManageData" @click="planConnectorRun">{{ t('mfg.domain.data.planConnector') }}</button><button class="primary-action" type="button" :disabled="!canManageData" @click="runConnector">{{ t('mfg.domain.data.runConnector') }}</button><button class="ghost-action" type="button" @click="inspectConnectorRun">{{ t('mfg.domain.data.inspectConnector') }}</button></div><ObjectInspectorDrawer :title="t('mfg.domain.data.connectors')" :data="data.sourcePackResult || {}" /></article>
+      <article class="mfg-domain__panel mfg-domain__panel--wide"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.data.ingest') }}</h3></header><textarea v-model="factPayload" rows="9" class="json-input" :placeholder="t('mfg.domain.data.factPayload')" /><button class="primary-action" type="button" :disabled="!canManageData" @click="ingestFacts"><Send :size="15" />{{ t('mfg.domain.data.ingestFacts') }}</button><RequestReceipt :receipt="receipt" :title="t('mfg.domain.receipt')" /></article>
     </div>
 
     <div v-else-if="section === 'reality'" class="mfg-domain__grid">
       <article class="mfg-domain__panel"><header><Activity :size="16" /><h3>{{ t('mfg.domain.reality.metrics') }}</h3></header><DataTable v-if="data.metrics.length" :rows="data.metrics" :columns="['metric_id', 'name', 'unit', 'status']" row-key="metric_id" @row-click="inspectMetric($event.metric_id || '')" /><EmptyState v-else :title="t('mfg.domain.emptyMetrics')" /><GraphSurface v-if="metricGraph.nodes.length" :model="metricGraph" /></article>
       <article class="mfg-domain__panel"><header><Database :size="16" /><h3>{{ t('mfg.domain.reality.entities') }}</h3></header><DataTable v-if="data.entities.length" :rows="data.entities" :columns="['entity_id', 'entity_type', 'display_name', 'confidence']" row-key="entity_id" @row-click="inspectEntity($event.entity_id || '')" /><EmptyState v-else :title="t('mfg.domain.emptyEntities')" /><GraphSurface v-if="entityGraph.nodes.length" :model="entityGraph" /></article>
-      <article class="mfg-domain__panel"><header><Database :size="16" /><h3>{{ t('mfg.domain.reality.entityOperations') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.reality.entityId') }}</span><input v-model="selectedEntityId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.displayName') }}</span><input v-model="entityDisplayName" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.entityType') }}</span><input v-model="entityType" /></label><div class="button-row"><button class="primary-action" type="button" @click="upsertEntity">{{ t('mfg.domain.reality.upsertEntity') }}</button><button class="ghost-action" type="button" @click="inspectEntity()">{{ t('mfg.domain.reality.inspectImpact') }}</button></div><label class="mfg-field"><span>{{ t('mfg.domain.reality.sourceSystem') }}</span><input v-model="sourceSystem" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.sourceKey') }}</span><input v-model="sourceKey" /></label><button class="ghost-action" type="button" @click="resolveEntity">{{ t('mfg.domain.reality.resolveSourceKey') }}</button><label class="mfg-field"><span>{{ t('mfg.domain.reality.relationTarget') }}</span><input v-model="relationTargetId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.relationType') }}</span><input v-model="relationType" /></label><button class="ghost-action" type="button" @click="upsertRelation">{{ t('mfg.domain.reality.upsertRelation') }}</button><ObjectInspectorDrawer :title="t('mfg.domain.reality.entityOperations')" :data="data.entityResolution || data.entityDetail || {}" /></article>
-      <article class="mfg-domain__panel"><header><Activity :size="16" /><h3>{{ t('mfg.domain.reality.metricOperations') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.reality.metricId') }}</span><input v-model="selectedMetricId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.triggerFactType') }}</span><input v-model="triggerFactType" /></label><div class="button-row"><button class="ghost-action" type="button" @click="inspectMetric()">{{ t('mfg.domain.reality.inspectLineage') }}</button><button class="ghost-action" type="button" @click="materializeMetricSnapshot">{{ t('mfg.domain.reality.materializeSnapshot') }}</button><button class="ghost-action" type="button" @click="planMetricAttention">{{ t('mfg.domain.reality.attentionPlan') }}</button><button class="ghost-action" type="button" @click="recomputeMetrics">{{ t('mfg.domain.reality.recompute') }}</button></div><label class="mfg-field"><span>{{ t('mfg.domain.reality.computeJobId') }}</span><input v-model="computeJobId" /></label><div class="button-row"><button class="ghost-action" type="button" @click="planComputeJob">{{ t('mfg.domain.reality.planCompute') }}</button><button class="primary-action" type="button" @click="runComputeJob">{{ t('mfg.domain.reality.runCompute') }}</button><button class="ghost-action" type="button" @click="inspectComputeJob">{{ t('mfg.domain.reality.inspectJob') }}</button></div><ObjectInspectorDrawer :title="t('mfg.domain.reality.metricOperations')" :data="data.computeResult || data.metricDetail || {}" /></article>
-      <article class="mfg-domain__panel mfg-domain__panel--wide"><header><Activity :size="16" /><h3>{{ t('mfg.domain.reality.attention') }}</h3></header><DataTable v-if="data.attention.length" :rows="data.attention" :columns="['attention_id', 'title', 'priority_score', 'severity', 'status']" row-key="attention_id" @row-click="selectedAttentionId = $event.attention_id || ''" /><EmptyState v-else :title="t('mfg.domain.emptyAttention')" /><button class="primary-action" type="button" :disabled="!selectedEntityId && !selectedMetricId && !selectedAttentionId" @click="openIncidentFromReality">{{ t('mfg.domain.reality.createIncident') }}</button></article>
+      <article class="mfg-domain__panel"><header><Database :size="16" /><h3>{{ t('mfg.domain.reality.entityOperations') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.reality.entityId') }}</span><input v-model="selectedEntityId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.displayName') }}</span><input v-model="entityDisplayName" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.entityType') }}</span><input v-model="entityType" /></label><div class="button-row"><button class="primary-action" type="button" :disabled="!canManageData" @click="upsertEntity">{{ t('mfg.domain.reality.upsertEntity') }}</button><button class="ghost-action" type="button" @click="inspectEntity()">{{ t('mfg.domain.reality.inspectImpact') }}</button></div><label class="mfg-field"><span>{{ t('mfg.domain.reality.sourceSystem') }}</span><input v-model="sourceSystem" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.sourceKey') }}</span><input v-model="sourceKey" /></label><button class="ghost-action" type="button" @click="resolveEntity">{{ t('mfg.domain.reality.resolveSourceKey') }}</button><label class="mfg-field"><span>{{ t('mfg.domain.reality.relationTarget') }}</span><input v-model="relationTargetId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.relationType') }}</span><input v-model="relationType" /></label><button class="ghost-action" type="button" :disabled="!canManageData" @click="upsertRelation">{{ t('mfg.domain.reality.upsertRelation') }}</button><ObjectInspectorDrawer :title="t('mfg.domain.reality.entityOperations')" :data="data.entityResolution || data.entityDetail || {}" /></article>
+      <article class="mfg-domain__panel"><header><Activity :size="16" /><h3>{{ t('mfg.domain.reality.metricOperations') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.reality.metricId') }}</span><input v-model="selectedMetricId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reality.triggerFactType') }}</span><input v-model="triggerFactType" /></label><div class="button-row"><button class="ghost-action" type="button" @click="inspectMetric()">{{ t('mfg.domain.reality.inspectLineage') }}</button><button class="ghost-action" type="button" :disabled="!canManageData" @click="materializeMetricSnapshot">{{ t('mfg.domain.reality.materializeSnapshot') }}</button><button class="ghost-action" type="button" @click="planMetricAttention">{{ t('mfg.domain.reality.attentionPlan') }}</button><button class="ghost-action" type="button" :disabled="!canManageData" @click="recomputeMetrics">{{ t('mfg.domain.reality.recompute') }}</button></div><label class="mfg-field"><span>{{ t('mfg.domain.reality.computeJobId') }}</span><input v-model="computeJobId" /></label><div class="button-row"><button class="ghost-action" type="button" :disabled="!canManageData" @click="planComputeJob">{{ t('mfg.domain.reality.planCompute') }}</button><button class="primary-action" type="button" :disabled="!canManageData" @click="runComputeJob">{{ t('mfg.domain.reality.runCompute') }}</button><button class="ghost-action" type="button" @click="inspectComputeJob">{{ t('mfg.domain.reality.inspectJob') }}</button></div><ObjectInspectorDrawer :title="t('mfg.domain.reality.metricOperations')" :data="data.computeResult || data.metricDetail || {}" /></article>
+      <article class="mfg-domain__panel mfg-domain__panel--wide"><header><Activity :size="16" /><h3>{{ t('mfg.domain.reality.attention') }}</h3></header><DataTable v-if="data.attention.length" :rows="data.attention" :columns="['attention_id', 'title', 'priority_score', 'severity', 'status']" row-key="attention_id" @row-click="selectedAttentionId = $event.attention_id || ''" /><EmptyState v-else :title="t('mfg.domain.emptyAttention')" /><button class="primary-action" type="button" :disabled="(!selectedEntityId && !selectedMetricId && !selectedAttentionId) || !canOperateIncidents" @click="openIncidentFromReality">{{ t('mfg.domain.reality.createIncident') }}</button></article>
       <article class="mfg-domain__panel mfg-domain__panel--wide"><header><Activity :size="16" /><h3>{{ t('mfg.domain.reality.changes') }}</h3></header><DataTable v-if="data.changes.length" :rows="data.changes" :columns="['change_id', 'metric_id', 'entity_ref', 'severity', 'status', 'updated_at']" row-key="change_id" /><EmptyState v-else :title="t('mfg.domain.reality.noChanges')" /></article>
     </div>
 
     <div v-else-if="section === 'evidence'" class="mfg-domain__grid">
-      <article class="mfg-domain__panel"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.evidence.packet') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.evidence.attention') }}</span><select v-model="selectedAttentionId"><option value="">{{ t('mfg.domain.evidence.selectAttention') }}</option><option v-for="item in data.attention" :key="item.attention_id" :value="item.attention_id">{{ item.title || item.attention_id }}</option></select></label><label class="mfg-field"><span>{{ t('mfg.domain.evidence.packetId') }}</span><input v-model="evidenceId" /></label><button class="primary-action" type="button" @click="buildEvidence">{{ t('mfg.domain.evidence.build') }}</button><button class="ghost-action" type="button" @click="inspectEvidence">{{ t('mfg.domain.evidence.inspect') }}</button></article>
+      <article class="mfg-domain__panel"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.evidence.packet') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.evidence.attention') }}</span><select v-model="selectedAttentionId"><option value="">{{ t('mfg.domain.evidence.selectAttention') }}</option><option v-for="item in data.attention" :key="item.attention_id" :value="item.attention_id">{{ item.title || item.attention_id }}</option></select></label><label class="mfg-field"><span>{{ t('mfg.domain.evidence.packetId') }}</span><input v-model="evidenceId" /></label><button class="primary-action" type="button" :disabled="!canManageData" @click="buildEvidence">{{ t('mfg.domain.evidence.build') }}</button><button class="ghost-action" type="button" @click="inspectEvidence">{{ t('mfg.domain.evidence.inspect') }}</button></article>
       <article class="mfg-domain__panel"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.evidence.trace') }}</h3></header><EvidenceTrace :items="evidenceItems" :title="t('mfg.domain.evidence.trace')" /><dl v-if="evidencePacket.packet_id" class="mfg-kv"><dt>{{ t('mfg.domain.evidence.missingSources') }}</dt><dd>{{ (evidencePacket.missing_evidence || []).join(', ') || '—' }}</dd><dt>{{ t('mfg.domain.evidence.consumers') }}</dt><dd>{{ evidenceContextItem.kind || evidenceContextItem.type || '—' }}</dd><dt>{{ t('mfg.domain.evidence.confidence') }}</dt><dd>{{ evidencePacket.confidence ?? '—' }}</dd></dl><ObjectInspectorDrawer :title="t('mfg.domain.evidence.detail')" :data="data.evidence || {}" /></article>
-      <article class="mfg-domain__panel mfg-domain__panel--wide"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.evidence.qualityGate') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.evidence.qualityGateId') }}</span><input v-model="qualityGateId" /></label><div class="button-row"><button class="primary-action" type="button" :disabled="!evidenceId" @click="evaluateEvidenceQuality">{{ t('mfg.domain.evidence.evaluateQuality') }}</button><button class="ghost-action" type="button" :disabled="!qualityGateId" @click="inspectQualityGate">{{ t('mfg.domain.evidence.inspectQuality') }}</button></div><dl v-if="qualityDecision.gate_id" class="mfg-kv"><dt>{{ t('mfg.domain.evidence.decision') }}</dt><dd>{{ qualityDecision.decision }}</dd><dt>{{ t('mfg.domain.evidence.remediation') }}</dt><dd>{{ (qualityDecision.required_actions || []).join(', ') || '—' }}</dd><dt>{{ t('mfg.domain.evidence.reasons') }}</dt><dd>{{ (qualityDecision.reasons || []).join(', ') || '—' }}</dd></dl><ObjectInspectorDrawer :title="t('mfg.domain.evidence.qualityGate')" :data="data.qualityGate || data.evidence?.context || {}" /></article>
+      <article class="mfg-domain__panel mfg-domain__panel--wide"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.evidence.qualityGate') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.evidence.qualityGateId') }}</span><input v-model="qualityGateId" /></label><div class="button-row"><button class="primary-action" type="button" :disabled="!evidenceId || !canManageData" @click="evaluateEvidenceQuality">{{ t('mfg.domain.evidence.evaluateQuality') }}</button><button class="ghost-action" type="button" :disabled="!qualityGateId" @click="inspectQualityGate">{{ t('mfg.domain.evidence.inspectQuality') }}</button></div><dl v-if="qualityDecision.gate_id" class="mfg-kv"><dt>{{ t('mfg.domain.evidence.decision') }}</dt><dd>{{ qualityDecision.decision }}</dd><dt>{{ t('mfg.domain.evidence.remediation') }}</dt><dd>{{ (qualityDecision.required_actions || []).join(', ') || '—' }}</dd><dt>{{ t('mfg.domain.evidence.reasons') }}</dt><dd>{{ (qualityDecision.reasons || []).join(', ') || '—' }}</dd></dl><ObjectInspectorDrawer :title="t('mfg.domain.evidence.qualityGate')" :data="data.qualityGate || data.evidence?.context || {}" /></article>
     </div>
 
     <div v-else-if="section === 'operations'" class="mfg-domain__grid">
@@ -604,11 +777,12 @@ onMounted(() => { void restoreSectionDeepLink(); });
         <p class="mfg-domain__note">{{ t('mfg.domain.reports.profile', { profile: cockpit.selectedProfile?.display_name || cockpit.selectedProfileId || '—' }) }}</p>
         <label class="mfg-field"><span>{{ t('mfg.domain.reports.reportId') }}</span><input v-model="reportId" /></label>
         <div class="button-row">
-          <button class="primary-action" type="button" :disabled="!cockpit.selectedProfileId" @click="generateReport"><Send :size="15" />{{ t('mfg.domain.reports.generate') }}</button>
+          <button class="primary-action" type="button" :disabled="!cockpit.selectedProfileId || !canGenerateReports" @click="generateReport"><Send :size="15" />{{ t('mfg.domain.reports.generate') }}</button>
           <button class="ghost-action" type="button" :disabled="!reportId" @click="inspectReport">{{ t('mfg.domain.reports.inspect') }}</button>
-          <button class="ghost-action" type="button" :disabled="!reportId" @click="deliverReport">{{ t('mfg.domain.reports.deliver') }}</button>
-          <button class="ghost-action" type="button" :disabled="!reportId || (reportDeliveryState.classification && !reportDeliveryState.retryable)" @click="retryReport">{{ t('mfg.domain.reports.retry') }}</button>
-          <button class="ghost-action" type="button" @click="runReportSchedule">{{ t('mfg.domain.reports.runSchedule') }}</button>
+          <button class="ghost-action" type="button" :disabled="!reportId || !canDeliverReports" @click="deliverReport">{{ t('mfg.domain.reports.deliver') }}</button>
+          <button class="ghost-action" type="button" :disabled="!reportId || !canDeliverReports || (reportDeliveryState.classification && !reportDeliveryState.retryable)" @click="retryReport">{{ t('mfg.domain.reports.retry') }}</button>
+          <button class="ghost-action" type="button" :disabled="!reportId || !reportDeliveryState.dead_lettered || !canDeliverReports" @click="reviewOpen = true">Manual review</button>
+          <button class="ghost-action" type="button" :disabled="!canGenerateReports" @click="runReportSchedule">{{ t('mfg.domain.reports.runSchedule') }}</button>
         </div>
         <RequestReceipt :receipt="receipt" :title="t('mfg.domain.receipt')" />
         <section v-if="reportDeliveryState.classification" class="object-inspector mfg-delivery-state" :data-status="reportDeliveryState.dead_lettered ? 'error' : reportDeliveryState.classification">
@@ -635,6 +809,16 @@ onMounted(() => { void restoreSectionDeepLink(); });
         <EmptyState v-else :title="t('mfg.domain.operations.noDecisionTrace')" />
       </article>
     </div>
+    <MfgReportReviewDrawer
+      v-if="reviewOpen && reportId"
+      :report-id="reportId"
+      :review-id="routeString(route.query.review)"
+      :report-revision="Number(reportSnapshot.revision || 0)"
+      :dead-lettered="Boolean(reportDeliveryState.dead_lettered)"
+      :can-review="canReviewReports"
+      @updated="reviewUpdated"
+      @close="reviewOpen = false"
+    />
   </section>
 </template>
 

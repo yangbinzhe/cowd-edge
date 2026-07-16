@@ -5,6 +5,7 @@ import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router';
 import { api, ApiWriteError } from '../../api/client';
 import { t } from '../../i18n';
 import { useMfgCockpitStore } from '../../stores/mfgCockpit';
+import { createMfgMutationIntent } from '../../stores/mutationIntents';
 import type { MfgCockpitProfile, MfgJsonSchema, MfgWidgetDefinition, MfgWidgetInstance } from '../../types/mfg';
 import RequestReceipt from '../workbench/RequestReceipt.vue';
 
@@ -121,6 +122,7 @@ const layoutConflicts = computed(() => {
   }
   return conflicts;
 });
+const canManageCockpit = computed(() => cockpit.grantedCapabilities.has('mfg.cockpit.manage'));
 const conflictDifferences = computed(() => {
   if (!conflict.value?.remote) return [];
   const keys: Array<keyof MfgCockpitProfile> = ['display_name', 'focus_refs', 'focus_metric_ids', 'thresholds', 'scope', 'template_id', 'global_filters', 'layout', 'widget_instances', 'sharing_policy'];
@@ -185,10 +187,11 @@ async function selectProfile(event: Event) {
 }
 
 function createProfile() {
+  if (!canManageCockpit.value) return;
   const now = new Date().toISOString();
   working.value = {
     profile_id: `cockpit-profile-${Date.now()}`,
-    owner_ref: 'webui',
+    owner_ref: '',
     display_name: t('mfg.cockpit.newProfile'),
     focus_refs: [],
     focus_metric_ids: [],
@@ -361,8 +364,10 @@ function toggleWidgetSettings(instanceId: string) {
 
 function parseConflict(cause: unknown) {
   if (!(cause instanceof ApiWriteError) || cause.status !== 409) return null;
-  try { return JSON.parse(cause.body); }
-  catch { return null; }
+  return {
+    code: cause.code,
+    details: cause.details || {},
+  };
 }
 
 function profileFromResponse(value: any): MfgCockpitProfile | null {
@@ -371,7 +376,7 @@ function profileFromResponse(value: any): MfgCockpitProfile | null {
 }
 
 async function save() {
-  if (!working.value) return;
+  if (!working.value || !canManageCockpit.value) return;
   operationError.value = '';
   if (working.value.scope.kind === 'personal') working.value.scope.scope_ref = null;
   working.value.sharing_policy = {
@@ -391,7 +396,9 @@ async function save() {
     await syncCockpitUrl(saved);
   } catch (cause) {
     const payload = parseConflict(cause);
-    if (payload?.code === 'mfg_revision_conflict' && working.value) {
+    if ((payload?.code === 'revision_conflict'
+      || payload?.code === 'mfg_revision_conflict'
+      || payload?.details?.legacy_code === 'mfg_revision_conflict') && working.value) {
       const draft = copyProfile(working.value)!;
       const remoteResult = await api.mfgCockpitProfile(working.value.profile_id);
       conflict.value = {
@@ -452,31 +459,57 @@ function cancelWidgetRefresh(instanceId: string) {
 }
 
 async function cloneProfile() {
-  if (!cockpit.selectedProfile) return;
+  if (!cockpit.selectedProfile || !canManageCockpit.value) return;
   operationError.value = '';
   try {
-    receipt.value = await api.mfgCloneCockpitProfile(cockpit.selectedProfile.profile_id, {});
+    const payload = {};
+    const intent = createMfgMutationIntent(
+      'mfg.cockpit.profile.clone',
+      `mfg:cockpit-profile:${cockpit.selectedProfile.profile_id}`,
+      payload,
+      { risk: 'medium' },
+    );
+    receipt.value = await api.mfgCloneCockpitProfile(cockpit.selectedProfile.profile_id, payload, intent);
     await cockpit.refresh();
   } catch (cause) { operationError.value = cause instanceof Error ? cause.message : String(cause); }
 }
 
 async function shareProfile() {
-  if (!cockpit.selectedProfile) return;
+  if (!cockpit.selectedProfile || !canManageCockpit.value) return;
+  if (!window.confirm(`${cockpit.selectedProfile.profile_id} @ revision ${cockpit.selectedProfile.revision}`)) return;
   operationError.value = '';
   try {
-    receipt.value = await api.mfgShareCockpitProfile(cockpit.selectedProfile.profile_id, {
+    const payload = {
       expected_revision: cockpit.selectedProfile.revision,
       sharing_policy: { visibility: shareVisibility.value, viewer_refs: commaList(shareViewers.value), editor_refs: commaList(shareEditors.value) },
-    });
+    };
+    const intent = createMfgMutationIntent(
+      'mfg.cockpit.profile.share',
+      `mfg:cockpit-profile:${cockpit.selectedProfile.profile_id}`,
+      payload,
+      { expectedRevision: cockpit.selectedProfile.revision, risk: 'high' },
+    );
+    receipt.value = await api.mfgShareCockpitProfile(cockpit.selectedProfile.profile_id, payload, intent);
     await cockpit.loadProfile(cockpit.selectedProfile.profile_id);
   } catch (cause) { operationError.value = cause instanceof Error ? cause.message : String(cause); }
 }
 
 async function deleteProfile() {
-  if (!cockpit.selectedProfile) return;
+  if (!cockpit.selectedProfile || !canManageCockpit.value) return;
+  if (!window.confirm(`${cockpit.selectedProfile.profile_id} @ revision ${cockpit.selectedProfile.revision}`)) return;
   operationError.value = '';
   try {
-    receipt.value = await api.mfgDeleteCockpitProfile(cockpit.selectedProfile.profile_id, cockpit.selectedProfile.revision);
+    const intent = createMfgMutationIntent(
+      'mfg.cockpit.profile.delete',
+      `mfg:cockpit-profile:${cockpit.selectedProfile.profile_id}`,
+      { expected_revision: cockpit.selectedProfile.revision },
+      { expectedRevision: cockpit.selectedProfile.revision, risk: 'high' },
+    );
+    receipt.value = await api.mfgDeleteCockpitProfile(
+      cockpit.selectedProfile.profile_id,
+      cockpit.selectedProfile.revision,
+      intent,
+    );
     cockpit.selectedProfileId = '';
     await cockpit.refresh();
     await syncCockpitUrl(cockpit.selectedProfile, '');
@@ -542,10 +575,10 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
       </div>
       <div class="mfg-cockpit__actions">
         <span class="mfg-live-state" :data-status="cockpit.liveStatus">{{ liveLabel }}</span>
-        <button class="ghost-action" type="button" @click="createProfile"><Plus :size="15" />{{ t('mfg.cockpit.new') }}</button>
-        <button class="ghost-action" type="button" :disabled="!cockpit.selectedProfile" @click="cloneProfile"><Copy :size="15" />{{ t('mfg.cockpit.clone') }}</button>
-        <button class="ghost-action" type="button" :disabled="!cockpit.selectedProfile" @click="deleteProfile"><Trash2 :size="15" />{{ t('mfg.cockpit.delete') }}</button>
-        <button class="primary-action" type="button" :disabled="!working" @click="editMode = !editMode"><Settings2 :size="15" />{{ editMode ? t('mfg.cockpit.closeEdit') : t('mfg.cockpit.edit') }}</button>
+        <button class="ghost-action" type="button" :disabled="!canManageCockpit" @click="createProfile"><Plus :size="15" />{{ t('mfg.cockpit.new') }}</button>
+        <button class="ghost-action" type="button" :disabled="!cockpit.selectedProfile || !canManageCockpit" @click="cloneProfile"><Copy :size="15" />{{ t('mfg.cockpit.clone') }}</button>
+        <button class="ghost-action" type="button" :disabled="!cockpit.selectedProfile || !canManageCockpit" @click="deleteProfile"><Trash2 :size="15" />{{ t('mfg.cockpit.delete') }}</button>
+        <button class="primary-action" type="button" :disabled="!working || !canManageCockpit" @click="editMode = !editMode"><Settings2 :size="15" />{{ editMode ? t('mfg.cockpit.closeEdit') : t('mfg.cockpit.edit') }}</button>
       </div>
     </header>
     <p v-if="operationError" class="settings-alert">{{ operationError }}</p>
@@ -593,10 +626,10 @@ function compactWidgetValue(instance: MfgWidgetInstance) {
         <label><span>{{ t('mfg.cockpit.visibility') }}</span><select v-model="shareVisibility"><option value="private">private</option><option value="team">team</option><option value="public">public</option></select></label>
         <label><span>{{ t('mfg.cockpit.viewers') }}</span><input v-model="shareViewers" /></label>
         <label><span>{{ t('mfg.cockpit.editors') }}</span><input v-model="shareEditors" /></label>
-        <button class="ghost-action" type="button" @click="shareProfile"><Share2 :size="15" />{{ t('mfg.cockpit.saveSharing') }}</button>
+        <button class="ghost-action" type="button" :disabled="!canManageCockpit" @click="shareProfile"><Share2 :size="15" />{{ t('mfg.cockpit.saveSharing') }}</button>
       </fieldset>
       <p v-if="layoutConflicts.size" class="mfg-widget__error mfg-cockpit__layout-error">{{ t('mfg.cockpit.layoutConflict', { count: layoutConflicts.size }) }}</p>
-      <button class="primary-action" type="submit" :disabled="cockpit.saving || layoutConflicts.size > 0"><Save :size="15" />{{ t('mfg.cockpit.save') }}</button>
+      <button class="primary-action" type="submit" :disabled="!canManageCockpit || cockpit.saving || layoutConflicts.size > 0"><Save :size="15" />{{ t('mfg.cockpit.save') }}</button>
       <div class="mfg-cockpit__history"><button class="ghost-action" type="button" :disabled="!undoStack.length" @click="undo"><Undo2 :size="15" />{{ t('mfg.cockpit.undo') }}</button><button class="ghost-action" type="button" :disabled="!redoStack.length" @click="redo"><Redo2 :size="15" />{{ t('mfg.cockpit.redo') }}</button><button class="ghost-action" type="button" @click="revert"><RefreshCw :size="15" />{{ t('mfg.cockpit.revert') }}</button></div>
       <section v-if="conflict" class="mfg-cockpit__conflict" role="alert">
         <strong>{{ t('mfg.cockpit.conflict') }}</strong>

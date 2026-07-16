@@ -43,10 +43,17 @@ for (const name of [
   'frontend-vitest',
   'frontend-gates',
   'frontend-build',
+  'backend-app-mfg-contract',
   'backend-app-mfg',
+  'backend-auth-broker',
   'backend-gateway-mfg',
+  'backend-tui-mfg',
+  'backend-harness-strategy',
   'backend-check',
+  'backend-clippy',
   'backend-test',
+  'backend-version-gate',
+  'edge-version-gate',
   'gateway-global-env',
   'openapi-generation',
   'visual-audit',
@@ -57,6 +64,9 @@ for (const name of [
   'scenario-same-session',
   'scenario-runtime-surface',
   'scenario-tui-smoke',
+  'scenario-auth-profile',
+  'scenario-mfg-surfaces',
+  'scenario-auto-strategy',
   'scenario-full-product',
 ]) {
   const metadata = readJson(path.join(testDir, `${name}.json`), `${name} command evidence`);
@@ -132,7 +142,13 @@ const artifactGroups = {
   playwright: [playwrightPath, commands.playwright?.log_path],
   performance: [performancePath, commands['performance-acceptance']?.log_path],
   mfg: [mfgPath, commands['matrix-mfg']?.log_path, commands['backend-app-mfg']?.log_path, commands['backend-gateway-mfg']?.log_path],
-  backend: [commands['backend-check']?.log_path, commands['backend-test']?.log_path],
+  backend: [commands['backend-check']?.log_path, commands['backend-clippy']?.log_path, commands['backend-test']?.log_path],
+  contract: [commands['backend-app-mfg-contract']?.log_path, commands['backend-auth-broker']?.log_path],
+  tuiMfg: [commands['backend-tui-mfg']?.log_path, commands['scenario-tui-smoke']?.log_path],
+  strategy: [commands['backend-harness-strategy']?.log_path, commands['scenario-auto-strategy']?.log_path],
+  authProfile: [commands['scenario-auth-profile']?.log_path],
+  mfgSurfaces: [commands['scenario-mfg-surfaces']?.log_path],
+  version: [commands['backend-version-gate']?.log_path, commands['edge-version-gate']?.log_path],
   global: [commands['gateway-global-env']?.log_path],
   openapi: [commands['openapi-generation']?.log_path],
   gatewayWebui: [commands['scenario-gateway-webui']?.log_path],
@@ -149,7 +165,13 @@ const commandGroups = {
   playwright: ['playwright'],
   performance: ['performance-acceptance'],
   mfg: ['matrix-mfg', 'backend-app-mfg', 'backend-gateway-mfg'],
-  backend: ['backend-check', 'backend-test'],
+  backend: ['backend-check', 'backend-clippy', 'backend-test'],
+  contract: ['backend-app-mfg-contract', 'backend-auth-broker'],
+  tuiMfg: ['backend-tui-mfg', 'scenario-tui-smoke'],
+  strategy: ['backend-harness-strategy', 'scenario-auto-strategy'],
+  authProfile: ['scenario-auth-profile'],
+  mfgSurfaces: ['scenario-mfg-surfaces'],
+  version: ['backend-version-gate', 'edge-version-gate'],
   global: ['gateway-global-env'],
   openapi: ['openapi-generation'],
   gatewayWebui: ['scenario-gateway-webui'],
@@ -245,6 +267,23 @@ const proofMap = {
   'P-07': ['performance', ['performance'], ['local timeout degradation with responsive shell']],
   'P-08': ['performance', ['performance'], ['long-task state and wait reason visibility']],
 };
+
+const plannedProofClasses = {
+  MC: ['integration-local', ['contract', 'mfg', 'version'], 'MFG contract, capability, error and recrop proof'],
+  MR: ['browser-real-gateway', ['contract', 'mfg', 'playwright', 'mfgSurfaces'], 'manual review, effect, idempotency and recovery proof'],
+  TUI: ['cross-surface', ['tuiMfg', 'mfgSurfaces'], 'real PTY MFG size, keyboard, action and capability proof'],
+  MUX: ['browser-controlled', ['visual', 'playwright', 'performance'], 'MFG responsive, focus and partial-degraded proof'],
+  MLIVE: ['cross-surface', ['mfgSurfaces', 'performance', 'tuiMfg'], 'MFG epoch, multi-observer, resync and hidden-scope proof'],
+  STR: ['integration-local', ['strategy', 'performance', 'mfgSurfaces'], 'automatic strategy selection, downgrade, projection and evaluation proof'],
+};
+const plannedProofCounts = { MC: 6, MR: 8, TUI: 8, MUX: 8, MLIVE: 9, STR: 11 };
+for (const [prefix, count] of Object.entries(plannedProofCounts)) {
+  const [level, groups, check] = plannedProofClasses[prefix];
+  for (let index = 1; index <= count; index += 1) {
+    const id = `${prefix}-${String(index).padStart(2, '0')}`;
+    proofMap[id] = [level, groups, [`${check}: ${id}`]];
+  }
+}
 
 const now = new Date().toISOString();
 const results = [];

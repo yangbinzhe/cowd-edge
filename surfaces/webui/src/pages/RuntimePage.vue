@@ -3,6 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -19,6 +20,7 @@ import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 
 const store = useAppStore();
+const router = useRouter();
 const loading = ref(false);
 const error = ref('');
 const controlPlane = ref<any>({});
@@ -230,7 +232,23 @@ async function releaseLease() {
   await refresh();
 }
 
-async function respondApproval(id: string, approved: boolean) {
+async function respondApproval(approval: any, approved: boolean) {
+  if (String(approval?.source?.kind || '').toLowerCase() === 'mfg') {
+    const reportRef = String(approval?.source?.resource_ref || '');
+    const reportId = reportRef.startsWith('mfg:cockpit-report:')
+      ? reportRef.slice('mfg:cockpit-report:'.length)
+      : '';
+    await router.push({
+      path: '/apps/mfg',
+      query: {
+        section: 'reports',
+        report: reportId || undefined,
+        review: approval?.source?.review_ref || undefined,
+      },
+    });
+    return;
+  }
+  const id = approval?.approval_id || approval?.id || approval?.request_id;
   actionResult.value = await api.approvalRespond(id, approved, approved ? 'approved from Runtime Workbench' : 'rejected from Runtime Workbench');
   await refresh();
 }
@@ -367,8 +385,8 @@ onMounted(refresh);
               <strong>{{ approval.summary || approval.reason || approval.id }}</strong>
               <p>{{ approval.command || approval.tool || approval.kind || t('page.runtime.page.inline.516d8685da') }}</p>
             </div>
-            <button class="ghost-action" type="button" @click="respondApproval(approval.id || approval.request_id, false)">{{ t('page.runtime.page.text.ae4dd827f7') }}</button>
-            <button class="primary-action" type="button" @click="respondApproval(approval.id || approval.request_id, true)">
+            <button class="ghost-action" type="button" @click="respondApproval(approval, false)">{{ t('page.runtime.page.text.ae4dd827f7') }}</button>
+            <button class="primary-action" type="button" @click="respondApproval(approval, true)">
               <ShieldCheck :size="14" />
               {{ t('template.pages.runtimepage.7b2c7f146a') }}
             </button>

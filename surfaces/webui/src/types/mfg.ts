@@ -1,3 +1,147 @@
+/**
+ * temporary_generated_api_adapter
+ *
+ * V542-V547 compatibility boundary for the canonical app-mfg-contract wire
+ * models. Business components may import these aliases and UI-only view
+ * models, but must not copy the wire shapes elsewhere. V548 replaces this
+ * adapter atomically with generated OpenAPI aliases.
+ */
+export const MFG_WIRE_ADAPTER_KIND = 'temporary_generated_api_adapter' as const;
+
+export type MfgMutationRisk = 'low' | 'medium' | 'high';
+export type MfgMutationIntentStatus =
+  | 'draft'
+  | 'submitting'
+  | 'pending'
+  | 'replayed'
+  | 'succeeded'
+  | 'conflict'
+  | 'forbidden'
+  | 'failed'
+  | 'cancelled';
+
+export interface MfgMutationIntent {
+  intent_id: string;
+  action_id: string;
+  resource_ref: string;
+  expected_revision?: number;
+  idempotency_key: string;
+  payload_digest: string;
+  risk: MfgMutationRisk;
+  status: MfgMutationIntentStatus;
+  error?: MfgApiErrorV1 | null;
+  receipt?: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MfgRecoveryActionKind =
+  | 'reload'
+  | 'compare'
+  | 'save_as'
+  | 'request_access'
+  | 'retry_same_intent'
+  | 'reauthenticate'
+  | string;
+
+export interface MfgRecoveryAction {
+  kind: MfgRecoveryActionKind;
+  label: string;
+  target?: string | null;
+  enabled: boolean;
+}
+
+export interface MfgApiErrorV1 {
+  code: string;
+  message: string;
+  http_status: number;
+  details?: Record<string, unknown> | null;
+  retryable: boolean;
+  contract_version?: { major?: number; minor?: number } | string;
+  recovery_actions: MfgRecoveryAction[];
+  request_id?: string | null;
+  receipt_ref?: string | null;
+}
+
+export interface MfgEntitlementProjection {
+  core_profile_id?: string;
+  mfg_profile_id?: string;
+  profile_revision?: number;
+  credential_epoch?: number;
+  granted?: string[];
+  denied?: string[];
+}
+
+export interface MfgFrontendContract {
+  contract_version?: { major?: number; minor?: number } | string;
+  schema_version?: number;
+  routes?: Array<{
+    route_id: string;
+    method: string;
+    path: string;
+    availability: string;
+    required_capability?: unknown;
+  }>;
+  actions?: Array<{
+    action_id: string;
+    route_id: string;
+    availability: string;
+    required_capabilities?: string[];
+    risk?: string;
+    confirmation?: string;
+  }>;
+  surfaces?: Array<{
+    surface: string;
+    role: string;
+    capabilities?: string[];
+    actions?: string[];
+  }>;
+}
+
+export type MfgReportDeliveryReviewDecision =
+  | 'force_retry'
+  | 'reroute'
+  | 'abandon'
+  | 'resolve'
+  | 'reject';
+
+export interface MfgReportDeliveryReviewRerouteTarget {
+  target_ref: string;
+  provider_account: string;
+  channel: string;
+  requested_capability: string;
+}
+
+export interface MfgReportDeliveryReview {
+  review_id: string;
+  report_id: string;
+  report_revision: number;
+  delivery_revision: number;
+  dead_letter_digest: string;
+  requester_principal: string;
+  approval_id?: string | null;
+  correlation_id: string;
+  requested_action?: MfgReportDeliveryReviewDecision | null;
+  decision?: MfgReportDeliveryReviewDecision | null;
+  reviewer_principal?: string | null;
+  reason?: string;
+  evidence_refs?: string[];
+  decision_lease_ref?: string | null;
+  effect_key?: string | null;
+  effect_payload?: unknown;
+  effect_receipt_ref?: string | null;
+  effect_error?: string | null;
+  status: string;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MfgReportDeliveryReviewCollection {
+  items: MfgReportDeliveryReview[];
+  next_cursor?: string | null;
+}
+
 export interface MfgWidgetPlacement {
   x: number;
   y: number;

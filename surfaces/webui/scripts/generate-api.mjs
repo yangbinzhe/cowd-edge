@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 const gatewayUrl = (process.env.COWD_GATEWAY_URL || 'http://127.0.0.1:8642').replace(/\/$/, '');
 const specUrl = `${gatewayUrl}/api/gateway/openapi.json`;
+const mfgContractUrl = `${gatewayUrl}/api/apps/mfg/contract`;
 const output = resolve('src/generated/gateway-api.ts');
 const requiredMfgOperations = {
   '/api/apps/mfg/cockpit/profiles': ['get'],
@@ -20,6 +21,10 @@ const requiredMfgOperations = {
   '/api/apps/mfg/cockpit/reports/{id}/deliver': ['post'],
   '/api/apps/mfg/cockpit/reports/{id}/delivery-state': ['get'],
   '/api/apps/mfg/cockpit/reports/{id}/delivery/retry': ['post'],
+  '/api/apps/mfg/cockpit/reports/{id}/reviews': ['post'],
+  '/api/apps/mfg/cockpit/report-reviews': ['get'],
+  '/api/apps/mfg/cockpit/report-reviews/{id}': ['get'],
+  '/api/apps/mfg/cockpit/report-reviews/{id}/decision': ['post'],
   '/api/apps/mfg/cockpit/reports/schedules/run': ['post'],
   '/api/apps/mfg/focus/alert-rules': ['get', 'post'],
   '/api/apps/mfg/focus/alerts': ['get'],
@@ -52,22 +57,59 @@ const requiredMfgOperations = {
   '/api/apps/mfg/executions/{id}/feedback': ['post'],
   '/api/apps/mfg/decision-trace': ['get'],
   '/api/apps/mfg/live': ['get'],
+  '/api/apps/mfg/live/snapshot': ['get'],
 };
 
-function assertMfgCapabilitySchema(document) {
+function openApiPath(path) {
+  return path.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
+}
+
+function operationHasNamedSchema(operation) {
+  const serialized = JSON.stringify({
+    requestBody: operation?.requestBody,
+    responses: operation?.responses,
+  });
+  return serialized.includes('"$ref":"#/components/schemas/');
+}
+
+function assertMfgCapabilitySchema(document, contract) {
+  const activeRoutes = (contract?.routes || []).filter((route) => route.availability === 'active');
+  if (activeRoutes.length !== 104) {
+    throw new Error(`MFG contract must expose exactly 104 active routes, received ${activeRoutes.length}`);
+  }
   const missing = Object.entries(requiredMfgOperations).flatMap(([route, methods]) => methods
     .filter((method) => !document.paths?.[route]?.[method])
     .map((method) => `${method.toUpperCase()} ${route}`));
   if (missing.length) {
     throw new Error(`Gateway OpenAPI is missing revisioned MFG operations: ${missing.join(', ')}`);
   }
+  const contractMissing = activeRoutes.flatMap((route) => {
+    const path = openApiPath(route.path);
+    const method = String(route.method || '').toLowerCase();
+    return document.paths?.[path]?.[method] ? [] : [`${method.toUpperCase()} ${path}`];
+  });
+  if (contractMissing.length) {
+    throw new Error(`Gateway OpenAPI is missing active contract operations: ${contractMissing.join(', ')}`);
+  }
+  const anonymous = activeRoutes.flatMap((route) => {
+    const operation = document.paths?.[openApiPath(route.path)]?.[String(route.method || '').toLowerCase()];
+    return operationHasNamedSchema(operation) ? [] : [route.route_id];
+  });
+  if (anonymous.length) {
+    throw new Error(`MFG operations still use anonymous request/response schemas: ${anonymous.join(', ')}`);
+  }
 }
 
-const response = await fetch(specUrl, {
-  headers: process.env.COWD_API_TOKEN
-    ? { Authorization: `Bearer ${process.env.COWD_API_TOKEN}` }
-    : undefined,
-});
+const requestHeaders = process.env.COWD_API_TOKEN
+  ? {
+    Authorization: `Bearer ${process.env.COWD_API_TOKEN}`,
+    'x-cowd-surface-id': 'webui',
+  }
+  : undefined;
+const [response, contractResponse] = await Promise.all([
+  fetch(specUrl, { headers: requestHeaders }),
+  fetch(mfgContractUrl, { headers: requestHeaders }),
+]);
 if (!response.ok) {
   throw new Error(`Gateway OpenAPI fetch failed (${response.status}) from ${specUrl}`);
 }
@@ -75,7 +117,11 @@ const document = await response.json();
 if (document?.openapi !== '3.1.0' || typeof document?.paths !== 'object') {
   throw new Error(`Gateway returned an invalid OpenAPI 3.1 document from ${specUrl}`);
 }
-assertMfgCapabilitySchema(document);
+if (!contractResponse.ok) {
+  throw new Error(`MFG contract fetch failed (${contractResponse.status}) from ${mfgContractUrl}`);
+}
+const contract = await contractResponse.json();
+assertMfgCapabilitySchema(document, contract);
 
 await mkdir(dirname(output), { recursive: true });
 const temporarySpec = resolve('.gateway-openapi.generated.json');

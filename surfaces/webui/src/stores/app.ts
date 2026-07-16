@@ -29,6 +29,7 @@ import {
 import { buildWorkspacePreviewHtml, isWorkspaceTextPreview, workspacePreviewKind, workspacePreviewMime } from '../utils/workspacePreview';
 import { activitySummary, normalizeTurnActivity } from '../utils/turnSettlement';
 import { useChatSessionsStore } from './chatSessions';
+import type { MfgEntitlementProjection } from '../types/mfg';
 
 const PINNED_SESSION_KEY = 'cowd.webui.sessions.pinned';
 const VIEWED_SESSION_KEY = 'cowd.webui.sessions.viewedCounts';
@@ -202,6 +203,7 @@ export const useAppStore = defineStore('app', () => {
   const gatewayOpenApi = ref<Record<string, any> | null>(null);
   const gatewayOpenAiTools = ref<GatewayOpenAiTools | null>(null);
   const gatewayContractError = ref('');
+  const authEntitlement = ref<MfgEntitlementProjection | null>(null);
   const capabilitySnapshots = ref<Record<string, EndpointSnapshot[]>>({});
   const capabilityLoading = ref<Record<string, boolean>>({});
   const capabilityError = ref<Record<string, string>>({});
@@ -335,6 +337,8 @@ export const useAppStore = defineStore('app', () => {
     bootPromise = (async () => {
       busy.value = true;
       try {
+        const authState = await api.authVerify();
+        authEntitlement.value = authState.entitlement || null;
         const [
           manifest,
           sessionData,
@@ -1134,7 +1138,16 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function verifyAuth() {
-    return api.authVerify();
+    const result = await api.authVerify();
+    authEntitlement.value = result.entitlement || null;
+    return result;
+  }
+
+  async function login(credential: string) {
+    const result = await api.authLogin(credential);
+    authEntitlement.value = result.entitlement || null;
+    await refreshGatewayCapabilityContract();
+    return result;
   }
 
   async function refreshGatewayCapabilityContract() {
@@ -1281,6 +1294,7 @@ export const useAppStore = defineStore('app', () => {
     gatewayOpenApi,
     gatewayOpenAiTools,
     gatewayContractError,
+    authEntitlement,
     capabilitySnapshots,
     capabilityLoading,
     capabilityError,
@@ -1357,6 +1371,7 @@ export const useAppStore = defineStore('app', () => {
     saveApprovalConfig,
     toggleSolo,
     verifyAuth,
+    login,
     refreshGatewayCapabilityContract,
     loadCapability,
     refreshCommands,
