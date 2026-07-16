@@ -4,9 +4,9 @@ import { api } from '../api/client';
 import type {
   ChatTurn,
   ExecutionLiveState,
-  ExecutionProjection,
   SessionEvidenceProjection,
 } from '../types';
+import { useProjectionRegistryStore } from './projectionRegistry';
 
 type LiveExecutionState = Pick<ExecutionLiveState, 'status'>
   & Partial<Omit<ExecutionLiveState, 'status'>>;
@@ -15,7 +15,6 @@ export type SessionChatState = {
   sessionId: string;
   turns: ChatTurn[];
   executionId: string;
-  projection: ExecutionProjection | null;
   live: LiveExecutionState | null;
   evidence: SessionEvidenceProjection | null;
   streamState: 'connected' | 'connecting' | 'reconnecting' | 'offline';
@@ -27,14 +26,13 @@ export type SessionChatState = {
 
 const states = reactive<Record<string, SessionChatState>>({});
 const streams = new Map<string, EventSource>();
-const projectionTimers = new Map<string, ReturnType<typeof setInterval>>();
 const deltaBuffers = new Map<string, string>();
 const flushFrames = new Map<string, number>();
 
 function stateFor(sessionId: string) {
   if (!states[sessionId]) {
     states[sessionId] = {
-      sessionId, turns: [], executionId: '', projection: null, live: null, evidence: null, streamState: 'offline',
+      sessionId, turns: [], executionId: '', live: null, evidence: null, streamState: 'offline',
       requestEpoch: 0, pending: false, lastError: '', unread: 0,
     };
   }
@@ -72,6 +70,7 @@ function queueDelta(sessionId: string, content: string) {
 }
 
 export const useChatSessionsStore = defineStore('chatSessions', () => {
+  const projections = useProjectionRegistryStore();
   const activeSessionId = ref('');
   const active = computed(() => activeSessionId.value ? stateFor(activeSessionId.value) : null);
 
@@ -90,15 +89,17 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const recoveredExecutionId = String(execution.latest_execution_id || '');
     if (!state.executionId && recoveredExecutionId) state.executionId = recoveredExecutionId;
     if (streaming && !state.turns.some((turn) => turn.role === 'assistant' && turn.content === streaming.content)) state.turns.push(streaming);
-    if (state.executionId) refreshProjection(sessionId).catch(() => undefined);
+    if (state.executionId) {
+      projections.acquire(state.executionId, `chat:${sessionId}`, 'full');
+      refreshProjection(sessionId).catch(() => undefined);
+    }
   }
 
   async function refreshProjection(sessionId: string) {
     const state = stateFor(sessionId);
     if (!state.executionId) return;
-    const projection = await api.executionProjection(state.executionId, 'full');
+    const projection = await projections.load(state.executionId, 'full');
     if (projection?.execution_id === state.executionId) {
-      state.projection = projection;
       if (projection.live) state.live = projection.live;
       const status = String(projection.live?.status || state.live?.status || '');
       if (['complete', 'error', 'cancelled'].includes(status)) {
@@ -107,12 +108,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         if (wasPending) await load(sessionId);
       }
     }
-  }
-
-  function startProjectionPolling(sessionId: string) {
-    if (projectionTimers.has(sessionId)) return;
-    const timer = window.setInterval(() => refreshProjection(sessionId).catch(() => undefined), 800);
-    projectionTimers.set(sessionId, timer);
   }
 
   function connect(sessionId: string) {
@@ -157,7 +152,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const state = stateFor(sessionId);
     state.unread = 0;
     connect(sessionId);
-    startProjectionPolling(sessionId);
     await load(sessionId);
   }
 
@@ -189,7 +183,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       );
       if (state.requestEpoch !== epoch) return false;
       state.executionId = String(receipt?.execution?.graph_id || receipt?.execution_id || '');
-      if (state.executionId) await refreshProjection(sessionId);
+      if (state.executionId) {
+        projections.acquire(state.executionId, `chat:${sessionId}`, 'full');
+        await refreshProjection(sessionId);
+      }
       return true;
     } catch (error: any) {
       if (state.requestEpoch !== epoch) return;
@@ -212,9 +209,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   function close(sessionId: string) {
     streams.get(sessionId)?.close();
     streams.delete(sessionId);
-    const timer = projectionTimers.get(sessionId);
-    if (timer) clearInterval(timer);
-    projectionTimers.delete(sessionId);
+    projections.release(`chat:${sessionId}`);
     const frame = flushFrames.get(sessionId);
     if (frame) cancelAnimationFrame(frame);
     flushFrames.delete(sessionId);

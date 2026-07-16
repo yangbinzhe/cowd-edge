@@ -13,14 +13,17 @@ import DataTable from '../components/workbench/DataTable.vue';
 import MissionActionPreview from '../components/workbench/MissionActionPreview.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
 import { useAppStore } from '../stores/app';
+import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
+const projections = useProjectionRegistryStore();
 const loading = ref(false);
 const error = ref('');
 const showFullTrace = ref(true);
 const selectedSessionId = ref('');
 const selectedTeamId = ref('');
+const selectedExecutionId = ref('');
 const teamObjective = ref(t('page.mission.control.team.objectiveDefault'));
 const routeTarget = ref('');
 const routeCommand = ref(t('page.mission.control.route.commandDefault'));
@@ -181,7 +184,7 @@ const cleanCounters = computed(() => ({
   memory: Number(sessionDetail.value?.memory_recall_count || sessionDetail.value?.memory_recalls || 0),
   handoffs: relationCount.value,
 }));
-const executionProjection = computed(() => store.currentExecutionProjection);
+const executionProjection = computed(() => selectedExecutionId.value ? projections.projectionFor(selectedExecutionId.value) : null);
 const executionGraph = computed(() => executionProjection.value?.graph || null);
 const executionCommandRows = computed(() => executionProjection.value?.available_commands || []);
 const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
@@ -261,7 +264,10 @@ async function refresh() {
     if (selectedSessionId.value && !missionSessionIds.value.has(selectedSessionId.value)) selectedSessionId.value = '';
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
     const executionId = workgraphRows.value[0]?.graph;
-    if (executionId && executionId !== '-') store.connectExecutionProjection(String(executionId), 'full', 'mission');
+    if (executionId && executionId !== '-') {
+      selectedExecutionId.value = String(executionId);
+      projections.acquire(selectedExecutionId.value, 'mission', 'full');
+    }
     await refreshSelectedSession();
     if (selectedTeamId.value) await loadTeamRun();
   } catch (err) {
@@ -309,7 +315,10 @@ async function loadTeamRun(teamId = selectedTeamId.value) {
     || teamRunDetail.value?.graph_id
     || teamRunDetail.value?.run?.execution_graph_id
     || teamRunDetail.value?.run?.graph_id;
-  if (executionId) store.connectExecutionProjection(String(executionId), 'full', 'mission');
+  if (executionId) {
+    selectedExecutionId.value = String(executionId);
+    projections.acquire(selectedExecutionId.value, 'mission', 'full');
+  }
 }
 
 async function cancelSelectedTeam() {
@@ -349,7 +358,8 @@ async function applyRecovery() {
 }
 
 async function executeProjectionCommand(command: string) {
-  actionResult.value = await store.executeExecutionProjectionCommand(command);
+  if (!selectedExecutionId.value) return;
+  actionResult.value = await projections.executeCommand(selectedExecutionId.value, command);
   await refresh();
 }
 
@@ -364,7 +374,7 @@ function executionCommandLabel(command: string) {
 }
 
 onMounted(refresh);
-onUnmounted(() => store.disconnectExecutionProjection('mission'));
+onUnmounted(() => projections.release('mission'));
 </script>
 
 <template>

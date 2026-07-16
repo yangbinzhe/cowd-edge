@@ -21,6 +21,7 @@ import SurfacePage from './pages/SurfacePage.vue';
 import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
+import { useProjectionRegistryStore } from './stores/projectionRegistry';
 import mfgWriteContracts from './data/mfgWriteContracts.json';
 import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
 import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
@@ -741,7 +742,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(stale.__last_success_at).toBeTruthy();
   });
 
-  it('upgrades and restores the execution stream by explicit subscriber ownership', async () => {
+  it('keeps independent execution streams and merges detail scope per projection', async () => {
     const urls: string[] = [];
     const closed: string[] = [];
     class FakeEventSource {
@@ -752,17 +753,20 @@ describe('Cowd Vue WebUI shell', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ execution_id: 'exec-1', cursor: 0 }), { status: 200 }))));
     setActivePinia(createPinia());
-    const store = useAppStore();
-    store.connectExecutionProjection('exec-1', 'summary', 'chat');
-    store.connectExecutionProjection('exec-1', 'full', 'mission');
-    store.disconnectExecutionProjection('mission');
+    const registry = useProjectionRegistryStore();
+    registry.acquire('exec-1', 'chat:session-1', 'summary');
+    registry.acquire('exec-1', 'mission', 'full');
+    registry.release('mission');
+    registry.acquire('exec-2', 'agents', 'full');
     expect(urls).toEqual([
       '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=summary',
       '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=full',
       '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=summary',
+      '/api/runtime/executions/exec-2/events?cursor=0&detail_scope=full',
     ]);
     expect(closed).toHaveLength(2);
-    store.disconnectExecutionProjection('chat');
+    registry.release('chat:session-1');
+    registry.release('agents');
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
   });

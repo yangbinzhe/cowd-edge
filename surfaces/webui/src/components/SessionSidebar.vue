@@ -5,9 +5,11 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { Plus, Radio, Search } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
+import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
+const projections = useProjectionRegistryStore();
 const SIDEBAR_WIDTH_KEY = 'cowd.webui.sessionSidebarWidth';
 const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 420;
@@ -33,7 +35,9 @@ async function createSession() {
 }
 
 function sessionLiveStatus(sessionId: string) {
-  return String(chat.states[sessionId]?.projection?.live?.status || chat.states[sessionId]?.live?.status || '');
+  const state = chat.states[sessionId];
+  const projection = state?.executionId ? projections.projectionFor(state.executionId) : null;
+  return String(projection?.live?.status || state?.live?.status || '');
 }
 
 function isSessionRunning(session: any) {

@@ -4,17 +4,20 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { Bot, Boxes, Brain, ChevronDown, CircleDot, Folder, Hash, Paperclip, Search, Send, Square, Wrench, X, Zap } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
+import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
+const projections = useProjectionRegistryStore();
 const draft = ref('');
 const sending = ref(false);
 const commandQuery = ref('');
 const inlineCommandIndex = ref(0);
-const live = computed(() => chat.active?.projection?.live || chat.active?.live || null);
+const activeProjection = computed(() => chat.active?.executionId ? projections.projectionFor(chat.active.executionId) : null);
+const live = computed(() => activeProjection.value?.live || chat.active?.live || null);
 const contextUsage = computed(() => {
   const value = Number(live.value?.context_usage?.usage_percent_bp);
   return Number.isFinite(value) ? value / 100 : null;

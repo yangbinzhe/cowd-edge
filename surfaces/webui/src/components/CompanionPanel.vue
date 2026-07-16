@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Brain, ChevronLeft, ChevronRight, CircleDot, Code2, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
+import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import MarkdownBlock from './MarkdownBlock.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
@@ -12,6 +13,7 @@ import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/works
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
+const projections = useProjectionRegistryStore();
 const fileInput = ref<HTMLInputElement | null>(null);
 const previewOpen = ref(false);
 const previewMode = ref<'render' | 'source'>('render');
@@ -55,7 +57,8 @@ const runtimeInputItems = computed(() => {
     return true;
   }).slice(0, 12);
 });
-const liveExecution = computed(() => chat.active?.projection?.live || chat.active?.live || null);
+const activeProjection = computed(() => chat.active?.executionId ? projections.projectionFor(chat.active.executionId) : null);
+const liveExecution = computed(() => activeProjection.value?.live || chat.active?.live || null);
 const liveMetrics = computed(() => liveExecution.value?.metrics || null);
 const liveContextLabel = computed(() => {
   const usage = liveExecution.value?.context_usage;

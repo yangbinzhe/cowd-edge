@@ -12,8 +12,11 @@ import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import { displayStatus } from '../i18n/domain/status';
 import { useAppStore } from '../stores/app';
+import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 
 const store = useAppStore();
+const projections = useProjectionRegistryStore();
+const selectedExecutionId = ref('');
 const loading = ref(false);
 const error = ref('');
 const catalog = ref<any>({});
@@ -176,7 +179,7 @@ const agentEvidence = computed(() => [
     source: 'gateway.agents.runs',
   })),
 ]);
-const executionProjection = computed(() => store.currentExecutionProjection);
+const executionProjection = computed(() => selectedExecutionId.value ? projections.projectionFor(selectedExecutionId.value) : null);
 const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
   id: node.node_id || '-',
   kind: node.kind || '-',
@@ -223,7 +226,10 @@ async function refresh() {
         || '';
     }
     const executionId = nextRuns?.runs?.find((run: any) => run.graph_id)?.graph_id;
-    if (executionId) store.connectExecutionProjection(String(executionId), 'full', 'agents');
+    if (executionId) {
+      selectedExecutionId.value = String(executionId);
+      projections.acquire(selectedExecutionId.value, 'agents', 'full');
+    }
     if (!selectedTaskId.value) {
       selectedTaskId.value = nextTasks?.current?.id || nextTasks?.tasks?.[0]?.id || '';
     }
@@ -243,7 +249,10 @@ async function loadGraph() {
   }
   graph.value = await api.taskAgentGraph(selectedTaskId.value);
   const executionId = graph.value?.execution_graph_id || graph.value?.graph_id || graph.value?.id;
-  if (executionId) store.connectExecutionProjection(String(executionId), 'full', 'agents');
+  if (executionId) {
+    selectedExecutionId.value = String(executionId);
+    projections.acquire(selectedExecutionId.value, 'agents', 'full');
+  }
 }
 
 async function startTask() {
@@ -596,7 +605,7 @@ function selectTask(id: string) {
 }
 
 onMounted(refresh);
-onUnmounted(() => store.disconnectExecutionProjection('agents'));
+onUnmounted(() => projections.release('agents'));
 </script>
 
 <template>

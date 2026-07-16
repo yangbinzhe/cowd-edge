@@ -11,8 +11,11 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import { useAppStore } from '../stores/app';
+import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 
 const store = useAppStore();
+const projections = useProjectionRegistryStore();
+const selectedExecutionId = ref('');
 const loading = ref(false);
 const error = ref('');
 const query = ref('Summarize current task evidence and runtime constraints');
@@ -85,7 +88,7 @@ const contextEvidence = computed(() => [
     source: evidence.value.source || 'gateway.evidence',
   }] : []),
 ]);
-const executionProjection = computed(() => store.currentExecutionProjection);
+const executionProjection = computed(() => selectedExecutionId.value ? projections.projectionFor(selectedExecutionId.value) : null);
 const projectionContextRows = computed(() => (executionProjection.value?.context || []).map((item: any) => ({
   id: item.id || '-',
   kind: item.kind || '-',
@@ -114,7 +117,10 @@ async function refresh() {
     history.value = nextHistory;
     recommendations.value = nextRecommendations;
     const executionId = nextTimeline?.execution_graph_summary?.latest?.graph_id;
-    if (executionId) store.connectExecutionProjection(String(executionId), 'summary', 'context');
+    if (executionId) {
+      selectedExecutionId.value = String(executionId);
+      projections.acquire(selectedExecutionId.value, 'context', 'summary');
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -133,7 +139,7 @@ async function acknowledgeRecommendation() {
 }
 
 onMounted(refresh);
-onUnmounted(() => store.disconnectExecutionProjection('context'));
+onUnmounted(() => projections.release('context'));
 </script>
 
 <template>
