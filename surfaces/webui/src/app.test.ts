@@ -21,7 +21,7 @@ import SurfacePage from './pages/SurfacePage.vue';
 import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
-import { useProjectionRegistryStore } from './stores/projectionRegistry';
+import { MAX_ACTIVE_PROJECTION_STREAMS, useProjectionRegistryStore } from './stores/projectionRegistry';
 import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
 import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
@@ -766,6 +766,15 @@ describe('Cowd Vue WebUI shell', () => {
     expect(closed).toHaveLength(2);
     registry.release('chat:session-1');
     registry.release('agents');
+
+    for (let index = 0; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) {
+      registry.acquire(`budget-${index}`, `consumer-${index}`, 'summary');
+    }
+    expect(registry.activeStreamCount).toBe(MAX_ACTIVE_PROJECTION_STREAMS);
+    expect(registry.entries[`budget-${MAX_ACTIVE_PROJECTION_STREAMS}`].connectionState).toBe('degraded');
+    registry.release('consumer-0');
+    expect(registry.entries[`budget-${MAX_ACTIVE_PROJECTION_STREAMS}`].connectionState).toBe('connecting');
+    for (let index = 1; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) registry.release(`consumer-${index}`);
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
   });

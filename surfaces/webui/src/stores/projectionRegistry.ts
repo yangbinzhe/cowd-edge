@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia';
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { api } from '../api/client';
 import type { ExecutionProjection, ExecutionProjectionDelta } from '../types';
 
 export type ProjectionDetailScope = 'summary' | 'full';
-export type ProjectionConnectionState = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'stale' | 'offline' | 'error' | 'terminal';
+export type ProjectionConnectionState = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'degraded' | 'stale' | 'offline' | 'error' | 'terminal';
 
 export interface ExecutionProjectionRegistryEntry {
   executionId: string;
@@ -13,18 +13,23 @@ export interface ExecutionProjectionRegistryEntry {
   detailScope: ProjectionDetailScope;
   connectionState: ProjectionConnectionState;
   lastUpdatedAt: number;
+  lastEventAt: number;
   lastError: string;
+  degradedReason: string;
+  resyncCount: number;
   requestEpoch: number;
   consumers: Record<string, ProjectionDetailScope>;
 }
 
 const terminalStatuses = new Set(['complete', 'cancelled', 'error']);
+export const MAX_ACTIVE_PROJECTION_STREAMS = 8;
 
 export const useProjectionRegistryStore = defineStore('projectionRegistry', () => {
   const entries = reactive<Record<string, ExecutionProjectionRegistryEntry>>({});
   const streams = new Map<string, EventSource>();
   const streamScopes = new Map<string, ProjectionDetailScope>();
   const consumerExecutions = new Map<string, string>();
+  const activeStreamCount = computed(() => streams.size);
 
   function ensureEntry(executionId: string) {
     if (!entries[executionId]) {
@@ -35,7 +40,10 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         detailScope: 'summary',
         connectionState: 'idle',
         lastUpdatedAt: 0,
+        lastEventAt: 0,
         lastError: '',
+        degradedReason: '',
+        resyncCount: 0,
         requestEpoch: 0,
         consumers: {},
       };
@@ -67,12 +75,18 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         return entry.projection;
       }
       if (projection.execution_id !== id) return entry.projection;
+      if (entry.projection && Number(projection.revision || 0) < Number(entry.projection.revision || 0)) {
+        entry.lastError = 'ignored projection snapshot with a lower revision';
+        return entry.projection;
+      }
       entry.projection = projection;
       entry.cursor = Number(projection.cursor || 0);
       entry.detailScope = scope;
       entry.lastUpdatedAt = Date.now();
       entry.lastError = '';
-      entry.connectionState = isTerminal(projection) ? 'terminal' : (streams.has(id) ? 'live' : 'offline');
+      entry.connectionState = isTerminal(projection)
+        ? 'terminal'
+        : (streams.has(id) ? 'live' : (entry.degradedReason ? 'degraded' : 'offline'));
       return projection;
     } catch (error) {
       if (entry.requestEpoch !== epoch) return entry.projection;
@@ -85,11 +99,16 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
   function applyDelta(delta: ExecutionProjectionDelta) {
     const entry = entries[delta.execution_id];
     if (!entry || entry.cursor !== delta.base_cursor || delta.target_cursor < delta.base_cursor) {
+      if (entry) {
+        entry.resyncCount += 1;
+        entry.lastError = `projection cursor mismatch (${entry.cursor} -> ${delta.base_cursor})`;
+      }
       void load(delta.execution_id);
       return;
     }
     entry.cursor = delta.target_cursor;
     entry.lastUpdatedAt = Date.now();
+    entry.lastEventAt = entry.lastUpdatedAt;
     if (delta.events.length) void load(delta.execution_id);
   }
 
@@ -99,13 +118,29 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     streamScopes.delete(executionId);
   }
 
+  function promoteDeferredStreams() {
+    if (streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) return;
+    Object.values(entries)
+      .filter((entry) => entry.connectionState === 'degraded' && Object.keys(entry.consumers).length > 0)
+      .sort((left, right) => left.lastUpdatedAt - right.lastUpdatedAt)
+      .slice(0, MAX_ACTIVE_PROJECTION_STREAMS - streams.size)
+      .forEach((entry) => connect(entry.executionId));
+  }
+
   function connect(executionId: string) {
     const entry = ensureEntry(executionId);
     const scope = desiredScope(entry);
     if (streams.has(executionId) && streamScopes.get(executionId) === scope) return;
     closeStream(executionId);
     entry.detailScope = scope;
+    if (streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) {
+      entry.connectionState = 'degraded';
+      entry.degradedReason = `projection connection budget reached (${MAX_ACTIVE_PROJECTION_STREAMS})`;
+      void load(executionId, scope);
+      return;
+    }
     entry.connectionState = 'connecting';
+    entry.degradedReason = '';
     void load(executionId, scope);
     if (typeof EventSource === 'undefined') {
       entry.connectionState = entry.projection ? 'offline' : 'connecting';
@@ -115,17 +150,25 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     streams.set(executionId, stream);
     streamScopes.set(executionId, scope);
     stream.onopen = () => {
-      if (streams.get(executionId) === stream) entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'live';
+      if (streams.get(executionId) === stream) {
+        entry.lastEventAt = Date.now();
+        entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'live';
+      }
     };
     stream.addEventListener('projection_delta', (event) => {
       try {
+        entry.lastEventAt = Date.now();
         applyDelta(JSON.parse((event as MessageEvent).data) as ExecutionProjectionDelta);
       } catch (error) {
         entry.lastError = error instanceof Error ? error.message : String(error);
         void load(executionId, scope);
       }
     });
-    stream.addEventListener('projection_resync', () => { void load(executionId, scope); });
+    stream.addEventListener('projection_resync', () => {
+      entry.lastEventAt = Date.now();
+      entry.resyncCount += 1;
+      void load(executionId, scope);
+    });
     stream.onerror = () => {
       if (streams.get(executionId) === stream && !isTerminal(entry.projection)) entry.connectionState = 'reconnecting';
     };
@@ -152,6 +195,8 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     if (!Object.keys(entry.consumers).length) {
       closeStream(executionId);
       entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'offline';
+      entry.degradedReason = '';
+      promoteDeferredStreams();
       return;
     }
     connect(executionId);
@@ -179,5 +224,15 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     return result;
   }
 
-  return { entries, acquire, release, load, projectionFor, stateFor, executeCommand };
+  return {
+    entries,
+    activeStreamCount,
+    maxActiveStreams: MAX_ACTIVE_PROJECTION_STREAMS,
+    acquire,
+    release,
+    load,
+    projectionFor,
+    stateFor,
+    executeCommand,
+  };
 });

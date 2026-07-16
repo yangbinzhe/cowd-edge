@@ -46,6 +46,16 @@ function isSessionRunning(session: any) {
     || store.isSessionRunning(session);
 }
 
+function sessionTransportLabel(sessionId: string) {
+  const state = chat.states[sessionId];
+  if (!state || !['reconnecting', 'degraded', 'offline'].includes(state.streamState)) return '';
+  return state.streamState === 'degraded' ? state.degradedReason : state.streamState;
+}
+
+function isSessionUnread(session: any) {
+  return Number(chat.states[session.id]?.unread || 0) > 0 || store.isSessionUnread(session);
+}
+
 function clampSidebarWidth(width: number) {
   return Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Math.round(width)));
 }
@@ -131,15 +141,16 @@ onBeforeUnmount(() => {
           <span class="session-row-top">
             <span class="session-title">
               <Radio v-if="isSessionRunning(session)" :size="11" />
-              <i v-else-if="store.isSessionUnread(session)" class="session-unread-dot"></i>
+              <i v-else-if="isSessionUnread(session)" class="session-unread-dot"></i>
               {{ store.sessionTitle(session) }}
             </span>
             <time class="session-row-time">{{ store.compactTime(session) }}</time>
           </span>
-          <span v-if="store.isSessionPinned(session) || isSessionRunning(session) || store.isSessionUnread(session) || session.parent_session_id || session.branch_count" class="session-state-line">
+          <span v-if="store.isSessionPinned(session) || isSessionRunning(session) || isSessionUnread(session) || sessionTransportLabel(session.id) || session.parent_session_id || session.branch_count" class="session-state-line">
             <small v-if="store.isSessionPinned(session)">{{ t('session.badge.pinned') }}</small>
             <small v-if="isSessionRunning(session)">{{ displayStatus(sessionLiveStatus(session.id) || 'running') }}</small>
-            <small v-else-if="store.isSessionUnread(session)">{{ t('session.badge.unread') }}</small>
+            <small v-else-if="isSessionUnread(session)">{{ t('session.badge.unread') }}{{ chat.states[session.id]?.unread ? ` ${chat.states[session.id].unread}` : '' }}</small>
+            <small v-if="sessionTransportLabel(session.id)">{{ sessionTransportLabel(session.id) }}</small>
             <small v-if="session.parent_session_id || session.branch_count">{{ t('session.badge.branch') }}</small>
           </span>
         </button>

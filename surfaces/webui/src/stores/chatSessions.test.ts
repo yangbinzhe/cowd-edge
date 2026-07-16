@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
-import { useChatSessionsStore } from './chatSessions';
+import { MAX_ACTIVE_SESSION_STREAMS, useChatSessionsStore } from './chatSessions';
 
 const emptyEvidence = { session_id: '', evidence_refs: [], turns: [], freshness: 'unavailable' };
 
@@ -73,6 +73,41 @@ describe('chatSessions', () => {
 
     expect(chat.states['stream-A'].turns.find((turn) => turn.id === 'stream:stream-A')?.content).toBe('one');
     expect(chat.states['stream-A'].live?.status).toBe('calling_tool');
+    expect(chat.states['stream-A'].unread).toBeGreaterThan(0);
+    expect(chat.states['stream-A'].lastProgressAtMs).toBeGreaterThan(0);
     expect(chat.states['stream-B'].turns).toEqual([]);
+    expect(chat.states['stream-B'].resyncCount).toBe(1);
+
+    chat.close('stream-A');
+    chat.close('stream-B');
+  });
+
+  it('degrades excess session observers without evicting active conversations and promotes them after release', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    const streams: Array<{ url: string; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(readonly url: string) { streams.push(this); }
+      close() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.spyOn(api, 'messages').mockResolvedValue({ messages: [] } as any);
+    vi.spyOn(api, 'sessionEvidence').mockResolvedValue(emptyEvidence as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({ active_execution_ids: [] } as any);
+
+    for (let index = 0; index <= MAX_ACTIVE_SESSION_STREAMS; index += 1) {
+      await chat.open(`budget-${index}`);
+    }
+
+    expect(streams).toHaveLength(MAX_ACTIVE_SESSION_STREAMS);
+    expect(chat.states[`budget-${MAX_ACTIVE_SESSION_STREAMS}`].streamState).toBe('degraded');
+    expect(chat.states['budget-0'].streamState).toBe('connecting');
+    chat.close('budget-0');
+    expect(streams).toHaveLength(MAX_ACTIVE_SESSION_STREAMS + 1);
+    expect(chat.states[`budget-${MAX_ACTIVE_SESSION_STREAMS}`].streamState).toBe('connecting');
+    for (let index = 1; index <= MAX_ACTIVE_SESSION_STREAMS; index += 1) chat.close(`budget-${index}`);
   });
 });

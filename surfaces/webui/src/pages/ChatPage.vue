@@ -331,7 +331,7 @@ async function chooseCommand(command: any) {
           <span class="composer-stats">
             <small v-for="item in composerStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</small>
           </span>
-          <span class="run-status" :data-status="executionStatus" role="status" aria-live="polite">{{ displayStatus(executionStatus) }} · {{ live?.status_detail || chat.active?.streamState }}</span>
+          <span class="run-status" :data-status="executionStatus" role="status" aria-live="polite" :title="chat.active?.degradedReason || ''">{{ displayStatus(executionStatus) }} · {{ live?.status_detail || chat.active?.degradedReason || chat.active?.streamState }}</span>
           <button type="button" class="composer-chip" @click="store.openModal('workspace')"><Folder :size="14" /> {{ store.workspaceDir || t('page.chat.page.inline.59c92a9169') }}</button>
           <button type="button" class="composer-chip" @click="store.openModal('model')"><Bot :size="14" /> {{ modelLabel }}</button>
           <button v-if="store.attachments.length" type="button" class="composer-chip" @click="store.openCompanion('workspace')"><Paperclip :size="14" /> {{ formatCount('sources', store.attachments.length) }}</button>

@@ -17,23 +17,29 @@ export type SessionChatState = {
   executionId: string;
   live: LiveExecutionState | null;
   evidence: SessionEvidenceProjection | null;
-  streamState: 'connected' | 'connecting' | 'reconnecting' | 'offline';
+  streamState: 'connected' | 'connecting' | 'reconnecting' | 'degraded' | 'offline';
   requestEpoch: number;
   pending: boolean;
   lastError: string;
   unread: number;
+  lastEventAtMs: number;
+  lastProgressAtMs: number;
+  degradedReason: string;
+  resyncCount: number;
 };
 
 const states = reactive<Record<string, SessionChatState>>({});
 const streams = new Map<string, EventSource>();
 const deltaBuffers = new Map<string, string>();
 const flushFrames = new Map<string, number>();
+export const MAX_ACTIVE_SESSION_STREAMS = 12;
 
 function stateFor(sessionId: string) {
   if (!states[sessionId]) {
     states[sessionId] = {
       sessionId, turns: [], executionId: '', live: null, evidence: null, streamState: 'offline',
       requestEpoch: 0, pending: false, lastError: '', unread: 0,
+      lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
     };
   }
   return states[sessionId];
@@ -73,6 +79,15 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   const projections = useProjectionRegistryStore();
   const activeSessionId = ref('');
   const active = computed(() => activeSessionId.value ? stateFor(activeSessionId.value) : null);
+  const activeStreamCount = computed(() => streams.size);
+
+  function recordProgress(sessionId: string) {
+    const state = stateFor(sessionId);
+    const now = Date.now();
+    state.lastEventAtMs = now;
+    state.lastProgressAtMs = now;
+    if (activeSessionId.value !== sessionId) state.unread += 1;
+  }
 
   async function load(sessionId: string) {
     const state = stateFor(sessionId);
@@ -113,23 +128,40 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   function connect(sessionId: string) {
     if (streams.has(sessionId)) return;
     const state = stateFor(sessionId);
+    if (streams.size >= MAX_ACTIVE_SESSION_STREAMS) {
+      state.streamState = 'degraded';
+      state.degradedReason = `session connection budget reached (${MAX_ACTIVE_SESSION_STREAMS})`;
+      return;
+    }
     state.streamState = 'connecting';
+    state.degradedReason = '';
+    if (typeof EventSource === 'undefined') {
+      state.streamState = 'offline';
+      return;
+    }
     const stream = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/stream`);
     streams.set(sessionId, stream);
-    stream.onopen = () => { state.streamState = 'connected'; };
+    stream.onopen = () => {
+      state.streamState = 'connected';
+      state.lastEventAtMs = Date.now();
+    };
     stream.onerror = () => { state.streamState = 'reconnecting'; };
     stream.onmessage = (event) => {
       let payload: any;
       try { payload = JSON.parse(event.data); } catch { return; }
+      state.lastEventAtMs = Date.now();
       if (payload.type === 'session_stream_resync' || payload.type === 'RuntimeStreamLagged') {
+        state.resyncCount += 1;
         load(sessionId).catch(() => undefined);
         refreshProjection(sessionId).catch(() => undefined);
         return;
       }
       if (payload.type === 'TextDelta') {
+        recordProgress(sessionId);
         queueDelta(sessionId, String(payload.text || payload.content || ''));
       }
       if (payload.type === 'ExecutionPhase') {
+        recordProgress(sessionId);
         state.live = {
           ...(state.live || {}),
           status: payload.status,
@@ -138,12 +170,22 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         };
       }
       if (payload.type === 'TerminalCommitted') {
+        recordProgress(sessionId);
         state.pending = false;
         state.live = { ...(state.live || {}), status: 'complete', last_progress_at_ms: Date.now() };
         load(sessionId).catch(() => undefined);
         refreshProjection(sessionId).catch(() => undefined);
       }
     };
+  }
+
+  function promoteDeferredStreams() {
+    if (streams.size >= MAX_ACTIVE_SESSION_STREAMS) return;
+    Object.values(states)
+      .filter((state) => state.streamState === 'degraded')
+      .sort((left, right) => left.lastEventAtMs - right.lastEventAtMs)
+      .slice(0, MAX_ACTIVE_SESSION_STREAMS - streams.size)
+      .forEach((state) => connect(state.sessionId));
   }
 
   async function open(sessionId: string) {
@@ -214,7 +256,23 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (frame) cancelAnimationFrame(frame);
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
+    const state = stateFor(sessionId);
+    state.streamState = 'offline';
+    state.degradedReason = '';
+    promoteDeferredStreams();
   }
 
-  return { states, activeSessionId, active, open, load, send, stop, close, refreshProjection };
+  return {
+    states,
+    activeSessionId,
+    active,
+    activeStreamCount,
+    maxActiveStreams: MAX_ACTIVE_SESSION_STREAMS,
+    open,
+    load,
+    send,
+    stop,
+    close,
+    refreshProjection,
+  };
 });
