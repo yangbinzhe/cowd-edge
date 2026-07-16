@@ -19,12 +19,37 @@ export interface MfgWidgetDefinition {
   title: string;
   renderer: string;
   renderer_version: number;
+  config_schema?: MfgJsonSchema;
+  query_schema?: MfgJsonSchema;
   min_width: number;
   min_height: number;
   max_width: number;
   max_height: number;
   required_capability: string;
   default_placement: MfgWidgetPlacement;
+}
+
+export interface MfgJsonSchema {
+  type?: string;
+  properties?: Record<string, MfgJsonSchema>;
+  items?: MfgJsonSchema;
+  enum?: string[];
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  additionalProperties?: boolean;
+}
+
+export interface MfgCockpitCatalogContract {
+  items: MfgWidgetDefinition[];
+  global_filter_schema?: MfgJsonSchema;
+  filter_merge_policy?: {
+    policy_id?: string;
+    precedence?: string[];
+    semantics?: string;
+    legacy_fallback?: Record<string, string>;
+  };
 }
 
 export interface MfgCockpitProfile {
@@ -60,9 +85,18 @@ export interface MfgCockpitWidget {
 }
 
 export interface MfgCockpitProjection {
+  projection_id?: string;
   profile: MfgCockpitProfile;
   widgets: MfgCockpitWidget[];
   summary: string;
+  generated_at: string;
+}
+
+export interface MfgCockpitWidgetProjection {
+  projection_id: string;
+  profile_id: string;
+  profile_revision: number;
+  widget: MfgCockpitWidget;
   generated_at: string;
 }
 

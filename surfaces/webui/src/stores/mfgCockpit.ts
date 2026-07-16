@@ -5,7 +5,9 @@ import type {
   MfgAlertOccurrence,
   MfgAssignment,
   MfgCockpitProfile,
+  MfgCockpitCatalogContract,
   MfgCockpitProjection,
+  MfgCockpitWidget,
   MfgLiveProjection,
   MfgWidgetDefinition,
   MfgWidgetInstance,
@@ -34,6 +36,8 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   let refreshQueued = false;
   const profiles = ref<MfgCockpitProfile[]>([]);
   const catalog = ref<MfgWidgetDefinition[]>([]);
+  const globalFilterSchema = ref<MfgCockpitCatalogContract['global_filter_schema']>();
+  const filterMergePolicy = ref<MfgCockpitCatalogContract['filter_merge_policy']>();
   const selectedProfileId = ref('');
   const projection = ref<MfgCockpitProjection | null>(null);
   const alerts = ref<MfgAlertOccurrence[]>([]);
@@ -49,6 +53,7 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   const liveStatus = ref<'connecting' | 'live' | 'reconnecting' | 'stopped'>('stopped');
   const lastUpdatedAt = ref('');
   const requestEpoch = ref(0);
+  const widgetRefreshState = ref<Record<string, { status: 'idle' | 'loading' | 'ready' | 'error'; error?: string; updated_at?: string }>>({});
 
   const selectedProfile = computed(() => profiles.value.find((profile) => profile.profile_id === selectedProfileId.value) || projection.value?.profile || null);
   const widgetsByInstance = computed(() => new Map((projection.value?.widgets || []).map((widget) => [widget.instance_id, widget])));
@@ -72,7 +77,10 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
       if (failure) throw new Error(failure);
       if (epoch !== requestEpoch.value) return;
       profiles.value = collection(profileResult).map(profileFrom).filter(Boolean) as MfgCockpitProfile[];
-      catalog.value = collection(catalogResult) as MfgWidgetDefinition[];
+      const catalogContract = catalogResult as MfgCockpitCatalogContract;
+      catalog.value = collection(catalogContract) as MfgWidgetDefinition[];
+      globalFilterSchema.value = catalogContract.global_filter_schema;
+      filterMergePolicy.value = catalogContract.filter_merge_policy;
       alertRules.value = collection(ruleResult);
       alerts.value = collection(alertResult) as MfgAlertOccurrence[];
       alertSubscriptions.value = collection(subscriptionResult);
@@ -159,11 +167,69 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     }
   }
 
+  async function refreshWidget(instanceId: string) {
+    const profileId = selectedProfileId.value;
+    if (!profileId) throw new Error('mfg.cockpit.profile_required');
+    widgetRefreshState.value = {
+      ...widgetRefreshState.value,
+      [instanceId]: { status: 'loading' },
+    };
+    try {
+      const result = await api.mfgCockpitWidgetProjection(profileId, instanceId);
+      if (result?.__state && result.__state !== 'ready') {
+        throw new Error(String(result.__error || result.__state));
+      }
+      const failure = readError(result);
+      if (failure) throw new Error(failure);
+      const next = (result?.projection?.widget || result?.widget) as MfgCockpitWidget | undefined;
+      if (!next?.instance_id) throw new Error('mfg.cockpit.invalid_widget_projection_response');
+      if (projection.value?.profile.profile_id === profileId) {
+        const widgets = [...projection.value.widgets];
+        const index = widgets.findIndex((widget) => widget.instance_id === instanceId);
+        if (index >= 0) widgets.splice(index, 1, next);
+        else widgets.push(next);
+        projection.value = {
+          ...projection.value,
+          widgets,
+          generated_at: result?.projection?.generated_at || new Date().toISOString(),
+        };
+      }
+      widgetRefreshState.value = {
+        ...widgetRefreshState.value,
+        [instanceId]: { status: 'ready', updated_at: result?.projection?.generated_at || new Date().toISOString() },
+      };
+      return next;
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      widgetRefreshState.value = {
+        ...widgetRefreshState.value,
+        [instanceId]: { status: 'error', error: message },
+      };
+      throw cause;
+    }
+  }
+
   function addWidget(profile: MfgCockpitProfile, definitionId: string) {
     const definition = catalog.value.find((item) => item.definition_id === definitionId);
     if (!definition) return;
-    const index = profile.widget_instances.length + 1;
-    const placement = { ...definition.default_placement, y: Math.max(definition.default_placement.y, Math.floor(index / 2) * 4) };
+    const columns = profile.layout.columns || 12;
+    const placement = { ...definition.default_placement };
+    let placed = false;
+    for (let y = 0; y < 128 && !placed; y += 1) {
+      for (let x = 0; x <= columns - placement.width; x += 1) {
+        const overlaps = profile.widget_instances.some((item) => item.visible !== false
+          && x < item.placement.x + item.placement.width
+          && x + placement.width > item.placement.x
+          && y < item.placement.y + item.placement.height
+          && y + placement.height > item.placement.y);
+        if (!overlaps) {
+          placement.x = x;
+          placement.y = y;
+          placed = true;
+          break;
+        }
+      }
+    }
     const instance: MfgWidgetInstance = {
       instance_id: `webui-${definitionId.replace(/[^a-z0-9]+/gi, '-')}-${Date.now()}`,
       definition_id: definition.definition_id,
@@ -235,8 +301,8 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
   }
 
   return {
-    profiles, catalog, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch,
+    profiles, catalog, globalFilterSchema, filterMergePolicy, selectedProfileId, projection, alerts, alertRules, alertSubscriptions, forecasts, assignments, live, lastReceipt, loading, saving, error, liveStatus, lastUpdatedAt, requestEpoch, widgetRefreshState,
     selectedProfile, widgetsByInstance, attentionAlerts, activeAssignments,
-    refresh, loadProfile, loadForecasts, saveProfile, addWidget, commandAlert, commandAssignment, startLive, stopLive,
+    refresh, loadProfile, loadForecasts, saveProfile, refreshWidget, addWidget, commandAlert, commandAssignment, startLive, stopLive,
   };
 });

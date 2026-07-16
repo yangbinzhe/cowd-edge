@@ -1304,6 +1304,7 @@ export const api = {
   mfgCockpitProfile: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}`, {}),
   mfgCockpitWidgetCatalog: () => read('/api/apps/mfg/cockpit/widget-catalog', { items: [] }),
   mfgCockpitProjection: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection`, {}),
+  mfgCockpitWidgetProjection: (profileId: string, instanceId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/widgets/${encodeURIComponent(instanceId)}/projection`, {}),
   mfgDeleteCockpitProfile: (profileId: string, expectedRevision: number, idempotencyKey = mfgIdempotencyKey('cockpit-delete')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${encodeURIComponent(expectedRevision)}&idempotency_key=${encodeURIComponent(idempotencyKey)}`, { method: 'DELETE' }),
   mfgCloneCockpitProfile: (profileId: string, body: Record<string, unknown> = {}, idempotencyKey = mfgIdempotencyKey('cockpit-clone')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/clone`, { method: 'POST', body: JSON.stringify({ ...body, idempotency_key: idempotencyKey }) }),
   mfgShareCockpitProfile: (profileId: string, body: Record<string, unknown>, idempotencyKey = mfgIdempotencyKey('cockpit-share')) => write(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/share`, { method: 'POST', body: JSON.stringify({ ...body, idempotency_key: idempotencyKey }) }),

@@ -1019,6 +1019,7 @@ describe('Cowd Vue WebUI shell', () => {
       expected_revision: 1,
       sharing_policy: { visibility: 'team', viewer_refs: ['viewer-1'], editor_refs: [] },
     }, 'profile-share-1');
+    await api.mfgCockpitWidgetProjection('profile-1', 'widget-1');
     await api.mfgUpsertAlertRule({ rule_id: 'rule-1', name: 'Line A deviation', revision: 1 }, 'alert-rule-upsert-1');
     await api.mfgAlertCommand('alert-1', { command: 'acknowledge', expected_revision: 1, idempotency_key: 'alert-ack-1' });
     await api.mfgUpsertAlertSubscription({ subscription_id: 'subscription-1', rule_id: 'rule-1', revision: 1 }, 'alert-subscription-upsert-1');
@@ -1031,6 +1032,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1?expected_revision=1&idempotency_key=profile-delete-1', expect.objectContaining({ method: 'DELETE' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/clone', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/share', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/widgets/widget-1/projection', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alert-rules', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alerts/alert-1/command', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alert-subscriptions', expect.objectContaining({ method: 'POST' }));

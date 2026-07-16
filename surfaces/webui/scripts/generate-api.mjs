@@ -13,6 +13,7 @@ const requiredMfgOperations = {
   '/api/apps/mfg/cockpit/profiles/{id}/share': ['post'],
   '/api/apps/mfg/cockpit/widget-catalog': ['get'],
   '/api/apps/mfg/cockpit/profiles/{id}/projection': ['get'],
+  '/api/apps/mfg/cockpit/profiles/{id}/widgets/{instance_id}/projection': ['get'],
   '/api/apps/mfg/focus/alert-rules': ['get', 'post'],
   '/api/apps/mfg/focus/alerts': ['get'],
   '/api/apps/mfg/focus/alert-subscriptions': ['get', 'post'],
