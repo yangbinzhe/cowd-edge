@@ -469,6 +469,173 @@ const mfgHiddenHeartbeatLog = commandLogIncludes(
   'MLIVE-09 hidden heartbeat',
 );
 
+const autoStrategyPointerPath = path.join(
+  context.backend.root,
+  'target/acceptance/latest-auto-strategy.json',
+);
+const autoStrategyPointer = readJson(
+  autoStrategyPointerPath,
+  'automatic strategy artifact pointer',
+);
+const autoStrategyArtifactRoot = path.join(context.backend.root, 'target/acceptance');
+const autoStrategyArtifactDir = path.resolve(autoStrategyPointer.artifact_dir || '/missing');
+const autoStrategyReportPath = path.resolve(
+  autoStrategyPointer.report || path.join(autoStrategyArtifactDir, 'auto-strategy-paired.json'),
+);
+if (autoStrategyPointer.producer !== 'auto-strategy-paired.v1'
+  || autoStrategyPointer.backend_commit !== context.backend.commit
+  || autoStrategyPointer.frontend_commit !== context.frontend.commit
+  || !autoStrategyArtifactDir.startsWith(`${autoStrategyArtifactRoot}${path.sep}`)
+  || !autoStrategyReportPath.startsWith(`${autoStrategyArtifactDir}${path.sep}`)) {
+  failures.push('automatic strategy artifact pointer is not bound to the final commits and target/acceptance root');
+}
+const autoStrategy = readJson(autoStrategyReportPath, 'automatic strategy paired report');
+const autoStrategyProvenance = autoStrategy.provenance || {};
+if (autoStrategyProvenance.workspace_revision !== context.backend.commit
+  || autoStrategyProvenance.frontend_workspace_revision !== context.frontend.commit
+  || !/^[a-f0-9]{64}$/i.test(autoStrategyProvenance.binary_sha256 || '')
+  || !/^[a-f0-9]{64}$/i.test(autoStrategyProvenance.backend_source_archive_sha256 || '')
+  || !/^[a-f0-9]{64}$/i.test(autoStrategyProvenance.frontend_source_archive_sha256 || '')) {
+  failures.push('automatic strategy report provenance is incomplete or not final-commit bound');
+}
+
+const scoredAutoSamples = (autoStrategy.samples || []).filter((sample) => (
+  sample.condition === 'auto' && sample.warmup === false
+));
+const frozenRouting = new Map((autoStrategy.task_comparisons || [])
+  .map((comparison) => [String(comparison.task_id || ''), String(comparison.expected_candidate || '')])
+  .filter(([taskId, expected]) => taskId && expected));
+function automaticRoutingEvidence(candidate) {
+  const expectedTaskIds = [...frozenRouting.entries()]
+    .filter(([, expected]) => expected === candidate)
+    .map(([taskId]) => taskId);
+  const expectedTaskSet = new Set(expectedTaskIds);
+  const samples = scoredAutoSamples.filter((sample) => expectedTaskSet.has(String(sample.task_id || '')));
+  const mismatches = samples.filter((sample) => (
+    sample.status !== 'completed'
+    || sample.selected_candidate !== frozenRouting.get(String(sample.task_id || ''))
+  ));
+  const perTaskPairs = expectedTaskIds.every((taskId) => {
+    const comparison = (autoStrategy.task_comparisons || [])
+      .find((item) => String(item.task_id || '') === taskId);
+    return Number(comparison?.valid_pair_count || 0) >= 3;
+  });
+  return {
+    candidate,
+    expectedTaskIds,
+    sampleCount: samples.length,
+    mismatches,
+    perTaskPairs,
+    valid: expectedTaskIds.length > 0
+      && samples.length >= expectedTaskIds.length * 3
+      && mismatches.length === 0
+      && perTaskPairs,
+  };
+}
+function namedVitestProof(...needles) {
+  const content = JSON.stringify(vitest);
+  return needles.every((needle) => content.includes(needle));
+}
+function namedPlaywrightProof(...needles) {
+  const content = JSON.stringify(playwright);
+  return needles.every((needle) => content.includes(needle));
+}
+function namedCommandProof(commandName, ...needles) {
+  const logPath = commands[commandName]?.log_path;
+  const content = logPath && fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
+  return needles.every((needle) => content.includes(needle));
+}
+
+const strategySemanticProof = {
+  'STR-01': () => automaticRoutingEvidence('direct').valid,
+  'STR-02': () => automaticRoutingEvidence('parallel_tools').valid,
+  'STR-03': () => {
+    const evidence = automaticRoutingEvidence('team');
+    const samples = scoredAutoSamples.filter((sample) => (
+      evidence.expectedTaskIds.includes(String(sample.task_id || ''))
+    ));
+    return evidence.valid && samples.every((sample) => (
+      sample.team_materialized === true
+      && sample.team_agent_count >= 2
+      && sample.team_child_count >= 1
+      && sample.parent_merge_count === 1
+    ));
+  },
+  'STR-04': () => namedCommandProof(
+    'backend-test',
+    'high_overlap_publishes_downgrade_with_visible_reason',
+  ),
+  'STR-05': () => namedCommandProof(
+    'backend-test',
+    'provider_constraint_publishes_monotonic_downgrade_and_retains_scope',
+  ),
+  'STR-06': () => namedCommandProof(
+    'backend-test',
+    'low_novelty_publishes_bounded_early_stop',
+  ),
+  'STR-07': () => (
+    namedCommandProof(
+      'backend-test',
+      'explicit_team_negative_candidate_benefit_emits_surface_cost_warning',
+    )
+    && namedPlaywrightProof('explicit Team negative-benefit cost warning renders through real Gateway on all strategy surfaces')
+  ),
+  'STR-08': () => (
+    autoStrategy.kind === 'harness_eval.auto_strategy_paired.v1'
+    && autoStrategy.status === 'passed'
+    && autoStrategy.gate?.passed === true
+    && autoStrategy.gate?.claim_allowed === true
+    && autoStrategy.gate?.provenance_complete === true
+    && autoStrategy.gate?.budget_observation_complete === true
+    && autoStrategy.gate?.routing_gate === true
+    && autoStrategy.gate?.automatic_team_materialization_gate === true
+    && autoStrategy.gate?.hard_budget_lease_gate === true
+    && autoStrategy.budget?.observation_complete === true
+    && autoStrategy.completeness_bp >= 9_000
+  ),
+  'STR-09': () => (
+    namedVitestProof(
+      'maps the shared canonical fixture without inferring fields',
+      'shows nested strategy schema mismatch in Companion',
+    )
+    && namedPlaywrightProof('explicit Team negative-benefit cost warning renders through real Gateway on all strategy surfaces')
+    && namedCommandProof(
+      'backend-tui-mfg',
+      'shared_projection_renders_decision_proof_outcome_and_backlinks',
+      'matching_runtime_backlink_reuses_the_shared_strategy_projection_summary',
+      'execution_projection_stream_generation_rejects_zombie_and_replayed_events',
+    )
+  ),
+  'STR-10': () => namedCommandProof(
+    'backend-test',
+    'routes_simple_question_to_direct',
+    'routes_parallel_research_to_explore_with_parallel_modifier',
+    'routes_multi_agent_request_to_collaborate',
+    'routes_bounded_write_to_execute_with_bounded_modifier',
+  ),
+  'STR-11': () => (
+    namedVitestProof(
+      'rejects a nested strategy schema mismatch',
+      'keeps malicious legacy detail out of the real GraphSurface evidence inspector',
+      'clears authorized full projection data when a later read is forbidden',
+      'fails closed when Gateway revokes an already-open projection stream',
+    )
+    && namedCommandProof(
+      'backend-test',
+      'strategy_scope_projection_drops_paths_prompts_and_hidden_reasoning',
+      'projection_scope_never_leaks_other_session_goals',
+      'execution_read_scope_does_not_inherit_graph_resource_grants',
+      'execution_commands_require_interactive_control_capability',
+      'foreign_owner_is_rejected_before_runtime_or_lifecycle_activation',
+    )
+    && namedCommandProof(
+      'backend-tui-mfg',
+      'agents_are_linked_only_by_the_selected_team_execution_graph',
+      'coincident_mfg_execution_id_never_selects_a_runtime_strategy',
+    )
+  ),
+};
+
 const artifactGroups = {
   visual: [visualPath, commands['visual-audit']?.log_path],
   vitest: [vitestPath, commands['frontend-vitest']?.log_path],
@@ -599,6 +766,17 @@ const proofMap = {
   'P-06': ['performance', ['performance'], ['500-row stable pagination fallback']],
   'P-07': ['performance', ['performance'], ['local timeout degradation with responsive shell']],
   'P-08': ['performance', ['performance'], ['long-task state and wait reason visibility']],
+  'STR-01': ['integration-local', ['strategy'], ['frozen simple/single-file corpus selects Direct']],
+  'STR-02': ['integration-local', ['strategy'], ['frozen independent read batches select ParallelTools']],
+  'STR-03': ['integration-local', ['strategy'], ['independent responsibility scopes select Team only when net benefit is positive']],
+  'STR-04': ['integration-local', ['strategy'], ['measured overlap rejects or downgrades Team without hiding the reason']],
+  'STR-05': ['integration-local', ['strategy'], ['provider resource constraints publish a monotonic downgrade and retained evidence scope']],
+  'STR-06': ['integration-local', ['strategy'], ['low novelty publishes a bounded early-stop transition']],
+  'STR-07': ['browser-real-gateway', ['strategy', 'playwright', 'gatewayWebui'], ['explicit Team execution renders its calibrated or assumed cost warning through a real Gateway']],
+  'STR-08': ['performance', ['strategy', 'performance'], ['frozen paired real-model report satisfies registered speed, quality and cost thresholds']],
+  'STR-09': ['cross-surface', ['strategy', 'vitest', 'backend', 'tuiMfg', 'tui'], ['the identical strategy fixture produces the same selected candidate and observed outcome in WebUI and TUI']],
+  'STR-10': ['integration-local', ['strategy', 'backend'], ['the four registered V506 strategy scenarios remain passing']],
+  'STR-11': ['cross-surface', ['strategy', 'vitest', 'backend', 'tuiMfg', 'tui'], ['projection and both surfaces exclude paths, hidden content, prompts and internal reasoning']],
 };
 
 const plannedProofClasses = {
@@ -607,9 +785,8 @@ const plannedProofClasses = {
   TUI: ['cross-surface', ['tuiMfg', 'mfgSurfaces'], 'real PTY MFG size, keyboard, action and capability proof'],
   MUX: ['browser-controlled', ['visual', 'playwright', 'performance'], 'MFG responsive, focus and partial-degraded proof'],
   MLIVE: ['cross-surface', ['mfgSurfaces', 'performance', 'tuiMfg'], 'MFG epoch, multi-observer, resync and hidden-scope proof'],
-  STR: ['integration-local', ['strategy', 'performance', 'mfgSurfaces'], 'automatic strategy selection, downgrade, projection and evaluation proof'],
 };
-const plannedProofCounts = { MC: 6, MR: 8, TUI: 8, MUX: 8, MLIVE: 9, STR: 11 };
+const plannedProofCounts = { MC: 6, MR: 8, TUI: 8, MUX: 8, MLIVE: 9 };
 for (const [prefix, count] of Object.entries(plannedProofCounts)) {
   const [level, groups, check] = plannedProofClasses[prefix];
   for (let index = 1; index <= count; index += 1) {
@@ -668,6 +845,34 @@ for (const entry of manifest.entries || []) {
     if (entry.id === 'MLIVE-09') {
       if (mfgHiddenHeartbeatLog) resultArtifacts.push(mfgHiddenHeartbeatLog);
     }
+  } else if (entry.id.startsWith('STR-')) {
+    const semanticProof = strategySemanticProof[entry.id];
+    if (!semanticProof || !semanticProof()) {
+      failures.push(`${entry.id} structured semantic proof is absent or false`);
+    }
+    if (['STR-01', 'STR-02', 'STR-03'].includes(entry.id)) {
+      const candidate = entry.id === 'STR-01'
+        ? 'direct'
+        : entry.id === 'STR-02'
+          ? 'parallel_tools'
+          : 'team';
+      const routing = automaticRoutingEvidence(candidate);
+      resultChecks = [
+        ...checks,
+        `frozen task ids=${routing.expectedTaskIds.join(',')}; auto samples=${routing.sampleCount}; mismatches=${routing.mismatches.length}; paired repetitions>=3=${routing.perTaskPairs}`,
+      ];
+    }
+    const allGroups = [...groups, 'build', 'openapi', 'global'];
+    resultArtifacts = [...new Set([
+      ...artifacts(...allGroups),
+      autoStrategyPointerPath,
+      autoStrategyReportPath,
+    ].filter(Boolean))];
+    execution = commandEvidence(...allGroups);
+    resultChecks = [
+      ...checks,
+      `${entry.id} semantic predicate passed against named tests and structured paired report`,
+    ];
   } else {
     const allGroups = [...groups, 'build', 'openapi', 'global'];
     resultArtifacts = artifacts(...allGroups);

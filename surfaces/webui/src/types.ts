@@ -67,6 +67,9 @@ export interface ActivityEvent {
 }
 
 export type ExecutionProjectionEntity = GatewayComponents['schemas']['ExecutionProjectionEntity'];
+export type StrategyDecisionProjection = GatewayComponents['schemas']['StrategyDecisionProjection'];
+export type StrategyCandidateEstimate = GatewayComponents['schemas']['StrategyCandidateEstimate'];
+export type StrategyActualProjection = GatewayComponents['schemas']['StrategyActualProjection'];
 export type ExecutionLiveStatus = 'queued' | 'preparing_context' | 'calling_model' | 'thinking' | 'calling_tool' | 'waiting_approval' | 'finalizing' | 'complete' | 'cancelled' | 'error';
 
 export interface ContextComponentUsage {

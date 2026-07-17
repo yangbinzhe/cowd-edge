@@ -29,6 +29,7 @@ import {
 import { buildWorkspacePreviewHtml, isWorkspaceTextPreview, workspacePreviewKind, workspacePreviewMime } from '../utils/workspacePreview';
 import { activitySummary, normalizeTurnActivity } from '../utils/turnSettlement';
 import { useChatSessionsStore } from './chatSessions';
+import { useProjectionRegistryStore } from './projectionRegistry';
 import type { MfgEntitlementProjection } from '../types/mfg';
 
 const PINNED_SESSION_KEY = 'cowd.webui.sessions.pinned';
@@ -1146,6 +1147,7 @@ export const useAppStore = defineStore('app', () => {
   async function login(credential: string) {
     const result = await api.authLogin(credential);
     authEntitlement.value = result.entitlement || null;
+    useProjectionRegistryStore().refreshAuthorization();
     await refreshGatewayCapabilityContract();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('cowd:auth-session-refreshed', {

@@ -2,8 +2,8 @@
 import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -14,12 +14,16 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import TimelineList from '../components/workbench/TimelineList.vue';
+import StrategyDecisionSummary from '../components/runtime/StrategyDecisionSummary.vue';
 import { useAppStore } from '../stores/app';
+import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 
 const store = useAppStore();
+const projections = useProjectionRegistryStore();
+const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
 const error = ref('');
@@ -29,6 +33,7 @@ const runtimeSnapshot = ref<any>({});
 const sourceAudit = ref<any>({});
 const sourceRepairPlan = ref<any>({});
 const runtimeTurns = ref<any>({});
+const sessionExecution = ref<any>({});
 const effectiveConfig = ref<any>({});
 const leases = ref<any>({});
 const approvals = ref<any>([]);
@@ -70,8 +75,20 @@ const turnRows = computed(() => (Array.isArray(runtimeTurns.value?.turns) ? runt
   status: turn.status || turn.phase || '-',
   session: turn.session_id || '-',
   task: turn.task_id || '-',
+  execution: turn.execution_id || turn.execution_graph_id || '-',
   prompt: turn.prompt || turn.summary || '-',
 })));
+const activeExecutionId = computed(() => {
+  const requested = typeof route.query.execution_id === 'string' ? route.query.execution_id.trim() : '';
+  if (requested) return requested;
+  const indexed = String(sessionExecution.value?.latest_execution_id || '').trim();
+  if (indexed) return indexed;
+  const fromTurn = String(turnRows.value.find((turn: any) => turn.execution && turn.execution !== '-')?.execution || '').trim();
+  return fromTurn;
+});
+const executionProjection = computed(() => activeExecutionId.value
+  ? projections.projectionFor(activeExecutionId.value)
+  : null);
 const growthEventRows = computed(() => (Array.isArray(growthEvents.value?.events) ? growthEvents.value.events : []).slice(0, 12).map((event: any) => ({
   id: event.id || event.event_id || '-',
   source: event.source || event.source_event_kind || event.kind || '-',
@@ -164,6 +181,7 @@ async function refresh() {
       nextGrowthStatus,
       nextGrowthEvents,
       nextReloadStatus,
+      nextSessionExecution,
     ] = await Promise.all([
       api.runtimeControlPlane(),
       api.runtimeStatus(),
@@ -179,6 +197,7 @@ async function refresh() {
       api.growthStatus(),
       api.growthEvents(),
       store.refreshConfigReloadStatus(),
+      api.sessionExecution(sessionId.value),
     ]);
     controlPlane.value = nextControl;
     runtimeStatus.value = nextStatus;
@@ -193,6 +212,7 @@ async function refresh() {
     tasks.value = nextTasks;
     growthStatus.value = nextGrowthStatus;
     growthEvents.value = nextGrowthEvents;
+    sessionExecution.value = nextSessionExecution;
     store.configReloadStatus = nextReloadStatus;
     selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
   } catch (err) {
@@ -253,7 +273,12 @@ async function respondApproval(approval: any, approved: boolean) {
   await refresh();
 }
 
+watch(activeExecutionId, (executionId) => {
+  if (executionId) projections.acquire(executionId, 'runtime-page', 'full');
+  else projections.release('runtime-page');
+}, { immediate: true });
 onMounted(refresh);
+onUnmounted(() => projections.release('runtime-page'));
 </script>
 
 <template>
@@ -295,6 +320,17 @@ onMounted(refresh);
     </section>
 
     <section class="runtime-grid">
+      <StrategyDecisionSummary
+        v-if="executionProjection?.strategy"
+        class="runtime-panel wide"
+        v-show="isSectionActive('runs')"
+        data-section="runs"
+        :strategy="executionProjection.strategy"
+        :agents="executionProjection.agents"
+        :execution-id="activeExecutionId"
+        :connection-state="projections.stateFor(activeExecutionId)"
+        surface="runtime"
+      />
       <section class="management-panel runtime-panel" v-show="isSectionActive('overview')" data-section="overview">
         <header>
           <h2>{{ t('page.runtime.page.text.895180bcc2') }}</h2>
@@ -434,7 +470,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="inspectTurn">{{ t('page.runtime.page.text.fc0b5cfe07') }}</button>
           <button class="ghost-action" type="button" :disabled="!selectedTurnId" @click="cancelTurn">{{ t('page.runtime.page.text.65edf171ac') }}</button>
         </div>
-        <DataTable v-if="turnRows.length" :rows="turnRows" :columns="['id', 'status', 'session', 'task', 'prompt']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="turnRows.length" :rows="turnRows" :columns="['id', 'status', 'session', 'task', 'execution', 'prompt']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.3d05bab814')" :detail="t('page.runtime.page.detail.334c21b2ac')" />
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.42c676123b')" />
         <ObjectInspectorDrawer :title="t('page.runtime.page.title.0d53bacfd6')" :data="runtimeTurns" />

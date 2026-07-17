@@ -18,16 +18,21 @@ export interface ExecutionProjectionRegistryEntry {
   degradedReason: string;
   resyncCount: number;
   requestEpoch: number;
+  reconnectBlocked: boolean;
   consumers: Record<string, ProjectionDetailScope>;
 }
 
 const terminalStatuses = new Set(['complete', 'cancelled', 'error']);
 export const MAX_ACTIVE_PROJECTION_STREAMS = 8;
+const PROJECTION_RECONNECT_BASE_MS = 250;
+const PROJECTION_RECONNECT_MAX_MS = 5_000;
 
 export const useProjectionRegistryStore = defineStore('projectionRegistry', () => {
   const entries = reactive<Record<string, ExecutionProjectionRegistryEntry>>({});
   const streams = new Map<string, EventSource>();
   const streamScopes = new Map<string, ProjectionDetailScope>();
+  const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const reconnectAttempts = new Map<string, number>();
   const consumerExecutions = new Map<string, string>();
   const activeStreamCount = computed(() => streams.size);
 
@@ -45,6 +50,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         degradedReason: '',
         resyncCount: 0,
         requestEpoch: 0,
+        reconnectBlocked: false,
         consumers: {},
       };
     }
@@ -59,6 +65,56 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     return terminalStatuses.has(String(projection?.live?.status || '').toLowerCase());
   }
 
+  function failClosed(
+    entry: ExecutionProjectionRegistryEntry,
+    message: string,
+    state: ProjectionConnectionState = 'error',
+  ) {
+    cancelReconnect(entry.executionId);
+    closeStream(entry.executionId);
+    entry.requestEpoch += 1;
+    entry.reconnectBlocked = true;
+    entry.projection = null;
+    entry.cursor = 0;
+    entry.connectionState = state;
+    entry.lastError = message;
+    entry.lastUpdatedAt = Date.now();
+  }
+
+  function hasActiveConsumer(entry: ExecutionProjectionRegistryEntry) {
+    return Object.keys(entry.consumers).length > 0;
+  }
+
+  function cancelReconnect(executionId: string, resetAttempt = true) {
+    const timer = reconnectTimers.get(executionId);
+    if (timer) clearTimeout(timer);
+    reconnectTimers.delete(executionId);
+    if (resetAttempt) reconnectAttempts.delete(executionId);
+  }
+
+  function scheduleReconnect(executionId: string, requestedScope?: ProjectionDetailScope) {
+    const entry = entries[executionId];
+    if (!entry
+      || entry.reconnectBlocked
+      || !hasActiveConsumer(entry)
+      || isTerminal(entry.projection)
+      || streams.has(executionId)) return;
+    if (reconnectTimers.has(executionId)) return;
+    const attempt = reconnectAttempts.get(executionId) || 0;
+    const delay = Math.min(
+      PROJECTION_RECONNECT_BASE_MS * (2 ** Math.min(attempt, 5)),
+      PROJECTION_RECONNECT_MAX_MS,
+    );
+    reconnectAttempts.set(executionId, attempt + 1);
+    entry.connectionState = 'reconnecting';
+    const timer = setTimeout(() => {
+      reconnectTimers.delete(executionId);
+      if (!hasActiveConsumer(entry) || isTerminal(entry.projection)) return;
+      connect(executionId, requestedScope);
+    }, delay);
+    reconnectTimers.set(executionId, timer);
+  }
+
   async function load(executionId: string, requestedScope?: ProjectionDetailScope) {
     const id = executionId.trim();
     if (!id) return null;
@@ -70,15 +126,36 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       const projection = await api.executionProjection(id, scope);
       if (entry.requestEpoch !== epoch) return entry.projection;
       if (projection.__state && projection.__state !== 'ready') {
+        const message = String(projection.__error || projection.__state);
+        if (['forbidden', 'unauthorized'].includes(String(projection.__state))) {
+          failClosed(entry, message);
+          return null;
+        }
         entry.connectionState = entry.projection ? 'stale' : 'error';
-        entry.lastError = String(projection.__error || projection.__state);
+        entry.lastError = message;
         // A receipt can reference an execution before Gateway has materialized
         // its projection, or it can reference an execution that no longer
         // exists. Keeping EventSource alive in that state creates an immediate
         // 404 reconnect loop in Chromium and can starve every shell control.
         // A later acquire/load can reconnect after a valid snapshot exists.
         if (!entry.projection) closeStream(id);
+        if (!entry.projection) scheduleReconnect(id, scope);
         return entry.projection;
+      }
+      if (Number(projection.schema_version) !== 1) {
+        failClosed(
+          entry,
+          `unsupported execution projection schema_version ${String(projection.schema_version)}`,
+        );
+        return null;
+      }
+      const strategySchemaVersion = projection.strategy?.schema_version;
+      if (strategySchemaVersion != null && Number(strategySchemaVersion) !== 1) {
+        failClosed(
+          entry,
+          `unsupported strategy projection schema_version ${String(strategySchemaVersion)}`,
+        );
+        return null;
       }
       if (projection.execution_id !== id) return entry.projection;
       if (entry.projection && Number(projection.revision || 0) < Number(entry.projection.revision || 0)) {
@@ -86,24 +163,43 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         return entry.projection;
       }
       entry.projection = projection;
+      entry.reconnectBlocked = false;
       entry.cursor = Number(projection.cursor || 0);
       entry.detailScope = scope;
       entry.lastUpdatedAt = Date.now();
       entry.lastError = '';
-      entry.connectionState = isTerminal(projection)
-        ? 'terminal'
-        : (streams.has(id) ? 'live' : (entry.degradedReason ? 'degraded' : 'offline'));
+      if (isTerminal(projection)) {
+        cancelReconnect(id);
+        closeStream(id);
+        entry.connectionState = 'terminal';
+        promoteDeferredStreams();
+      } else {
+        entry.connectionState = streams.has(id) ? 'live' : (entry.degradedReason ? 'degraded' : 'offline');
+      }
       return projection;
     } catch (error) {
       if (entry.requestEpoch !== epoch) return entry.projection;
       entry.lastError = error instanceof Error ? error.message : String(error);
       entry.connectionState = entry.projection ? 'stale' : 'error';
+      if (!entry.projection) {
+        closeStream(id);
+        scheduleReconnect(id, scope);
+      }
       return entry.projection;
     }
   }
 
   function applyDelta(delta: ExecutionProjectionDelta) {
     const entry = entries[delta.execution_id];
+    if (Number(delta.schema_version) !== 1) {
+      if (entry) {
+        failClosed(
+          entry,
+          `unsupported execution projection delta schema_version ${String(delta.schema_version)}`,
+        );
+      }
+      return;
+    }
     if (!entry || entry.cursor !== delta.base_cursor || delta.target_cursor < delta.base_cursor) {
       if (entry) {
         entry.resyncCount += 1;
@@ -133,10 +229,11 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       .forEach((entry) => connect(entry.executionId));
   }
 
-  function connect(executionId: string) {
+  function connect(executionId: string, requestedScope?: ProjectionDetailScope) {
     const entry = ensureEntry(executionId);
-    const scope = desiredScope(entry);
+    const scope = requestedScope || desiredScope(entry);
     if (streams.has(executionId) && streamScopes.get(executionId) === scope) return;
+    cancelReconnect(executionId, false);
     closeStream(executionId);
     entry.detailScope = scope;
     if (streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) {
@@ -157,6 +254,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     streamScopes.set(executionId, scope);
     stream.onopen = () => {
       if (streams.get(executionId) === stream) {
+        reconnectAttempts.delete(executionId);
         entry.lastEventAt = Date.now();
         entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'live';
       }
@@ -175,9 +273,40 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       entry.resyncCount += 1;
       void load(executionId, scope);
     });
+    stream.addEventListener('projection_authorization_revoked', () => {
+      if (streams.get(executionId) === stream) {
+        // Gateway revalidated a stream that was opened under an older
+        // credential.  Do not retain its last full snapshot or schedule a
+        // retry with that credential: the next user-authenticated refresh is
+        // the only authority allowed to restore it.
+        failClosed(entry, 'Gateway revoked the execution projection stream');
+      }
+    });
     stream.onerror = () => {
-      if (streams.get(executionId) === stream && !isTerminal(entry.projection)) entry.connectionState = 'reconnecting';
+      if (streams.get(executionId) === stream && !isTerminal(entry.projection)) {
+        closeStream(executionId);
+        entry.connectionState = 'reconnecting';
+        void load(executionId, scope).then(() => scheduleReconnect(executionId, scope));
+      }
     };
+  }
+
+  function refreshAuthorization() {
+    const reconnect = Object.values(entries)
+      .filter((entry) => Object.keys(entry.consumers).length > 0)
+      .map((entry) => entry.executionId);
+    for (const entry of Object.values(entries)) {
+      failClosed(entry, 'authorization context changed; reloading projection', 'connecting');
+    }
+    reconnect.forEach((executionId) => {
+      const entry = entries[executionId];
+      if (!entry) return;
+      // Only an explicit post-login/profile refresh may clear the auth stop
+      // latch. A transport error or server-side revoke must stay closed until
+      // this authenticated user action occurs.
+      entry.reconnectBlocked = false;
+      connect(executionId);
+    });
   }
 
   function acquire(executionId: string, consumer: string, scope: ProjectionDetailScope = 'summary') {
@@ -199,6 +328,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     if (!entry) return;
     delete entry.consumers[consumer];
     if (!Object.keys(entry.consumers).length) {
+      cancelReconnect(executionId);
       closeStream(executionId);
       entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'offline';
       entry.degradedReason = '';
@@ -237,8 +367,10 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     acquire,
     release,
     load,
+    applyDelta,
     projectionFor,
     stateFor,
     executeCommand,
+    refreshAuthorization,
   };
 });

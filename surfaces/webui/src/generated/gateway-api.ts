@@ -10934,7 +10934,7 @@ export interface components {
             /** @constant */
             schema_version: 1;
             session_id?: string | null;
-            strategy?: components["schemas"]["ExecutionProjectionEntity"] | null;
+            strategy?: components["schemas"]["StrategyDecisionProjection"] | null;
             teams: components["schemas"]["ExecutionProjectionEntity"][];
             usage: components["schemas"]["ExecutionProjectionEntity"][];
         };
@@ -10946,6 +10946,115 @@ export interface components {
             revision: number;
             status?: string | null;
             summary?: string | null;
+        };
+        StrategyActualProjection: {
+            actual_speedup_ratio_bp?: number | null;
+            cached_tokens: number;
+            duplicate_tool_calls: number;
+            duration_ms: number;
+            evaluation_budget_breached: boolean;
+            evaluation_budget_observed: boolean;
+            evaluation_token_limit: number;
+            evaluation_tokens_consumed: number;
+            evidence_overlap_bp: number;
+            evidence_overlap_observed: boolean;
+            input_tokens: number;
+            max_tool_concurrency_observed: number;
+            merge_cost_ms: number;
+            output_tokens: number;
+            parallel_tool_batches: number;
+            parent_merge_count: number;
+            quality_score_bp?: number | null;
+            terminal_reason: string;
+            tool_calls: number;
+            write_attempt_refs: string[];
+            working_state_verified: boolean;
+        };
+        StrategyCandidateEstimate: {
+            assumed: boolean;
+            calibration_sample_count: number;
+            calibration_source: string;
+            /** @enum {string} */
+            candidate: "direct" | "parallel_tools" | "team";
+            context_duplication_tokens: number;
+            eligible: boolean;
+            estimated_critical_path_ms: number;
+            estimated_serial_ms: number;
+            evidence_overlap_penalty_bp: number;
+            expected_quality_lift_bp: number;
+            merge_cost_ms: number;
+            net_benefit_score: number;
+            provider_concurrency_penalty_bp: number;
+            reasons: string[];
+            risk_approval_penalty_bp: number;
+            startup_overhead_ms: number;
+        };
+        StrategyDecisionProjection: {
+            actual?: components["schemas"]["StrategyActualProjection"] | null;
+            /** @enum {string|null} */
+            actual_status?: "unknown" | "observed" | null;
+            benefit_reason?: string[];
+            candidate_estimates?: components["schemas"]["StrategyCandidateEstimate"][];
+            confidence?: number | null;
+            cost_reason?: string[];
+            decision_id?: string | null;
+            detail?: Record<string, never> | unknown[] | string | number | boolean | null;
+            downgrade?: components["schemas"]["StrategyTransitionProjection"][];
+            early_stop?: components["schemas"]["StrategyTransitionProjection"][];
+            estimated?: components["schemas"]["StrategyCandidateEstimate"] | null;
+            evidence_refs: string[];
+            evidence_scopes?: components["schemas"]["StrategyEvidenceScopeProjection"][];
+            execution_id?: string | null;
+            id: string;
+            kind: string;
+            /** @enum {string|null} */
+            selected_pattern?: "direct" | "explore" | "execute" | "deliberate" | "collaborate" | "supervise" | null;
+            policy_version?: string | null;
+            /** @enum {string|null} */
+            proof_status?: "not_proven" | "calibrated" | null;
+            resource_snapshot?: components["schemas"]["StrategyResourceSnapshot"] | null;
+            revision: number;
+            /** @constant */
+            schema_version?: 1;
+            /** @enum {string|null} */
+            selected_candidate?: "direct" | "parallel_tools" | "team" | null;
+            session_id?: string | null;
+            /** @enum {string|null} */
+            source?: "deterministic" | "model_validated" | "experience_adapted" | "resource_adapted" | null;
+            status?: string | null;
+            summary?: string | null;
+            team_execution_id?: string | null;
+            team_id?: string | null;
+            turn_id?: string | null;
+        };
+        StrategyEvidenceScopeProjection: {
+            capability_cropped_refs: string[];
+            focus_id: string;
+            novelty_target_bp: number;
+            overlap_budget_bp: number;
+            responsibility_summary: string;
+            role_id: string;
+            scope_hash: string;
+        };
+        StrategyResourceSnapshot: {
+            assumed: boolean;
+            provider_available: boolean;
+            provider_concurrency: number;
+            provider_concurrency_penalty_bp: number;
+            sample_count: number;
+            sample_source: string;
+            team_available: boolean;
+            team_slots: number;
+            tool_concurrency: number;
+            tools_available: boolean;
+            version: string;
+        };
+        StrategyTransitionProjection: {
+            /** @enum {string} */
+            kind: "runtime.strategy.downgraded" | "runtime.strategy.early_stopped";
+            revision: number;
+            status: string;
+            summary: string;
         };
         GatewayError: {
             error: string;

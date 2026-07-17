@@ -204,6 +204,70 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
   await expect(page.locator('[data-section="reports"]').getByRole('heading', { name: 'Decision trace' })).toBeVisible();
 });
 
+test('explicit Team negative-benefit cost warning renders through real Gateway on all strategy surfaces', async ({ page }) => {
+  test.skip(!realGateway, 'requires a real cowd gateway');
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const create = await page.request.post('/api/sessions', { data: {} });
+  expect(create.ok()).toBeTruthy();
+  const session = await create.json();
+  expect(session.id).toBeTruthy();
+
+  const admitted = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/messages`, {
+    data: {
+      content: `I must actually start a Team to separately audit runtime, gateway, and frontend, then synthesize the result. This explicit Team request must keep its negative estimated lift cost warning visible. [cowd-e2e:explicit-team-negative] ${suffix}`,
+      resource_ids: [],
+      idempotency_key: `e2e-strategy-${suffix}`,
+    },
+  });
+  expect(admitted.ok()).toBeTruthy();
+  const receipt = await admitted.json();
+  const executionId = String(receipt?.execution?.graph_id || receipt?.execution_id || '');
+  expect(executionId).toBeTruthy();
+
+  let projection = null;
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=full`);
+    if (!response.ok()) return null;
+    projection = await response.json();
+    const strategy = projection?.strategy;
+    const teamId = String(strategy?.team_id || '');
+    const teamExecutionId = String(strategy?.team_execution_id || '');
+    const materializedTopology = [
+      ...(Array.isArray(projection?.teams) ? projection.teams : []),
+      ...(Array.isArray(projection?.child_executions) ? projection.child_executions : []),
+      ...(Array.isArray(projection?.agents) ? projection.agents : []),
+    ].some((entity) => {
+      const id = String(entity?.id || entity?.execution_id || '');
+      const graphId = String(entity?.detail?.graph_id || '');
+      return id === teamId || id === teamExecutionId || graphId === teamExecutionId;
+    });
+    return Boolean(
+      projection?.schema_version === 1
+      && projection?.execution_id === executionId
+      && strategy?.schema_version === 1
+      && strategy?.selected_candidate === 'team'
+      && Array.isArray(strategy?.cost_reason)
+      && strategy.cost_reason.some((reason) => /negative estimated lift/i.test(String(reason)))
+      && teamId
+      && teamExecutionId
+      && materializedTopology,
+    );
+  }, { timeout: 30_000, intervals: [250, 500, 1_000] }).toBe(true);
+  const teamEstimate = projection?.strategy?.candidate_estimates
+    ?.find((estimate) => estimate?.candidate === 'team');
+  expect(teamEstimate?.net_benefit_score).toBeLessThan(0);
+  expect([true, false]).toContain(teamEstimate?.assumed);
+
+  await page.goto(`/index.html#/runtime?section=runs&execution_id=${encodeURIComponent(executionId)}`);
+  await expect(page.locator('.strategy-summary[data-surface="runtime"]')).toContainText(/negative estimated lift/i);
+  await page.goto(`/index.html#/mission?section=teams&execution_id=${encodeURIComponent(executionId)}`);
+  await expect(page.locator('.strategy-summary[data-surface="mission"]')).toContainText(/negative estimated lift/i);
+  await page.goto(`/index.html#/apps/mfg?section=operations&execution_id=${encodeURIComponent(executionId)}`);
+  await expect(page.locator('.strategy-summary[data-surface="mfg"]')).toContainText(/negative estimated lift/i);
+
+  await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/cancel`);
+});
+
 test('real gateway closes MFG profile, filter, alert, assignment and report contracts', async ({ page }) => {
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;

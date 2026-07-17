@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Activity, Database, FileCheck2, Play, RefreshCw, Send, Wrench } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ApiWriteError } from '../../api/client';
 import { t } from '../../i18n';
 import { useMfgCockpitStore } from '../../stores/mfgCockpit';
+import { useProjectionRegistryStore } from '../../stores/projectionRegistry';
 import { createMfgMutationIntent } from '../../stores/mutationIntents';
 import { adaptEntityImpact } from '../../adapters/graph/entityImpact';
 import { adaptMetricLineage } from '../../adapters/graph/metricLineage';
 import { adaptMfgDecisionTrace } from '../../adapters/graph/mfgDecisionTrace';
+import { resolveMfgRuntimeExecutionId } from '../../adapters/strategyDecision';
 import DataTable from '../workbench/DataTable.vue';
 import EmptyState from '../workbench/EmptyState.vue';
 import EvidenceTrace from '../workbench/EvidenceTrace.vue';
@@ -17,12 +19,14 @@ import ObjectInspectorDrawer from '../workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../workbench/RequestReceipt.vue';
 import MfgReportReviewDrawer from './MfgReportReviewDrawer.vue';
 import RecoveryActions from './RecoveryActions.vue';
+import StrategyDecisionSummary from '../runtime/StrategyDecisionSummary.vue';
 import type { MfgApiErrorV1, MfgRecoveryAction } from '../../types/mfg';
 
 const props = defineProps<{ section: 'data' | 'reality' | 'evidence' | 'operations' | 'skills' | 'reports' }>();
 const route = useRoute();
 const router = useRouter();
 const cockpit = useMfgCockpitStore();
+const projections = useProjectionRegistryStore();
 const loading = ref(false);
 const error = ref('');
 const operationApiError = ref<MfgApiErrorV1 | null>(null);
@@ -107,6 +111,15 @@ const evidenceContextItem = computed(() => data.value.evidence?.context?.context
 const qualityDecision = computed(() => data.value.qualityGate?.gate || data.value.qualityGate?.quality_gate || data.value.qualityGate || {});
 const reportDeliveryState = computed(() => data.value.delivery?.delivery_state || data.value.delivery?.after_state || data.value.delivery || {});
 const reportSnapshot = computed(() => data.value.report?.report || data.value.report || {});
+// An execution selected in Runtime or Mission can be inspected in the MFG
+// operations surface without fabricating an MFG receipt.  The explicit URL
+// selection remains subject to the same Gateway projection authorization and
+// registry fail-closed behavior as a receipt-derived execution.
+const runtimeExecutionId = computed(() => routeString(route.query.execution_id).trim()
+  || resolveMfgRuntimeExecutionId(receipt.value, data.value));
+const runtimeProjection = computed(() => runtimeExecutionId.value
+  ? projections.projectionFor(runtimeExecutionId.value)
+  : null);
 const canReviewReports = computed(() => cockpit.grantedCapabilities.has('mfg.report.review')
   && cockpit.grantedCapabilities.has('approval.respond'));
 const canManageData = computed(() => cockpit.grantedCapabilities.has('mfg.data.manage'));
@@ -728,10 +741,16 @@ watch(
     () => route.query.incident,
     () => route.query.report,
     () => route.query.review,
+    () => route.query.execution_id,
   ],
   () => { void restoreSectionDeepLink(); },
 );
+watch(runtimeExecutionId, (id) => {
+  if (id) projections.acquire(id, 'mfg-domain-strategy', 'full');
+  else projections.release('mfg-domain-strategy');
+}, { immediate: true });
 onMounted(() => { void restoreSectionDeepLink(); });
+onUnmounted(() => projections.release('mfg-domain-strategy'));
 </script>
 
 <template>
@@ -764,6 +783,15 @@ onMounted(() => { void restoreSectionDeepLink(); });
     <div v-else-if="section === 'operations'" class="mfg-domain__grid">
       <article class="mfg-domain__panel"><header><Activity :size="16" /><h3>{{ t('mfg.domain.operations.incidents') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.operations.incidentTitle') }}</span><textarea v-model="incidentTitle" rows="3" /></label><button class="primary-action" type="button" @click="createIncident">{{ t('mfg.domain.operations.createIncident') }}</button><label class="mfg-field"><span>{{ t('mfg.domain.operations.incident') }}</span><select v-model="selectedIncidentId" @change="openIncidentRoom"><option value="">{{ t('mfg.domain.operations.selectIncident') }}</option><option v-for="incident in data.incidents" :key="incident.incident_id" :value="incident.incident_id">{{ incident.title || incident.incident_id }}</option></select></label></article>
       <article class="mfg-domain__panel"><header><Wrench :size="16" /><h3>{{ t('mfg.domain.operations.actions') }}</h3></header><div class="button-row"><button class="ghost-action" type="button" @click="analyzeIncident">{{ t('mfg.domain.operations.analyze') }}</button><button class="ghost-action" type="button" @click="recommendPlaybooks">{{ t('mfg.domain.operations.recommendPlaybooks') }}</button><button class="ghost-action" type="button" @click="planSkills">{{ t('mfg.domain.operations.planSkills') }}</button><button class="ghost-action" type="button" @click="promoteCase">{{ t('mfg.domain.operations.promoteCase') }}</button></div><DataTable v-if="recommendedActions.length" :rows="recommendedActions" :columns="['action_id', 'title', 'risk', 'governance', 'status']" row-key="action_id" @row-click="selectedActionId = $event.action_id || ''" /><label class="mfg-field"><span>{{ t('mfg.domain.operations.executionMode') }}</span><select v-model="executionMode"><option value="dry_run">dry_run</option><option value="commit">commit</option></select></label><div class="button-row"><button class="ghost-action" type="button" :disabled="!selectedActionId" @click="planAction">{{ t('mfg.domain.operations.planPreflight') }}</button><button class="primary-action" type="button" :disabled="!selectedActionId" @click="executeAction">{{ t('mfg.domain.operations.executeAction') }}</button><button class="ghost-action" type="button" :disabled="!executionId" @click="bridgeExecution">{{ t('mfg.domain.operations.bridgeExecution') }}</button></div><label class="mfg-field"><span>{{ t('mfg.domain.operations.executionId') }}</span><input v-model="executionId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.operations.feedbackOutcome') }}</span><select v-model="feedbackOutcome"><option value="resolved">resolved</option><option value="accepted">accepted</option><option value="rejected">rejected</option><option value="needs_followup">needs_followup</option></select></label><label class="mfg-field"><span>{{ t('mfg.domain.operations.feedbackNote') }}</span><input v-model="feedbackNote" /></label><label class="mfg-field"><span>{{ t('mfg.domain.operations.metricDelta') }}</span><input v-model.number="feedbackMetricDelta" type="number" step="any" /></label><button class="ghost-action" type="button" :disabled="!executionId || !feedbackNote" @click="recordExecutionFeedback">{{ t('mfg.domain.operations.recordFeedback') }}</button><RequestReceipt :receipt="receipt" :title="t('mfg.domain.receipt')" /><ObjectInspectorDrawer v-if="data.actionLoop" :title="t('mfg.domain.operations.actionLoop')" :data="data.actionLoop" /><ObjectInspectorDrawer :title="t('mfg.domain.operations.room')" :data="data.room || {}" /></article>
+      <StrategyDecisionSummary
+        v-if="runtimeProjection?.strategy"
+        class="mfg-domain__panel--wide"
+        :strategy="runtimeProjection.strategy"
+        :agents="runtimeProjection.agents"
+        :execution-id="runtimeExecutionId"
+        :connection-state="projections.stateFor(runtimeExecutionId)"
+        surface="mfg"
+      />
       <article class="mfg-domain__panel mfg-domain__panel--wide"><header><Activity :size="16" /><h3>{{ t('mfg.domain.operations.decisionTrace') }}</h3></header><button class="ghost-action" type="button" @click="loadDecisionTrace">{{ t('mfg.domain.operations.refreshDecisionTrace') }}</button><GraphSurface v-if="decisionGraph.nodes.length" :model="decisionGraph" /><EmptyState v-else :title="t('mfg.domain.operations.noDecisionTrace')" /><ObjectInspectorDrawer :title="t('mfg.domain.operations.decisionTrace')" :data="data.decisionTrace || {}" /></article>
       <article class="mfg-domain__panel"><header><FileCheck2 :size="16" /><h3>{{ t('mfg.domain.operations.cases') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.operations.caseId') }}</span><input v-model="selectedCaseId" /></label><label class="mfg-field"><span>{{ t('mfg.domain.reports.caseSearch') }}</span><input v-model="caseQuery" /></label><div class="button-row"><button class="ghost-action" type="button" @click="inspectCase">{{ t('mfg.domain.operations.inspectCase') }}</button><button class="ghost-action" type="button" @click="searchCases">{{ t('mfg.domain.reports.searchCases') }}</button></div><DataTable v-if="data.cases.length" :rows="data.cases" :columns="['case_id', 'title', 'status', 'updated_at']" row-key="case_id" @row-click="selectedCaseId = $event.case_id || ''" /><ObjectInspectorDrawer :title="t('mfg.domain.operations.cases')" :data="data.caseDetail || {}" /></article>
       <article class="mfg-domain__panel"><header><Wrench :size="16" /><h3>{{ t('mfg.domain.operations.playbooks') }}</h3></header><label class="mfg-field"><span>{{ t('mfg.domain.operations.playbookId') }}</span><input v-model="selectedPlaybookId" /></label><textarea v-model="playbookPayload" rows="5" class="json-input" :placeholder="t('mfg.domain.operations.playbookPayload')" /><div class="button-row"><button class="ghost-action" type="button" @click="inspectPlaybook">{{ t('mfg.domain.operations.inspectPlaybook') }}</button><button class="primary-action" type="button" @click="upsertPlaybook">{{ t('mfg.domain.operations.savePlaybook') }}</button></div><ObjectInspectorDrawer :title="t('mfg.domain.operations.playbooks')" :data="data.playbook || {}" /></article>

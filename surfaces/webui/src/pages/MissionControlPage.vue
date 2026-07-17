@@ -2,7 +2,8 @@
 import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import {
   AlertTriangle, CheckCircle2, Database, RefreshCw, Route,
   ShieldCheck, Square, Users, Workflow,
@@ -14,12 +15,14 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import DataTable from '../components/workbench/DataTable.vue';
 import MissionActionPreview from '../components/workbench/MissionActionPreview.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
+import StrategyDecisionSummary from '../components/runtime/StrategyDecisionSummary.vue';
 import { useAppStore } from '../stores/app';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
 const projections = useProjectionRegistryStore();
+const route = useRoute();
 const loading = ref(false);
 const error = ref('');
 const showFullTrace = ref(true);
@@ -224,14 +227,32 @@ const teamRunRows = computed(() => collaborationRuns.value.slice(0, 8).map((run:
     synthesis: run.execution_summary?.synthesis_status || team.execution_summary?.synthesis_status || '-',
   };
 }));
-const agentRows = computed(() => agents.value.slice(0, 24).map((agent: any) => ({
+const requestedAgentId = computed(() => typeof route.query.agent_id === 'string'
+  ? route.query.agent_id.trim()
+  : '');
+const agentRows = computed(() => agents.value.map((agent: any) => ({
   id: agent.agent_id || agent.id || agent.name || '-',
   role: agent.role || agent.kind || agent.profile || '-',
   status: agent.status || agent.lifecycle || '-',
   session: agent.session_id || agent.active_session_id || activeSession.value || '-',
   team: agent.team_id || agent.active_team_id || '-',
   summary: agent.summary || agent.objective || agent.last_message || agent.name || '-',
-})));
+})).sort((left: any, right: any) => {
+  if (left.id === requestedAgentId.value) return -1;
+  if (right.id === requestedAgentId.value) return 1;
+  return String(left.id).localeCompare(String(right.id));
+}).slice(0, 24));
+const focusedAgent = computed(() => agentRows.value.find((agent: any) => agent.id === requestedAgentId.value) || null);
+function selectExecutionProjection(executionId: unknown) {
+  const next = typeof executionId === 'string' ? executionId.trim() : '';
+  if (!next || next === '-') {
+    selectedExecutionId.value = '';
+    projections.release('mission');
+    return;
+  }
+  selectedExecutionId.value = next;
+  projections.acquire(next, 'mission', 'full');
+}
 const recoveryPreview = computed(() => {
   const candidates = recoveryReport.value?.candidates || recoveryReport.value?.report?.candidates || recoveryReport.value?.plan?.candidates || [];
   const gaps = candidates.length ? candidates : (recoveryReport.value?.gaps || recoveryReport.value?.replay_gaps || recoveryReport.value?.report?.gaps || []);
@@ -264,14 +285,14 @@ async function refresh() {
       selectedSessionId.value = declaredActiveSessionId.value;
     }
     if (selectedSessionId.value && !missionSessionIds.value.has(selectedSessionId.value)) selectedSessionId.value = '';
+    const requestedTeamId = typeof route.query.team_id === 'string' ? route.query.team_id.trim() : '';
+    if (requestedTeamId) selectedTeamId.value = requestedTeamId;
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
-    const executionId = executionGraphRows.value[0]?.graph;
-    if (executionId && executionId !== '-') {
-      selectedExecutionId.value = String(executionId);
-      projections.acquire(selectedExecutionId.value, 'mission', 'full');
-    }
+    const requestedExecutionId = typeof route.query.execution_id === 'string' ? route.query.execution_id.trim() : '';
+    const executionId = requestedExecutionId || executionGraphRows.value[0]?.graph;
+    selectExecutionProjection(executionId);
     await refreshSelectedSession();
-    if (selectedTeamId.value) await loadTeamRun();
+    if (selectedTeamId.value) await loadTeamRun(selectedTeamId.value, false);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -309,7 +330,7 @@ async function startTeam() {
   await refresh();
 }
 
-async function loadTeamRun(teamId = selectedTeamId.value) {
+async function loadTeamRun(teamId = selectedTeamId.value, userSelected = false) {
   if (!teamId) return;
   selectedTeamId.value = teamId;
   teamRunDetail.value = await api.collaborationRun(teamId);
@@ -317,9 +338,18 @@ async function loadTeamRun(teamId = selectedTeamId.value) {
     || teamRunDetail.value?.graph_id
     || teamRunDetail.value?.run?.execution_graph_id
     || teamRunDetail.value?.run?.graph_id;
-  if (executionId) {
-    selectedExecutionId.value = String(executionId);
-    projections.acquire(selectedExecutionId.value, 'mission', 'full');
+  const requestedExecutionId = typeof route.query.execution_id === 'string'
+    ? route.query.execution_id.trim()
+    : '';
+  // A deep link is the cross-Surface execution identity.  Loading ambient
+  // team detail must never silently replace it; only an explicit user team
+  // selection is allowed to retarget the projection.
+  if (requestedExecutionId && !userSelected) {
+    selectExecutionProjection(requestedExecutionId);
+  } else if (executionId) {
+    selectExecutionProjection(executionId);
+  } else {
+    selectExecutionProjection('');
   }
 }
 
@@ -376,6 +406,21 @@ function executionCommandLabel(command: string) {
 }
 
 onMounted(refresh);
+watch(
+  [() => route.query.team_id, () => route.query.execution_id],
+  async ([teamId, executionId], [, previousExecutionId]) => {
+    const requestedExecutionId = typeof executionId === 'string' ? executionId.trim() : '';
+    if (requestedExecutionId) {
+      selectExecutionProjection(requestedExecutionId);
+    } else if (typeof previousExecutionId === 'string' && previousExecutionId.trim()) {
+      // A cleared deep link is an explicit deselection, not permission to
+      // retain the previous execution's strategy while Mission refreshes.
+      selectExecutionProjection('');
+    }
+    const requestedTeamId = typeof teamId === 'string' ? teamId.trim() : '';
+    if (requestedTeamId && requestedTeamId !== selectedTeamId.value) await loadTeamRun(requestedTeamId, false);
+  },
+);
 onUnmounted(() => projections.release('mission'));
 </script>
 
@@ -472,6 +517,14 @@ onUnmounted(() => projections.release('mission'));
           :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
           @select="selectedExecutionNode = $event"
         />
+        <StrategyDecisionSummary
+          v-if="executionProjection?.strategy"
+          :strategy="executionProjection.strategy"
+          :agents="executionProjection.agents"
+          :execution-id="selectedExecutionId"
+          :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
+          surface="mission"
+        />
         <div v-if="executionCommandRows.length" class="button-row" :aria-label="t('runtime.execution.commandGroup')">
           <button
             v-for="command in executionCommandRows"
@@ -540,7 +593,7 @@ onUnmounted(() => projections.release('mission'));
             class="section-row"
             :class="{ active: team.id === selectedTeamId }"
             type="button"
-            @click="loadTeamRun(team.id)"
+            @click="loadTeamRun(team.id, true)"
           >
             <strong>{{ team.id }}</strong>
             <span>{{ displayStatus(team.status) }} · agents {{ team.agents }} · synthesis {{ displayStatus(team.synthesis) }}</span>
@@ -567,6 +620,12 @@ onUnmounted(() => projections.release('mission'));
           :rows="agentRows"
           :columns="['id', 'role', 'status', 'session', 'team', 'summary']"
         />
+        <dl v-if="focusedAgent" class="detail-list">
+          <dt>{{ t('runtime.execution.node.field.executor') }}</dt><dd>{{ focusedAgent.id }}</dd>
+          <dt>{{ t('runtime.execution.node.field.status') }}</dt><dd>{{ displayStatus(focusedAgent.status) }}</dd>
+          <dt>{{ t('page.mission.control.page.text.ed040118e2') }}</dt><dd>{{ focusedAgent.team }}</dd>
+          <dt>{{ t('runtime.execution.node.field.result') }}</dt><dd>{{ focusedAgent.summary }}</dd>
+        </dl>
         <p v-else class="empty-note">{{ t('capability.section.mission.agents.description') }}</p>
       </section>
 

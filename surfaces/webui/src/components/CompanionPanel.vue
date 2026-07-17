@@ -58,6 +58,16 @@ const runtimeInputItems = computed(() => {
   }).slice(0, 12);
 });
 const activeProjection = computed(() => chat.active?.executionId ? projections.projectionFor(chat.active.executionId) : null);
+const activeProjectionEntry = computed(() => chat.active?.executionId
+  ? projections.entries[chat.active.executionId]
+  : null);
+const projectionContractError = computed(() => {
+  const message = activeProjectionEntry.value?.lastError || '';
+  return message.startsWith('unsupported execution projection')
+    || message.startsWith('unsupported strategy projection')
+    ? message
+    : '';
+});
 const liveExecution = computed(() => activeProjection.value?.live || chat.active?.live || null);
 const liveMetrics = computed(() => liveExecution.value?.metrics || null);
 const liveContextLabel = computed(() => {
@@ -187,6 +197,9 @@ onBeforeUnmount(() => {
         <h2>{{ t('component.companion.panel.text.97ab0e4ebb') }}</h2>
         <span>{{ formatCount('events', store.activity.length) }}</span>
       </div>
+      <p v-if="projectionContractError" class="companion-contract-alert" role="alert">
+        {{ t('strategy.state.contractMismatch') }} · {{ projectionContractError }}
+      </p>
       <div class="activity-list">
         <article v-for="event in store.activity" :key="event.id" class="activity-item" :data-kind="event.kind" @click="store.selectedActivity = event">
           <div>
