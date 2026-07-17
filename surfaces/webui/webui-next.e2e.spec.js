@@ -288,7 +288,23 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   await page.goto(`/index.html#/apps/mfg?section=operations&execution_id=${encodeURIComponent(executionId)}`);
   await expect(page.locator('.strategy-summary[data-surface="mfg"]')).toContainText(/negative estimated lift/i);
 
-  await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/cancel`);
+  // This endpoint requires a JSON body.  A bare POST is rejected before the
+  // cancellation handler and leaves the real Team execution running, which
+  // contaminates later surface checks with a live background workload.
+  const cancelled = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/cancel`, {
+    data: { reason: 'e2e Team strategy cleanup' },
+  });
+  expect(cancelled.ok()).toBeTruthy();
+  expect(await cancelled.json()).toMatchObject({
+    status: 'cancel_requested',
+    execution_ids: expect.arrayContaining([executionId]),
+  });
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=full`);
+    if (!response.ok()) return false;
+    const value = await response.json();
+    return value?.health?.some((item) => item?.id === `execution-health:${executionId}` && item?.status === 'terminal') || false;
+  }, { timeout: 30_000, intervals: [250, 500, 1_000] }).toBe(true);
 });
 
 test('real gateway closes MFG profile, filter, alert, assignment and report contracts', async ({ page }) => {
