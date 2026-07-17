@@ -522,6 +522,12 @@ test('real gateway cockpit editing and concurrent observers close without silent
   const cloneResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/clone`) && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Clone' }).click();
   expect((await cloneResponsePromise).ok()).toBeTruthy();
+  // The clone action refreshes the shared cockpit store after its mutation
+  // response.  Wait for that refresh to settle before opening two independent
+  // editor views; otherwise an in-flight pre-clone refresh can win the route
+  // restoration race and make this a timing test rather than a revision test.
+  await expect(page.locator('.mfg-cockpit__toolbar select option')).toHaveCount(2);
+  await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
 
   const observer = await page.context().newPage();
   await observer.addInitScript(() => localStorage.setItem('cowd.webui.locale', 'en-US'));
@@ -533,6 +539,8 @@ test('real gateway cockpit editing and concurrent observers close without silent
     page.getByRole('button', { name: 'Edit layout' }).click(),
     observer.getByRole('button', { name: 'Edit layout' }).click(),
   ]);
+  await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
+  await expect(observer.locator('.mfg-revision')).toHaveText('Revision 2');
   const firstName = page.locator('.mfg-cockpit__editor > label input').first();
   const secondName = observer.locator('.mfg-cockpit__editor > label input').first();
   await firstName.fill('Observer one committed');
