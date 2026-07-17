@@ -73,14 +73,40 @@ function cockpitQuery(profile: MfgCockpitProfile | null, widgetId?: string, focu
   return query;
 }
 
+function routeFilterOverrides() {
+  const filters: Record<string, unknown> = {};
+  for (const [filterKey, queryKey] of Object.entries(cockpitFilterQueryKeys)) {
+    const value = queryString(route.query[queryKey]);
+    if (!value) continue;
+    filters[filterKey] = ['entity_refs', 'metric_ids', 'severities', 'statuses'].includes(filterKey)
+      ? commaList(value)
+      : value;
+  }
+  return filters;
+}
+
+function draftProfile(profile: MfgCockpitProfile | null) {
+  const draft = copyProfile(profile);
+  if (!draft) return null;
+  const overrides = routeFilterOverrides();
+  if (!Object.keys(overrides).length) return draft;
+  return {
+    ...draft,
+    // A shared/deep-linked cockpit must show the filters encoded in its URL
+    // before the editor opens.  Keep this as a local draft: persistence still
+    // requires the user's explicit Save cockpit action.
+    global_filters: { ...(draft.global_filters || {}), ...overrides },
+  };
+}
+
 async function syncCockpitUrl(profile = working.value, widgetId = queryString(route.query.widget)) {
   await router.replace({ query: cockpitQuery(profile, widgetId) });
 }
 
 watch(() => cockpit.selectedProfile, (profile) => {
   if (editMode.value && profile?.profile_id === working.value?.profile_id) return;
-  working.value = copyProfile(profile);
-  baseProfile.value = copyProfile(profile);
+  working.value = draftProfile(profile);
+  baseProfile.value = copyProfile(working.value);
   shareVisibility.value = profile?.sharing_policy?.visibility || 'private';
   shareViewers.value = (profile?.sharing_policy?.viewer_refs || []).join(', ');
   shareEditors.value = (profile?.sharing_policy?.editor_refs || []).join(', ');
