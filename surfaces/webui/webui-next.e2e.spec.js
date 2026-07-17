@@ -1,8 +1,17 @@
 import { test, expect } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
 
 const realGateway = Boolean(process.env.COWD_E2E_GATEWAY_URL);
+const useReleaseEntry = process.env.COWD_E2E_RELEASE_ENTRY === '1';
+const sourceEntry = fileURLToPath(new URL('./index.dev.html', import.meta.url));
 
 test.beforeEach(async ({ page }) => {
+  // Vite serves the checked-in release entry as a static file.  Browser tests
+  // must exercise current source; the release entry is covered explicitly
+  // after `npm run build` with COWD_E2E_RELEASE_ENTRY=1.
+  if (!useReleaseEntry) {
+    await page.context().route('**/index.html', (route) => route.fulfill({ path: sourceEntry }));
+  }
   await page.addInitScript(() => {
     localStorage.setItem('cowd.webui.locale', 'en-US');
   });
@@ -212,6 +221,20 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   const session = await create.json();
   expect(session.id).toBeTruthy();
 
+  // A Team must derive its authority from existing bounded workspace scopes;
+  // seed the three independently reviewed domains through the public gateway
+  // API instead of weakening that runtime guard for browser acceptance.
+  for (const path of [
+    `crates/runtime/e2e-team-${suffix}.md`,
+    `crates/gateway/e2e-team-${suffix}.md`,
+    `surfaces/webui/e2e-team-${suffix}.md`,
+  ]) {
+    const scopedFile = await page.request.post('/api/workspace/files', {
+      data: { path, content: 'bounded Team acceptance scope' },
+    });
+    expect(scopedFile.status()).toBe(201);
+  }
+
   const admitted = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/messages`, {
     data: {
       content: `I must actually start a Team to separately audit runtime, gateway, and frontend, then synthesize the result. This explicit Team request must keep its negative estimated lift cost warning visible. [cowd-e2e:explicit-team-negative] ${suffix}`,
@@ -352,7 +375,10 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   expect(assignmentResponse.ok()).toBeTruthy();
   expect((await assignmentResponse.json()).assignment).toMatchObject({ priority: 'high', sla_minutes: 30 });
 
-  const reportResponse = await page.request.post(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/reports/generate`, { data: { report: { cadence: 'daily' } } });
+  const reportResponse = await page.request.post(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/reports/generate`, {
+    headers: { 'idempotency-key': `e2e-report-${suffix}` },
+    data: { report: { cadence: 'daily' } },
+  });
   expect(reportResponse.ok()).toBeTruthy();
   const report = (await reportResponse.json()).report;
   const reportsResponse = await page.request.get(`/api/apps/mfg/cockpit/reports?profile_id=${encodeURIComponent(profileId)}`);
@@ -366,9 +392,12 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   await expect(page.locator('[data-section="reports"] .graph-surface')).toBeVisible();
   const deliveryResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/reports/${report.report_id}/deliver`) && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Deliver report' }).click();
-  expect((await deliveryResponsePromise).ok()).toBeTruthy();
-  await expect(page.locator('.object-inspector').filter({ hasText: 'Delivery state' })).toContainText('policy_blocked');
-  await expect(page.getByRole('button', { name: 'Retry delivery' })).toBeDisabled();
+  const deliveryResponse = await deliveryResponsePromise;
+  expect(deliveryResponse.ok()).toBeTruthy();
+  expect(await deliveryResponse.json()).toMatchObject({ status: 'blocked', dispatch_status: 'policy_blocked' });
+  await expect(page.locator('.request-receipt')).toContainText('blocked by policy');
+  await expect(page.locator('.object-inspector').filter({ hasText: 'Delivery state' })).toContainText('not_delivered');
+  await expect(page.getByRole('button', { name: 'Retry delivery' })).toBeEnabled();
 
   const deleteResponse = await page.request.delete(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${savedProfile.revision}&idempotency_key=e2e-delete-${suffix}`);
   expect(deleteResponse.ok()).toBeTruthy();

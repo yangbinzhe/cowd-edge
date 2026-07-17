@@ -21,7 +21,7 @@ export default defineConfig({
   },
   webServer: gatewayUrl ? undefined : {
     command: 'npm run dev -- --port 9241',
-    url: 'http://127.0.0.1:9241/index.html',
+    url: 'http://127.0.0.1:9241/index.dev.html',
     reuseExistingServer: !process.env.CI,
     timeout: 20_000,
   },

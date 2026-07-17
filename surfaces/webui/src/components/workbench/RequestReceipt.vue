@@ -24,13 +24,29 @@ const normalized = computed(() => {
 function value(key: string) {
   return normalized.value && typeof normalized.value === 'object' ? (normalized.value as any)[key] : undefined;
 }
+
+function outcome() {
+  return value('dispatch_status')
+    || value('cross_plane_dispatch_status')
+    || value('cross_plane_status')
+    || value('outcome')
+    || value('result');
+}
+
+function receiptStatus() {
+  return value('status')
+    || outcome()
+    || value('status_text')
+    || value('mode')
+    || 'ready';
+}
 </script>
 
 <template>
   <section v-if="receipt" class="request-receipt" :data-ok="value('ok') !== false">
     <header>
       <h2>{{ title || t('requestReceipt.title') }}</h2>
-      <StatusPill :status="value('ok') === false ? 'error' : (value('mode') || value('status') || 'ready')" />
+      <StatusPill :status="value('ok') === false ? 'error' : receiptStatus()" />
     </header>
     <dl class="detail-list">
       <dt>{{ t('requestReceipt.endpoint') }}</dt>
@@ -39,6 +55,14 @@ function value(key: string) {
       <dd>{{ value('method') || '-' }}</dd>
       <dt>{{ t('requestReceipt.status') }}</dt>
       <dd>{{ value('status') || value('status_text') ? displayStatus(value('status') || value('status_text')) : '-' }}</dd>
+      <template v-if="outcome()">
+        <dt>{{ t('requestReceipt.outcome') }}</dt>
+        <dd>{{ displayStatus(outcome()) }}</dd>
+      </template>
+      <template v-if="value('mode')">
+        <dt>{{ t('requestReceipt.mode') }}</dt>
+        <dd>{{ displayStatus(value('mode')) }}</dd>
+      </template>
       <dt>{{ t('requestReceipt.retryable') }}</dt>
       <dd>{{ value('retryable') === undefined ? '-' : displayBoolean(value('retryable')) }}</dd>
       <dt>{{ t('requestReceipt.error') }}</dt>
