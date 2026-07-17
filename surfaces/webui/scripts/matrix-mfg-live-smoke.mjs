@@ -39,10 +39,25 @@ async function request(step, method, route, body, {
   validate,
 } = {}) {
   const started = Date.now();
+  const durableMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase());
+  // MFG accepts a legacy body/query key for compatibility, but the canonical
+  // contract is the Idempotency-Key header.  Keep body keys (where endpoint
+  // payloads model them) equal to the header so this smoke exercises the same
+  // durable-mutation path as the WebUI client.
+  const legacyIdempotencyKey = typeof body?.idempotency_key === 'string'
+    ? body.idempotency_key
+    : '';
+  const queryIdempotencyKey = new URL(route, baseUrl).searchParams.get('idempotency_key') || '';
+  const idempotencyKey = legacyIdempotencyKey || queryIdempotencyKey
+    || `matrix-mfg-live-smoke:${stamp}:${step.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+  const requestHeaders = {
+    ...headers,
+    ...(durableMutation ? { 'idempotency-key': idempotencyKey } : {}),
+  };
   try {
     const response = await fetch(`${baseUrl}${route}`, {
       method,
-      headers,
+      headers: requestHeaders,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const text = await response.text();
@@ -348,9 +363,10 @@ if (analysisId && actionId) {
     note: 'forged actor must be rejected',
     operator_id: 'principal:forged-client',
   }, { expectedStatus: 422 }));
-  const actionExecution = await request('action dry-run execute', 'POST', `/api/apps/mfg/analyses/${encodeURIComponent(analysisId)}/actions/${encodeURIComponent(actionId)}/execute`, {
-    mode: 'dry_run',
-    note: 'matrix mfg terminal smoke',
+  const actionExecution = await request('action commit execute', 'POST', `/api/apps/mfg/analyses/${encodeURIComponent(analysisId)}/actions/${encodeURIComponent(actionId)}/execute`, {
+    mode: 'commit',
+    expected_revision: analysis.data?.analysis?.revision,
+    note: 'matrix mfg terminal smoke commits only to the isolated MFG fixture',
   }, {
     validate: (data) => Boolean(data.execution?.execution_id) && data.execution?.operator_id !== 'principal:forged-client' || 'server-derived action operator missing',
   });
@@ -406,7 +422,13 @@ if (incidentTaskId) {
       idempotency_key: `live-smoke-assignment-${command}-${stamp}`,
       ...(targetRef ? { target_ref: targetRef } : {}),
       reason: `terminal smoke ${command}`,
-    }, { validate: (data) => data.assignment?.revision === current.revision + 1 && Boolean(data.receipt?.audit_ref) || `assignment ${command} receipt/revision mismatch` });
+    }, { validate: (data) => (
+      data.assignment?.revision === current.revision + 1
+      && Boolean(
+        data.business_receipt?.response?.audit_ref
+        || data.receipt?.response?.business_receipt?.response?.audit_ref,
+      )
+    ) || `assignment ${command} receipt/revision mismatch` });
     steps.push(commandStep);
     current = commandStep.data?.assignment || current;
   }
@@ -442,7 +464,10 @@ if (savedProfile) {
   steps.push(await request('cockpit stale revision rejected', 'POST', '/api/apps/mfg/cockpit/profiles/upsert', {
     idempotency_key: `live-smoke-profile-stale-${stamp}`,
     profile: { ...savedProfile, display_name: 'stale overwrite must fail', expected_revision: 0 },
-  }, { expectedStatus: 409, validate: (data) => data.code === 'mfg_revision_conflict' || 'stale profile did not return revision conflict' }));
+  }, { expectedStatus: 409, validate: (data) => (
+    data.code === 'revision_conflict'
+    && data.details?.legacy_code === 'mfg_revision_conflict'
+  ) || 'stale profile did not return canonical revision conflict' }));
   const projectionQuery = new URLSearchParams({ entity: entityRef, metric: metricId, from: '2026-07-01T00:00:00Z' });
   const projection = await request('cockpit filtered projection', 'GET', `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection?${projectionQuery}`, undefined, {
     validate: (data) => data.projection?.profile?.profile_id === profileId && data.projection?.widgets?.length === 4 || 'cockpit projection incomplete',
@@ -486,14 +511,21 @@ if (reportId) {
     mode: 'dry_run',
     idempotency_key: `live-smoke-report-deliver-${stamp}`,
     source_channel: 'mfg.report.delivery',
-  }, { validate: (data) => Boolean(data.status && data.report?.delivery_receipts?.length) || 'delivery receipt missing' });
+  }, { validate: (data) => (
+    data.status === 'blocked'
+    && data.dispatch_status === 'policy_blocked'
+    && data.report?.delivery_receipts?.length === 0
+  ) || 'dry-run delivery did not preserve its policy-blocked, no-attempt truth' });
   steps.push(delivery);
   steps.push(await request('cockpit delivery state probe', 'GET', `/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/delivery-state`, undefined, {
-    validate: (data) => data.delivery_state?.attempt_count >= 1 || 'delivery state did not record attempt',
+    validate: (data) => (
+      data.delivery_state?.attempt_count === 0
+      && data.delivery_state?.classification === 'not_delivered'
+      && data.delivery_state?.retryable === true
+    ) || 'policy-blocked dry-run delivery state is not truthful',
   }));
   steps.push(await request('cockpit delivery retry', 'POST', `/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/delivery/retry`, {
     mode: 'dry_run',
-    force: true,
     idempotency_key: `live-smoke-report-retry-${stamp}`,
     source_channel: 'mfg.report.retry',
   }, { validate: (data) => Boolean(data.before_state && data.after_state && data.delivery) || 'delivery retry state transition missing' }));
@@ -583,7 +615,7 @@ const report = {
     'incident room',
     'action policy simulation',
     'action preflight',
-    'action dry-run execute',
+    'action commit execute',
     'action feedback',
     'assignment create',
     'assignment claim',
