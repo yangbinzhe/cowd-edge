@@ -23,6 +23,7 @@ import type {
   MfgReportDeliveryReviewCollection,
   MfgReportDeliveryReviewDecision,
   MfgReportDeliveryReviewRerouteTarget,
+  MfgWireApiErrorV1,
 } from '../types/mfg';
 import {
   classifyMfgIntentFailure,
@@ -240,6 +241,20 @@ function payloadSummary(body: BodyInit | null | undefined): string {
   return text.length > 280 ? `${text.slice(0, 280)}...` : text;
 }
 
+function normalizeMfgApiError(value: MfgWireApiErrorV1): MfgApiErrorV1 {
+  return {
+    ...value,
+    details: value.details && typeof value.details === 'object'
+      ? value.details as Record<string, unknown>
+      : null,
+    recovery_actions: (value.recovery_actions || []).map((action) => ({
+      ...action,
+      kind: action.kind,
+      target: action.target,
+    })),
+  };
+}
+
 async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
   if (!response.ok) {
@@ -248,11 +263,14 @@ async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
       const parsed = JSON.parse(body);
       if (parsed && typeof parsed.code === 'string' && typeof parsed.message === 'string') {
+        const wire = parsed as MfgWireApiErrorV1;
         apiError = {
-          ...parsed,
-          http_status: Number(parsed.http_status || response.status),
-          retryable: Boolean(parsed.retryable),
-          recovery_actions: Array.isArray(parsed.recovery_actions) ? parsed.recovery_actions : [],
+          ...normalizeMfgApiError(wire),
+          http_status: Number(wire.http_status || response.status),
+          retryable: Boolean(wire.retryable),
+          recovery_actions: Array.isArray(wire.recovery_actions)
+            ? normalizeMfgApiError(wire).recovery_actions
+            : [],
         };
       }
     } catch {

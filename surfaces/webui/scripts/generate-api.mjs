@@ -5,7 +5,9 @@ import { dirname, resolve } from 'node:path';
 const gatewayUrl = (process.env.COWD_GATEWAY_URL || 'http://127.0.0.1:8642').replace(/\/$/, '');
 const specUrl = `${gatewayUrl}/api/gateway/openapi.json`;
 const mfgContractUrl = `${gatewayUrl}/api/apps/mfg/contract`;
-const output = resolve('src/generated/gateway-api.ts');
+const output = process.env.COWD_GENERATED_API_OUTPUT
+  ? resolve(process.env.COWD_GENERATED_API_OUTPUT)
+  : resolve('src/generated/gateway-api.ts');
 const requiredMfgOperations = {
   '/api/apps/mfg/cockpit/profiles': ['get'],
   '/api/apps/mfg/cockpit/profiles/upsert': ['post'],

@@ -28,6 +28,7 @@ function requiredEnv(name) {
 
 export function evidenceContext(scriptId, { final = process.argv.includes('--final') } = {}) {
   const detectedVersion = cargoVersion(frontendRoot);
+  const detectedBackendVersion = cargoVersion(backendRoot);
   const detectedFrontendCommit = git(frontendRoot, 'rev-parse', 'HEAD');
   const detectedBackendCommit = git(backendRoot, 'rev-parse', 'HEAD');
   const frontendDirty = Boolean(git(frontendRoot, 'status', '--porcelain'));
@@ -39,6 +40,7 @@ export function evidenceContext(scriptId, { final = process.argv.includes('--fin
   const frontendCommit = final ? requiredEnv('COWD_FRONTEND_COMMIT') : (process.env.COWD_FRONTEND_COMMIT || detectedFrontendCommit);
   const backendCommit = final ? requiredEnv('COWD_BACKEND_COMMIT') : (process.env.COWD_BACKEND_COMMIT || detectedBackendCommit);
   if (version !== detectedVersion) throw new Error(`evidence version ${version} does not match frontend Cargo version ${detectedVersion}`);
+  if (version !== detectedBackendVersion) throw new Error(`evidence version ${version} does not match backend Cargo version ${detectedBackendVersion}`);
   if (frontendCommit !== detectedFrontendCommit) throw new Error(`frontend evidence commit ${frontendCommit} does not match HEAD ${detectedFrontendCommit}`);
   if (backendCommit !== detectedBackendCommit) throw new Error(`backend evidence commit ${backendCommit} does not match HEAD ${detectedBackendCommit}`);
   if (final && (frontendDirty || backendDirty)) throw new Error(`final evidence requires clean worktrees; frontend_dirty=${frontendDirty} backend_dirty=${backendDirty}`);
@@ -50,8 +52,20 @@ export function evidenceContext(scriptId, { final = process.argv.includes('--fin
     version,
     plan_root: planRoot,
     manifest_path: manifestPath,
-    frontend: { root: frontendRoot, branch: git(frontendRoot, 'branch', '--show-current'), commit: frontendCommit, dirty: frontendDirty },
-    backend: { root: backendRoot, branch: git(backendRoot, 'branch', '--show-current'), commit: backendCommit, dirty: backendDirty },
+    frontend: {
+      root: frontendRoot,
+      branch: git(frontendRoot, 'branch', '--show-current'),
+      commit: frontendCommit,
+      version: detectedVersion,
+      dirty: frontendDirty,
+    },
+    backend: {
+      root: backendRoot,
+      branch: git(backendRoot, 'branch', '--show-current'),
+      commit: backendCommit,
+      version: detectedBackendVersion,
+      dirty: backendDirty,
+    },
     generated_at: new Date().toISOString(),
   };
 }

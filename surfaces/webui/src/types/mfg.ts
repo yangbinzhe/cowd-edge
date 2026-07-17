@@ -1,12 +1,17 @@
-/**
- * temporary_generated_api_adapter
- *
- * V542-V547 compatibility boundary for the canonical app-mfg-contract wire
- * models. Business components may import these aliases and UI-only view
- * models, but must not copy the wire shapes elsewhere. V548 replaces this
- * adapter atomically with generated OpenAPI aliases.
- */
-export const MFG_WIRE_ADAPTER_KIND = 'temporary_generated_api_adapter' as const;
+import type { components as GatewayComponents } from '../generated/gateway-api';
+
+/** The only source of truth for MFG HTTP wire schemas is the generated OpenAPI contract. */
+export const MFG_GENERATED_CONTRACT_KIND = 'generated_openapi_aliases' as const;
+
+type MfgGeneratedSchemas = GatewayComponents['schemas'];
+export type MfgWireApiErrorV1 = MfgGeneratedSchemas['MfgApiErrorV1'];
+export type MfgWireRecoveryAction = MfgGeneratedSchemas['MfgRecoveryAction'];
+export type MfgWireEntitlementProjection = MfgGeneratedSchemas['MfgEntitlementProjectionV2'];
+export type MfgWireCockpitProfile = MfgGeneratedSchemas['MfgCockpitProfile'];
+export type MfgWireAlertOccurrence = MfgGeneratedSchemas['MfgAlertOccurrence'];
+export type MfgWireAssignment = MfgGeneratedSchemas['MfgAssignment'];
+export type MfgWireReportDeliveryReview = MfgGeneratedSchemas['MfgReportDeliveryReview'];
+export type MfgWireLiveEnvelope = MfgGeneratedSchemas['MfgLiveEnvelopeV1'];
 
 export type MfgMutationRisk = 'low' | 'medium' | 'high';
 export type MfgMutationIntentStatus =
@@ -35,42 +40,25 @@ export interface MfgMutationIntent {
   updated_at: string;
 }
 
-export type MfgRecoveryActionKind =
-  | 'reload'
-  | 'compare'
-  | 'save_as'
-  | 'request_access'
-  | 'retry_same_intent'
-  | 'reauthenticate'
-  | string;
+export type MfgRecoveryActionKind = MfgWireRecoveryAction['kind'] | 'reauthenticate';
 
-export interface MfgRecoveryAction {
+export type MfgRecoveryAction = Omit<MfgWireRecoveryAction, 'kind' | 'target'> & {
   kind: MfgRecoveryActionKind;
-  label: string;
   target?: string | null;
-  enabled: boolean;
-}
+};
 
-export interface MfgApiErrorV1 {
+export type MfgApiErrorV1 = Omit<
+  MfgWireApiErrorV1,
+  'code' | 'details' | 'recovery_actions' | 'contract_version'
+> & {
+  /** UI also represents transport-only failures which have no server enum code. */
   code: string;
-  message: string;
-  http_status: number;
   details?: Record<string, unknown> | null;
-  retryable: boolean;
   contract_version?: { major?: number; minor?: number } | string;
   recovery_actions: MfgRecoveryAction[];
-  request_id?: string | null;
-  receipt_ref?: string | null;
-}
+};
 
-export interface MfgEntitlementProjection {
-  core_profile_id?: string;
-  mfg_profile_id?: string;
-  profile_revision?: number;
-  credential_epoch?: number;
-  granted?: string[];
-  denied?: string[];
-}
+export type MfgEntitlementProjection = Partial<MfgWireEntitlementProjection>;
 
 export interface MfgFrontendContract {
   contract_version?: { major?: number; minor?: number } | string;
@@ -98,12 +86,9 @@ export interface MfgFrontendContract {
   }>;
 }
 
-export type MfgReportDeliveryReviewDecision =
-  | 'force_retry'
-  | 'reroute'
-  | 'abandon'
-  | 'resolve'
-  | 'reject';
+export type MfgReportDeliveryReviewDecision = NonNullable<
+  MfgWireReportDeliveryReview['decision']
+>;
 
 export interface MfgReportDeliveryReviewRerouteTarget {
   target_ref: string;
@@ -142,21 +127,15 @@ export interface MfgReportDeliveryReviewCollection {
   next_cursor?: string | null;
 }
 
-export interface MfgWidgetPlacement {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+export type MfgWidgetPlacement = MfgWireCockpitProfile['$defs']['MfgWidgetPlacement'];
 
-export interface MfgWidgetInstance {
-  instance_id: string;
-  definition_id: string;
-  placement: MfgWidgetPlacement;
+export type MfgWidgetInstance = Omit<
+  MfgWireCockpitProfile['$defs']['MfgWidgetInstance'],
+  'config' | 'query'
+> & {
   config?: Record<string, unknown> | null;
   query?: Record<string, unknown> | null;
-  visible?: boolean;
-}
+};
 
 export interface MfgWidgetDefinition {
   definition_id: string;
@@ -196,24 +175,17 @@ export interface MfgCockpitCatalogContract {
   };
 }
 
-export interface MfgCockpitProfile {
-  profile_id: string;
-  owner_ref: string;
-  display_name: string;
-  focus_refs: string[];
-  focus_metric_ids: string[];
+export type MfgCockpitProfile = Omit<
+  MfgWireCockpitProfile,
+  'thresholds' | 'global_filters' | 'widget_instances' | 'scope' | 'sharing_policy' | 'template_id'
+> & {
   thresholds: Record<string, unknown> | null;
-  cadence: string;
-  revision: number;
   scope: { kind: string; scope_ref?: string | null };
-  layout: { columns: number; row_height: number; gap: number };
   global_filters: Record<string, unknown> | null;
   widget_instances: MfgWidgetInstance[];
   sharing_policy: { visibility: string; viewer_refs: string[]; editor_refs: string[] };
   template_id?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+};
 
 export interface MfgCockpitWidget {
   widget_id: string;
@@ -244,7 +216,7 @@ export interface MfgCockpitWidgetProjection {
   generated_at: string;
 }
 
-export interface MfgAlertOccurrence {
+export type MfgAlertOccurrence = Partial<MfgWireAlertOccurrence> & {
   occurrence_id: string;
   rule_id: string;
   status: string;
@@ -254,9 +226,9 @@ export interface MfgAlertOccurrence {
   revision: number;
   snoozed_until?: string | null;
   updated_at?: string;
-}
+};
 
-export interface MfgAssignment {
+export type MfgAssignment = Partial<MfgWireAssignment> & {
   assignment_id: string;
   task_ref: string;
   workflow_id?: string | null;
@@ -272,7 +244,7 @@ export interface MfgAssignment {
   due_at?: string | null;
   sla_minutes?: number | null;
   notification_targets?: Array<{ surface: string; recipient: string; thread?: string | null }>;
-}
+};
 
 export interface MfgLiveSnapshotState {
   cockpit: Record<string, unknown>;

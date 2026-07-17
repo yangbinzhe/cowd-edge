@@ -43,6 +43,14 @@ const actualUnavailableLabel = computed(() => {
 const actualUnavailableDetail = computed(() => view.value?.actualMode === 'running'
   ? t('strategy.state.actualPending')
   : t('strategy.state.actualUnavailable'));
+const estimateModeLabel = computed(() => {
+  const key = {
+    assumed: 'strategy.state.assumed',
+    calibrated: 'strategy.state.calibrated',
+    unknown: 'strategy.state.unknown',
+  }[view.value?.estimateMode || 'unknown'];
+  return t(key);
+});
 
 function formatDuration(milliseconds: number | null | undefined) {
   if (milliseconds == null || !Number.isFinite(Number(milliseconds))) return t('strategy.value.unknown');
@@ -96,7 +104,7 @@ function trackVisualState(event: Event) {
     <dl class="strategy-summary__identity">
       <div><dt>{{ t('strategy.field.source') }}</dt><dd>{{ view.source }}</dd></div>
       <div><dt>{{ t('strategy.field.confidence') }}</dt><dd>{{ view.confidence == null ? t('strategy.value.unknown') : `${view.confidence}%` }}</dd></div>
-      <div><dt>{{ t('strategy.field.estimateMode') }}</dt><dd>{{ t(`strategy.state.${view.estimateMode}`) }}</dd></div>
+      <div><dt>{{ t('strategy.field.estimateMode') }}</dt><dd>{{ estimateModeLabel }}</dd></div>
       <div>
         <dt>{{ t('strategy.field.proof') }}</dt>
         <dd>

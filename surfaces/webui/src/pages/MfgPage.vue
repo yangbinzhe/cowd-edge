@@ -109,11 +109,11 @@ watch(
       <div>
         <h1>{{ t('mfg.shell.title') }}</h1>
         <p>{{ t('mfg.shell.summary') }}</p>
-        <dl class="mfg-page__diagnostics" aria-label="MFG contract and permission diagnostics">
-          <div><dt>Contract</dt><dd>{{ contractVersion }}</dd></div>
-          <div><dt>Profile</dt><dd>{{ profileSummary }}</dd></div>
-          <div><dt>Permissions</dt><dd>{{ capabilitySummary }}</dd></div>
-          <div><dt>Freshness</dt><dd>{{ cockpit.lastUpdatedAt || cockpit.liveStatus }}</dd></div>
+        <dl class="mfg-page__diagnostics" :aria-label="t('mfg.shell.diagnostics.aria')">
+          <div><dt>{{ t('mfg.shell.diagnostics.contract') }}</dt><dd>{{ contractVersion }}</dd></div>
+          <div><dt>{{ t('mfg.shell.diagnostics.profile') }}</dt><dd>{{ profileSummary }}</dd></div>
+          <div><dt>{{ t('mfg.shell.diagnostics.permissions') }}</dt><dd>{{ capabilitySummary }}</dd></div>
+          <div><dt>{{ t('mfg.shell.diagnostics.freshness') }}</dt><dd>{{ cockpit.lastUpdatedAt || cockpit.liveStatus }}</dd></div>
           <div
             data-mfg-live-diagnostics
             :data-live-status="cockpit.liveStatus"
@@ -126,7 +126,7 @@ watch(
             :data-report-state="reportLiveState"
             :data-review-state="reviewLiveState"
             :data-receipt-state="receiptLiveState"
-          ><dt>Live</dt><dd>{{ liveSummary }}</dd></div>
+          ><dt>{{ t('mfg.shell.diagnostics.live') }}</dt><dd>{{ liveSummary }}</dd></div>
         </dl>
       </div>
       <div class="mfg-page__header-actions">

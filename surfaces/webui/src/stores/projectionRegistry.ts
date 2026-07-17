@@ -85,6 +85,14 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     return Object.keys(entry.consumers).length > 0;
   }
 
+  // A session receipt may outlive the execution projection it references.
+  // Retrying that missing snapshot from a passive chat restore creates a
+  // permanent 404 loop, whereas an explicitly opened control-plane surface
+  // should retry short-lived materialization and post-login transients.
+  function allowsInitialSnapshotRetry(entry: ExecutionProjectionRegistryEntry) {
+    return Object.keys(entry.consumers).some((consumer) => !consumer.startsWith('chat:'));
+  }
+
   function cancelReconnect(executionId: string, resetAttempt = true) {
     const timer = reconnectTimers.get(executionId);
     if (timer) clearTimeout(timer);
@@ -138,8 +146,10 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         // exists. Keeping EventSource alive in that state creates an immediate
         // 404 reconnect loop in Chromium and can starve every shell control.
         // A later acquire/load can reconnect after a valid snapshot exists.
-        if (!entry.projection) closeStream(id);
-        if (!entry.projection) scheduleReconnect(id, scope);
+        if (!entry.projection) {
+          closeStream(id);
+          if (allowsInitialSnapshotRetry(entry)) scheduleReconnect(id, scope);
+        }
         return entry.projection;
       }
       if (Number(projection.schema_version) !== 1) {
@@ -183,7 +193,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       entry.connectionState = entry.projection ? 'stale' : 'error';
       if (!entry.projection) {
         closeStream(id);
-        scheduleReconnect(id, scope);
+        if (allowsInitialSnapshotRetry(entry)) scheduleReconnect(id, scope);
       }
       return entry.projection;
     }
@@ -196,6 +206,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         failClosed(
           entry,
           `unsupported execution projection delta schema_version ${String(delta.schema_version)}`,
+          'stale',
         );
       }
       return;

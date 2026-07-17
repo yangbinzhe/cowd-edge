@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { ApiWriteError, api } from '../../api/client';
+import { t } from '../../i18n';
 import { createMfgMutationIntent } from '../../stores/mutationIntents';
 import type {
   MfgApiErrorV1,
@@ -41,6 +42,17 @@ const selected = computed(() => reviews.value.find((review) => review.review_id 
 const canDecide = computed(() => selected.value?.status === 'pending_approval');
 const effectPending = computed(() => ['decision_pending_effect', 'approved_pending_effect'].includes(selected.value?.status || ''));
 
+function decisionLabel(value: MfgReportDeliveryReviewDecision) {
+  const key: Record<MfgReportDeliveryReviewDecision, string> = {
+    force_retry: 'mfg.review.decision.force_retry',
+    reroute: 'mfg.review.decision.reroute',
+    abandon: 'mfg.review.decision.abandon',
+    resolve: 'mfg.review.decision.resolve',
+    reject: 'mfg.review.decision.reject',
+  };
+  return t(key[value]);
+}
+
 function evidenceRefs() {
   return evidence.value.split(',').map((item) => item.trim()).filter(Boolean);
 }
@@ -62,7 +74,7 @@ function captureError(error: unknown) {
       message: error instanceof Error ? error.message : String(error),
       http_status: 0,
       retryable: true,
-      recovery_actions: [{ kind: 'retry_same_intent', label: 'Retry', enabled: true }],
+      recovery_actions: [{ kind: 'retry_same_intent', label: t('mfg.review.retry'), enabled: true }],
     };
   }
 }
@@ -153,7 +165,11 @@ async function decide() {
   const review = selected.value;
   if (!review || !canDecide.value || !props.canReview || !reason.value.trim()) return;
   if (['abandon', 'resolve'].includes(decision.value)
-    && !window.confirm(`${decision.value}: ${props.reportId} @ revision ${review.revision}`)) return;
+    && !window.confirm(t('mfg.review.confirmDecision', {
+      decision: decisionLabel(decision.value),
+      report: props.reportId,
+      revision: review.revision,
+    }))) return;
   if (decision.value === 'resolve' && !evidenceRefs().length) return;
   if (decision.value === 'reroute'
     && (!targetRef.value.trim() || !providerAccount.value.trim() || !channel.value.trim() || !requestedCapability.value.trim())) return;
@@ -203,18 +219,18 @@ watch(() => props.reportId, async () => {
   <aside
     ref="drawer"
     class="mfg-review-drawer"
-    aria-label="MFG report delivery review"
+    :aria-label="t('mfg.review.aria')"
     tabindex="-1"
   >
     <header>
-      <div><strong>Manual review</strong><span>{{ reportId }}</span></div>
-      <button class="ghost-action" type="button" @click="emit('close')">Close</button>
+      <div><strong>{{ t('mfg.review.title') }}</strong><span>{{ reportId }}</span></div>
+      <button class="ghost-action" type="button" @click="emit('close')">{{ t('mfg.review.close') }}</button>
     </header>
 
     <RecoveryActions :error="apiError" @action="recover" />
 
-    <label><span>Reason / external disposition</span><textarea v-model="reason" data-testid="review-reason" rows="3" /></label>
-    <label><span>Evidence refs, comma separated</span><input v-model="evidence" data-testid="review-evidence" /></label>
+    <label><span>{{ t('mfg.review.reason') }}</span><textarea v-model="reason" data-testid="review-reason" rows="3" /></label>
+    <label><span>{{ t('mfg.review.evidenceRefs') }}</span><input v-model="evidence" data-testid="review-evidence" /></label>
 
     <button
       class="primary-action"
@@ -223,35 +239,35 @@ watch(() => props.reportId, async () => {
       :disabled="busy || !deadLettered || !reason.trim()"
       @click="requestReview"
     >
-      Request review
+      {{ t('mfg.review.request') }}
     </button>
 
-    <label v-if="reviews.length"><span>Review</span><select v-model="selectedId" data-testid="review-select"><option v-for="review in reviews" :key="review.review_id" :value="review.review_id">{{ review.review_id }} · {{ review.status }}</option></select></label>
+    <label v-if="reviews.length"><span>{{ t('mfg.review.review') }}</span><select v-model="selectedId" data-testid="review-select"><option v-for="review in reviews" :key="review.review_id" :value="review.review_id">{{ review.review_id }} · {{ review.status }}</option></select></label>
 
     <section v-if="selected" class="mfg-review-drawer__status" aria-live="polite">
       <dl>
-        <dt>Status</dt><dd>{{ selected.status }}</dd>
-        <dt>Revision</dt><dd>{{ selected.revision }}</dd>
-        <dt>Approval</dt><dd>{{ selected.approval_id || 'pending submission' }}</dd>
-        <dt>Effect</dt><dd>{{ selected.effect_receipt_ref || selected.effect_error || 'not terminal' }}</dd>
+        <dt>{{ t('mfg.review.status') }}</dt><dd>{{ selected.status }}</dd>
+        <dt>{{ t('mfg.review.revision') }}</dt><dd>{{ selected.revision }}</dd>
+        <dt>{{ t('mfg.review.approval') }}</dt><dd>{{ selected.approval_id || t('mfg.review.pendingSubmission') }}</dd>
+        <dt>{{ t('mfg.review.effect') }}</dt><dd>{{ selected.effect_receipt_ref || selected.effect_error || t('mfg.review.notTerminal') }}</dd>
       </dl>
     </section>
 
     <p v-if="effectPending" class="mfg-review-drawer__warning">
-      The decision is committed. Effect reconciliation is still running; reload to observe retry or terminal receipt.
-      <button class="ghost-action" type="button" @click="load">Reload effect state</button>
+      {{ t('mfg.review.effectPending') }}
+      <button class="ghost-action" type="button" @click="load">{{ t('mfg.review.reloadEffect') }}</button>
     </p>
 
     <template v-if="selected && canReview && canDecide">
-      <label><span>Decision</span><select v-model="decision" data-testid="review-decision"><option value="force_retry">force retry</option><option value="reroute">reroute</option><option value="abandon">abandon</option><option value="resolve">resolve external</option><option value="reject">reject review</option></select></label>
+      <label><span>{{ t('mfg.review.decisionLabel') }}</span><select v-model="decision" data-testid="review-decision"><option value="force_retry">{{ t('mfg.review.decision.force_retry') }}</option><option value="reroute">{{ t('mfg.review.decision.reroute') }}</option><option value="abandon">{{ t('mfg.review.decision.abandon') }}</option><option value="resolve">{{ t('mfg.review.decision.resolve') }}</option><option value="reject">{{ t('mfg.review.decision.reject') }}</option></select></label>
       <template v-if="decision === 'reroute'">
-        <label><span>Target</span><input v-model="targetRef" data-testid="review-reroute-target" placeholder="channel://..." /></label>
-        <label><span>Provider account</span><input v-model="providerAccount" data-testid="review-reroute-provider" /></label>
-        <label><span>Channel</span><input v-model="channel" data-testid="review-reroute-channel" /></label>
-        <label><span>Requested capability</span><input v-model="requestedCapability" data-testid="review-reroute-capability" /></label>
+        <label><span>{{ t('mfg.review.target') }}</span><input v-model="targetRef" data-testid="review-reroute-target" placeholder="channel://..." /></label>
+        <label><span>{{ t('mfg.review.providerAccount') }}</span><input v-model="providerAccount" data-testid="review-reroute-provider" /></label>
+        <label><span>{{ t('mfg.review.channel') }}</span><input v-model="channel" data-testid="review-reroute-channel" /></label>
+        <label><span>{{ t('mfg.review.requestedCapability') }}</span><input v-model="requestedCapability" data-testid="review-reroute-capability" /></label>
       </template>
-      <p v-if="decision === 'abandon' || decision === 'resolve'" class="mfg-review-drawer__warning">This decision is irreversible for the current dead-letter record.</p>
-      <button class="danger-action" data-testid="review-submit" type="button" :disabled="busy || !reason.trim()" @click="decide">Submit typed decision</button>
+      <p v-if="decision === 'abandon' || decision === 'resolve'" class="mfg-review-drawer__warning">{{ t('mfg.review.irreversible') }}</p>
+      <button class="danger-action" data-testid="review-submit" type="button" :disabled="busy || !reason.trim()" @click="decide">{{ t('mfg.review.submit') }}</button>
     </template>
   </aside>
 </template>

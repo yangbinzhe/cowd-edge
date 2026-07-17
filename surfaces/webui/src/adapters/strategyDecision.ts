@@ -89,7 +89,7 @@ function strategyStatus(value: unknown) {
 
 function transitionStatus(value: unknown) {
   return normalizedEnum(value, [
-    'running', 'downgraded', 'early_stopped', 'completed', 'cancelled', 'failed', 'error',
+    'running', 'downgraded', 'early_stopped', 'completed', 'cancelled', 'failed', 'error', 'degraded',
   ]);
 }
 

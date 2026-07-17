@@ -1,4 +1,4 @@
-import type { MfgApiErrorV1, MfgLiveEnvelope } from '../types/mfg';
+import type { MfgApiErrorV1, MfgLiveEnvelope, MfgWireLiveEnvelope } from '../types/mfg';
 
 const MFG_CONTRACT_VERSION = 'mfg.frontend.v1';
 
@@ -152,7 +152,8 @@ export class MfgLiveTransport {
           if (parsed.event !== 'mfg_live' || !parsed.data) continue;
           let envelope: MfgLiveEnvelope;
           try {
-            envelope = JSON.parse(parsed.data) as MfgLiveEnvelope;
+            const wireEnvelope = JSON.parse(parsed.data) as MfgWireLiveEnvelope;
+            envelope = wireEnvelope as MfgLiveEnvelope;
           } catch {
             throw new MfgLiveTransportError('MFG live stream emitted invalid JSON', 0, null);
           }
@@ -190,7 +191,8 @@ export class MfgLiveTransport {
   private async fetchJson(path: string): Promise<MfgLiveEnvelope> {
     const response = await this.request(path);
     try {
-      return await response.json() as MfgLiveEnvelope;
+      const wireEnvelope = await response.json() as MfgWireLiveEnvelope;
+      return wireEnvelope as MfgLiveEnvelope;
     } catch {
       throw new MfgLiveTransportError('MFG live endpoint returned invalid JSON', response.status, null);
     }

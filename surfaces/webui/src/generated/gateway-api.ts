@@ -274,6 +274,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/approval/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * approval GET /api/approval/:id
+         * @description Query Gateway approval capability through `/api/approval/:id` handled by `approval_exact_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_approval_get_api_approval_by_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/apps/mfg/analyses/{analysis_id}/actions/{action_id}/execute": {
         parameters: {
             query?: never;
@@ -289,7 +311,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_analyses_by_analysis_id_actions_by_action_id_execute"];
+        post: operations["mfg_analysis_action_execute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -309,7 +331,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_analyses_by_id"];
+        get: operations["mfg_analysis_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -331,7 +353,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_app"];
+        get: operations["mfg_app_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -353,7 +375,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_assignments"];
+        get: operations["mfg_assignment_list"];
         put?: never;
         /**
          * mfg POST /api/apps/mfg/assignments
@@ -361,7 +383,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_assignments"];
+        post: operations["mfg_assignment_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -381,7 +403,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_assignments_by_id"];
+        get: operations["mfg_assignment_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -405,7 +427,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_assignments_by_id_command"];
+        post: operations["mfg_assignment_command"];
         delete?: never;
         options?: never;
         head?: never;
@@ -425,7 +447,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cases_search"];
+        get: operations["mfg_case_search"];
         put?: never;
         post?: never;
         delete?: never;
@@ -447,7 +469,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cases_by_id"];
+        get: operations["mfg_case_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -469,7 +491,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_profiles"];
+        get: operations["mfg_cockpit_profile_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -493,7 +515,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_cockpit_profiles_upsert"];
+        post: operations["mfg_cockpit_profile_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -513,7 +535,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id"];
+        get: operations["mfg_cockpit_profile_get"];
         put?: never;
         post?: never;
         /**
@@ -522,7 +544,7 @@ export interface paths {
          *
          *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state.
          */
-        delete: operations["gateway_mfg_delete_api_apps_mfg_cockpit_profiles_by_id"];
+        delete: operations["mfg_cockpit_profile_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -543,7 +565,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_cockpit_profiles_by_id_clone"];
+        post: operations["mfg_cockpit_profile_clone"];
         delete?: never;
         options?: never;
         head?: never;
@@ -563,7 +585,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id_projection"];
+        get: operations["mfg_cockpit_projection_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -587,7 +609,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_cockpit_profiles_by_id_reports_generate"];
+        post: operations["mfg_report_generate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -609,7 +631,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_cockpit_profiles_by_id_share"];
+        post: operations["mfg_cockpit_profile_share"];
         delete?: never;
         options?: never;
         head?: never;
@@ -629,9 +651,75 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id_widgets_by_instance_id_projection"];
+        get: operations["mfg_cockpit_widget_projection_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/report-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * mfg GET /api/apps/mfg/cockpit/report-reviews
+         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/report-reviews` handled by `mfg_cockpit_report_review_list_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["mfg_report_review_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/report-reviews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * mfg GET /api/apps/mfg/cockpit/report-reviews/:id
+         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/report-reviews/:id` handled by `mfg_cockpit_report_review_get_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["mfg_report_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/report-reviews/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * mfg POST /api/apps/mfg/cockpit/report-reviews/:id/decision
+         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/report-reviews/:id/decision` handled by `mfg_cockpit_report_review_decision_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["mfg_report_review_decide"];
         delete?: never;
         options?: never;
         head?: never;
@@ -651,7 +739,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_reports"];
+        get: operations["mfg_report_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -675,7 +763,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_cockpit_reports_schedules_run"];
+        post: operations["mfg_report_schedule_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -695,7 +783,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_reports_by_id"];
+        get: operations["mfg_report_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -719,7 +807,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_cockpit_reports_by_id_deliver"];
+        post: operations["mfg_report_deliver"];
         delete?: never;
         options?: never;
         head?: never;
@@ -739,7 +827,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_reports_by_id_delivery_state"];
+        get: operations["mfg_report_delivery_state_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -763,7 +851,29 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_cockpit_reports_by_id_delivery_retry"];
+        post: operations["mfg_report_delivery_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/reports/{id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * mfg POST /api/apps/mfg/cockpit/reports/:id/reviews
+         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/reports/:id/reviews` handled by `mfg_cockpit_report_review_request_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["mfg_report_review_request"];
         delete?: never;
         options?: never;
         head?: never;
@@ -783,7 +893,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_cockpit_widget_catalog"];
+        get: operations["mfg_cockpit_widget_catalog_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -805,7 +915,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_command_center"];
+        get: operations["mfg_command_center_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -827,7 +937,29 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_command_center_live"];
+        get: operations["mfg_command_center_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * mfg GET /api/apps/mfg/contract
+         * @description Query Gateway mfg capability through `/api/apps/mfg/contract` handled by `mfg_contract_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["mfg_contract_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -849,7 +981,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_decision_trace"];
+        get: operations["mfg_decision_trace_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -871,7 +1003,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_domain_server_manufacturing"];
+        get: operations["mfg_domain_server_manufacturing_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -895,7 +1027,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_domain_server_manufacturing_seed"];
+        post: operations["mfg_domain_server_manufacturing_seed"];
         delete?: never;
         options?: never;
         head?: never;
@@ -915,7 +1047,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_executions_by_id"];
+        get: operations["mfg_execution_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -939,7 +1071,7 @@ export interface paths {
          *
          *     Risk: external. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_executions_by_id_cross_plane_execute"];
+        post: operations["mfg_execution_cross_plane_execute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -961,7 +1093,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_executions_by_id_feedback"];
+        post: operations["mfg_execution_feedback_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -981,7 +1113,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_focus_alert_rules"];
+        get: operations["mfg_alert_rule_list"];
         put?: never;
         /**
          * mfg POST /api/apps/mfg/focus/alert-rules
@@ -989,7 +1121,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_focus_alert_rules"];
+        post: operations["mfg_alert_rule_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1009,7 +1141,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_focus_alert_subscriptions"];
+        get: operations["mfg_alert_subscription_list"];
         put?: never;
         /**
          * mfg POST /api/apps/mfg/focus/alert-subscriptions
@@ -1017,7 +1149,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_focus_alert_subscriptions"];
+        post: operations["mfg_alert_subscription_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1037,7 +1169,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_focus_alerts"];
+        get: operations["mfg_alert_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1061,7 +1193,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_focus_alerts_by_id_command"];
+        post: operations["mfg_alert_command"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1081,7 +1213,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_focus_forecasts"];
+        get: operations["mfg_forecast_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1103,7 +1235,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_incidents"];
+        get: operations["mfg_incident_list"];
         put?: never;
         /**
          * mfg POST /api/apps/mfg/incidents
@@ -1111,7 +1243,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_incidents"];
+        post: operations["mfg_incident_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1131,7 +1263,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_incidents_by_id"];
+        get: operations["mfg_incident_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1155,7 +1287,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_incidents_by_id_analyze"];
+        post: operations["mfg_incident_analyze"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1177,7 +1309,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_incidents_by_id_cases_promote"];
+        post: operations["mfg_incident_case_promote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1199,7 +1331,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_incidents_by_id_playbooks_recommend"];
+        post: operations["mfg_incident_playbook_recommend"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1219,7 +1351,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_incidents_by_id_room"];
+        get: operations["mfg_incident_room_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1241,7 +1373,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_incidents_by_id_skills"];
+        get: operations["mfg_incident_skill_run_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1265,7 +1397,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_incidents_by_id_skills_plan"];
+        post: operations["mfg_incident_skill_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1287,7 +1419,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_incidents_by_id_skills_by_skill_id_run"];
+        post: operations["mfg_incident_skill_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1307,7 +1439,29 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_live"];
+        get: operations["mfg_live_stream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/live/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * mfg GET /api/apps/mfg/live/snapshot
+         * @description Query Gateway mfg capability through `/api/apps/mfg/live/snapshot` handled by `mfg_live_snapshot_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["mfg_live_snapshot"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1329,7 +1483,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_ontology_server_manufacturing"];
+        get: operations["mfg_ontology_server_manufacturing_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1353,7 +1507,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_ontology_server_manufacturing_seed"];
+        post: operations["mfg_ontology_server_manufacturing_seed"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1375,7 +1529,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_playbooks_upsert"];
+        post: operations["mfg_playbook_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1395,7 +1549,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_playbooks_by_id"];
+        get: operations["mfg_playbook_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1417,7 +1571,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_production_governance"];
+        get: operations["mfg_production_governance_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1439,7 +1593,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_attention_hot"];
+        get: operations["mfg_reality_attention_hot"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1461,7 +1615,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_changes"];
+        get: operations["mfg_reality_change_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1485,7 +1639,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_compute_jobs_plan"];
+        post: operations["mfg_reality_compute_job_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1505,7 +1659,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_compute_jobs_by_id"];
+        get: operations["mfg_reality_compute_job_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1529,7 +1683,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_compute_jobs_by_id_run"];
+        post: operations["mfg_reality_compute_job_execute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1549,7 +1703,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_connector_runs_by_id"];
+        get: operations["mfg_reality_connector_run_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1571,7 +1725,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_data_plane_health"];
+        get: operations["mfg_reality_data_plane_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1595,7 +1749,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_data_plane_ingest_plan"];
+        post: operations["mfg_reality_data_plane_ingest_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1615,7 +1769,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_entities"];
+        get: operations["mfg_reality_entity_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1639,7 +1793,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_entities_conflict_decision"];
+        post: operations["mfg_reality_entity_conflict_decision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1661,7 +1815,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_entities_match_candidate"];
+        post: operations["mfg_reality_entity_match_candidate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1683,7 +1837,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_entities_resolve_source_key"];
+        post: operations["mfg_reality_entity_resolve_source_key"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1705,7 +1859,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_entities_upsert"];
+        post: operations["mfg_reality_entity_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1725,7 +1879,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_entities_by_id"];
+        get: operations["mfg_reality_entity_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1747,7 +1901,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_entities_by_id_impact_path"];
+        get: operations["mfg_reality_entity_impact_path"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1769,7 +1923,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_entities_by_id_relations"];
+        get: operations["mfg_reality_entity_relations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1793,7 +1947,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_evidence_build"];
+        post: operations["mfg_reality_evidence_build"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1813,7 +1967,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_evidence_by_id"];
+        get: operations["mfg_reality_evidence_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1835,7 +1989,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_evidence_by_id_context"];
+        get: operations["mfg_reality_evidence_context"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1859,7 +2013,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_evidence_by_id_quality_gate"];
+        post: operations["mfg_reality_evidence_quality_gate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1881,7 +2035,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_facts_ingest"];
+        post: operations["mfg_reality_fact_ingest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1901,7 +2055,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_health"];
+        get: operations["mfg_reality_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1925,7 +2079,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_metric_dependencies_affected_by_fact_type"];
+        post: operations["mfg_reality_metric_dependency_affected_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1947,7 +2101,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_metric_dependencies_upsert"];
+        post: operations["mfg_reality_metric_dependency_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1967,7 +2121,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_metrics"];
+        get: operations["mfg_reality_metric_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1991,7 +2145,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_metrics_attention_plan"];
+        post: operations["mfg_reality_metric_attention_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2013,7 +2167,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_metrics_recompute"];
+        post: operations["mfg_reality_metric_recompute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2035,7 +2189,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_metrics_snapshots_materialize"];
+        post: operations["mfg_reality_metric_snapshot_materialize"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2055,7 +2209,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_metrics_by_id"];
+        get: operations["mfg_reality_metric_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2077,7 +2231,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_metrics_by_id_lineage"];
+        get: operations["mfg_reality_metric_lineage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2099,7 +2253,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_quality_gates_by_id"];
+        get: operations["mfg_reality_quality_gate_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2123,7 +2277,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_relations_upsert"];
+        post: operations["mfg_reality_relation_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2145,7 +2299,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_source_packs_upsert"];
+        post: operations["mfg_reality_source_pack_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2165,7 +2319,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_reality_source_packs_by_id"];
+        get: operations["mfg_reality_source_pack_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2189,7 +2343,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_plan"];
+        post: operations["mfg_reality_connector_run_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2211,7 +2365,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_run"];
+        post: operations["mfg_reality_connector_run_execute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2233,7 +2387,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_delta_plan"];
+        post: operations["mfg_reality_source_pack_delta_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2255,7 +2409,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_ingest_file"];
+        post: operations["mfg_reality_source_pack_ingest_file"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2277,7 +2431,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_validate"];
+        post: operations["mfg_reality_source_pack_validate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2297,7 +2451,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_skill_runs_by_id"];
+        get: operations["mfg_skill_run_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2319,7 +2473,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_skills"];
+        get: operations["mfg_skill_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2341,7 +2495,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_mfg_get_api_apps_mfg_skills_by_id"];
+        get: operations["mfg_skill_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3162,6 +3316,28 @@ export interface paths {
          *     Risk: external. Side effects: .
          */
         get: operations["gateway_cross_plane_get_api_cross_plane_action_executions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/cross-plane/action/executions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * cross_plane GET /api/cross-plane/action/executions/:id
+         * @description Query Gateway cross_plane capability through `/api/cross-plane/action/executions/:id` handled by `cross_plane_action_execution_get_handler`.
+         *
+         *     Risk: external. Side effects: .
+         */
+        get: operations["gateway_cross_plane_get_api_cross_plane_action_executions_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7620,8 +7796,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * gateway GET /api/runtime/executions/:id
-         * @description Query Gateway gateway capability through `/api/runtime/executions/:id` handled by `runtime_execution_projection_get`.
+         * route_registry GET /api/runtime/executions/:id
+         * @description Query Gateway route_registry capability through `/api/runtime/executions/:id` handled by `runtime_execution_projection_get`.
          *
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
@@ -7644,8 +7820,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * gateway POST /api/runtime/executions/:id/commands
-         * @description Invoke or create Gateway gateway capability through `/api/runtime/executions/:id/commands` handled by `runtime_execution_projection_command`.
+         * route_registry POST /api/runtime/executions/:id/commands
+         * @description Invoke or create Gateway route_registry capability through `/api/runtime/executions/:id/commands` handled by `runtime_execution_projection_command`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
@@ -7664,8 +7840,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * gateway GET /api/runtime/executions/:id/events
-         * @description Query Gateway gateway capability through `/api/runtime/executions/:id/events` handled by `runtime_execution_projection_events`.
+         * route_registry GET /api/runtime/executions/:id/events
+         * @description Query Gateway route_registry capability through `/api/runtime/executions/:id/events` handled by `runtime_execution_projection_events`.
          *
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
@@ -9712,6 +9888,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/surfaces/{id}/outbox/{delivery_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * surface GET /api/surfaces/:id/outbox/:delivery_id
+         * @description Query Gateway surface capability through `/api/surfaces/:id/outbox/:delivery_id` handled by `get_surface_outbox_delivery_handler`.
+         *
+         *     Risk: external. Side effects: may_call_or_control_external_surface.
+         */
+        get: operations["gateway_surface_get_api_surfaces_by_id_outbox_by_delivery_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/surfaces/{id}/outbox/{delivery_id}/dead-letter": {
         parameters: {
             query?: never;
@@ -10947,117 +11145,3565 @@ export interface components {
             status?: string | null;
             summary?: string | null;
         };
-        StrategyActualProjection: {
-            actual_speedup_ratio_bp?: number | null;
-            cached_tokens: number;
-            duplicate_tool_calls: number;
-            duration_ms: number;
-            evaluation_budget_breached: boolean;
-            evaluation_budget_observed: boolean;
-            evaluation_token_limit: number;
-            evaluation_tokens_consumed: number;
-            evidence_overlap_bp: number;
-            evidence_overlap_observed: boolean;
-            input_tokens: number;
-            max_tool_concurrency_observed: number;
-            merge_cost_ms: number;
-            output_tokens: number;
-            parallel_tool_batches: number;
-            parent_merge_count: number;
-            quality_score_bp?: number | null;
-            terminal_reason: string;
-            tool_calls: number;
-            write_attempt_refs: string[];
-            working_state_verified: boolean;
+        GatewayError: {
+            error: string;
         };
-        StrategyCandidateEstimate: {
-            assumed: boolean;
-            calibration_sample_count: number;
-            calibration_source: string;
-            /** @enum {string} */
-            candidate: "direct" | "parallel_tools" | "team";
-            context_duplication_tokens: number;
-            eligible: boolean;
-            estimated_critical_path_ms: number;
-            estimated_serial_ms: number;
-            evidence_overlap_penalty_bp: number;
-            expected_quality_lift_bp: number;
-            merge_cost_ms: number;
-            net_benefit_score: number;
-            provider_concurrency_penalty_bp: number;
+        /** MatrixAttentionItem */
+        MatrixAttentionItem: {
+            attention_id: string;
+            business_domain: string;
+            /** Format: float */
+            confidence: number;
+            /** Format: date-time */
+            created_at: string;
+            /** @default null */
+            entity_ref: string | null;
+            /** @default [] */
+            linked_anomalies: string[];
+            /** @default [] */
+            linked_changes: string[];
+            /** @default [] */
+            linked_impacts: string[];
+            /**
+             * @description Canonical Matrix metric identifiers that caused this attention item.
+             * @default []
+             */
+            metric_refs: string[];
+            /** @default [] */
+            owner_roles: string[];
+            /** @default null */
+            period: string | null;
+            /** Format: float */
+            priority_score: number;
+            /** @default [] */
+            reason_codes: string[];
+            severity: components["schemas"]["MatrixAttentionItem"]["$defs"]["MatrixSeverity"];
+            status: string;
+            /** Format: float */
+            strategic_weight: number;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: float */
+            urgency: number;
+            $defs: {
+                /** @enum {string} */
+                MatrixSeverity: "normal" | "warning" | "critical" | "unknown";
+            };
+        };
+        /** MatrixChangeEvent */
+        MatrixChangeEvent: {
+            change_id: string;
+            change_type: string;
+            /** Format: double */
+            delta: number;
+            /** Format: date-time */
+            detected_at: string;
+            entity_ref: string;
+            /** @default null */
+            from_value: unknown;
+            /** @default null */
+            metric_id: string | null;
+            period: string;
+            severity_hint: string;
+            /** @default [] */
+            source_fact_refs: string[];
+            /** @default null */
+            to_value: unknown;
+        };
+        /** MatrixComputeJob */
+        MatrixComputeJob: {
+            /** Format: uint32 */
+            attempts: number;
+            /** Format: date-time */
+            created_at: string;
+            /** @default null */
+            entity_scope: string | null;
+            job_id: string;
+            /** @default [] */
+            metric_ids: string[];
+            /** @default null */
+            period: string | null;
+            /** Format: float */
+            priority: number;
+            /** @default null */
+            result_summary: unknown;
+            status: string;
+            /** @default [] */
+            trigger_fact_refs: string[];
+            trigger_fact_type: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** MatrixConnectorRun */
+        MatrixConnectorRun: {
+            affected_metric_ids: string[];
+            connector_kind: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @default null */
+            credential_ref: string | null;
+            /** Format: uint64 */
+            expected_rows: number;
+            mapped_fact_types: string[];
+            /** @default null */
+            metadata: unknown;
+            mode: string;
+            /** @default null */
+            partition_ref: string | null;
+            quality_report: components["schemas"]["MatrixConnectorRun"]["$defs"]["MatrixConnectorQualityReport"];
+            receipt: components["schemas"]["MatrixConnectorRun"]["$defs"]["MatrixConnectorReceipt"];
+            /** @default null */
+            resource_ref: string | null;
+            run_id: string;
+            source_pack_id: string;
+            status: string;
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                MatrixConnectorQualityReport: {
+                    /** @default [] */
+                    blockers: string[];
+                    /** Format: float */
+                    score: number;
+                    status: string;
+                    /** @default [] */
+                    warnings: string[];
+                };
+                MatrixConnectorReceipt: {
+                    message: string;
+                    receipt_id: string;
+                    /** Format: date-time */
+                    recorded_at: string;
+                    retryable: boolean;
+                    status: string;
+                };
+            };
+        };
+        /** MatrixDataPlaneHealth */
+        MatrixDataPlaneHealth: {
+            /** @default [] */
+            capabilities: components["schemas"]["MatrixDataPlaneHealth"]["$defs"]["MatrixDataPlaneCapability"][];
+            /** Format: date-time */
+            checked_at: string;
+            mode: string;
+            provider: string;
+            status: string;
+            /** Format: uint64 */
+            watermark_count: number;
+            $defs: {
+                MatrixDataPlaneCapability: {
+                    capability_id: string;
+                    description: string;
+                    status: string;
+                };
+            };
+        };
+        /** MatrixDataPlaneIngestPlan */
+        MatrixDataPlaneIngestPlan: {
+            /** @default [] */
+            affected_metric_ids: string[];
+            batch_id: string;
+            /** @default [] */
+            compute_jobs: components["schemas"]["MatrixDataPlaneIngestPlan"]["$defs"]["MatrixComputeJobInput"][];
+            /** Format: uint64 */
+            estimated_rows: number;
+            fact_type: string;
+            idempotency_key: string;
+            partition_ref: string;
+            /** Format: date-time */
+            planned_at: string;
+            replay_policy: string;
+            source_ref: string;
+            watermark: components["schemas"]["MatrixDataPlaneIngestPlan"]["$defs"]["MatrixDataPlaneWatermark"];
+            $defs: {
+                MatrixComputeJobInput: {
+                    /** @default null */
+                    entity_scope: string | null;
+                    /** @default null */
+                    job_id: string | null;
+                    /** @default [] */
+                    metric_ids: string[];
+                    /** @default null */
+                    period: string | null;
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    priority: number | null;
+                    /** @default [] */
+                    trigger_fact_refs: string[];
+                    trigger_fact_type: string;
+                };
+                MatrixDataPlaneWatermark: {
+                    fact_type: string;
+                    high_watermark: string;
+                    last_batch_id: string;
+                    partition_ref: string;
+                    source_ref: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        /** MatrixDecisionTraceQuery */
+        MatrixDecisionTraceQuery: {
+            /** @default null */
+            incident_id: string | null;
+            /** @default null */
+            report_id: string | null;
+        };
+        /** MatrixEntity */
+        MatrixEntity: {
+            /** @default null */
+            attributes: unknown;
+            canonical_key: string;
+            /** Format: float */
+            confidence: number;
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            entity_id: string;
+            entity_type: string;
+            /** @default [] */
+            source_keys: components["schemas"]["MatrixEntity"]["$defs"]["MatrixSourceKey"][];
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                MatrixSourceKey: {
+                    source_key: string;
+                    /** @default null */
+                    source_ref: string | null;
+                    source_system: string;
+                };
+            };
+        };
+        /** MatrixEvidencePacket */
+        MatrixEvidencePacket: {
+            /** @default [] */
+            anomaly_evidence: unknown[];
+            /** @default null */
+            attention_id: string | null;
+            /** @default [] */
+            attribution_candidates: unknown[];
+            /** @default null */
+            business_context: unknown;
+            /** @default [] */
+            change_evidence: unknown[];
+            /** Format: float */
+            confidence: number;
+            /** Format: date-time */
+            created_at: string;
+            /** @default [] */
+            impact_paths: unknown[];
+            /** @default [] */
+            metric_evidence: unknown[];
+            /** @default [] */
+            missing_evidence: string[];
+            packet_id: string;
+            problem_statement: string;
+            /** @default [] */
+            source_refs: components["schemas"]["MatrixEvidencePacket"]["$defs"]["MatrixEvidenceSourceRef"][];
+            /** Format: uint64 */
+            token_budget: number;
+            $defs: {
+                MatrixEvidenceSourceRef: {
+                    kind: string;
+                    reference: string;
+                    summary: string;
+                };
+            };
+        };
+        /** MatrixFact */
+        MatrixFact: {
+            /** Format: float */
+            confidence: number;
+            /** @default null */
+            dimensions: unknown;
+            /** @default [] */
+            entity_refs: string[];
+            /** Format: date-time */
+            event_time: string;
+            fact_id: string;
+            fact_type: string;
+            /** @default null */
+            measures: unknown;
+            /** @default null */
+            metric_key: string | null;
+            raw_hash: string;
+            snapshot_id: string;
+            /** @default null */
+            source_ref: string | null;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            valid_from: string | null;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            valid_to: string | null;
+        };
+        /** MatrixMetricAttentionPlan */
+        MatrixMetricAttentionPlan: {
+            /** @default [] */
+            compute_jobs: components["schemas"]["MatrixMetricAttentionPlan"]["$defs"]["MatrixComputeJobInput"][];
+            /** @default null */
+            entity_scope: string | null;
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: uint */
+            limit: number;
+            /** @default null */
+            period: string | null;
+            plan_id: string;
+            /** @default [] */
+            scored_metrics: components["schemas"]["MatrixMetricAttentionPlan"]["$defs"]["MatrixMetricAttentionScore"][];
+            /** @default [] */
+            selected_metric_ids: string[];
+            trigger_fact_type: string;
+            $defs: {
+                MatrixComputeJobInput: {
+                    /** @default null */
+                    entity_scope: string | null;
+                    /** @default null */
+                    job_id: string | null;
+                    /** @default [] */
+                    metric_ids: string[];
+                    /** @default null */
+                    period: string | null;
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    priority: number | null;
+                    /** @default [] */
+                    trigger_fact_refs: string[];
+                    trigger_fact_type: string;
+                };
+                MatrixMetricAttentionScore: {
+                    /** Format: float */
+                    business_priority: number;
+                    /** Format: uint */
+                    dependency_count: number;
+                    /**
+                     * Format: double
+                     * @default null
+                     */
+                    latest_delta: number | null;
+                    /** @default null */
+                    latest_status: string | null;
+                    metric_id: string;
+                    /** @default [] */
+                    reason_codes: string[];
+                    /** Format: float */
+                    score: number;
+                };
+            };
+        };
+        /** MatrixMetricDefinition */
+        MatrixMetricDefinition: {
+            /** Format: float */
+            business_priority: number;
+            /** Format: date-time */
+            created_at: string;
+            /** @default [] */
+            dependency_metric_ids: string[];
+            /** @default [] */
+            dimensions: string[];
+            domain: string;
+            formula_ref: string;
+            grain: string;
+            /** @default [] */
+            inputs: string[];
+            metric_id: string;
+            name: string;
+            owner_role: string;
+            refresh_policy: string;
+            /** @default null */
+            threshold_policy: unknown;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** MatrixMetricLineage */
+        MatrixMetricLineage: {
+            /** @default [] */
+            downstream_dependencies: components["schemas"]["MatrixMetricLineage"]["$defs"]["MatrixMetricDependency"][];
+            /** Format: date-time */
+            generated_at: string;
+            /** @default [] */
+            impacted_metric_ids: string[];
+            metric_id: string;
+            /** @default [] */
+            upstream_dependencies: components["schemas"]["MatrixMetricLineage"]["$defs"]["MatrixMetricDependency"][];
+            $defs: {
+                MatrixMetricDependency: {
+                    /** Format: float */
+                    confidence: number;
+                    /** Format: date-time */
+                    created_at: string;
+                    dependency_id: string;
+                    dependency_type: string;
+                    downstream_metric_id: string;
+                    /** @default null */
+                    entity_relation_type: string | null;
+                    /** @default null */
+                    notes: string | null;
+                    /** @default [] */
+                    required_fact_types: string[];
+                    /** @default null */
+                    transformation_ref: string | null;
+                    /** Format: date-time */
+                    updated_at: string;
+                    upstream_metric_id: string;
+                };
+            };
+        };
+        /** MatrixMetricSnapshot */
+        MatrixMetricSnapshot: {
+            /** Format: date-time */
+            created_at: string;
+            /** @default [] */
+            items: components["schemas"]["MatrixMetricSnapshot"]["$defs"]["MatrixMetricSnapshotItem"][];
+            /** @default [] */
+            metric_ids: string[];
+            scope_ref: string;
+            snapshot_id: string;
+            summary: string;
+            $defs: {
+                MatrixMetricSnapshotItem: {
+                    metric_id: string;
+                    /** @default null */
+                    state: components["schemas"]["MatrixMetricSnapshot"]["$defs"]["MatrixMetricState"] | null;
+                };
+                MatrixMetricState: {
+                    /** Format: date-time */
+                    computed_at: string;
+                    /** Format: float */
+                    confidence: number;
+                    /** Format: double */
+                    delta: number;
+                    /**
+                     * Format: double
+                     * @default null
+                     */
+                    delta_ratio: number | null;
+                    entity_scope: string;
+                    /** @default [] */
+                    input_fact_refs: string[];
+                    metric_id: string;
+                    period: string;
+                    /**
+                     * Format: double
+                     * @default null
+                     */
+                    previous_value: number | null;
+                    state_id: string;
+                    status: components["schemas"]["MatrixMetricSnapshot"]["$defs"]["MatrixMetricStatus"];
+                    /** Format: double */
+                    value: number;
+                };
+                /** @enum {string} */
+                MatrixMetricStatus: "normal" | "warning" | "critical" | "unknown";
+            };
+        };
+        /** MatrixQualityGateDecision */
+        MatrixQualityGateDecision: {
+            /** Format: date-time */
+            created_at: string;
+            decision: string;
+            gate_id: string;
+            gate_type: string;
+            /** @default [] */
             reasons: string[];
-            risk_approval_penalty_bp: number;
-            startup_overhead_ms: number;
+            /** @default [] */
+            required_actions: string[];
+            /** Format: float */
+            score: number;
+            target_ref: string;
         };
-        StrategyDecisionProjection: {
-            actual?: components["schemas"]["StrategyActualProjection"] | null;
-            /** @enum {string|null} */
-            actual_status?: "unknown" | "observed" | null;
-            benefit_reason?: string[];
-            candidate_estimates?: components["schemas"]["StrategyCandidateEstimate"][];
-            confidence?: number | null;
-            cost_reason?: string[];
-            decision_id?: string | null;
-            detail?: Record<string, never> | unknown[] | string | number | boolean | null;
-            downgrade?: components["schemas"]["StrategyTransitionProjection"][];
-            early_stop?: components["schemas"]["StrategyTransitionProjection"][];
-            estimated?: components["schemas"]["StrategyCandidateEstimate"] | null;
+        /** MatrixRelation */
+        MatrixRelation: {
+            /** @default null */
+            attributes: unknown;
+            /** Format: float */
+            confidence: number;
+            /** Format: date-time */
+            created_at: string;
+            from_entity_id: string;
+            relation_id: string;
+            relation_type: string;
+            to_entity_id: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** MatrixSourceDeltaPlan */
+        MatrixSourceDeltaPlan: {
+            /** @default [] */
+            affected_metric_ids: string[];
+            compute_scope: string;
+            /** @default [] */
+            fact_types: string[];
+            /** Format: date-time */
+            planned_at: string;
+            source_pack_id: string;
+        };
+        /** MatrixSourcePack */
+        MatrixSourcePack: {
+            access_mode: string;
+            /**
+             * Format: date-time
+             * @default 1970-01-01T00:00:00Z
+             */
+            created_at: string;
+            /** @default [] */
+            entity_mappings: components["schemas"]["MatrixSourcePack"]["$defs"]["MatrixSourceEntityMapping"][];
+            /** @default [] */
+            fact_mappings: components["schemas"]["MatrixSourcePack"]["$defs"]["MatrixSourceFactMapping"][];
+            /** @default null */
+            freshness_sla: string | null;
+            /** @default null */
+            metadata: unknown;
+            owner: string;
+            /** @default [] */
+            quality_rules: string[];
+            /** @default [] */
+            reconciliation_rules: string[];
+            refresh_mode: string;
+            /** @default [] */
+            relation_mappings: components["schemas"]["MatrixSourcePack"]["$defs"]["MatrixSourceRelationMapping"][];
+            /** @default null */
+            security_policy: string | null;
+            source_name: string;
+            source_pack_id: string;
+            /**
+             * Format: date-time
+             * @default 1970-01-01T00:00:00Z
+             */
+            updated_at: string;
+            $defs: {
+                MatrixSourceEntityMapping: {
+                    matrix_entity_type: string;
+                    source_entity: string;
+                    source_key_field: string;
+                };
+                MatrixSourceFactMapping: {
+                    dedup_key: string;
+                    delta_signature: string;
+                    /** @default [] */
+                    entity_ref_fields: string[];
+                    /** @default null */
+                    event_time_field: string | null;
+                    fact_type: string;
+                    /** @default [] */
+                    measure_fields: string[];
+                    metric_key: string;
+                    source_table: string;
+                };
+                MatrixSourceRelationMapping: {
+                    /** @default [] */
+                    attribute_fields: string[];
+                    dedup_key: string;
+                    from_source_key_field: string;
+                    relation_type: string;
+                    source_table: string;
+                    to_source_key_field: string;
+                };
+            };
+        };
+        /** MatrixSourcePackValidation */
+        MatrixSourcePackValidation: {
+            /** @default [] */
+            blockers: string[];
+            source_pack_id: string;
+            status: string;
+            /** Format: date-time */
+            validated_at: string;
+            /** @default [] */
+            warnings: string[];
+        };
+        /** MfgActionContract */
+        MfgActionContract: {
+            action_id: components["schemas"]["MfgActionContract"]["$defs"]["MfgActionId"];
+            availability: components["schemas"]["MfgActionContract"]["$defs"]["MfgActionAvailability"];
+            class: components["schemas"]["MfgActionContract"]["$defs"]["MfgMutationClass"];
+            confirmation: components["schemas"]["MfgActionContract"]["$defs"]["MfgConfirmationKind"];
+            emits_live_event: boolean;
+            mutation: components["schemas"]["MfgActionContract"]["$defs"]["MfgMutationSemantics"];
+            /** @default [] */
+            required_capabilities: string[];
+            risk: components["schemas"]["MfgActionContract"]["$defs"]["MfgActionRisk"];
+            route_id: components["schemas"]["MfgActionContract"]["$defs"]["MfgRouteId"];
+            $defs: {
+                /** @enum {string} */
+                MfgActionAvailability: "active" | "planned_v541" | "planned_v545" | "unavailable";
+                MfgActionId: components["schemas"]["MfgActionContract"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgActionContract"]["$defs"]["MfgMultiActionId"];
+                /** @enum {string} */
+                MfgActionRisk: "low" | "medium" | "high";
+                /** @enum {string} */
+                MfgConfirmationKind: "none" | "target" | "target_and_confirm";
+                /** @enum {string} */
+                MfgIdempotencySemantics: "not_applicable_pure_dry_run" | "required" | "natural_key";
+                /** @enum {string} */
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                /** @enum {string} */
+                MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
+                MfgMutationSemantics: ("read_only" | "preview_receipt") | {
+                    durable_receipt: {
+                        idempotency: components["schemas"]["MfgActionContract"]["$defs"]["MfgIdempotencySemantics"];
+                        revision: components["schemas"]["MfgActionContract"]["$defs"]["MfgRevisionSemantics"];
+                    };
+                };
+                /** @enum {string} */
+                MfgRevisionSemantics: "not_applicable" | "create_only" | "required";
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+            };
+        };
+        /** MfgActionExecution */
+        MfgActionExecution: {
+            action_id: string;
+            action_type: string;
+            analysis_id: string;
+            /** @default null */
+            command_hint: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @default [] */
+            cross_plane_receipts: components["schemas"]["MfgActionExecution"]["$defs"]["MfgCrossPlaneBridgeReceipt"][];
+            execution_id: string;
+            /** @default null */
+            feedback: components["schemas"]["MfgActionExecution"]["$defs"]["MfgActionFeedback"] | null;
+            governance: string;
+            incident_id: string;
+            mode: string;
+            /** @default null */
+            operator_id: string | null;
+            owner_role: string;
+            /** @default null */
+            receipt: unknown;
+            status: string;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                MfgActionFeedback: {
+                    /** @default null */
+                    actor_ref: string | null;
+                    /**
+                     * Format: double
+                     * @default null
+                     */
+                    metric_delta: number | null;
+                    note: string;
+                    outcome: string;
+                    /** Format: date-time */
+                    recorded_at: string;
+                };
+                MfgCrossPlaneBridgeReceipt: {
+                    /** @default null */
+                    audit_record_id: string | null;
+                    bridge_id: string;
+                    /** Format: date-time */
+                    bridged_at: string;
+                    cross_plane_dispatch_status: string;
+                    cross_plane_receipt_id: string;
+                    cross_plane_status: string;
+                    execution_id: string;
+                };
+            };
+        };
+        /**
+         * MfgActionExecutionIntent
+         * @description Public action execution intent. The authenticated gateway principal is the
+         *     only source of the effective operator id.
+         */
+        MfgActionExecutionIntent: {
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            /** @default dry_run */
+            mode: string;
+            /** @default null */
+            note: string | null;
+        };
+        /** MfgActionFeedback */
+        MfgActionFeedback: {
+            /** @default null */
+            actor_ref: string | null;
+            /**
+             * Format: double
+             * @default null
+             */
+            metric_delta: number | null;
+            note: string;
+            outcome: string;
+            /** Format: date-time */
+            recorded_at: string;
+        };
+        /** MfgAlertCommandRequest */
+        MfgAlertCommandRequest: {
+            command: components["schemas"]["MfgAlertCommandRequest"]["$defs"]["MfgAlertCommand"];
+            /** Format: uint64 */
+            expected_revision: number;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default null */
+            reason: string | null;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            until: string | null;
+            $defs: {
+                /** @enum {string} */
+                MfgAlertCommand: "acknowledge" | "snooze" | "resolve" | "escalate";
+            };
+        };
+        /** MfgAlertListQuery */
+        MfgAlertListQuery: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            status: string | null;
+        };
+        /** MfgAlertOccurrence */
+        MfgAlertOccurrence: {
+            /** @default null */
+            attention_ref: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @default [] */
             evidence_refs: string[];
-            evidence_scopes?: components["schemas"]["StrategyEvidenceScopeProjection"][];
-            execution_id?: string | null;
-            id: string;
-            kind: string;
-            /** @enum {string|null} */
-            selected_pattern?: "direct" | "explore" | "execute" | "deliberate" | "collaborate" | "supervise" | null;
-            policy_version?: string | null;
-            /** @enum {string|null} */
-            proof_status?: "not_proven" | "calibrated" | null;
-            resource_snapshot?: components["schemas"]["StrategyResourceSnapshot"] | null;
+            /** @default null */
+            incident_ref: string | null;
+            occurrence_id: string;
+            /** Format: uint64 */
             revision: number;
-            /** @constant */
-            schema_version?: 1;
-            /** @enum {string|null} */
-            selected_candidate?: "direct" | "parallel_tools" | "team" | null;
-            session_id?: string | null;
-            /** @enum {string|null} */
-            source?: "deterministic" | "model_validated" | "experience_adapted" | "resource_adapted" | null;
-            status?: string | null;
-            summary?: string | null;
-            team_execution_id?: string | null;
-            team_id?: string | null;
-            turn_id?: string | null;
+            rule_id: string;
+            severity: string;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            snoozed_until: string | null;
+            status: string;
+            summary: string;
+            /** Format: date-time */
+            updated_at: string;
         };
-        StrategyEvidenceScopeProjection: {
-            capability_cropped_refs: string[];
-            focus_id: string;
-            novelty_target_bp: number;
-            overlap_budget_bp: number;
-            responsibility_summary: string;
-            role_id: string;
-            scope_hash: string;
+        /** MfgAlertRule */
+        MfgAlertRule: {
+            /** @default null */
+            condition: unknown;
+            /** Format: date-time */
+            created_at: string;
+            enabled: boolean;
+            /** @default [] */
+            entity_refs: string[];
+            /** @default [] */
+            metric_refs: string[];
+            name: string;
+            owner_ref: string;
+            /** Format: uint64 */
+            revision: number;
+            rule_id: string;
+            severity: string;
+            /** Format: date-time */
+            updated_at: string;
         };
-        StrategyResourceSnapshot: {
-            assumed: boolean;
-            provider_available: boolean;
-            provider_concurrency: number;
-            provider_concurrency_penalty_bp: number;
-            sample_count: number;
-            sample_source: string;
-            team_available: boolean;
-            team_slots: number;
-            tool_concurrency: number;
-            tools_available: boolean;
+        /** MfgAlertRuleUpsertRequest */
+        MfgAlertRuleUpsertRequest: {
+            /** @default null */
+            idempotency_key: string | null;
+            rule: components["schemas"]["MfgAlertRuleUpsertRequest"]["$defs"]["MfgAlertRuleInput"];
+            $defs: {
+                MfgAlertRuleInput: {
+                    /** @default null */
+                    condition: unknown;
+                    /** @default true */
+                    enabled: boolean;
+                    /** @default [] */
+                    entity_refs: string[];
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
+                    /** @default [] */
+                    metric_refs: string[];
+                    name: string;
+                    owner_ref: string;
+                    /** @default null */
+                    rule_id: string | null;
+                    /** @default warning */
+                    severity: string;
+                };
+            };
+        };
+        /** MfgAlertSubscription */
+        MfgAlertSubscription: {
+            /** @default [] */
+            channels: string[];
+            /** Format: date-time */
+            created_at: string;
+            enabled: boolean;
+            /** Format: uint64 */
+            revision: number;
+            rule_id: string;
+            subscriber_ref: string;
+            subscription_id: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** MfgAlertSubscriptionUpsertRequest */
+        MfgAlertSubscriptionUpsertRequest: {
+            /** @default null */
+            idempotency_key: string | null;
+            subscription: components["schemas"]["MfgAlertSubscriptionUpsertRequest"]["$defs"]["MfgAlertSubscriptionInput"];
+            $defs: {
+                MfgAlertSubscriptionInput: {
+                    /** @default [] */
+                    channels: string[];
+                    /** @default true */
+                    enabled: boolean;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
+                    rule_id: string;
+                    /** @default null */
+                    subscription_id: string | null;
+                };
+            };
+        };
+        /** MfgApiErrorV1 */
+        MfgApiErrorV1: {
+            code: components["schemas"]["MfgApiErrorV1"]["$defs"]["MfgErrorCode"];
+            contract_version: string;
+            /** @default null */
+            details: unknown;
+            /** Format: uint16 */
+            http_status: number;
+            message: string;
+            /** @default null */
+            receipt_ref: string | null;
+            /** @default [] */
+            recovery_actions: components["schemas"]["MfgApiErrorV1"]["$defs"]["MfgRecoveryAction"][];
+            /** @default null */
+            request_id: string | null;
+            retryable: boolean;
+            $defs: {
+                /** @enum {string} */
+                MfgErrorCode: "authentication_required" | "capability_denied" | "scope_not_found" | "validation_failed" | "revision_conflict" | "idempotency_conflict" | "rate_limited" | "internal" | "contract_mismatch" | "resync_required" | "review_required" | "mfg_live_cursor_key_invalid" | "mfg_assignment_task_transition_required";
+                MfgRecoveryAction: {
+                    /** @default false */
+                    enabled: boolean;
+                    kind: components["schemas"]["MfgApiErrorV1"]["$defs"]["MfgRecoveryActionKind"];
+                    label: string;
+                    /** @default null */
+                    target: string | null;
+                };
+                /** @enum {string} */
+                MfgRecoveryActionKind: "reload" | "compare" | "save_as" | "retry_same_intent" | "request_access" | "open_approvals" | "request_manual_review" | "resync" | "change_target" | "abandon" | "open_runtime";
+            };
+        };
+        /** MfgApplicationDescriptor */
+        MfgApplicationDescriptor: {
+            app_id: string;
+            /** @default [] */
+            cowd_capabilities: string[];
+            description: string;
+            /** @default [] */
+            domains: components["schemas"]["MfgApplicationDescriptor"]["$defs"]["MfgApplicationDomain"][];
+            layer: string;
+            name: string;
+            /** @default [] */
+            skill_ids: string[];
+            /** @default [] */
+            source_contracts: string[];
+            /** @default [] */
+            surfaces: components["schemas"]["MfgApplicationDescriptor"]["$defs"]["MfgApplicationSurface"][];
             version: string;
+            $defs: {
+                MfgApplicationDomain: {
+                    domain_id: string;
+                    /** @default [] */
+                    entity_types: string[];
+                    industry: string;
+                    /** @default [] */
+                    metric_ids: string[];
+                    name: string;
+                    /** @default [] */
+                    relation_types: string[];
+                    /** Format: uint */
+                    scenario_count: number;
+                    version: string;
+                };
+                MfgApplicationSurface: {
+                    /** @default [] */
+                    actions: string[];
+                    /** @default [] */
+                    entrypoints: string[];
+                    role: string;
+                    surface: components["schemas"]["MfgApplicationDescriptor"]["$defs"]["MfgApplicationSurfaceKind"];
+                };
+                /** @enum {string} */
+                MfgApplicationSurfaceKind: "management" | "tui" | "cli";
+            };
         };
-        StrategyTransitionProjection: {
-            /** @enum {string} */
-            kind: "runtime.strategy.downgraded" | "runtime.strategy.early_stopped";
+        /** MfgAssignment */
+        MfgAssignment: {
+            assignee_kind: string;
+            assignee_ref: string;
+            assignment_id: string;
+            /** @default null */
+            completion_ref: string | null;
+            /** Format: date-time */
+            created_at: string;
+            created_by: string;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            due_at: string | null;
+            /** @default null */
+            incident_id: string | null;
+            /** @default null */
+            lifecycle_correlation_id: string | null;
+            /** @default [] */
+            notification_targets: components["schemas"]["MfgAssignment"]["$defs"]["MfgSurfaceNotificationTarget"][];
+            priority: string;
+            /** Format: uint64 */
+            revision: number;
+            /**
+             * Format: uint64
+             * @default null
+             */
+            sla_minutes: number | null;
+            status: string;
+            task_ref: string;
+            /** Format: date-time */
+            updated_at: string;
+            visibility: string;
+            /** @default [] */
+            watcher_refs: string[];
+            /** @default null */
+            workflow_id: string | null;
+            /** @default null */
+            workflow_node_id: string | null;
+            $defs: {
+                /**
+                 * @description A delivery address owned by the Surface boundary.  It deliberately carries
+                 *     no provider token or task state; Surface owns transport and recovery.
+                 */
+                MfgSurfaceNotificationTarget: {
+                    recipient: string;
+                    surface: string;
+                    /** @default null */
+                    thread: string | null;
+                };
+            };
+        };
+        /** MfgAssignmentCommandRequest */
+        MfgAssignmentCommandRequest: {
+            command: components["schemas"]["MfgAssignmentCommandRequest"]["$defs"]["MfgAssignmentCommand"];
+            /** Format: uint64 */
+            expected_revision: number;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default null */
+            reason: string | null;
+            /** @default null */
+            target_ref: string | null;
+            $defs: {
+                /** @enum {string} */
+                MfgAssignmentCommand: "assign" | "claim" | "transfer" | "unassign" | "watch" | "request_update" | "escalate" | "start" | "complete";
+            };
+        };
+        /** MfgAssignmentCompletionEvidenceV1 */
+        MfgAssignmentCompletionEvidenceV1: {
+            correlation_id: string;
+            owner_kind: string;
+            receipt_ref: string;
+            task_ref: string;
+            terminal_status: string;
+            /** @default null */
+            workflow_node_id: string | null;
+        };
+        /** MfgAssignmentListQuery */
+        MfgAssignmentListQuery: {
+            /** @default null */
+            assignee_ref: string | null;
+            /** @default null */
+            incident_id: string | null;
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+        };
+        /** MfgAssignmentUpsertRequest */
+        MfgAssignmentUpsertRequest: {
+            assignment: components["schemas"]["MfgAssignmentUpsertRequest"]["$defs"]["MfgAssignmentInput"];
+            /** @default null */
+            idempotency_key: string | null;
+            $defs: {
+                MfgAssignmentInput: {
+                    /** @default user */
+                    assignee_kind: string;
+                    assignee_ref: string;
+                    /** @default null */
+                    assignment_id: string | null;
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    due_at: string | null;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
+                    /** @default null */
+                    incident_id: string | null;
+                    /** @default [] */
+                    notification_targets: components["schemas"]["MfgAssignmentUpsertRequest"]["$defs"]["MfgSurfaceNotificationTarget"][];
+                    /** @default normal */
+                    priority: string;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    sla_minutes: number | null;
+                    task_ref: string;
+                    /** @default team */
+                    visibility: string;
+                    /** @default [] */
+                    watcher_refs: string[];
+                    /** @default null */
+                    workflow_id: string | null;
+                    /** @default null */
+                    workflow_node_id: string | null;
+                };
+                /**
+                 * @description A delivery address owned by the Surface boundary.  It deliberately carries
+                 *     no provider token or task state; Surface owns transport and recovery.
+                 */
+                MfgSurfaceNotificationTarget: {
+                    recipient: string;
+                    surface: string;
+                    /** @default null */
+                    thread: string | null;
+                };
+            };
+        };
+        /** MfgCaseSearchQuery */
+        MfgCaseSearchQuery: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            q: string | null;
+        };
+        /** MfgCockpitProfile */
+        MfgCockpitProfile: {
+            cadence: string;
+            /** Format: date-time */
+            created_at: string;
+            display_name: string;
+            /** @default [] */
+            focus_metric_ids: string[];
+            /** @default [] */
+            focus_refs: string[];
+            /** @default null */
+            global_filters: unknown;
+            /**
+             * @default {
+             *       "columns": 12,
+             *       "gap": 12,
+             *       "row_height": 72
+             *     }
+             */
+            layout: components["schemas"]["MfgCockpitProfile"]["$defs"]["MfgDashboardLayout"];
+            owner_ref: string;
+            profile_id: string;
+            /**
+             * Format: uint64
+             * @default 1
+             */
+            revision: number;
+            /**
+             * @default {
+             *       "kind": "personal",
+             *       "scope_ref": null
+             *     }
+             */
+            scope: components["schemas"]["MfgCockpitProfile"]["$defs"]["MfgDashboardScope"];
+            /**
+             * @default {
+             *       "editor_refs": [],
+             *       "viewer_refs": [],
+             *       "visibility": "private"
+             *     }
+             */
+            sharing_policy: components["schemas"]["MfgCockpitProfile"]["$defs"]["MfgDashboardSharingPolicy"];
+            template_id: string;
+            /** @default null */
+            thresholds: unknown;
+            /** Format: date-time */
+            updated_at: string;
+            /** @default [] */
+            widget_instances: components["schemas"]["MfgCockpitProfile"]["$defs"]["MfgWidgetInstance"][];
+            $defs: {
+                MfgDashboardLayout: {
+                    /** Format: uint16 */
+                    columns: number;
+                    /** Format: uint16 */
+                    gap: number;
+                    /** Format: uint16 */
+                    row_height: number;
+                };
+                MfgDashboardScope: {
+                    kind: string;
+                    /** @default null */
+                    scope_ref: string | null;
+                };
+                MfgDashboardSharingPolicy: {
+                    /** @default [] */
+                    editor_refs: string[];
+                    /** @default [] */
+                    viewer_refs: string[];
+                    visibility: string;
+                };
+                MfgWidgetInstance: {
+                    /** @default null */
+                    config: unknown;
+                    definition_id: string;
+                    instance_id: string;
+                    placement: components["schemas"]["MfgCockpitProfile"]["$defs"]["MfgWidgetPlacement"];
+                    /** @default null */
+                    query: unknown;
+                    /** @default true */
+                    visible: boolean;
+                };
+                MfgWidgetPlacement: {
+                    /** Format: uint16 */
+                    height: number;
+                    /** Format: uint16 */
+                    width: number;
+                    /** Format: uint16 */
+                    x: number;
+                    /** Format: uint16 */
+                    y: number;
+                };
+            };
+        };
+        /** MfgCockpitProfileCloneRequest */
+        MfgCockpitProfileCloneRequest: {
+            /** @default null */
+            display_name: string | null;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default null */
+            profile_id: string | null;
+        };
+        /** MfgCockpitProfileDeleteQuery */
+        MfgCockpitProfileDeleteQuery: {
+            /** Format: uint64 */
+            expected_revision: number;
+            /** @default null */
+            idempotency_key: string | null;
+        };
+        /** MfgCockpitProfileListQuery */
+        MfgCockpitProfileListQuery: {
+            /** @default null */
+            cadence: string | null;
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+        };
+        /** MfgCockpitProfileShareRequest */
+        MfgCockpitProfileShareRequest: {
+            /** Format: uint64 */
+            expected_revision: number;
+            /** @default null */
+            idempotency_key: string | null;
+            sharing_policy: components["schemas"]["MfgCockpitProfileShareRequest"]["$defs"]["MfgDashboardSharingPolicy"];
+            $defs: {
+                MfgDashboardSharingPolicy: {
+                    /** @default [] */
+                    editor_refs: string[];
+                    /** @default [] */
+                    viewer_refs: string[];
+                    visibility: string;
+                };
+            };
+        };
+        /** MfgCockpitProfileUpsertRequest */
+        MfgCockpitProfileUpsertRequest: {
+            /** @default null */
+            idempotency_key: string | null;
+            profile: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgCockpitProfileInput"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MfgCockpitProfileInput: {
+                    /** @default null */
+                    cadence: string | null;
+                    /** @default null */
+                    display_name: string | null;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
+                    /** @default [] */
+                    focus_metric_ids: string[];
+                    /** @default [] */
+                    focus_refs: string[];
+                    /** @default null */
+                    global_filters: unknown;
+                    /** @default null */
+                    layout: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgDashboardLayout"] | null;
+                    owner_ref: string;
+                    /** @default null */
+                    profile_id: string | null;
+                    /** @default null */
+                    scope: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgDashboardScope"] | null;
+                    /** @default null */
+                    sharing_policy: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgDashboardSharingPolicy"] | null;
+                    /** @default null */
+                    template_id: string | null;
+                    /** @default null */
+                    thresholds: unknown;
+                    /** @default [] */
+                    widget_instances: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgWidgetInstance"][];
+                };
+                MfgDashboardLayout: {
+                    /** Format: uint16 */
+                    columns: number;
+                    /** Format: uint16 */
+                    gap: number;
+                    /** Format: uint16 */
+                    row_height: number;
+                };
+                MfgDashboardScope: {
+                    kind: string;
+                    /** @default null */
+                    scope_ref: string | null;
+                };
+                MfgDashboardSharingPolicy: {
+                    /** @default [] */
+                    editor_refs: string[];
+                    /** @default [] */
+                    viewer_refs: string[];
+                    visibility: string;
+                };
+                MfgWidgetInstance: {
+                    /** @default null */
+                    config: unknown;
+                    definition_id: string;
+                    instance_id: string;
+                    placement: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgWidgetPlacement"];
+                    /** @default null */
+                    query: unknown;
+                    /** @default true */
+                    visible: boolean;
+                };
+                MfgWidgetPlacement: {
+                    /** Format: uint16 */
+                    height: number;
+                    /** Format: uint16 */
+                    width: number;
+                    /** Format: uint16 */
+                    x: number;
+                    /** Format: uint16 */
+                    y: number;
+                };
+            };
+        };
+        /** MfgCockpitProjection */
+        MfgCockpitProjection: {
+            /** Format: date-time */
+            generated_at: string;
+            profile: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgCockpitProfile"];
+            projection_id: string;
+            summary: string;
+            /** @default [] */
+            widgets: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgCockpitWidget"][];
+            $defs: {
+                MfgCockpitProfile: {
+                    cadence: string;
+                    /** Format: date-time */
+                    created_at: string;
+                    display_name: string;
+                    /** @default [] */
+                    focus_metric_ids: string[];
+                    /** @default [] */
+                    focus_refs: string[];
+                    /** @default null */
+                    global_filters: unknown;
+                    /**
+                     * @default {
+                     *       "columns": 12,
+                     *       "gap": 12,
+                     *       "row_height": 72
+                     *     }
+                     */
+                    layout: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgDashboardLayout"];
+                    owner_ref: string;
+                    profile_id: string;
+                    /**
+                     * Format: uint64
+                     * @default 1
+                     */
+                    revision: number;
+                    /**
+                     * @default {
+                     *       "kind": "personal",
+                     *       "scope_ref": null
+                     *     }
+                     */
+                    scope: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgDashboardScope"];
+                    /**
+                     * @default {
+                     *       "editor_refs": [],
+                     *       "viewer_refs": [],
+                     *       "visibility": "private"
+                     *     }
+                     */
+                    sharing_policy: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgDashboardSharingPolicy"];
+                    template_id: string;
+                    /** @default null */
+                    thresholds: unknown;
+                    /** Format: date-time */
+                    updated_at: string;
+                    /** @default [] */
+                    widget_instances: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgWidgetInstance"][];
+                };
+                MfgCockpitWidget: {
+                    /** @default null */
+                    data: unknown;
+                    /** @default  */
+                    definition_id: string;
+                    /** @default null */
+                    error: string | null;
+                    /** @default null */
+                    freshness: unknown;
+                    /** @default  */
+                    instance_id: string;
+                    /** Format: float */
+                    priority_score: number;
+                    /**
+                     * Format: uint32
+                     * @default 1
+                     */
+                    renderer_version: number;
+                    /** @default [] */
+                    source_refs: string[];
+                    status: string;
+                    title: string;
+                    widget_id: string;
+                    widget_type: string;
+                };
+                MfgDashboardLayout: {
+                    /** Format: uint16 */
+                    columns: number;
+                    /** Format: uint16 */
+                    gap: number;
+                    /** Format: uint16 */
+                    row_height: number;
+                };
+                MfgDashboardScope: {
+                    kind: string;
+                    /** @default null */
+                    scope_ref: string | null;
+                };
+                MfgDashboardSharingPolicy: {
+                    /** @default [] */
+                    editor_refs: string[];
+                    /** @default [] */
+                    viewer_refs: string[];
+                    visibility: string;
+                };
+                MfgWidgetInstance: {
+                    /** @default null */
+                    config: unknown;
+                    definition_id: string;
+                    instance_id: string;
+                    placement: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgWidgetPlacement"];
+                    /** @default null */
+                    query: unknown;
+                    /** @default true */
+                    visible: boolean;
+                };
+                MfgWidgetPlacement: {
+                    /** Format: uint16 */
+                    height: number;
+                    /** Format: uint16 */
+                    width: number;
+                    /** Format: uint16 */
+                    x: number;
+                    /** Format: uint16 */
+                    y: number;
+                };
+            };
+        };
+        /** MfgCockpitProjectionQuery */
+        MfgCockpitProjectionQuery: {
+            /** @default null */
+            entity: string | null;
+            /** @default null */
+            from: string | null;
+            /** @default null */
+            metric: string | null;
+            /** @default null */
+            severity: string | null;
+            /** @default null */
+            status: string | null;
+            /** @default null */
+            to: string | null;
+        };
+        /**
+         * MfgCockpitReportDeliveryIntent
+         * @description Public MFG delivery intent. It cannot deserialize service-owned actor data.
+         */
+        MfgCockpitReportDeliveryIntent: {
+            /** @default null */
+            actor_identity_ref: string | null;
+            /** @default null */
+            channel: string | null;
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default dry_run */
+            mode: string;
+            /** @default null */
+            provider_account: string | null;
+            /** @default null */
+            requested_capability: string | null;
+            /** @default null */
+            resource_ref: string | null;
+            /** @default null */
+            source_channel: string | null;
+            /** @default null */
+            target_ref: string | null;
+            /** @default null */
+            template_id: string | null;
+        };
+        /** MfgCockpitReportDeliveryRetryRequest */
+        MfgCockpitReportDeliveryRetryRequest: {
+            /** @default null */
+            actor_identity_ref: string | null;
+            /** @default null */
+            channel: string | null;
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default  */
+            mode: string;
+            /** @default null */
+            provider_account: string | null;
+            /** @default null */
+            requested_capability: string | null;
+            /** @default null */
+            resource_ref: string | null;
+            /** @default null */
+            source_channel: string | null;
+            /** @default null */
+            target_ref: string | null;
+            /** @default null */
+            template_id: string | null;
+        };
+        /** MfgCockpitReportDeliveryState */
+        MfgCockpitReportDeliveryState: {
+            /** Format: uint */
+            attempt_count: number;
+            classification: string;
+            dead_lettered: boolean;
+            /** @default null */
+            latest_receipt: components["schemas"]["MfgCockpitReportDeliveryState"]["$defs"]["MfgCockpitReportDeliveryReceipt"] | null;
+            /** Format: uint */
+            max_attempts: number;
+            /** @default [] */
+            reasons: string[];
+            recommended_mode: string;
+            report_id: string;
+            report_status: string;
+            /** Format: uint */
+            retry_attempt_count: number;
+            retryable: boolean;
+            /** @default null */
+            review: components["schemas"]["MfgCockpitReportDeliveryState"]["$defs"]["MfgReportDeliveryReviewSummary"] | null;
+            $defs: {
+                MfgCockpitReportDeliveryReceipt: {
+                    /** @default null */
+                    audit_record_id: string | null;
+                    cross_plane_dispatch_status: string;
+                    cross_plane_receipt_id: string;
+                    cross_plane_status: string;
+                    /** Format: date-time */
+                    delivered_at: string;
+                    delivery_id: string;
+                    report_id: string;
+                };
+                /** @enum {string} */
+                MfgReportDeliveryReviewDecision: "force_retry" | "reroute" | "abandon" | "resolve" | "reject";
+                /** @enum {string} */
+                MfgReportDeliveryReviewStatus: "approval_submission_pending" | "pending_approval" | "decision_pending_effect" | "approved_pending_effect" | "effect_applied_force_retry" | "effect_applied_reroute" | "abandoned" | "resolved_external" | "rejected";
+                MfgReportDeliveryReviewSummary: {
+                    /** @default null */
+                    decision: components["schemas"]["MfgCockpitReportDeliveryState"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+                    /** @default null */
+                    requested_action: components["schemas"]["MfgCockpitReportDeliveryState"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+                    review_id: string;
+                    /** Format: uint64 */
+                    revision: number;
+                    status: components["schemas"]["MfgCockpitReportDeliveryState"]["$defs"]["MfgReportDeliveryReviewStatus"];
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        /** MfgCockpitReportGenerateRequest */
+        MfgCockpitReportGenerateRequest: {
+            /**
+             * @default {
+             *       "cadence": null,
+             *       "delivery_ref": null,
+             *       "note": null,
+             *       "report_id": null
+             *     }
+             */
+            report: components["schemas"]["MfgCockpitReportGenerateRequest"]["$defs"]["MfgCockpitReportRequest"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MfgCockpitReportRequest: {
+                    /** @default null */
+                    cadence: string | null;
+                    /** @default null */
+                    delivery_ref: string | null;
+                    /** @default null */
+                    note: string | null;
+                    /** @default null */
+                    report_id: string | null;
+                };
+            };
+        };
+        /** MfgCockpitReportListQuery */
+        MfgCockpitReportListQuery: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            profile_id: string | null;
+        };
+        /** MfgCockpitReportScheduleRunRequest */
+        MfgCockpitReportScheduleRunRequest: {
+            /** @default null */
+            actor_identity_ref: string | null;
+            /** @default null */
+            cadence: string | null;
+            /** @default null */
+            channel: string | null;
+            /** @default false */
+            deliver: boolean;
+            /** @default null */
+            delivery_ref: string | null;
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default dry_run */
+            mode: string;
+            /** @default null */
+            provider_account: string | null;
+            /** @default null */
+            report_id_prefix: string | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            requested_capability: string | null;
+            /** @default null */
+            session_id: string | null;
+            /** @default null */
+            source_channel: string | null;
+            /** @default null */
+            template_id: string | null;
+        };
+        /** MfgCockpitReportSnapshot */
+        MfgCockpitReportSnapshot: {
+            cadence: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @default [] */
+            delivery_receipts: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgCockpitReportDeliveryReceipt"][];
+            /** @default null */
+            delivery_ref: string | null;
+            /** @default null */
+            note: string | null;
+            owner_ref: string;
+            profile_id: string;
+            projection: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgCockpitProjection"];
+            report_id: string;
+            /**
+             * Format: uint64
+             * @default 1
+             */
             revision: number;
             status: string;
             summary: string;
+            title: string;
+            $defs: {
+                MfgCockpitProfile: {
+                    cadence: string;
+                    /** Format: date-time */
+                    created_at: string;
+                    display_name: string;
+                    /** @default [] */
+                    focus_metric_ids: string[];
+                    /** @default [] */
+                    focus_refs: string[];
+                    /** @default null */
+                    global_filters: unknown;
+                    /**
+                     * @default {
+                     *       "columns": 12,
+                     *       "gap": 12,
+                     *       "row_height": 72
+                     *     }
+                     */
+                    layout: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgDashboardLayout"];
+                    owner_ref: string;
+                    profile_id: string;
+                    /**
+                     * Format: uint64
+                     * @default 1
+                     */
+                    revision: number;
+                    /**
+                     * @default {
+                     *       "kind": "personal",
+                     *       "scope_ref": null
+                     *     }
+                     */
+                    scope: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgDashboardScope"];
+                    /**
+                     * @default {
+                     *       "editor_refs": [],
+                     *       "viewer_refs": [],
+                     *       "visibility": "private"
+                     *     }
+                     */
+                    sharing_policy: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgDashboardSharingPolicy"];
+                    template_id: string;
+                    /** @default null */
+                    thresholds: unknown;
+                    /** Format: date-time */
+                    updated_at: string;
+                    /** @default [] */
+                    widget_instances: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgWidgetInstance"][];
+                };
+                MfgCockpitProjection: {
+                    /** Format: date-time */
+                    generated_at: string;
+                    profile: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgCockpitProfile"];
+                    projection_id: string;
+                    summary: string;
+                    /** @default [] */
+                    widgets: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgCockpitWidget"][];
+                };
+                MfgCockpitReportDeliveryReceipt: {
+                    /** @default null */
+                    audit_record_id: string | null;
+                    cross_plane_dispatch_status: string;
+                    cross_plane_receipt_id: string;
+                    cross_plane_status: string;
+                    /** Format: date-time */
+                    delivered_at: string;
+                    delivery_id: string;
+                    report_id: string;
+                };
+                MfgCockpitWidget: {
+                    /** @default null */
+                    data: unknown;
+                    /** @default  */
+                    definition_id: string;
+                    /** @default null */
+                    error: string | null;
+                    /** @default null */
+                    freshness: unknown;
+                    /** @default  */
+                    instance_id: string;
+                    /** Format: float */
+                    priority_score: number;
+                    /**
+                     * Format: uint32
+                     * @default 1
+                     */
+                    renderer_version: number;
+                    /** @default [] */
+                    source_refs: string[];
+                    status: string;
+                    title: string;
+                    widget_id: string;
+                    widget_type: string;
+                };
+                MfgDashboardLayout: {
+                    /** Format: uint16 */
+                    columns: number;
+                    /** Format: uint16 */
+                    gap: number;
+                    /** Format: uint16 */
+                    row_height: number;
+                };
+                MfgDashboardScope: {
+                    kind: string;
+                    /** @default null */
+                    scope_ref: string | null;
+                };
+                MfgDashboardSharingPolicy: {
+                    /** @default [] */
+                    editor_refs: string[];
+                    /** @default [] */
+                    viewer_refs: string[];
+                    visibility: string;
+                };
+                MfgWidgetInstance: {
+                    /** @default null */
+                    config: unknown;
+                    definition_id: string;
+                    instance_id: string;
+                    placement: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MfgWidgetPlacement"];
+                    /** @default null */
+                    query: unknown;
+                    /** @default true */
+                    visible: boolean;
+                };
+                MfgWidgetPlacement: {
+                    /** Format: uint16 */
+                    height: number;
+                    /** Format: uint16 */
+                    width: number;
+                    /** Format: uint16 */
+                    x: number;
+                    /** Format: uint16 */
+                    y: number;
+                };
+            };
         };
-        GatewayError: {
-            error: string;
+        /** MfgCockpitWidgetProjection */
+        MfgCockpitWidgetProjection: {
+            /** Format: date-time */
+            generated_at: string;
+            profile_id: string;
+            /** Format: uint64 */
+            profile_revision: number;
+            projection_id: string;
+            widget: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["MfgCockpitWidget"];
+            $defs: {
+                MfgCockpitWidget: {
+                    /** @default null */
+                    data: unknown;
+                    /** @default  */
+                    definition_id: string;
+                    /** @default null */
+                    error: string | null;
+                    /** @default null */
+                    freshness: unknown;
+                    /** @default  */
+                    instance_id: string;
+                    /** Format: float */
+                    priority_score: number;
+                    /**
+                     * Format: uint32
+                     * @default 1
+                     */
+                    renderer_version: number;
+                    /** @default [] */
+                    source_refs: string[];
+                    status: string;
+                    title: string;
+                    widget_id: string;
+                    widget_type: string;
+                };
+            };
+        };
+        /** MfgContractDiagnosticV1 */
+        MfgContractDiagnosticV1: {
+            /** Format: uint */
+            action_count: number;
+            /** Format: uint */
+            active_route_count: number;
+            contract_version: string;
+            /** @default null */
+            last_receipt: components["schemas"]["MfgContractDiagnosticV1"]["$defs"]["MfgReceiptV1"] | null;
+            /** Format: uint */
+            route_count: number;
+            $defs: {
+                MfgActionId: components["schemas"]["MfgContractDiagnosticV1"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgContractDiagnosticV1"]["$defs"]["MfgMultiActionId"];
+                /** @enum {string} */
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                /** @enum {string} */
+                MfgReceiptStatus: "preview" | "accepted" | "replayed" | "completed" | "conflict" | "rejected" | "failed";
+                MfgReceiptV1: {
+                    action_id: components["schemas"]["MfgContractDiagnosticV1"]["$defs"]["MfgActionId"];
+                    actor_principal: string;
+                    contract_version: string;
+                    /** @default null */
+                    correlation_id: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
+                    idempotency_key: string;
+                    payload_digest: string;
+                    receipt_id: string;
+                    resource_ref: string;
+                    /** @default null */
+                    response: unknown;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    result_revision: number | null;
+                    status: components["schemas"]["MfgContractDiagnosticV1"]["$defs"]["MfgReceiptStatus"];
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+            };
+        };
+        /** MfgContractFreshnessV1 */
+        MfgContractFreshnessV1: {
+            /** Format: date-time */
+            generated_at: string;
+            is_stale: boolean;
+            /** Format: uint64 */
+            stale_after_ms: number;
+        };
+        /**
+         * MfgCrossPlaneBridgeIntent
+         * @description Public MFG bridge intent. Gateway authentication owns the effective actor;
+         *     an actor field in an HTTP body is rejected by this closed schema.
+         */
+        MfgCrossPlaneBridgeIntent: {
+            /** @default null */
+            actor_identity_ref: string | null;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default dry_run */
+            mode: string;
+            /** @default null */
+            provider_account: string | null;
+            /** @default null */
+            requested_capability: string | null;
+            /** @default null */
+            resource_ref: string | null;
+            /** @default null */
+            source_channel: string | null;
+            /** @default null */
+            target_ref: string | null;
+        };
+        /** MfgEntitlementProjectionV2 */
+        MfgEntitlementProjectionV2: {
+            /** @default [] */
+            ceiling: string[];
+            core_profile_id: components["schemas"]["MfgEntitlementProjectionV2"]["$defs"]["MfgCoreProfileId"];
+            /** Format: uint64 */
+            credential_epoch: number;
+            /** @default [] */
+            denied: string[];
+            /** @default [] */
+            granted: string[];
+            mfg_profile_id: components["schemas"]["MfgEntitlementProjectionV2"]["$defs"]["MfgProfileId"];
+            /** Format: uint64 */
+            profile_revision: number;
+            $defs: {
+                /** @enum {string} */
+                MfgCoreProfileId: "core_legacy_0_9_530" | "core_manager";
+                /** @enum {string} */
+                MfgProfileId: "mfg_viewer" | "mfg_legacy_0_9_529" | "mfg_operator" | "mfg_reviewer" | "mfg_manager";
+            };
+        };
+        /** MfgExecutionFeedbackRequest */
+        MfgExecutionFeedbackRequest: {
+            /**
+             * Format: double
+             * @default null
+             */
+            metric_delta: number | null;
+            note: string;
+            outcome: string;
+        };
+        /** MfgForecastProjection */
+        MfgForecastProjection: {
+            /**
+             * Format: float
+             * @default null
+             */
+            confidence: number | null;
+            /** @default null */
+            entity_ref: string | null;
+            /** @default [] */
+            evidence_refs: string[];
+            /** Format: date-time */
+            expires_at: string;
+            forecast_id: string;
+            /** Format: date-time */
+            generated_at: string;
+            horizon: string;
+            interval: string;
+            /** @default [] */
+            leading_signals: components["schemas"]["MfgForecastProjection"]["$defs"]["MfgForecastSignal"][];
+            method: string;
+            metric_ref: string;
+            /** @default [] */
+            points: unknown[];
+            status: string;
+            /** @default null */
+            unavailable_reason: string | null;
+            $defs: {
+                MfgForecastSignal: {
+                    direction: string;
+                    label: string;
+                    signal_ref: string;
+                    /** Format: float */
+                    weight: number;
+                };
+            };
+        };
+        /** MfgForecastQuery */
+        MfgForecastQuery: {
+            /** @default next_period */
+            horizon: string;
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            metric_refs: string | null;
+        };
+        /** MfgFrontendContractV1 */
+        MfgFrontendContractV1: {
+            /** @default [] */
+            actions: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgActionContract"][];
+            /** Format: uint */
+            active_route_count: number;
+            app_id: string;
+            contract_version: string;
+            /** Format: date-time */
+            generated_at: string;
+            /**
+             * @description Effective capability grant for the authenticated principal on the
+             *     requesting surface. It is descriptive and never authorizes a request;
+             *     Gateway middleware remains the enforcement owner.
+             * @default []
+             */
+            granted_capabilities: string[];
+            kind: string;
+            /** Format: uint */
+            planned_route_count: number;
+            /** @default [] */
+            routes: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgRouteContract"][];
+            /** @default [] */
+            surfaces: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgSurfaceContract"][];
+            $defs: {
+                /** @enum {string} */
+                MfgActionAvailability: "active" | "planned_v541" | "planned_v545" | "unavailable";
+                MfgActionContract: {
+                    action_id: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgActionId"];
+                    availability: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgActionAvailability"];
+                    class: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgMutationClass"];
+                    confirmation: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgConfirmationKind"];
+                    emits_live_event: boolean;
+                    mutation: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgMutationSemantics"];
+                    /** @default [] */
+                    required_capabilities: string[];
+                    risk: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgActionRisk"];
+                    route_id: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgRouteId"];
+                };
+                MfgActionId: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgMultiActionId"];
+                /** @enum {string} */
+                MfgActionRisk: "low" | "medium" | "high";
+                /** @enum {string} */
+                MfgCapabilityId: "mfg.read" | "mfg.incident.operate" | "mfg.playbook.manage" | "mfg.alert.respond" | "mfg.alert.manage" | "mfg.assignment.manage" | "mfg.assignment.lifecycle" | "mfg.execution.operate" | "mfg.execution.feedback" | "mfg.report.generate" | "mfg.report.deliver" | "mfg.report.review" | "mfg.skill.run" | "mfg.cockpit.manage" | "mfg.data.manage";
+                MfgCapabilityRequirement: {
+                    capability: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgCapabilityId"];
+                    /** @constant */
+                    mode: "one";
+                } | {
+                    capabilities: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgCapabilityId"][];
+                    /** @constant */
+                    mode: "all";
+                } | {
+                    /** @constant */
+                    mode: "per_action";
+                };
+                /** @enum {string} */
+                MfgConfirmationKind: "none" | "target" | "target_and_confirm";
+                /** @enum {string} */
+                MfgConsumer: "webui" | "tui_p0" | "tui_p1" | "backend";
+                /** @enum {string} */
+                MfgIdempotencySemantics: "not_applicable_pure_dry_run" | "required" | "natural_key";
+                /** @enum {string} */
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                /** @enum {string} */
+                MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
+                MfgMutationSemantics: ("read_only" | "preview_receipt") | {
+                    durable_receipt: {
+                        idempotency: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgIdempotencySemantics"];
+                        revision: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgRevisionSemantics"];
+                    };
+                };
+                /** @enum {string} */
+                MfgRevisionSemantics: "not_applicable" | "create_only" | "required";
+                MfgRouteContract: {
+                    availability: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgActionAvailability"];
+                    capability: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgCapabilityRequirement"];
+                    class: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgMutationClass"];
+                    confirmation: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgConfirmationKind"];
+                    /** @default [] */
+                    consumers: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgConsumer"][];
+                    emits_live_event: boolean;
+                    method: string;
+                    path: string;
+                    request_schema: string;
+                    response_schema: string;
+                    risk: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgActionRisk"];
+                    route_id: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgRouteId"];
+                    schema_owner: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgSchemaOwner"];
+                };
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                /** @enum {string} */
+                MfgSchemaOwner: "contract" | "matrix_core";
+                MfgSurfaceContract: {
+                    /** @default [] */
+                    actions: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgActionId"][];
+                    /** @default [] */
+                    entrypoints: string[];
+                    role: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgSurfaceRole"];
+                    /** @default [] */
+                    routes: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgRouteId"][];
+                    surface: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgSurfaceKind"];
+                };
+                /** @enum {string} */
+                MfgSurfaceKind: "webui" | "tui" | "cli" | "management";
+                /** @enum {string} */
+                MfgSurfaceRole: "enhanced_management" | "console_unavailable" | "console_read_only" | "console_operational_control" | "minimal_core_control";
+            };
+        };
+        /** MfgIncident */
+        MfgIncident: {
+            attention_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            evidence_packet_id?: string | null;
+            incident_id: string;
+            /**
+             * Format: uint64
+             * @default 1
+             */
+            revision: number;
+            status: string;
+            task_id?: string | null;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
+            workflow_graph_id?: string | null;
+        };
+        /** MfgIncidentCreateRequest */
+        MfgIncidentCreateRequest: {
+            /** @default null */
+            attention_id: string | null;
+            /** @default null */
+            evidence_packet_id: string | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            /** @default null */
+            title: string | null;
+        };
+        /** MfgIncidentListQuery */
+        MfgIncidentListQuery: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+        };
+        /** MfgLiveDeltaV1 */
+        MfgLiveDeltaV1: {
+            base_cursor: string;
+            /** @default [] */
+            events: components["schemas"]["MfgLiveDeltaV1"]["$defs"]["MfgLiveEventV1"][];
+            target_cursor: string;
+            view_epoch: string;
+            $defs: {
+                MfgLiveEventV1: {
+                    event_type: string;
+                    /** Format: date-time */
+                    occurred_at: string;
+                    /** @default null */
+                    payload: unknown;
+                    /** Format: uint64 */
+                    revision: number;
+                    subject_ref: string;
+                };
+            };
+        };
+        /** MfgLiveEnvelopeV1 */
+        MfgLiveEnvelopeV1: {
+            $defs: {
+                MfgLiveDeltaV1: {
+                    base_cursor: string;
+                    /** @default [] */
+                    events: components["schemas"]["MfgLiveEnvelopeV1"]["$defs"]["MfgLiveEventV1"][];
+                    target_cursor: string;
+                    view_epoch: string;
+                };
+                MfgLiveEventV1: {
+                    event_type: string;
+                    /** Format: date-time */
+                    occurred_at: string;
+                    /** @default null */
+                    payload: unknown;
+                    /** Format: uint64 */
+                    revision: number;
+                    subject_ref: string;
+                };
+                MfgLiveHeartbeatV1: {
+                    cursor: string;
+                    /** Format: date-time */
+                    generated_at: string;
+                    view_epoch: string;
+                };
+                MfgLiveResyncV1: {
+                    latest_cursor: string;
+                    previous_view_epoch: string;
+                    reason: string;
+                    snapshot_url: string;
+                };
+                MfgLiveSnapshotStateV1: {
+                    /** @default null */
+                    alerts: unknown;
+                    /** @default null */
+                    assignments: unknown;
+                    /** @default null */
+                    cockpit: unknown;
+                    /** @default null */
+                    data_compute: unknown;
+                    /** @default null */
+                    executions: unknown;
+                    /** @default null */
+                    incidents: unknown;
+                    /** @default null */
+                    receipts: unknown;
+                    /** @default null */
+                    reports: unknown;
+                    /** @default null */
+                    reviews: unknown;
+                };
+                MfgLiveSnapshotV1: {
+                    contract_version: string;
+                    cursor: string;
+                    /** Format: date-time */
+                    generated_at: string;
+                    state: components["schemas"]["MfgLiveEnvelopeV1"]["$defs"]["MfgLiveSnapshotStateV1"];
+                    view_epoch: string;
+                };
+            };
+        } & (components["schemas"]["MfgLiveEnvelopeV1"]["$defs"]["MfgLiveSnapshotV1"] | components["schemas"]["MfgLiveEnvelopeV1"]["$defs"]["MfgLiveDeltaV1"] | components["schemas"]["MfgLiveEnvelopeV1"]["$defs"]["MfgLiveResyncV1"] | components["schemas"]["MfgLiveEnvelopeV1"]["$defs"]["MfgLiveHeartbeatV1"]);
+        /** MfgLiveHeartbeatV1 */
+        MfgLiveHeartbeatV1: {
+            cursor: string;
+            /** Format: date-time */
+            generated_at: string;
+            view_epoch: string;
+        };
+        /** MfgLiveQuery */
+        MfgLiveQuery: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+        };
+        /** MfgLiveResyncV1 */
+        MfgLiveResyncV1: {
+            latest_cursor: string;
+            previous_view_epoch: string;
+            reason: string;
+            snapshot_url: string;
+        };
+        /** MfgLiveSnapshotStateV1 */
+        MfgLiveSnapshotStateV1: {
+            /** @default null */
+            alerts: unknown;
+            /** @default null */
+            assignments: unknown;
+            /** @default null */
+            cockpit: unknown;
+            /** @default null */
+            data_compute: unknown;
+            /** @default null */
+            executions: unknown;
+            /** @default null */
+            incidents: unknown;
+            /** @default null */
+            receipts: unknown;
+            /** @default null */
+            reports: unknown;
+            /** @default null */
+            reviews: unknown;
+        };
+        /** MfgLiveSnapshotV1 */
+        MfgLiveSnapshotV1: {
+            contract_version: string;
+            cursor: string;
+            /** Format: date-time */
+            generated_at: string;
+            state: components["schemas"]["MfgLiveSnapshotV1"]["$defs"]["MfgLiveSnapshotStateV1"];
+            view_epoch: string;
+            $defs: {
+                MfgLiveSnapshotStateV1: {
+                    /** @default null */
+                    alerts: unknown;
+                    /** @default null */
+                    assignments: unknown;
+                    /** @default null */
+                    cockpit: unknown;
+                    /** @default null */
+                    data_compute: unknown;
+                    /** @default null */
+                    executions: unknown;
+                    /** @default null */
+                    incidents: unknown;
+                    /** @default null */
+                    receipts: unknown;
+                    /** @default null */
+                    reports: unknown;
+                    /** @default null */
+                    reviews: unknown;
+                };
+            };
+        };
+        /** MfgMemoryCase */
+        MfgMemoryCase: {
+            /** @default [] */
+            actions_taken: string[];
+            /** @default null */
+            analysis_id: string | null;
+            case_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @default [] */
+            entity_refs: string[];
+            /** @default null */
+            evidence_packet_id: string | null;
+            /** @default [] */
+            execution_receipts: string[];
+            /** @default null */
+            feedback_summary: string | null;
+            incident_id: string;
+            memory_summary: string;
+            /** @default [] */
+            metric_keys: string[];
+            outcome: string;
+            /** @default null */
+            playbook_id: string | null;
+            problem_signature: string;
+            /** @default [] */
+            root_causes: string[];
+            title: string;
+        };
+        /** MfgMutationContextV1 */
+        MfgMutationContextV1: {
+            contract_version: string;
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            idempotency_key: string;
+            /** @default null */
+            intent_id: string | null;
+            /** @default null */
+            payload_digest: string | null;
+            /** @default null */
+            request_id: string | null;
+        };
+        /** MfgMutationResponseV1 */
+        MfgMutationResponseV1: {
+            /** @default null */
+            _mfg_receipt: components["schemas"]["MfgMutationResponseV1"]["$defs"]["MfgReceiptV1"] | null;
+            /** @default null */
+            receipt: unknown;
+            $defs: {
+                MfgActionId: components["schemas"]["MfgMutationResponseV1"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgMutationResponseV1"]["$defs"]["MfgMultiActionId"];
+                /** @enum {string} */
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                /** @enum {string} */
+                MfgReceiptStatus: "preview" | "accepted" | "replayed" | "completed" | "conflict" | "rejected" | "failed";
+                MfgReceiptV1: {
+                    action_id: components["schemas"]["MfgMutationResponseV1"]["$defs"]["MfgActionId"];
+                    actor_principal: string;
+                    contract_version: string;
+                    /** @default null */
+                    correlation_id: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
+                    idempotency_key: string;
+                    payload_digest: string;
+                    receipt_id: string;
+                    resource_ref: string;
+                    /** @default null */
+                    response: unknown;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    result_revision: number | null;
+                    status: components["schemas"]["MfgMutationResponseV1"]["$defs"]["MfgReceiptStatus"];
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        /** MfgNoBodyRequestV1 */
+        MfgNoBodyRequestV1: Record<string, never>;
+        /** MfgOperationalAnalysis */
+        MfgOperationalAnalysis: {
+            analysis_id: string;
+            /** @default [] */
+            attribution_candidates: components["schemas"]["MfgOperationalAnalysis"]["$defs"]["MfgAttributionCandidate"][];
+            /** Format: float */
+            confidence: number;
+            /** Format: date-time */
+            created_at: string;
+            evidence_packet_id: string;
+            /** @default [] */
+            impact_paths: components["schemas"]["MfgOperationalAnalysis"]["$defs"]["MfgImpactPath"][];
+            incident_id: string;
+            /** @default [] */
+            recommended_actions: components["schemas"]["MfgOperationalAnalysis"]["$defs"]["MfgRecommendedAction"][];
+            /**
+             * Format: uint64
+             * @default 1
+             */
+            revision: number;
+            status: string;
+            $defs: {
+                MfgAttributionCandidate: {
+                    cause_id: string;
+                    cause_type: string;
+                    /** Format: float */
+                    confidence: number;
+                    /** @default null */
+                    entity_ref: string | null;
+                    /** @default [] */
+                    evidence_refs: string[];
+                    /** @default null */
+                    metric_id: string | null;
+                    /** Format: float */
+                    priority_score: number;
+                    summary: string;
+                };
+                MfgImpactPath: {
+                    /** Format: float */
+                    confidence: number;
+                    /** @default [] */
+                    evidence_refs: string[];
+                    from_entity: string;
+                    impact_type: string;
+                    path_id: string;
+                    severity: string;
+                    summary: string;
+                    to_scope: string;
+                };
+                MfgRecommendedAction: {
+                    action_id: string;
+                    action_type: string;
+                    /** @default null */
+                    command_hint: string | null;
+                    expected_effect: string;
+                    governance: string;
+                    owner_role: string;
+                    priority: string;
+                    /** @default [] */
+                    required_evidence: string[];
+                    title: string;
+                };
+            };
+        };
+        /** MfgPlaybook */
+        MfgPlaybook: {
+            /** Format: date-time */
+            created_at: string;
+            /** @default null */
+            created_from_case_id: string | null;
+            cross_plane_policy: string;
+            domain: string;
+            /** @default [] */
+            metric_keys: string[];
+            playbook_id: string;
+            quality_gate_policy: string;
+            /** @default [] */
+            recommended_steps: components["schemas"]["MfgPlaybook"]["$defs"]["MfgPlaybookStep"][];
+            /** @default [] */
+            required_evidence: string[];
+            /**
+             * Format: uint64
+             * @default 1
+             */
+            revision: number;
+            scenario: string;
+            /** @default [] */
+            success_metrics: string[];
+            /** @default [] */
+            trigger_fact_types: string[];
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                MfgPlaybookStep: {
+                    action_type: string;
+                    expected_effect: string;
+                    owner_role: string;
+                    /** @default [] */
+                    required_evidence: string[];
+                    step_id: string;
+                    title: string;
+                };
+            };
+        };
+        /** MfgPlaybookRecommendRequest */
+        MfgPlaybookRecommendRequest: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgPlaybookUpsertRequest */
+        MfgPlaybookUpsertRequest: {
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            playbook: components["schemas"]["MfgPlaybookUpsertRequest"]["$defs"]["MfgPlaybook"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MfgPlaybook: {
+                    /** Format: date-time */
+                    created_at: string;
+                    /** @default null */
+                    created_from_case_id: string | null;
+                    cross_plane_policy: string;
+                    domain: string;
+                    /** @default [] */
+                    metric_keys: string[];
+                    playbook_id: string;
+                    quality_gate_policy: string;
+                    /** @default [] */
+                    recommended_steps: components["schemas"]["MfgPlaybookUpsertRequest"]["$defs"]["MfgPlaybookStep"][];
+                    /** @default [] */
+                    required_evidence: string[];
+                    /**
+                     * Format: uint64
+                     * @default 1
+                     */
+                    revision: number;
+                    scenario: string;
+                    /** @default [] */
+                    success_metrics: string[];
+                    /** @default [] */
+                    trigger_fact_types: string[];
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                MfgPlaybookStep: {
+                    action_type: string;
+                    expected_effect: string;
+                    owner_role: string;
+                    /** @default [] */
+                    required_evidence: string[];
+                    step_id: string;
+                    title: string;
+                };
+            };
+        };
+        /** MfgReadResponseV1 */
+        MfgReadResponseV1: {
+            /** @default null */
+            kind: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MfgRealityAffectedByFactTypeRequest */
+        MfgRealityAffectedByFactTypeRequest: {
+            fact_type: string;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgRealityComputeJobPlanRequest */
+        MfgRealityComputeJobPlanRequest: {
+            job: components["schemas"]["MfgRealityComputeJobPlanRequest"]["$defs"]["MatrixComputeJobInput"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixComputeJobInput: {
+                    /** @default null */
+                    entity_scope: string | null;
+                    /** @default null */
+                    job_id: string | null;
+                    /** @default [] */
+                    metric_ids: string[];
+                    /** @default null */
+                    period: string | null;
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    priority: number | null;
+                    /** @default [] */
+                    trigger_fact_refs: string[];
+                    trigger_fact_type: string;
+                };
+            };
+        };
+        /** MfgRealityConnectorRunRequest */
+        MfgRealityConnectorRunRequest: {
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            run: components["schemas"]["MfgRealityConnectorRunRequest"]["$defs"]["MatrixConnectorRunInput"] | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixConnectorRunInput: {
+                    /** @default null */
+                    checksum: string | null;
+                    /** @default null */
+                    credential_ref: string | null;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_rows: number | null;
+                    /** @default null */
+                    mode: string | null;
+                    /** @default null */
+                    partition_ref: string | null;
+                    /** @default null */
+                    resource_ref: string | null;
+                    /** @default null */
+                    run_id: string | null;
+                };
+            };
+        };
+        /** MfgRealityDataPlaneIngestPlanRequest */
+        MfgRealityDataPlaneIngestPlanRequest: {
+            ingest: components["schemas"]["MfgRealityDataPlaneIngestPlanRequest"]["$defs"]["MatrixDataPlaneIngestPlanInput"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixDataPlaneIngestPlanInput: {
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    estimated_rows: number | null;
+                    fact_type: string;
+                    /** @default null */
+                    high_watermark: string | null;
+                    /** @default [] */
+                    metric_ids: string[];
+                    /** @default null */
+                    partition_ref: string | null;
+                    /** @default null */
+                    raw_checksum: string | null;
+                    source_ref: string;
+                };
+            };
+        };
+        /** MfgRealityEntityConflictDecisionRequest */
+        MfgRealityEntityConflictDecisionRequest: {
+            candidate_id: string;
+            /** @default null */
+            notes: string | null;
+            /** @default null */
+            request_id: string | null;
+            retired_entity_id: string;
+            /** @default null */
+            session_id: string | null;
+            survivor_entity_id: string;
+            survivorship_rule: string;
+        };
+        /** MfgRealityEntityMatchCandidateRequest */
+        MfgRealityEntityMatchCandidateRequest: {
+            left_entity_id: string;
+            /** @default null */
+            request_id: string | null;
+            right_entity_id: string;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgRealityEntityResolveSourceKeyRequest */
+        MfgRealityEntityResolveSourceKeyRequest: {
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            source_key: string;
+            source_system: string;
+        };
+        /** MfgRealityEntityUpsertRequest */
+        MfgRealityEntityUpsertRequest: {
+            entity: components["schemas"]["MfgRealityEntityUpsertRequest"]["$defs"]["MatrixEntityInput"];
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixEntityInput: {
+                    /** @default null */
+                    attributes: unknown;
+                    canonical_key: string;
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    confidence: number | null;
+                    /** @default null */
+                    display_name: string | null;
+                    /** @default null */
+                    entity_id: string | null;
+                    entity_type: string;
+                    /** @default [] */
+                    source_keys: components["schemas"]["MfgRealityEntityUpsertRequest"]["$defs"]["MatrixSourceKey"][];
+                };
+                MatrixSourceKey: {
+                    source_key: string;
+                    /** @default null */
+                    source_ref: string | null;
+                    source_system: string;
+                };
+            };
+        };
+        /** MfgRealityEvidenceBuildRequest */
+        MfgRealityEvidenceBuildRequest: {
+            /** @default null */
+            attention_id: string | null;
+            /** @default null */
+            problem_statement: string | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgRealityFactIngestRequest */
+        MfgRealityFactIngestRequest: {
+            /** @default [] */
+            facts: components["schemas"]["MfgRealityFactIngestRequest"]["$defs"]["MatrixFactInput"][];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixFactInput: {
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    confidence: number | null;
+                    /** @default null */
+                    dimensions: unknown;
+                    /** @default [] */
+                    entity_refs: string[];
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    event_time: string | null;
+                    /** @default null */
+                    fact_id: string | null;
+                    fact_type: string;
+                    /** @default null */
+                    measures: unknown;
+                    /** @default null */
+                    metric_key: string | null;
+                    /** @default null */
+                    raw_hash: string | null;
+                    /** @default null */
+                    snapshot_id: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    valid_from: string | null;
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    valid_to: string | null;
+                };
+            };
+        };
+        /** MfgRealityMetricAttentionPlanRequest */
+        MfgRealityMetricAttentionPlanRequest: {
+            /** @default null */
+            entity_scope: string | null;
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            period: string | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            trigger_fact_type: string;
+        };
+        /** MfgRealityMetricDependencyUpsertRequest */
+        MfgRealityMetricDependencyUpsertRequest: {
+            dependency: components["schemas"]["MfgRealityMetricDependencyUpsertRequest"]["$defs"]["MatrixMetricDependencyInput"];
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixMetricDependencyInput: {
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    confidence: number | null;
+                    /** @default null */
+                    dependency_id: string | null;
+                    dependency_type: string;
+                    downstream_metric_id: string;
+                    /** @default null */
+                    entity_relation_type: string | null;
+                    /** @default null */
+                    notes: string | null;
+                    /** @default [] */
+                    required_fact_types: string[];
+                    /** @default null */
+                    transformation_ref: string | null;
+                    upstream_metric_id: string;
+                };
+            };
+        };
+        /** MfgRealityMetricSnapshotMaterializeRequest */
+        MfgRealityMetricSnapshotMaterializeRequest: {
+            metric_ids: string[];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            scope_ref: string | null;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgRealityRelationUpsertRequest */
+        MfgRealityRelationUpsertRequest: {
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            relation: components["schemas"]["MfgRealityRelationUpsertRequest"]["$defs"]["MatrixRelationInput"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixRelationInput: {
+                    /** @default null */
+                    attributes: unknown;
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    confidence: number | null;
+                    from_entity_id: string;
+                    /** @default null */
+                    relation_id: string | null;
+                    relation_type: string;
+                    to_entity_id: string;
+                };
+            };
+        };
+        /** MfgRealitySourcePackIngestFileRequest */
+        MfgRealitySourcePackIngestFileRequest: {
+            /** @default [] */
+            facts: components["schemas"]["MfgRealitySourcePackIngestFileRequest"]["$defs"]["MatrixFactInput"][];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MatrixFactInput: {
+                    /**
+                     * Format: float
+                     * @default null
+                     */
+                    confidence: number | null;
+                    /** @default null */
+                    dimensions: unknown;
+                    /** @default [] */
+                    entity_refs: string[];
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    event_time: string | null;
+                    /** @default null */
+                    fact_id: string | null;
+                    fact_type: string;
+                    /** @default null */
+                    measures: unknown;
+                    /** @default null */
+                    metric_key: string | null;
+                    /** @default null */
+                    raw_hash: string | null;
+                    /** @default null */
+                    snapshot_id: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    valid_from: string | null;
+                    /**
+                     * Format: date-time
+                     * @default null
+                     */
+                    valid_to: string | null;
+                };
+            };
+        };
+        /** MfgRealitySourcePackUpsertRequest */
+        MfgRealitySourcePackUpsertRequest: {
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            source_pack: components["schemas"]["MfgRealitySourcePackUpsertRequest"]["$defs"]["MatrixSourcePack"];
+            $defs: {
+                MatrixSourceEntityMapping: {
+                    matrix_entity_type: string;
+                    source_entity: string;
+                    source_key_field: string;
+                };
+                MatrixSourceFactMapping: {
+                    dedup_key: string;
+                    delta_signature: string;
+                    /** @default [] */
+                    entity_ref_fields: string[];
+                    /** @default null */
+                    event_time_field: string | null;
+                    fact_type: string;
+                    /** @default [] */
+                    measure_fields: string[];
+                    metric_key: string;
+                    source_table: string;
+                };
+                MatrixSourcePack: {
+                    access_mode: string;
+                    /**
+                     * Format: date-time
+                     * @default 1970-01-01T00:00:00Z
+                     */
+                    created_at: string;
+                    /** @default [] */
+                    entity_mappings: components["schemas"]["MfgRealitySourcePackUpsertRequest"]["$defs"]["MatrixSourceEntityMapping"][];
+                    /** @default [] */
+                    fact_mappings: components["schemas"]["MfgRealitySourcePackUpsertRequest"]["$defs"]["MatrixSourceFactMapping"][];
+                    /** @default null */
+                    freshness_sla: string | null;
+                    /** @default null */
+                    metadata: unknown;
+                    owner: string;
+                    /** @default [] */
+                    quality_rules: string[];
+                    /** @default [] */
+                    reconciliation_rules: string[];
+                    refresh_mode: string;
+                    /** @default [] */
+                    relation_mappings: components["schemas"]["MfgRealitySourcePackUpsertRequest"]["$defs"]["MatrixSourceRelationMapping"][];
+                    /** @default null */
+                    security_policy: string | null;
+                    source_name: string;
+                    source_pack_id: string;
+                    /**
+                     * Format: date-time
+                     * @default 1970-01-01T00:00:00Z
+                     */
+                    updated_at: string;
+                };
+                MatrixSourceRelationMapping: {
+                    /** @default [] */
+                    attribute_fields: string[];
+                    dedup_key: string;
+                    from_source_key_field: string;
+                    relation_type: string;
+                    source_table: string;
+                    to_source_key_field: string;
+                };
+            };
+        };
+        /** MfgReceiptV1 */
+        MfgReceiptV1: {
+            action_id: components["schemas"]["MfgReceiptV1"]["$defs"]["MfgActionId"];
+            actor_principal: string;
+            contract_version: string;
+            /** @default null */
+            correlation_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            idempotency_key: string;
+            payload_digest: string;
+            receipt_id: string;
+            resource_ref: string;
+            /** @default null */
+            response: unknown;
+            /**
+             * Format: uint64
+             * @default null
+             */
+            result_revision: number | null;
+            status: components["schemas"]["MfgReceiptV1"]["$defs"]["MfgReceiptStatus"];
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                MfgActionId: components["schemas"]["MfgReceiptV1"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgReceiptV1"]["$defs"]["MfgMultiActionId"];
+                /** @enum {string} */
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                /** @enum {string} */
+                MfgReceiptStatus: "preview" | "accepted" | "replayed" | "completed" | "conflict" | "rejected" | "failed";
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+            };
+        };
+        /** MfgRecoveryAction */
+        MfgRecoveryAction: {
+            /** @default false */
+            enabled: boolean;
+            kind: components["schemas"]["MfgRecoveryAction"]["$defs"]["MfgRecoveryActionKind"];
+            label: string;
+            /** @default null */
+            target: string | null;
+            $defs: {
+                /** @enum {string} */
+                MfgRecoveryActionKind: "reload" | "compare" | "save_as" | "retry_same_intent" | "request_access" | "open_approvals" | "request_manual_review" | "resync" | "change_target" | "abandon" | "open_runtime";
+            };
+        };
+        /** MfgReportDeliveryReview */
+        MfgReportDeliveryReview: {
+            /** @default null */
+            approval_id: string | null;
+            correlation_id: string;
+            /** Format: date-time */
+            created_at: string;
+            dead_letter_digest: string;
+            /** @default null */
+            decision: components["schemas"]["MfgReportDeliveryReview"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+            /** @default null */
+            decision_lease_ref: string | null;
+            /** Format: uint64 */
+            delivery_revision: number;
+            /** @default null */
+            effect_error: string | null;
+            /** @default null */
+            effect_key: string | null;
+            /** @default null */
+            effect_payload: unknown;
+            /** @default null */
+            effect_receipt_ref: string | null;
+            /** @default [] */
+            evidence_refs: string[];
+            /** @default  */
+            reason: string;
+            report_id: string;
+            /** Format: uint64 */
+            report_revision: number;
+            /** @default null */
+            requested_action: components["schemas"]["MfgReportDeliveryReview"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+            requester_principal: string;
+            review_id: string;
+            /** @default null */
+            reviewer_principal: string | null;
+            /** Format: uint64 */
+            revision: number;
+            status: components["schemas"]["MfgReportDeliveryReview"]["$defs"]["MfgReportDeliveryReviewStatus"];
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                /** @enum {string} */
+                MfgReportDeliveryReviewDecision: "force_retry" | "reroute" | "abandon" | "resolve" | "reject";
+                /** @enum {string} */
+                MfgReportDeliveryReviewStatus: "approval_submission_pending" | "pending_approval" | "decision_pending_effect" | "approved_pending_effect" | "effect_applied_force_retry" | "effect_applied_reroute" | "abandoned" | "resolved_external" | "rejected";
+            };
+        };
+        /** MfgReportDeliveryReviewCollection */
+        MfgReportDeliveryReviewCollection: {
+            /** @default [] */
+            items: components["schemas"]["MfgReportDeliveryReviewCollection"]["$defs"]["MfgReportDeliveryReview"][];
+            /** @default null */
+            next_cursor: string | null;
+            $defs: {
+                MfgReportDeliveryReview: {
+                    /** @default null */
+                    approval_id: string | null;
+                    correlation_id: string;
+                    /** Format: date-time */
+                    created_at: string;
+                    dead_letter_digest: string;
+                    /** @default null */
+                    decision: components["schemas"]["MfgReportDeliveryReviewCollection"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+                    /** @default null */
+                    decision_lease_ref: string | null;
+                    /** Format: uint64 */
+                    delivery_revision: number;
+                    /** @default null */
+                    effect_error: string | null;
+                    /** @default null */
+                    effect_key: string | null;
+                    /** @default null */
+                    effect_payload: unknown;
+                    /** @default null */
+                    effect_receipt_ref: string | null;
+                    /** @default [] */
+                    evidence_refs: string[];
+                    /** @default  */
+                    reason: string;
+                    report_id: string;
+                    /** Format: uint64 */
+                    report_revision: number;
+                    /** @default null */
+                    requested_action: components["schemas"]["MfgReportDeliveryReviewCollection"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+                    requester_principal: string;
+                    review_id: string;
+                    /** @default null */
+                    reviewer_principal: string | null;
+                    /** Format: uint64 */
+                    revision: number;
+                    status: components["schemas"]["MfgReportDeliveryReviewCollection"]["$defs"]["MfgReportDeliveryReviewStatus"];
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                /** @enum {string} */
+                MfgReportDeliveryReviewDecision: "force_retry" | "reroute" | "abandon" | "resolve" | "reject";
+                /** @enum {string} */
+                MfgReportDeliveryReviewStatus: "approval_submission_pending" | "pending_approval" | "decision_pending_effect" | "approved_pending_effect" | "effect_applied_force_retry" | "effect_applied_reroute" | "abandoned" | "resolved_external" | "rejected";
+            };
+        };
+        /** MfgReportDeliveryReviewCreateRequest */
+        MfgReportDeliveryReviewCreateRequest: {
+            /** @default [] */
+            evidence_refs: string[];
+            /** Format: uint64 */
+            expected_report_revision: number;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default  */
+            reason: string;
+        };
+        /** MfgReportDeliveryReviewDecisionRequest */
+        MfgReportDeliveryReviewDecisionRequest: {
+            decision: components["schemas"]["MfgReportDeliveryReviewDecisionRequest"]["$defs"]["MfgReportDeliveryReviewDecision"];
+            /** @default [] */
+            evidence_refs: string[];
+            /** Format: uint64 */
+            expected_revision: number;
+            /** @default null */
+            idempotency_key: string | null;
+            /** @default  */
+            reason: string;
+            /** @default null */
+            reroute: components["schemas"]["MfgReportDeliveryReviewDecisionRequest"]["$defs"]["MfgReportDeliveryReviewRerouteTarget"] | null;
+            $defs: {
+                /** @enum {string} */
+                MfgReportDeliveryReviewDecision: "force_retry" | "reroute" | "abandon" | "resolve" | "reject";
+                MfgReportDeliveryReviewRerouteTarget: {
+                    channel: string;
+                    provider_account: string;
+                    requested_capability: string;
+                    target_ref: string;
+                };
+            };
+        };
+        /** MfgReportDeliveryReviewEffect */
+        MfgReportDeliveryReviewEffect: {
+            action: components["schemas"]["MfgReportDeliveryReviewEffect"]["$defs"]["MfgReportDeliveryReviewDecision"];
+            /** Format: uint64 */
+            attempt_count: number;
+            /** Format: date-time */
+            created_at: string;
+            effect_id: string;
+            effect_key: string;
+            /** @default null */
+            last_error: string | null;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            next_attempt_at: string | null;
+            /** @default null */
+            payload: unknown;
+            /** @default null */
+            receipt_ref: string | null;
+            review_id: string;
+            status: string;
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                /** @enum {string} */
+                MfgReportDeliveryReviewDecision: "force_retry" | "reroute" | "abandon" | "resolve" | "reject";
+            };
+        };
+        /** MfgReportDeliveryReviewSummary */
+        MfgReportDeliveryReviewSummary: {
+            /** @default null */
+            decision: components["schemas"]["MfgReportDeliveryReviewSummary"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+            /** @default null */
+            requested_action: components["schemas"]["MfgReportDeliveryReviewSummary"]["$defs"]["MfgReportDeliveryReviewDecision"] | null;
+            review_id: string;
+            /** Format: uint64 */
+            revision: number;
+            status: components["schemas"]["MfgReportDeliveryReviewSummary"]["$defs"]["MfgReportDeliveryReviewStatus"];
+            /** Format: date-time */
+            updated_at: string;
+            $defs: {
+                /** @enum {string} */
+                MfgReportDeliveryReviewDecision: "force_retry" | "reroute" | "abandon" | "resolve" | "reject";
+                /** @enum {string} */
+                MfgReportDeliveryReviewStatus: "approval_submission_pending" | "pending_approval" | "decision_pending_effect" | "approved_pending_effect" | "effect_applied_force_retry" | "effect_applied_reroute" | "abandoned" | "resolved_external" | "rejected";
+            };
+        };
+        /** MfgReportReviewListQuery */
+        MfgReportReviewListQuery: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            report_id: string | null;
+        };
+        /** MfgRouteContract */
+        MfgRouteContract: {
+            availability: components["schemas"]["MfgRouteContract"]["$defs"]["MfgActionAvailability"];
+            capability: components["schemas"]["MfgRouteContract"]["$defs"]["MfgCapabilityRequirement"];
+            class: components["schemas"]["MfgRouteContract"]["$defs"]["MfgMutationClass"];
+            confirmation: components["schemas"]["MfgRouteContract"]["$defs"]["MfgConfirmationKind"];
+            /** @default [] */
+            consumers: components["schemas"]["MfgRouteContract"]["$defs"]["MfgConsumer"][];
+            emits_live_event: boolean;
+            method: string;
+            path: string;
+            request_schema: string;
+            response_schema: string;
+            risk: components["schemas"]["MfgRouteContract"]["$defs"]["MfgActionRisk"];
+            route_id: components["schemas"]["MfgRouteContract"]["$defs"]["MfgRouteId"];
+            schema_owner: components["schemas"]["MfgRouteContract"]["$defs"]["MfgSchemaOwner"];
+            $defs: {
+                /** @enum {string} */
+                MfgActionAvailability: "active" | "planned_v541" | "planned_v545" | "unavailable";
+                /** @enum {string} */
+                MfgActionRisk: "low" | "medium" | "high";
+                /** @enum {string} */
+                MfgCapabilityId: "mfg.read" | "mfg.incident.operate" | "mfg.playbook.manage" | "mfg.alert.respond" | "mfg.alert.manage" | "mfg.assignment.manage" | "mfg.assignment.lifecycle" | "mfg.execution.operate" | "mfg.execution.feedback" | "mfg.report.generate" | "mfg.report.deliver" | "mfg.report.review" | "mfg.skill.run" | "mfg.cockpit.manage" | "mfg.data.manage";
+                MfgCapabilityRequirement: {
+                    capability: components["schemas"]["MfgRouteContract"]["$defs"]["MfgCapabilityId"];
+                    /** @constant */
+                    mode: "one";
+                } | {
+                    capabilities: components["schemas"]["MfgRouteContract"]["$defs"]["MfgCapabilityId"][];
+                    /** @constant */
+                    mode: "all";
+                } | {
+                    /** @constant */
+                    mode: "per_action";
+                };
+                /** @enum {string} */
+                MfgConfirmationKind: "none" | "target" | "target_and_confirm";
+                /** @enum {string} */
+                MfgConsumer: "webui" | "tui_p0" | "tui_p1" | "backend";
+                /** @enum {string} */
+                MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                /** @enum {string} */
+                MfgSchemaOwner: "contract" | "matrix_core";
+            };
+        };
+        /** MfgReadCollectionV1 */
+        MfgRouteContractCollectionV1: {
+            contract_version: string;
+            items?: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgRouteContract"][];
+            /** @default null */
+            next_cursor: string | null;
+            $defs: {
+                /** @enum {string} */
+                MfgActionAvailability: "active" | "planned_v541" | "planned_v545" | "unavailable";
+                /** @enum {string} */
+                MfgActionRisk: "low" | "medium" | "high";
+                /** @enum {string} */
+                MfgCapabilityId: "mfg.read" | "mfg.incident.operate" | "mfg.playbook.manage" | "mfg.alert.respond" | "mfg.alert.manage" | "mfg.assignment.manage" | "mfg.assignment.lifecycle" | "mfg.execution.operate" | "mfg.execution.feedback" | "mfg.report.generate" | "mfg.report.deliver" | "mfg.report.review" | "mfg.skill.run" | "mfg.cockpit.manage" | "mfg.data.manage";
+                MfgCapabilityRequirement: {
+                    capability: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgCapabilityId"];
+                    /** @constant */
+                    mode: "one";
+                } | {
+                    capabilities: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgCapabilityId"][];
+                    /** @constant */
+                    mode: "all";
+                } | {
+                    /** @constant */
+                    mode: "per_action";
+                };
+                /** @enum {string} */
+                MfgConfirmationKind: "none" | "target" | "target_and_confirm";
+                /** @enum {string} */
+                MfgConsumer: "webui" | "tui_p0" | "tui_p1" | "backend";
+                /** @enum {string} */
+                MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
+                MfgRouteContract: {
+                    availability: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgActionAvailability"];
+                    capability: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgCapabilityRequirement"];
+                    class: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgMutationClass"];
+                    confirmation: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgConfirmationKind"];
+                    /** @default [] */
+                    consumers: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgConsumer"][];
+                    emits_live_event: boolean;
+                    method: string;
+                    path: string;
+                    request_schema: string;
+                    response_schema: string;
+                    risk: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgActionRisk"];
+                    route_id: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgRouteId"];
+                    schema_owner: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgSchemaOwner"];
+                };
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                /** @enum {string} */
+                MfgSchemaOwner: "contract" | "matrix_core";
+            };
+        };
+        /** MfgReadResourceV1 */
+        MfgRouteContractResourceV1: {
+            contract_version: string;
+            resource: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgRouteContract"];
+            $defs: {
+                /** @enum {string} */
+                MfgActionAvailability: "active" | "planned_v541" | "planned_v545" | "unavailable";
+                /** @enum {string} */
+                MfgActionRisk: "low" | "medium" | "high";
+                /** @enum {string} */
+                MfgCapabilityId: "mfg.read" | "mfg.incident.operate" | "mfg.playbook.manage" | "mfg.alert.respond" | "mfg.alert.manage" | "mfg.assignment.manage" | "mfg.assignment.lifecycle" | "mfg.execution.operate" | "mfg.execution.feedback" | "mfg.report.generate" | "mfg.report.deliver" | "mfg.report.review" | "mfg.skill.run" | "mfg.cockpit.manage" | "mfg.data.manage";
+                MfgCapabilityRequirement: {
+                    capability: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgCapabilityId"];
+                    /** @constant */
+                    mode: "one";
+                } | {
+                    capabilities: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgCapabilityId"][];
+                    /** @constant */
+                    mode: "all";
+                } | {
+                    /** @constant */
+                    mode: "per_action";
+                };
+                /** @enum {string} */
+                MfgConfirmationKind: "none" | "target" | "target_and_confirm";
+                /** @enum {string} */
+                MfgConsumer: "webui" | "tui_p0" | "tui_p1" | "backend";
+                /** @enum {string} */
+                MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
+                MfgRouteContract: {
+                    availability: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgActionAvailability"];
+                    capability: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgCapabilityRequirement"];
+                    class: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgMutationClass"];
+                    confirmation: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgConfirmationKind"];
+                    /** @default [] */
+                    consumers: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgConsumer"][];
+                    emits_live_event: boolean;
+                    method: string;
+                    path: string;
+                    request_schema: string;
+                    response_schema: string;
+                    risk: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgActionRisk"];
+                    route_id: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgRouteId"];
+                    schema_owner: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgSchemaOwner"];
+                };
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                /** @enum {string} */
+                MfgSchemaOwner: "contract" | "matrix_core";
+            };
+        };
+        /** MfgSkillManifest */
+        MfgSkillManifest: {
+            analysis_method: string;
+            domain: string;
+            /** @default [] */
+            input_fact_types: string[];
+            /** @default [] */
+            input_metric_keys: string[];
+            /** @default [] */
+            output_actions: string[];
+            quality_gate: string;
+            /** @default [] */
+            required_evidence: string[];
+            role: string;
+            skill_id: string;
+            success_criteria: string;
+            /** @default [] */
+            tools: string[];
+        };
+        /** MfgSkillPlanRequest */
+        MfgSkillPlanRequest: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgSkillRun */
+        MfgSkillRun: {
+            /** @default null */
+            agent_node_id: string | null;
+            /** @default null */
+            execution_context: components["schemas"]["MfgSkillRun"]["$defs"]["MfgSkillExecutionContext"] | null;
+            /** @default null */
+            execution_id: string | null;
+            incident_id: string;
+            /** @default [] */
+            recommended_actions: string[];
+            /** @default [] */
+            required_evidence: string[];
+            /**
+             * Format: uint64
+             * @default null
+             */
+            runtime_commit_cursor: number | null;
+            /** @default null */
+            runtime_execution_ref: string | null;
+            skill_id: string;
+            status: string;
+            /** @default null */
+            structured_report: unknown;
+            summary: string;
+            /** @default null */
+            telemetry: components["schemas"]["MfgSkillRun"]["$defs"]["MfgSkillTelemetry"] | null;
+            /** @default [] */
+            tool_plan: components["schemas"]["MfgSkillRun"]["$defs"]["MfgSkillToolCall"][];
+            /** @default [] */
+            tool_results: components["schemas"]["MfgSkillRun"]["$defs"]["MfgSkillToolResult"][];
+            $defs: {
+                MfgSkillExecutionContext: {
+                    /** @default null */
+                    analysis_id: string | null;
+                    /** @default null */
+                    attention_id: string | null;
+                    /** @default [] */
+                    entity_refs: string[];
+                    /** @default null */
+                    evidence_packet_id: string | null;
+                    /** @default [] */
+                    evidence_refs: string[];
+                    incident_id: string;
+                    /** @default [] */
+                    metric_keys: string[];
+                    skill_id: string;
+                };
+                MfgSkillTelemetry: {
+                    /** Format: date-time */
+                    completed_at: string;
+                    /** Format: float */
+                    confidence: number;
+                    /** Format: uint64 */
+                    elapsed_ms: number;
+                    /** Format: uint */
+                    evidence_ref_count: number;
+                    /** Format: date-time */
+                    started_at: string;
+                    /** Format: uint */
+                    tool_call_count: number;
+                };
+                MfgSkillToolCall: {
+                    expected_output: string;
+                    /** @default [] */
+                    input_refs: string[];
+                    purpose: string;
+                    tool_name: string;
+                };
+                MfgSkillToolResult: {
+                    /** @default [] */
+                    evidence_refs: string[];
+                    /** @default null */
+                    result: unknown;
+                    status: string;
+                    summary: string;
+                    tool_name: string;
+                };
+            };
+        };
+        /** MfgSkillRunRequest */
+        MfgSkillRunRequest: {
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_revision: number | null;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgSurfaceContract */
+        MfgSurfaceContract: {
+            /** @default [] */
+            actions: components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgActionId"][];
+            /** @default [] */
+            entrypoints: string[];
+            role: components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgSurfaceRole"];
+            /** @default [] */
+            routes: components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgRouteId"][];
+            surface: components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgSurfaceKind"];
+            $defs: {
+                MfgActionId: components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgMultiActionId"];
+                /** @enum {string} */
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                /** @enum {string} */
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                /** @enum {string} */
+                MfgSurfaceKind: "webui" | "tui" | "cli" | "management";
+                /** @enum {string} */
+                MfgSurfaceRole: "enhanced_management" | "console_unavailable" | "console_read_only" | "console_operational_control" | "minimal_core_control";
+            };
+        };
+        /** MfgSurfaceStatusV1 */
+        MfgSurfaceStatusV1: {
+            contract_version: string;
+            /** @default [] */
+            degraded_domains: string[];
+            entitlement: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgEntitlementProjectionV2"];
+            freshness: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgContractFreshnessV1"];
+            $defs: {
+                MfgContractFreshnessV1: {
+                    /** Format: date-time */
+                    generated_at: string;
+                    is_stale: boolean;
+                    /** Format: uint64 */
+                    stale_after_ms: number;
+                };
+                /** @enum {string} */
+                MfgCoreProfileId: "core_legacy_0_9_530" | "core_manager";
+                MfgEntitlementProjectionV2: {
+                    /** @default [] */
+                    ceiling: string[];
+                    core_profile_id: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgCoreProfileId"];
+                    /** Format: uint64 */
+                    credential_epoch: number;
+                    /** @default [] */
+                    denied: string[];
+                    /** @default [] */
+                    granted: string[];
+                    mfg_profile_id: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgProfileId"];
+                    /** Format: uint64 */
+                    profile_revision: number;
+                };
+                /** @enum {string} */
+                MfgProfileId: "mfg_viewer" | "mfg_legacy_0_9_529" | "mfg_operator" | "mfg_reviewer" | "mfg_manager";
+            };
         };
         ProjectionDelta: {
             base_cursor: number;
@@ -11104,6 +14750,115 @@ export interface components {
         SessionExecutionIndicesProjection: {
             items: components["schemas"]["SessionExecutionIndexProjection"][];
         };
+        StrategyActualProjection: {
+            actual_speedup_ratio_bp?: number | null;
+            cached_tokens: number;
+            duplicate_tool_calls: number;
+            duration_ms: number;
+            evaluation_budget_breached: boolean;
+            evaluation_budget_observed: boolean;
+            evaluation_token_limit: number;
+            evaluation_tokens_consumed: number;
+            evidence_overlap_bp: number;
+            evidence_overlap_observed: boolean;
+            input_tokens: number;
+            max_tool_concurrency_observed: number;
+            merge_cost_ms: number;
+            output_tokens: number;
+            parallel_tool_batches: number;
+            parent_merge_count: number;
+            quality_score_bp?: number | null;
+            terminal_reason: string;
+            tool_calls: number;
+            working_state_verified: boolean;
+            write_attempt_refs: string[];
+        };
+        StrategyCandidateEstimate: {
+            assumed: boolean;
+            calibration_sample_count: number;
+            calibration_source: string;
+            /** @enum {string} */
+            candidate: "direct" | "parallel_tools" | "team";
+            context_duplication_tokens: number;
+            eligible: boolean;
+            estimated_critical_path_ms: number;
+            estimated_serial_ms: number;
+            evidence_overlap_penalty_bp: number;
+            expected_quality_lift_bp: number;
+            merge_cost_ms: number;
+            net_benefit_score: number;
+            provider_concurrency_penalty_bp: number;
+            reasons: string[];
+            risk_approval_penalty_bp: number;
+            startup_overhead_ms: number;
+        };
+        StrategyDecisionProjection: {
+            actual?: components["schemas"]["StrategyActualProjection"] | null;
+            /** @enum {string|null} */
+            actual_status?: "unknown" | "observed" | null;
+            benefit_reason?: string[];
+            candidate_estimates?: components["schemas"]["StrategyCandidateEstimate"][];
+            confidence?: number | null;
+            cost_reason?: string[];
+            decision_id?: string | null;
+            detail?: Record<string, never> | unknown[] | string | number | boolean | null;
+            downgrade?: components["schemas"]["StrategyTransitionProjection"][];
+            early_stop?: components["schemas"]["StrategyTransitionProjection"][];
+            estimated?: components["schemas"]["StrategyCandidateEstimate"] | null;
+            evidence_refs: string[];
+            evidence_scopes?: components["schemas"]["StrategyEvidenceScopeProjection"][];
+            execution_id?: string | null;
+            id: string;
+            kind: string;
+            policy_version?: string | null;
+            /** @enum {string|null} */
+            proof_status?: "not_proven" | "calibrated" | null;
+            resource_snapshot?: components["schemas"]["StrategyResourceSnapshot"] | null;
+            revision: number;
+            /** @constant */
+            schema_version?: 1;
+            /** @enum {string|null} */
+            selected_candidate?: "direct" | "parallel_tools" | "team" | null;
+            /** @enum {string|null} */
+            selected_pattern?: "direct" | "explore" | "execute" | "deliberate" | "collaborate" | "supervise" | null;
+            session_id?: string | null;
+            /** @enum {string|null} */
+            source?: "deterministic" | "model_validated" | "experience_adapted" | "resource_adapted" | null;
+            status?: string | null;
+            summary?: string | null;
+            team_execution_id?: string | null;
+            team_id?: string | null;
+            turn_id?: string | null;
+        };
+        StrategyEvidenceScopeProjection: {
+            capability_cropped_refs: string[];
+            focus_id: string;
+            novelty_target_bp: number;
+            overlap_budget_bp: number;
+            responsibility_summary: string;
+            role_id: string;
+            scope_hash: string;
+        };
+        StrategyResourceSnapshot: {
+            assumed: boolean;
+            provider_available: boolean;
+            provider_concurrency: number;
+            provider_concurrency_penalty_bp: number;
+            sample_count: number;
+            sample_source: string;
+            team_available: boolean;
+            team_slots: number;
+            tool_concurrency: number;
+            tools_available: boolean;
+            version: string;
+        };
+        StrategyTransitionProjection: {
+            /** @enum {string} */
+            kind: "runtime.strategy.downgraded" | "runtime.strategy.early_stopped";
+            revision: number;
+            status: string;
+            summary: string;
+        };
         TurnEvidenceProjection: {
             assistant_message_id?: string | null;
             context_report_id?: string | null;
@@ -11115,6 +14870,214 @@ export interface components {
             terminal_ref?: string | null;
             turn_id: string;
         };
+        "mfg.alert.command.request.v1": components["schemas"]["MfgAlertCommandRequest"];
+        "mfg.alert.command.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.alert.list.request.v1": components["schemas"]["MfgAlertListQuery"];
+        "mfg.alert.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.alert_rule.list.request.v1": components["schemas"]["MfgAlertListQuery"];
+        "mfg.alert_rule.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.alert_rule.upsert.request.v1": components["schemas"]["MfgAlertRuleUpsertRequest"];
+        "mfg.alert_rule.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.alert_subscription.list.request.v1": components["schemas"]["MfgAlertListQuery"];
+        "mfg.alert_subscription.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.alert_subscription.upsert.request.v1": components["schemas"]["MfgAlertSubscriptionUpsertRequest"];
+        "mfg.alert_subscription.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.analysis.action.execute.request.v1": components["schemas"]["MfgActionExecutionIntent"];
+        "mfg.analysis.action.execute.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.analysis.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.analysis.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.app.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.app.get.response.v1": components["schemas"]["MfgApplicationDescriptor"];
+        "mfg.assignment.command.request.v1": components["schemas"]["MfgAssignmentCommandRequest"];
+        "mfg.assignment.command.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.assignment.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.assignment.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.assignment.list.request.v1": components["schemas"]["MfgAssignmentListQuery"];
+        "mfg.assignment.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.assignment.upsert.request.v1": components["schemas"]["MfgAssignmentUpsertRequest"];
+        "mfg.assignment.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.case.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.case.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.case.search.request.v1": components["schemas"]["MfgCaseSearchQuery"];
+        "mfg.case.search.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.profile.clone.request.v1": components["schemas"]["MfgCockpitProfileCloneRequest"];
+        "mfg.cockpit.profile.clone.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.profile.delete.request.v1": components["schemas"]["MfgCockpitProfileDeleteQuery"];
+        "mfg.cockpit.profile.delete.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.profile.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.cockpit.profile.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.profile.list.request.v1": components["schemas"]["MfgCockpitProfileListQuery"];
+        "mfg.cockpit.profile.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.profile.share.request.v1": components["schemas"]["MfgCockpitProfileShareRequest"];
+        "mfg.cockpit.profile.share.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.profile.upsert.request.v1": components["schemas"]["MfgCockpitProfileUpsertRequest"];
+        "mfg.cockpit.profile.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.projection.get.request.v1": components["schemas"]["MfgCockpitProjectionQuery"];
+        "mfg.cockpit.projection.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.widget_catalog.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.cockpit.widget_catalog.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.widget_projection.get.request.v1": components["schemas"]["MfgCockpitProjectionQuery"];
+        "mfg.cockpit.widget_projection.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.command_center.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.command_center.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.command_center.live.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.command_center.live.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.contract.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.contract.get.response.v1": components["schemas"]["MfgFrontendContractV1"];
+        "mfg.decision_trace.get.request.v1": components["schemas"]["MatrixDecisionTraceQuery"];
+        "mfg.decision_trace.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.domain.server_manufacturing.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.domain.server_manufacturing.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.domain.server_manufacturing.seed.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.domain.server_manufacturing.seed.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.execution.cross_plane.execute.request.v1": components["schemas"]["MfgCrossPlaneBridgeIntent"];
+        "mfg.execution.cross_plane.execute.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.execution.feedback.create.request.v1": components["schemas"]["MfgExecutionFeedbackRequest"];
+        "mfg.execution.feedback.create.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.execution.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.execution.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.forecast.list.request.v1": components["schemas"]["MfgForecastQuery"];
+        "mfg.forecast.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.incident.analyze.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.incident.analyze.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.incident.case.promote.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.incident.case.promote.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.incident.create.request.v1": components["schemas"]["MfgIncidentCreateRequest"];
+        "mfg.incident.create.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.incident.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.incident.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.incident.list.request.v1": components["schemas"]["MfgIncidentListQuery"];
+        "mfg.incident.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.incident.playbook.recommend.request.v1": components["schemas"]["MfgPlaybookRecommendRequest"];
+        "mfg.incident.playbook.recommend.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.incident.room.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.incident.room.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.incident.skill.plan.request.v1": components["schemas"]["MfgSkillPlanRequest"];
+        "mfg.incident.skill.plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.incident.skill.run.request.v1": components["schemas"]["MfgSkillRunRequest"];
+        "mfg.incident.skill.run.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.incident.skill_run.list.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.incident.skill_run.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.live.snapshot.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.live.snapshot.response.v1": components["schemas"]["MfgLiveEnvelopeV1"];
+        "mfg.live.stream.request.v1": components["schemas"]["MfgLiveQuery"];
+        "mfg.live.stream.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.ontology.server_manufacturing.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.ontology.server_manufacturing.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.ontology.server_manufacturing.seed.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.ontology.server_manufacturing.seed.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.playbook.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.playbook.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.playbook.upsert.request.v1": components["schemas"]["MfgPlaybookUpsertRequest"];
+        "mfg.playbook.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.production.governance.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.production.governance.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.attention.hot.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.attention.hot.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.change.list.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.change.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.compute_job.execute.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.compute_job.execute.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.compute_job.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.compute_job.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.compute_job.plan.request.v1": components["schemas"]["MfgRealityComputeJobPlanRequest"];
+        "mfg.reality.compute_job.plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.connector_run.execute.request.v1": components["schemas"]["MfgRealityConnectorRunRequest"];
+        "mfg.reality.connector_run.execute.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.connector_run.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.connector_run.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.connector_run.plan.request.v1": components["schemas"]["MfgRealityConnectorRunRequest"];
+        "mfg.reality.connector_run.plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.data_plane.health.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.data_plane.health.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.data_plane.ingest_plan.request.v1": components["schemas"]["MfgRealityDataPlaneIngestPlanRequest"];
+        "mfg.reality.data_plane.ingest_plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.entity.conflict_decision.request.v1": components["schemas"]["MfgRealityEntityConflictDecisionRequest"];
+        "mfg.reality.entity.conflict_decision.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.entity.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.entity.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.entity.impact_path.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.entity.impact_path.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.entity.list.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.entity.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.entity.match_candidate.request.v1": components["schemas"]["MfgRealityEntityMatchCandidateRequest"];
+        "mfg.reality.entity.match_candidate.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.entity.relations.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.entity.relations.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.entity.resolve_source_key.request.v1": components["schemas"]["MfgRealityEntityResolveSourceKeyRequest"];
+        "mfg.reality.entity.resolve_source_key.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.entity.upsert.request.v1": components["schemas"]["MfgRealityEntityUpsertRequest"];
+        "mfg.reality.entity.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.evidence.build.request.v1": components["schemas"]["MfgRealityEvidenceBuildRequest"];
+        "mfg.reality.evidence.build.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.evidence.context.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.evidence.context.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.evidence.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.evidence.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.evidence.quality_gate.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.evidence.quality_gate.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.fact.ingest.request.v1": components["schemas"]["MfgRealityFactIngestRequest"];
+        "mfg.reality.fact.ingest.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.health.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.health.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.metric.attention_plan.request.v1": components["schemas"]["MfgRealityMetricAttentionPlanRequest"];
+        "mfg.reality.metric.attention_plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.metric.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.metric.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.metric.lineage.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.metric.lineage.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.metric.list.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.metric.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.metric.recompute.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.metric.recompute.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.metric_dependency.affected_plan.request.v1": components["schemas"]["MfgRealityAffectedByFactTypeRequest"];
+        "mfg.reality.metric_dependency.affected_plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.metric_dependency.upsert.request.v1": components["schemas"]["MfgRealityMetricDependencyUpsertRequest"];
+        "mfg.reality.metric_dependency.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.metric_snapshot.materialize.request.v1": components["schemas"]["MfgRealityMetricSnapshotMaterializeRequest"];
+        "mfg.reality.metric_snapshot.materialize.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.quality_gate.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.quality_gate.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.relation.upsert.request.v1": components["schemas"]["MfgRealityRelationUpsertRequest"];
+        "mfg.reality.relation.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.source_pack.delta_plan.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.source_pack.delta_plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.source_pack.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.source_pack.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.reality.source_pack.ingest_file.request.v1": components["schemas"]["MfgRealitySourcePackIngestFileRequest"];
+        "mfg.reality.source_pack.ingest_file.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.source_pack.upsert.request.v1": components["schemas"]["MfgRealitySourcePackUpsertRequest"];
+        "mfg.reality.source_pack.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.reality.source_pack.validate.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.reality.source_pack.validate.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.report.deliver.request.v1": components["schemas"]["MfgCockpitReportDeliveryIntent"];
+        "mfg.report.deliver.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.report.delivery.retry.request.v1": components["schemas"]["MfgCockpitReportDeliveryRetryRequest"];
+        "mfg.report.delivery.retry.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.report.delivery_state.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.report.delivery_state.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.report.generate.request.v1": components["schemas"]["MfgCockpitReportGenerateRequest"];
+        "mfg.report.generate.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.report.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.report.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.report.list.request.v1": components["schemas"]["MfgCockpitReportListQuery"];
+        "mfg.report.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.report.review.decide.request.v1": components["schemas"]["MfgReportDeliveryReviewDecisionRequest"];
+        "mfg.report.review.decide.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.report.review.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.report.review.get.response.v1": components["schemas"]["MfgReportDeliveryReview"];
+        "mfg.report.review.list.request.v1": components["schemas"]["MfgReportReviewListQuery"];
+        "mfg.report.review.list.response.v1": components["schemas"]["MfgReportDeliveryReviewCollection"];
+        "mfg.report.review.request.request.v1": components["schemas"]["MfgReportDeliveryReviewCreateRequest"];
+        "mfg.report.review.request.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.report.schedule.run.request.v1": components["schemas"]["MfgCockpitReportScheduleRunRequest"];
+        "mfg.report.schedule.run.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.skill.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.skill.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.skill.list.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.skill.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.skill_run.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.skill_run.get.response.v1": components["schemas"]["MfgReadResponseV1"];
     };
     responses: never;
     parameters: never;
@@ -11758,7 +15721,52 @@ export interface operations {
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_analyses_by_analysis_id_actions_by_action_id_execute: {
+    gateway_approval_get_api_approval_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    mfg_analysis_action_execute: {
         parameters: {
             query?: never;
             header?: never;
@@ -11770,30 +15778,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `action_id` */
-                        action_id: string;
-                        /** @description Path parameter `analysis_id` */
-                        analysis_id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `action_id` */
-                        action_id: string;
-                        /** @description Path parameter `analysis_id` */
-                        analysis_id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.analysis.action.execute.request.v1"];
             };
         };
         responses: {
@@ -11803,9 +15788,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.analysis.action.execute.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -11813,25 +15796,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_analyses_by_id: {
+    mfg_analysis_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -11848,9 +15873,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.analysis.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -11858,25 +15881,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_app: {
+    mfg_app_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -11891,9 +15956,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.app.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -11901,25 +15964,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_assignments: {
+    mfg_assignment_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -11934,9 +16039,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.assignment.list.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -11944,25 +16047,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_assignments: {
+    mfg_assignment_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -11971,18 +16116,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.assignment.upsert.request.v1"];
             };
         };
         responses: {
@@ -11992,9 +16126,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.assignment.upsert.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12002,25 +16134,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_assignments_by_id: {
+    mfg_assignment_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12037,9 +16211,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.assignment.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12047,25 +16219,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_assignments_by_id_command: {
+    mfg_assignment_command: {
         parameters: {
             query?: never;
             header?: never;
@@ -12076,26 +16290,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.assignment.command.request.v1"];
             };
         };
         responses: {
@@ -12105,9 +16300,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.assignment.command.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12115,25 +16308,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cases_search: {
+    mfg_case_search: {
         parameters: {
             query?: never;
             header?: never;
@@ -12148,9 +16383,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.case.search.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12158,25 +16391,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cases_by_id: {
+    mfg_case_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12193,9 +16468,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.case.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12203,25 +16476,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cockpit_profiles: {
+    mfg_cockpit_profile_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -12236,9 +16551,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.profile.list.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12246,25 +16559,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_cockpit_profiles_upsert: {
+    mfg_cockpit_profile_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -12273,18 +16628,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.cockpit.profile.upsert.request.v1"];
             };
         };
         responses: {
@@ -12294,9 +16638,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.profile.upsert.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12304,25 +16646,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id: {
+    mfg_cockpit_profile_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12339,9 +16723,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.profile.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12349,25 +16731,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_delete_api_apps_mfg_cockpit_profiles_by_id: {
+    mfg_cockpit_profile_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -12384,9 +16808,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.profile.delete.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12394,25 +16816,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_cockpit_profiles_by_id_clone: {
+    mfg_cockpit_profile_clone: {
         parameters: {
             query?: never;
             header?: never;
@@ -12423,26 +16887,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.cockpit.profile.clone.request.v1"];
             };
         };
         responses: {
@@ -12452,9 +16897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.profile.clone.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12462,25 +16905,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id_projection: {
+    mfg_cockpit_projection_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12497,9 +16982,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.projection.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12507,25 +16990,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_cockpit_profiles_by_id_reports_generate: {
+    mfg_report_generate: {
         parameters: {
             query?: never;
             header?: never;
@@ -12536,26 +17061,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.report.generate.request.v1"];
             };
         };
         responses: {
@@ -12565,9 +17071,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.generate.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12575,25 +17079,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_cockpit_profiles_by_id_share: {
+    mfg_cockpit_profile_share: {
         parameters: {
             query?: never;
             header?: never;
@@ -12604,26 +17150,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.cockpit.profile.share.request.v1"];
             };
         };
         responses: {
@@ -12633,9 +17160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.profile.share.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12643,25 +17168,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cockpit_profiles_by_id_widgets_by_instance_id_projection: {
+    mfg_cockpit_widget_projection_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12679,9 +17246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.cockpit.widget_projection.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -12689,25 +17254,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cockpit_reports: {
+    mfg_report_review_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -12722,93 +17329,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.review.list.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_cockpit_reports_schedules_run: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cockpit_reports_by_id: {
+    mfg_report_review_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12825,148 +17414,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.review.get.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_cockpit_reports_by_id_deliver: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_cockpit_reports_by_id_delivery_state: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
+            /** @description Capability or scope denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
-            /** @description Unauthorized */
-            401: {
+            /** @description Resource is outside the verified scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_cockpit_reports_by_id_delivery_retry: {
+    mfg_report_review_decide: {
         parameters: {
             query?: never;
             header?: never;
@@ -12977,26 +17493,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.report.review.decide.request.v1"];
             };
         };
         responses: {
@@ -13006,9 +17503,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.review.decide.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -13016,25 +17511,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_cockpit_widget_catalog: {
+    mfg_report_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -13049,207 +17586,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.list.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_command_center: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_command_center_live: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_decision_trace: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Capability or scope denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_domain_server_manufacturing: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Resource is outside the verified scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
+            /** @description Revision or idempotency conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
-            /** @description Unauthorized */
-            401: {
+            /** @description Rate limited */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_domain_server_manufacturing_seed: {
+    mfg_report_schedule_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -13258,18 +17663,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.report.schedule.run.request.v1"];
             };
         };
         responses: {
@@ -13279,9 +17673,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.schedule.run.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -13289,25 +17681,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_executions_by_id: {
+    mfg_report_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -13324,9 +17758,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -13334,25 +17766,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_executions_by_id_cross_plane_execute: {
+    mfg_report_deliver: {
         parameters: {
             query?: never;
             header?: never;
@@ -13363,26 +17837,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.report.deliver.request.v1"];
             };
         };
         responses: {
@@ -13392,560 +17847,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.deliver.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_executions_by_id_feedback: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_focus_alert_rules: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_focus_alert_rules: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Capability or scope denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_focus_alert_subscriptions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Resource is outside the verified scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_focus_alert_subscriptions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Revision or idempotency conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_focus_alerts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Rate limited */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Gateway internal error */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_focus_alerts_by_id_command: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_focus_forecasts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_incidents: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_incidents: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_incidents_by_id: {
+    mfg_report_delivery_state_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -13962,9 +17932,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.delivery_state.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -13972,25 +17940,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_incidents_by_id_analyze: {
+    mfg_report_delivery_retry: {
         parameters: {
             query?: never;
             header?: never;
@@ -14001,26 +18011,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.report.delivery.retry.request.v1"];
             };
         };
         responses: {
@@ -14030,9 +18021,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.delivery.retry.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14040,25 +18029,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_incidents_by_id_cases_promote: {
+    mfg_report_review_request: {
         parameters: {
             query?: never;
             header?: never;
@@ -14069,26 +18100,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.report.review.request.request.v1"];
             };
         };
         responses: {
@@ -14098,9 +18110,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.report.review.request.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14108,55 +18118,574 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_incidents_by_id_playbooks_recommend: {
+    mfg_cockpit_widget_catalog_get: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.widget_catalog.get.response.v1"];
+                };
             };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_command_center_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.command_center.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_command_center_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.command_center.live.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.contract.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_decision_trace_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.decision_trace.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_domain_server_manufacturing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.domain.server_manufacturing.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_domain_server_manufacturing_seed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.domain.server_manufacturing.seed.request.v1"];
             };
         };
         responses: {
@@ -14166,9 +18695,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.domain.server_manufacturing.seed.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14176,25 +18703,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_incidents_by_id_room: {
+    mfg_execution_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14211,9 +18780,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.execution.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14221,25 +18788,1010 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_incidents_by_id_skills: {
+    mfg_execution_cross_plane_execute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.execution.cross_plane.execute.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.execution.cross_plane.execute.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_execution_feedback_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.execution.feedback.create.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.execution.feedback.create.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_alert_rule_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.alert_rule.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_alert_rule_upsert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.alert_rule.upsert.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.alert_rule.upsert.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_alert_subscription_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.alert_subscription.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_alert_subscription_upsert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.alert_subscription.upsert.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.alert_subscription.upsert.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_alert_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.alert.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_alert_command: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.alert.command.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.alert.command.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_forecast_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.forecast.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.incident.create.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.create.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14256,9 +19808,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.incident.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14266,25 +19816,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_incidents_by_id_skills_plan: {
+    mfg_incident_analyze: {
         parameters: {
             query?: never;
             header?: never;
@@ -14295,26 +19887,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.incident.analyze.request.v1"];
             };
         };
         responses: {
@@ -14324,9 +19897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.incident.analyze.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14334,25 +19905,504 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_incidents_by_id_skills_by_skill_id_run: {
+    mfg_incident_case_promote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.incident.case.promote.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.case.promote.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_playbook_recommend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.incident.playbook.recommend.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.playbook.recommend.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_room_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.room.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_skill_run_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.skill_run.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_skill_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.incident.skill.plan.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.skill.plan.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_incident_skill_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -14364,30 +20414,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `skill_id` */
-                        skill_id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `skill_id` */
-                        skill_id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.incident.skill.run.request.v1"];
             };
         };
         responses: {
@@ -14397,9 +20424,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.incident.skill.run.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14407,25 +20432,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_live: {
+    mfg_live_stream: {
         parameters: {
             query?: never;
             header?: never;
@@ -14440,9 +20507,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.live.stream.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -14450,25 +20516,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_ontology_server_manufacturing: {
+    mfg_live_snapshot: {
         parameters: {
             query?: never;
             header?: never;
@@ -14483,9 +20591,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.live.snapshot.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14493,25 +20599,150 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_ontology_server_manufacturing_seed: {
+    mfg_ontology_server_manufacturing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.ontology.server_manufacturing.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_ontology_server_manufacturing_seed: {
         parameters: {
             query?: never;
             header?: never;
@@ -14520,18 +20751,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.ontology.server_manufacturing.seed.request.v1"];
             };
         };
         responses: {
@@ -14541,9 +20761,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.ontology.server_manufacturing.seed.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14551,25 +20769,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_playbooks_upsert: {
+    mfg_playbook_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -14578,18 +20838,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.playbook.upsert.request.v1"];
             };
         };
         responses: {
@@ -14599,9 +20848,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.playbook.upsert.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14609,25 +20856,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_playbooks_by_id: {
+    mfg_playbook_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14644,9 +20933,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.playbook.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14654,25 +20941,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_production_governance: {
+    mfg_production_governance_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14687,9 +21016,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.production.governance.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14697,25 +21024,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_reality_attention_hot: {
+    mfg_reality_attention_hot: {
         parameters: {
             query?: never;
             header?: never;
@@ -14730,9 +21099,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.attention.hot.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14740,25 +21107,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_reality_changes: {
+    mfg_reality_change_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -14773,9 +21182,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.change.list.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14783,25 +21190,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_compute_jobs_plan: {
+    mfg_reality_compute_job_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -14810,18 +21259,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.reality.compute_job.plan.request.v1"];
             };
         };
         responses: {
@@ -14831,9 +21269,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.compute_job.plan.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14841,25 +21277,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_reality_compute_jobs_by_id: {
+    mfg_reality_compute_job_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14876,9 +21354,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.compute_job.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -14886,25 +21362,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_compute_jobs_by_id_run: {
+    mfg_reality_compute_job_execute: {
         parameters: {
             query?: never;
             header?: never;
@@ -14915,26 +21433,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.reality.compute_job.execute.request.v1"];
             };
         };
         responses: {
@@ -14944,456 +21443,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.compute_job.execute.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_connector_runs_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_data_plane_health: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_data_plane_ingest_plan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Capability or scope denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_entities: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Resource is outside the verified scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_entities_conflict_decision: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Revision or idempotency conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_entities_match_candidate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Rate limited */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Gateway internal error */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_entities_resolve_source_key: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_entities_upsert: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_entities_by_id: {
+    mfg_reality_connector_run_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -15410,399 +21528,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.connector_run.get.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_entities_by_id_impact_path: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_entities_by_id_relations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_evidence_build: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Capability or scope denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_evidence_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Resource is outside the verified scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_evidence_by_id_context: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Revision or idempotency conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_evidence_by_id_quality_gate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Rate limited */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Gateway internal error */
             500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_facts_ingest: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_reality_health: {
+    mfg_reality_data_plane_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -15817,9 +21611,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.data_plane.health.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -15827,25 +21619,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_metric_dependencies_affected_by_fact_type: {
+    mfg_reality_data_plane_ingest_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -15854,18 +21688,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.reality.data_plane.ingest_plan.request.v1"];
             };
         };
         responses: {
@@ -15875,93 +21698,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.data_plane.ingest_plan.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_metric_dependencies_upsert: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_reality_metrics: {
+    mfg_reality_entity_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -15976,9 +21781,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.entity.list.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -15986,25 +21789,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_metrics_attention_plan: {
+    mfg_reality_entity_conflict_decision: {
         parameters: {
             query?: never;
             header?: never;
@@ -16013,18 +21858,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.reality.entity.conflict_decision.request.v1"];
             };
         };
         responses: {
@@ -16034,9 +21868,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.entity.conflict_decision.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -16044,25 +21876,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_metrics_recompute: {
+    mfg_reality_entity_match_candidate: {
         parameters: {
             query?: never;
             header?: never;
@@ -16071,18 +21945,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.reality.entity.match_candidate.request.v1"];
             };
         };
         responses: {
@@ -16092,9 +21955,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.entity.match_candidate.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -16102,25 +21963,67 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_metrics_snapshots_materialize: {
+    mfg_reality_entity_resolve_source_key: {
         parameters: {
             query?: never;
             header?: never;
@@ -16129,18 +22032,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.reality.entity.resolve_source_key.request.v1"];
             };
         };
         responses: {
@@ -16150,170 +22042,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.entity.resolve_source_key.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_metrics_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_metrics_by_id_lineage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_get_api_apps_mfg_reality_quality_gates_by_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Capability or scope denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
+            /** @description Resource is outside the verified scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
-            /** @description Unauthorized */
-            401: {
+            /** @description Revision or idempotency conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_post_api_apps_mfg_reality_relations_upsert: {
+    mfg_reality_entity_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -16322,18 +22119,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["mfg.reality.entity.upsert.request.v1"];
             };
         };
         responses: {
@@ -16343,93 +22129,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.entity.upsert.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_source_packs_upsert: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_reality_source_packs_by_id: {
+    mfg_reality_entity_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16446,375 +22214,75 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.entity.get.response.v1"];
                 };
             };
             /** @description Bad request */
             400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_plan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Unauthorized */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_run: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_delta_plan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Capability or scope denied */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_ingest_file: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Resource is outside the verified scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mfg_post_api_apps_mfg_reality_source_packs_by_id_validate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
+            /** @description Revision or idempotency conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
             };
-            /** @description Bad request */
-            400: {
+            /** @description Rate limited */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
                 };
-                content?: never;
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_skill_runs_by_id: {
+    mfg_reality_entity_impact_path: {
         parameters: {
             query?: never;
             header?: never;
@@ -16831,9 +22299,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.entity.impact_path.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -16841,25 +22307,585 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_skills: {
+    mfg_reality_entity_relations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.entity.relations.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_evidence_build: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.evidence.build.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.evidence.build.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.evidence.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_evidence_context: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.evidence.context.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_evidence_quality_gate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.evidence.quality_gate.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.evidence.quality_gate.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_fact_ingest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.fact.ingest.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.fact.ingest.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16874,9 +22900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.health.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -16884,25 +22908,585 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
-    gateway_mfg_get_api_apps_mfg_skills_by_id: {
+    mfg_reality_metric_dependency_affected_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.metric_dependency.affected_plan.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.metric_dependency.affected_plan.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_metric_dependency_upsert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.metric_dependency.upsert.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.metric_dependency.upsert.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_metric_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.metric.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_metric_attention_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.metric.attention_plan.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.metric.attention_plan.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_metric_recompute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.metric.recompute.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.metric.recompute.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_metric_snapshot_materialize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.metric_snapshot.materialize.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.metric_snapshot.materialize.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_metric_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -16919,9 +23503,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["mfg.reality.metric.get.response.v1"];
                 };
             };
             /** @description Bad request */
@@ -16929,21 +23511,1190 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Unauthorized */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
             /** @description Gateway internal error */
             500: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_metric_lineage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.metric.lineage.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_quality_gate_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.quality_gate.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_relation_upsert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.relation.upsert.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.relation.upsert.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_source_pack_upsert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.source_pack.upsert.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.source_pack.upsert.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_source_pack_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.source_pack.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_connector_run_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.connector_run.plan.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.connector_run.plan.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_connector_run_execute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.connector_run.execute.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.connector_run.execute.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_source_pack_delta_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.source_pack.delta_plan.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.source_pack.delta_plan.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_source_pack_ingest_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.source_pack.ingest_file.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.source_pack.ingest_file.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_reality_source_pack_validate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.reality.source_pack.validate.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.reality.source_pack.validate.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_skill_run_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.skill_run.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_skill_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.skill.list.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    mfg_skill_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.skill.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
             };
         };
     };
@@ -18756,6 +26507,51 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_cross_plane_get_api_cross_plane_action_executions_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -34981,6 +42777,52 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_surface_get_api_surfaces_by_id_outbox_by_delivery_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                delivery_id: string;
             };
             cookie?: never;
         };

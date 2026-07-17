@@ -402,10 +402,13 @@ describe('MFG cockpit live reducer', () => {
     const first = store.recoverLiveAuthorization('auth-session:profile=1:credential=1');
     const duplicate = store.recoverLiveAuthorization('auth-session:profile=1:credential=1');
     const newer = store.recoverLiveAuthorization('auth-session:profile=2:credential=2');
-    expect(duplicate).toBe(first);
-    expect(newer).toBe(first);
+    // Pinia wraps exposed action return values, so identity is not a reliable
+    // coalescing signal. The observable contract is one in-flight recovery
+    // that drains the newest credential/profile signature before resolving.
+    await Promise.resolve();
+    expect(contractSpy).toHaveBeenCalledTimes(1);
     releaseFirstContract({ contract_version: 'old' });
-    await first;
+    await Promise.all([first, duplicate, newer]);
 
     expect(contractSpy).toHaveBeenCalledTimes(2);
     expect(api.authVerify).toHaveBeenCalledTimes(2);
