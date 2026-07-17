@@ -70,6 +70,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .sidebar-warning { margin: 0; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border)); border-radius: 8px; padding: 8px; color: var(--warn); background: color-mix(in srgb, var(--warn) 8%, var(--surface)); font-size: 12px; line-height: 1.4; }
 
 .main-surface { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; background: var(--bg); }
+.app-shell[data-companion="collapsed"] .main-surface { padding-right: 58px; }
 .main-surface > .capability-page { flex: 1 1 auto; height: auto; }
 .capability-section-nav { display: none; flex: 0 0 auto; min-width: 0; border-bottom: 1px solid var(--border); background: var(--surface); }
 .capability-section-select { display: none; min-width: 0; }
@@ -782,12 +783,15 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .rail-button, .icon-action, .primary-action, .ghost-action, .danger-action, .composer-chip, .status-strip button, .message-meta button { min-width: 44px; min-height: 44px; }
   .session-actions .icon-action { width: 44px; height: 44px; min-height: 44px; }
   .main-surface { min-height: 0; overflow: hidden; }
+  .app-shell[data-companion="collapsed"] .main-surface { padding-right: 0; }
   .capability-section-nav { padding: 7px 10px; }
   .capability-section-select { display: block; flex: 1 1 auto; }
   .capability-section-tabs { display: none; }
   .capability-page, .settings-page, .memory-page, .agents-page, .runtime-page, .context-page, .gateway-page { overflow: auto; }
   .companion-panel { min-height: 0; max-height: 45dvh; border-left: 0; border-top: 1px solid var(--border); }
-  .companion-toggle, .app-shell[data-companion="open"] .companion-toggle { right: 12px; top: 64px; width: 44px; height: 44px; }
+  .app-shell[data-companion="collapsed"] .rail,
+  .app-shell[data-companion="open"] .rail { padding-right: 64px; }
+  .companion-toggle, .app-shell[data-companion="open"] .companion-toggle { right: 12px; top: 10px; width: 44px; height: 44px; }
   .composer-bar, .chat-top-actions, .capability-grid, .settings-workbench, .management-grid, .modal-columns, .memory-workbench, .memory-main, .memory-split, .memory-tabs, .memory-form-row, .agents-workbench-grid, .agents-task-layout, .agent-graph-lanes, .runtime-grid, .context-grid, .context-builder-row, .gateway-grid, .reality-grid, .reality-toolbar, .mfg-lanes { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; }
   .page-header { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); padding: 10px 14px; align-items: start; gap: 9px; }
   .page-header > * { min-width: 0; }

@@ -138,7 +138,13 @@ watch(
           type="button"
           @click="openGatewayAuthentication"
         >{{ cockpit.liveRecoveryReason === 'forbidden' ? t('settings.gateway.replaceCredential') : t('settings.gateway.login') }}</button>
-        <button class="ghost-action" type="button" :disabled="cockpit.loading" @click="refresh"><RefreshCw :size="15" />{{ t('mfg.shell.refresh') }}</button>
+        <button
+          class="ghost-action"
+          data-mfg-workspace-refresh
+          type="button"
+          :disabled="cockpit.loading"
+          @click="refresh"
+        ><RefreshCw :size="15" />{{ t('mfg.shell.refresh') }}</button>
       </div>
     </header>
 

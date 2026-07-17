@@ -1,5 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../api/client';
 import { useMfgCockpitStore } from './mfgCockpit';
 import type { MfgCockpitProfile, MfgCockpitProjection, MfgWidgetDefinition } from '../types/mfg';
 
@@ -132,5 +133,28 @@ describe('MFG cockpit store', () => {
     expect(store.widgetRefreshState.a.status).toBe('idle');
     expect(store.projection?.widgets[0].status).toBe('unavailable');
     expect(store.projection?.widgets[1]).toBe(sibling);
+  });
+
+  it('does not prefetch report reviews after entitlement refresh removes review access', async () => {
+    vi.spyOn(api, 'authVerify').mockResolvedValue({
+      valid: true,
+      auth_required: true,
+      entitlement: { granted: ['mfg.read'], denied: ['mfg.report.review'] },
+    } as any);
+    vi.spyOn(api, 'mfgContract').mockResolvedValue({ contract_version: 'mfg.frontend.v1' } as any);
+    vi.spyOn(api, 'mfgCockpitProfiles').mockResolvedValue({ items: [] } as any);
+    vi.spyOn(api, 'mfgCockpitWidgetCatalog').mockResolvedValue({ items: [] } as any);
+    vi.spyOn(api, 'mfgAlertRules').mockResolvedValue({ items: [] } as any);
+    vi.spyOn(api, 'mfgAlertOccurrences').mockResolvedValue({ items: [] } as any);
+    vi.spyOn(api, 'mfgAlertSubscriptions').mockResolvedValue({ items: [] } as any);
+    vi.spyOn(api, 'mfgAssignments').mockResolvedValue({ items: [] } as any);
+    vi.spyOn(api, 'mfgForecasts').mockResolvedValue({ items: [] } as any);
+    const reviewReads = vi.spyOn(api, 'mfgReportReviews').mockResolvedValue({ items: [] } as any);
+
+    const store = useMfgCockpitStore();
+    await store.refresh();
+
+    expect(reviewReads).not.toHaveBeenCalled();
+    expect(store.reviews).toEqual([]);
   });
 });

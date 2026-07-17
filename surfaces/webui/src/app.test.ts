@@ -1215,6 +1215,10 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('制造运营工作台');
     expect(wrapper.text()).toContain('Plant cockpit');
     expect(wrapper.text()).toContain('独立的制造应用');
+    const refreshButton = wrapper.get('[data-mfg-workspace-refresh]');
+    expect(refreshButton.attributes('disabled')).toBeUndefined();
+    await refreshButton.trigger('click');
+    await settleAsync();
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/live/snapshot', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/live', expect.any(Object));

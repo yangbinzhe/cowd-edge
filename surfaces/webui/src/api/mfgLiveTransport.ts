@@ -84,10 +84,7 @@ export class MfgLiveTransport {
           ? cause
           : new MfgLiveTransportError(cause instanceof Error ? cause.message : String(cause), 0, null);
         this.options.onState('reconnecting', error);
-        if (
-          [401, 403].includes(error.status)
-          || ['mfg_live_cursor_key_invalid', 'contract_mismatch'].includes(error.apiError?.code || '')
-        ) {
+        if (isTerminalMfgLiveError(error)) {
           this.running = false;
           this.options.onState('stopped', error);
           return;
@@ -222,6 +219,21 @@ export class MfgLiveTransport {
     }
     throw new MfgLiveTransportError(apiError?.message || text || `${response.status} ${response.statusText}`, response.status, apiError);
   }
+}
+
+/**
+ * An unavailable authority is the expected, short-lived response while the
+ * local Broker is restarting. It deliberately uses 401 because no authority
+ * can validate the request at that instant, but it is not a credential
+ * failure. Keep all other authorization failures terminal so the UI cannot
+ * spin indefinitely on a truly invalid session or missing capability.
+ */
+function isTerminalMfgLiveError(error: MfgLiveTransportError) {
+  if (['mfg_live_cursor_key_invalid', 'contract_mismatch'].includes(error.apiError?.code || '')) {
+    return true;
+  }
+  if (error.status === 403) return true;
+  return error.status === 401 && error.apiError?.details?.reason !== 'authority_unavailable';
 }
 
 function parseSseFrame(frame: string) {

@@ -146,19 +146,35 @@ export const useMfgCockpitStore = defineStore('mfg-cockpit', () => {
     loading.value = true;
     error.value = '';
     try {
-      const [contractResult, authResult, profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, reviewResult] = await Promise.all([
-        api.mfgContract(), api.authVerify(), api.mfgCockpitProfiles(), api.mfgCockpitWidgetCatalog(), api.mfgAlertRules(), api.mfgAlertOccurrences(), api.mfgAlertSubscriptions(), api.mfgAssignments(), api.mfgReportReviews(),
-      ]);
-      const failure = readError(contractResult, authResult, profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, reviewResult);
+      // Read the replacement entitlement before scheduling capability-gated
+      // projections. A profile switch invalidates the browser session before
+      // this refresh; using the old in-memory capability set here caused the
+      // new viewer session to issue report-review reads it was not entitled to
+      // make, producing avoidable 403s after a successful recovery.
+      const authResult = await api.authVerify();
       if (epoch !== requestEpoch.value) return;
-      error.value = failure;
-      if (readable(contractResult)) contract.value = contractResult as MfgFrontendContract;
       if (readable(authResult)) {
         authRequired.value = typeof authResult.auth_required === 'boolean'
           ? authResult.auth_required
           : null;
         entitlement.value = authResult.entitlement || null;
       }
+      const canReadReportReviews = authRequired.value === false
+        || grantedCapabilities.value.has('mfg.report.review');
+      const [contractResult, profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, reviewResult] = await Promise.all([
+        api.mfgContract(),
+        api.mfgCockpitProfiles(),
+        api.mfgCockpitWidgetCatalog(),
+        api.mfgAlertRules(),
+        api.mfgAlertOccurrences(),
+        api.mfgAlertSubscriptions(),
+        api.mfgAssignments(),
+        canReadReportReviews ? api.mfgReportReviews() : Promise.resolve({ items: [] }),
+      ]);
+      const failure = readError(authResult, contractResult, profileResult, catalogResult, ruleResult, alertResult, subscriptionResult, assignmentResult, reviewResult);
+      if (epoch !== requestEpoch.value) return;
+      error.value = failure;
+      if (readable(contractResult)) contract.value = contractResult as MfgFrontendContract;
       if (readable(profileResult)) profiles.value = collection(profileResult).map(profileFrom).filter(Boolean) as MfgCockpitProfile[];
       if (readable(catalogResult)) {
         const catalogContract = catalogResult as MfgCockpitCatalogContract;

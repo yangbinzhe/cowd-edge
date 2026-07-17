@@ -98,6 +98,42 @@ describe('MfgLiveTransport', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('reconnects after a temporary Broker authority restart instead of treating it as a sign-out', async () => {
+    const states: Array<{ state: string; status?: number; reason?: string }> = [];
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        code: 'authentication_required',
+        message: 'the local authority is restarting',
+        http_status: 401,
+        retryable: true,
+        details: { reason: 'authority_unavailable' },
+        recovery_actions: [],
+      }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(snapshot('epoch-after-restart', 'cursor-1'))));
+    let transport!: MfgLiveTransport;
+    transport = new MfgLiveTransport({
+      fetchImpl,
+      onEnvelope: (envelope) => {
+        if (envelope.kind === 'snapshot') transport.stop();
+      },
+      onState: (state, error) => states.push({
+        state,
+        status: error?.status,
+        reason: typeof error?.apiError?.details?.reason === 'string'
+          ? error.apiError.details.reason
+          : undefined,
+      }),
+    });
+    transport.start();
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(states).toContainEqual({
+      state: 'reconnecting',
+      status: 401,
+      reason: 'authority_unavailable',
+    });
+    expect(states).not.toContainEqual(expect.objectContaining({ state: 'stopped', status: 401 }));
+  });
+
   it('installs a new-generation snapshot after an ordinary stream closure', async () => {
     const installed: Array<{ kind: string; generation: number; epoch?: string }> = [];
     const fetchImpl = vi.fn()

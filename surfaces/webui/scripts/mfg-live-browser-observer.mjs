@@ -41,10 +41,25 @@ await loginWebui();
 
 const page = await context.newPage();
 const consoleErrors = [];
+const pageErrors = [];
+const httpFailures = [];
+const expectedHttpFailureWindows = [];
 page.on('console', (message) => {
   if (message.type() === 'error') consoleErrors.push(message.text());
 });
-page.on('pageerror', (error) => consoleErrors.push(error.message));
+page.on('pageerror', (error) => pageErrors.push(error.message));
+page.on('response', (response) => {
+  if (response.status() < 400) return;
+  const request = response.request();
+  httpFailures.push({
+    url: response.url(),
+    method: request.method(),
+    status: response.status(),
+    resource_type: request.resourceType(),
+    observer_id: request.headers()['x-cowd-observer-id'] || '',
+    at: new Date().toISOString(),
+  });
+});
 await page.addInitScript(() => {
   const originalFetch = window.fetch.bind(window);
   const evidence = {
@@ -93,6 +108,9 @@ await page.addInitScript(() => {
             ...(parsed.state?.receipts?.commands || []),
             ...(parsed.state?.receipts?.mutations || []),
           ].map((receipt) => receipt.receipt_id).filter(Boolean),
+          assignment_ids: (parsed.state?.assignments?.items || [])
+            .map((assignment) => assignment.assignment_id)
+            .filter(Boolean),
           observed_at: new Date().toISOString(),
         });
       }).catch((error) => {
@@ -210,8 +228,48 @@ const interactionProbes = [];
 const completedInteractionProbes = new Set();
 const consumerGenerationDeltas = [];
 let artifactSequence = 0;
+
+function inExpectedFailureWindow(failure, reason) {
+  const timestamp = Date.parse(failure.at);
+  return expectedHttpFailureWindows.some((window) => (
+    window.reason === reason
+      && timestamp >= window.started_at_ms
+      && timestamp <= (window.finished_at_ms || Date.now())
+  ));
+}
+
+function isExpectedHttpFailure(failure) {
+  const pathname = new URL(failure.url).pathname;
+  if (failure.status === 401 && pathname === '/api/auth/verify') return true;
+  // The valid-session entitlement probe intentionally replaces the browser
+  // cookie with a capability-restricted session. Only failures observed in
+  // that short, recorded interval are acceptable; any 403 outside it remains
+  // a regression.
+  if (
+    failure.status === 403
+      && pathname.startsWith('/api/apps/mfg/')
+      && inExpectedFailureWindow(failure, 'forbidden_entitlement_probe')
+  ) return true;
+  // Gateway restart is a deliberate availability fault in this acceptance
+  // lane. These two read paths may return one transient 500 before the live
+  // transport retries; the succeeding live/recovery assertions below prove
+  // that the user-visible surface did not remain degraded.
+  return failure.status === 500 && (
+    pathname === '/api/apps/mfg/live/snapshot'
+      || pathname === '/api/runtime/config/reload/status'
+  );
+}
+
 async function writeArtifact(status) {
   const currentEvidence = await page.evaluate(() => window.__cowdMfgLiveEvidence);
+  const liveFrames = (currentEvidence.frames || []).filter((frame) => (
+    (frame.kind === 'snapshot' || frame.kind === 'delta' || frame.kind === 'heartbeat')
+      && typeof frame.view_epoch === 'string'
+      && frame.view_epoch.length > 0
+  ));
+  const currentViewEpoch = liveFrames.length > 0
+    ? liveFrames[liveFrames.length - 1].view_epoch
+    : '';
   const browserEvidence = {
     frames: currentEvidence.frames || [],
     stream_errors: currentEvidence.stream_errors || [],
@@ -223,12 +281,16 @@ async function writeArtifact(status) {
     forbidden_recovery_count: forbiddenRecoveryCount,
     same_document_recovery_count: sameDocumentRecoveryCount,
     consumer_generation_deltas: consumerGenerationDeltas,
+    http_failures: httpFailures,
+    expected_http_failures: httpFailures.filter(isExpectedHttpFailure),
+    unexpected_http_failures: httpFailures.filter((failure) => !isExpectedHttpFailure(failure)),
   };
-  const ui = await page.locator('.mfg-page').evaluate((element) => ({
+  const ui = await page.locator('.mfg-page').evaluate((element, viewEpoch) => ({
     diagnostics: element.querySelector('.mfg-page__diagnostics')?.textContent?.trim() || '',
     degraded: Boolean(element.querySelector('.api-state-banner[data-status="degraded"]')),
     live: {
       status: element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-live-status') || '',
+      view_epoch: viewEpoch,
       assignment_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-assignment-count') || 0),
       report_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-report-count') || 0),
       review_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-review-count') || 0),
@@ -240,7 +302,7 @@ async function writeArtifact(status) {
       receipt_items: JSON.parse(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-receipt-state') || '[]'),
     },
     text_sample: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 2_000),
-  }));
+  }), currentViewEpoch);
   const artifact = {
     surface: 'webui',
     status,
@@ -251,6 +313,9 @@ async function writeArtifact(status) {
     browser: browserEvidence,
     interaction_probes: interactionProbes,
     console_errors: consoleErrors,
+    unexpected_console_errors: consoleErrors.filter((message) => !/^Failed to load resource: the server responded with a status of (401|403|500) \(/.test(message)),
+    page_errors: pageErrors,
+    expected_http_failure_windows: expectedHttpFailureWindows,
   };
   fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
   const temporary = `${artifactPath}.tmp-${process.pid}-${++artifactSequence}`;
@@ -343,6 +408,12 @@ async function processInteractionProbe() {
   interactionProbes.push(probe);
   try {
     if (request.kind === 'forbidden_recovery') {
+      const entitlementWindow = {
+        reason: 'forbidden_entitlement_probe',
+        started_at_ms: Date.now(),
+        finished_at_ms: 0,
+      };
+      expectedHttpFailureWindows.push(entitlementWindow);
       const response = await page.evaluate(async ({ credential }) => {
         const login = await fetch('/api/auth/login', {
           method: 'POST',
@@ -378,14 +449,15 @@ async function processInteractionProbe() {
       }
       probe.authorization_error = response.body;
       await recoverThroughProductUi('forbidden');
+      entitlementWindow.finished_at_ms = Date.now();
       forbiddenRecoveryCount += 1;
       probe.status = 'passed';
       return;
     }
-    const refreshButton = page.locator('.mfg-page__header-actions > button.ghost-action').first();
+    const refreshButton = page.locator('[data-mfg-workspace-refresh]');
     await refreshButton.click({ timeout: 10_000 });
     await page.waitForFunction(() => {
-      const button = document.querySelector('.mfg-page__header-actions > button.ghost-action');
+      const button = document.querySelector('[data-mfg-workspace-refresh]');
       const live = document.querySelector('[data-mfg-live-diagnostics]');
       return button instanceof HTMLButtonElement
         && !button.disabled
@@ -408,8 +480,14 @@ const interval = setInterval(() => {
   void (async () => {
     if (profileReauthenticationCount === 0) {
       const evidence = await page.evaluate(() => window.__cowdMfgLiveEvidence);
+      // A Gateway/Broker hand-over can emit a 401-shaped stream frame while
+      // the local authority socket is absent. The product transport retries
+      // that specific `authority_unavailable` reason; driving the login UI
+      // here would turn a recoverable restart into a false session reset.
       const requiresReauthentication = evidence.stream_errors.some(
-        (error) => error.code === 'authentication_required' && error.http_status === 401,
+        (error) => error.code === 'authentication_required'
+          && error.http_status === 401
+          && error.details?.reason !== 'authority_unavailable',
       );
       if (requiresReauthentication) {
         reauthenticating = true;
