@@ -21,6 +21,7 @@ import SurfacePage from './pages/SurfacePage.vue';
 import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
+import { useMfgCockpitStore } from './stores/mfgCockpit';
 import { createMfgMutationIntent } from './stores/mutationIntents';
 import { MAX_ACTIVE_PROJECTION_STREAMS, useProjectionRegistryStore } from './stores/projectionRegistry';
 import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
@@ -1177,11 +1178,30 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
       if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
       if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
+      if (url === '/api/auth/verify') return Promise.resolve(new Response(JSON.stringify({
+        valid: true,
+        auth_required: true,
+        entitlement: { granted: ['mfg.read'], denied: [] },
+      })));
       if (url === '/api/apps/mfg/cockpit/profiles') return Promise.resolve(new Response(JSON.stringify({ items: [{ profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }] })));
       if (url === '/api/apps/mfg/cockpit/widget-catalog') return Promise.resolve(new Response(JSON.stringify({ items: [] })));
       if (url === '/api/apps/mfg/focus/alert-rules' || url === '/api/apps/mfg/focus/alerts' || url === '/api/apps/mfg/focus/alert-subscriptions' || url.startsWith('/api/apps/mfg/focus/forecasts')) return Promise.resolve(new Response(JSON.stringify({ items: [] })));
       if (url === '/api/apps/mfg/assignments') return Promise.resolve(new Response(JSON.stringify({ items: [] })));
-      if (url === '/api/apps/mfg/live') return Promise.resolve(new Response(JSON.stringify({ kind: 'snapshot', cursor: 1, recoverable: true, snapshot: {} })));
+      if (url === '/api/apps/mfg/live/snapshot') return Promise.resolve(new Response(JSON.stringify({
+        kind: 'snapshot',
+        view_epoch: 'epoch-1',
+        cursor: 'cursor-1',
+        generated_at: '2026-07-16T00:00:00Z',
+        contract_version: 'mfg.frontend.v1',
+        state: {
+          cockpit: { profiles: [{ profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }] },
+          alerts: {}, assignments: {}, incidents: {}, executions: {}, reports: {}, reviews: {}, receipts: {}, data_compute: {},
+        },
+      })));
+      if (url === '/api/apps/mfg/live') return Promise.resolve(new Response(
+        'event: mfg_live\ndata: {"kind":"heartbeat","view_epoch":"epoch-1","cursor":"cursor-1","generated_at":"2026-07-16T00:00:01Z"}\n\n',
+        { headers: { 'content-type': 'text/event-stream' } },
+      ));
       if (url === '/api/apps/mfg/cockpit/profiles/profile-1') return Promise.resolve(new Response(JSON.stringify({ profile: { profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } } })));
       if (url === '/api/apps/mfg/cockpit/profiles/profile-1/projection') return Promise.resolve(new Response(JSON.stringify({ projection_id: 'projection-1', profile: { profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }, widgets: [], summary: 'ready', generated_at: '2026-07-16T00:00:00Z' })));
       return Promise.resolve(new Response(JSON.stringify({})));
@@ -1196,7 +1216,9 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Plant cockpit');
     expect(wrapper.text()).toContain('独立的制造应用');
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/live/snapshot', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/live', expect.any(Object));
+    useMfgCockpitStore().stopLive();
   });
 
   it('loads audit, usage, and release gate from real governance endpoints', async () => {

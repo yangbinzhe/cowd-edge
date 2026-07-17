@@ -515,8 +515,12 @@ if (reportId) {
       && typeof data.objects === 'object'
     ) || 'decision trace aggregate is empty',
   }));
-  steps.push(await request('mfg live projection', 'GET', '/api/apps/mfg/live', undefined, {
-    validate: (data) => Boolean(data.projection || data.events || data.cursor !== undefined) || 'live projection contract missing',
+  steps.push(await request('mfg live projection', 'GET', '/api/apps/mfg/live/snapshot', undefined, {
+    validate: (data) => (
+      data.kind === 'snapshot'
+      && typeof data.cursor === 'string'
+      && typeof data.view_epoch === 'string'
+    ) || 'typed live snapshot contract missing',
   }));
 } else {
   steps.push({

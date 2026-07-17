@@ -274,11 +274,28 @@ export interface MfgAssignment {
   notification_targets?: Array<{ surface: string; recipient: string; thread?: string | null }>;
 }
 
-export interface MfgLiveProjection {
-  kind: 'snapshot' | 'delta' | 'resync' | string;
-  cursor: number;
-  recoverable: boolean;
-  snapshot?: Record<string, unknown>;
-  events?: Array<{ cursor: number; event_type: string; subject_ref: string; payload: Record<string, unknown>; created_at: string }>;
-  resync_reason?: string | null;
+export interface MfgLiveSnapshotState {
+  cockpit: Record<string, unknown>;
+  alerts: Record<string, unknown>;
+  assignments: Record<string, unknown>;
+  incidents: Record<string, unknown>;
+  executions: Record<string, unknown>;
+  reports: Record<string, unknown>;
+  reviews: Record<string, unknown>;
+  receipts: Record<string, unknown>;
+  data_compute: Record<string, unknown>;
 }
+
+export interface MfgLiveEvent {
+  event_type: string;
+  subject_ref: string;
+  revision: number;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+}
+
+export type MfgLiveEnvelope =
+  | { kind: 'snapshot'; view_epoch: string; cursor: string; generated_at: string; contract_version: string; state: MfgLiveSnapshotState }
+  | { kind: 'delta'; view_epoch: string; base_cursor: string; target_cursor: string; events: MfgLiveEvent[] }
+  | { kind: 'resync'; previous_view_epoch: string; reason: string; snapshot_url: '/api/apps/mfg/live/snapshot'; latest_cursor: string }
+  | { kind: 'heartbeat'; view_epoch: string; cursor: string; generated_at: string };

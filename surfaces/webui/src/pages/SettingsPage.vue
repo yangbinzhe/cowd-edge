@@ -42,6 +42,10 @@ const accessModeCode = computed(() => {
   return 'sameOrigin';
 });
 const accessMode = computed(() => t(accessModeLabels[accessModeCode.value]));
+const forceCredentialReplacement = computed(() => (
+  route.query.replaceCredential === '1'
+  || route.query.reason === 'forbidden'
+));
 const providerModels = computed(() => store.providers?.models || []);
 const providerRows = computed(() => store.providers?.providers || []);
 const configuredModel = computed(() => store.providers?.configured_model || store.controlPlane?.configured_model || store.settings?.model || '');
@@ -212,7 +216,7 @@ watch(locale, (value) => {
 
 watch(activeSettingsSection, (section) => {
   if (section === 'gateway' && !authResult.value) void verifyAuth();
-});
+}, { immediate: true });
 
 async function run(label: string, action: () => Promise<unknown>) {
   settingsError.value = '';
@@ -328,6 +332,12 @@ async function loginGateway() {
     await store.login(authCredential.value);
     authCredential.value = '';
     authResult.value = await store.verifyAuth();
+    if (forceCredentialReplacement.value) {
+      const query = { ...route.query };
+      delete query.replaceCredential;
+      delete query.reason;
+      await router.replace({ query });
+    }
   });
 }
 
@@ -589,14 +599,17 @@ function selectSettingsSection(id: string) {
           <button class="ghost-action" type="button" @click="verifyAuth">{{ t('page.settings.page.text.1dad098952') }}</button>
           <button v-if="authResult?.valid" class="ghost-action" type="button" @click="logoutGateway">{{ t('settings.gateway.logout') }}</button>
         </div>
-        <form v-if="authResult?.auth_required && !authResult?.valid" class="gateway-auth-form" @submit.prevent="loginGateway">
+        <p v-if="route.query.reason === 'forbidden'" class="security-note" data-gateway-forbidden-recovery>
+          {{ t('settings.gateway.capabilityDenied') }}
+        </p>
+        <form v-if="forceCredentialReplacement || (authResult?.auth_required && !authResult?.valid)" class="gateway-auth-form" @submit.prevent="loginGateway">
           <label>
             <span>{{ t('settings.gateway.credential') }}</span>
             <input v-model="authCredential" type="password" autocomplete="current-password" :placeholder="t('settings.gateway.credentialPlaceholder')" required />
           </label>
-          <button class="primary-action" type="submit" :disabled="!authCredential.trim() || busyAction === 'auth-login'">{{ t('settings.gateway.login') }}</button>
+          <button class="primary-action" type="submit" :disabled="!authCredential.trim() || busyAction === 'auth-login'">{{ forceCredentialReplacement ? t('settings.gateway.replaceCredential') : t('settings.gateway.login') }}</button>
         </form>
-        <p v-if="authResult?.auth_required && !authResult?.valid" class="panel-note">{{ t('settings.gateway.sessionNotice') }}</p>
+        <p v-if="forceCredentialReplacement || (authResult?.auth_required && !authResult?.valid)" class="panel-note">{{ t('settings.gateway.sessionNotice') }}</p>
         <dl v-if="authResult" class="contract-list">
           <dt>{{ t('page.settings.page.text.dcfaad321b') }}</dt>
           <dd>{{ authResult.valid === true ? displayStatus('valid') : (authResult.status ? displayStatus(authResult.status) : authResult.authenticated !== undefined ? displayBoolean(authResult.authenticated) : t('page.settings.page.inline.3be9ccc7cd')) }}</dd>

@@ -1574,7 +1574,7 @@ export const api = {
     intent,
     body,
   ),
-  mfgLive: (cursor?: number) => read(`/api/apps/mfg/live${cursor === undefined ? '' : `?cursor=${encodeURIComponent(cursor)}`}`, {}),
+  mfgLiveSnapshot: () => read('/api/apps/mfg/live/snapshot', {}),
   mfgGenerateReport: (profileId: string, report: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
     `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/reports/generate`,
     intent,

@@ -2528,6 +2528,8 @@ export const enUS: MessageCatalog = {
   "settings.gateway.credential": "Gateway credential",
   "settings.gateway.credentialPlaceholder": "Used only to establish this browser session",
   "settings.gateway.login": "Start secure session",
+  "settings.gateway.replaceCredential": "Replace credential",
+  "settings.gateway.capabilityDenied": "This session is valid but does not grant MFG live access. Use a credential with mfg.read, or ask an administrator to grant that capability.",
   "settings.gateway.logout": "End secure session",
   "settings.gateway.sessionNotice": "The credential is not stored in the browser, conversation, tool environment, or logs. Gateway retains only a short-lived HttpOnly session.",
   "graph.title.default": "Runtime graph",

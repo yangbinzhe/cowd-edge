@@ -300,7 +300,36 @@ async function widgetScenario(browser) {
       return routeJson(route, { projection: { profile_id: profileId, profile_revision: 1, generated_at: new Date().toISOString(), widget: widget(instance) } });
     }
     if (pathname.includes('/focus/alert-rules') || pathname.includes('/focus/alerts') || pathname.includes('/focus/alert-subscriptions') || pathname === '/api/apps/mfg/assignments' || pathname.includes('/focus/forecasts')) return routeJson(route, { items: [] });
-    if (pathname === '/api/apps/mfg/live') return routeJson(route, { cursor: 0, status: 'ready', events: [] });
+    if (pathname === '/api/apps/mfg/live/snapshot') return routeJson(route, {
+      kind: 'snapshot',
+      view_epoch: 'performance-view',
+      cursor: 'performance-cursor',
+      generated_at: new Date().toISOString(),
+      contract_version: 'mfg.frontend.v1',
+      state: {
+        cockpit: { profiles: [profile] },
+        alerts: { rules: [], subscriptions: [], occurrences: [] },
+        assignments: { items: [] },
+        incidents: { items: [], workflows: [], analyses: [], memory_cases: [], playbooks: [] },
+        executions: { actions: [], skills: [] },
+        reports: { items: [] },
+        reviews: { items: [] },
+        receipts: { commands: [], mutations: [] },
+        data_compute: {},
+      },
+    });
+    if (pathname === '/api/apps/mfg/live') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: `event: mfg_live\ndata: ${JSON.stringify({
+          kind: 'heartbeat',
+          view_epoch: 'performance-view',
+          cursor: 'performance-cursor',
+          generated_at: new Date().toISOString(),
+        })}\n\n`,
+      });
+    }
     return routeJson(route, { items: [] });
   });
 

@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "wecom",
   "name": "WeCom Message Connector",
-  "version": "0.9.542",
+  "version": "0.9.545",
   "kind": "message-connector",
   "entry": "./cowd-edge-wecom-message",
   "transport": "stdio-jsonl",

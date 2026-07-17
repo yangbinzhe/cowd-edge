@@ -1147,6 +1147,11 @@ export const useAppStore = defineStore('app', () => {
     const result = await api.authLogin(credential);
     authEntitlement.value = result.entitlement || null;
     await refreshGatewayCapabilityContract();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cowd:auth-session-refreshed', {
+        detail: { entitlement: authEntitlement.value },
+      }));
+    }
     return result;
   }
 

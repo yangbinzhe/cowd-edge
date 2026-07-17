@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { RefreshCw } from 'lucide-vue-next';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { t } from '../i18n';
 import { useAppStore } from '../stores/app';
 import { useMfgCockpitStore } from '../stores/mfgCockpit';
@@ -12,6 +12,7 @@ import MfgDomainWorkspace from '../components/mfg/MfgDomainWorkspace.vue';
 import MfgFocusWorkspace from '../components/mfg/MfgFocusWorkspace.vue';
 
 const route = useRoute();
+const router = useRouter();
 const app = useAppStore();
 const cockpit = useMfgCockpitStore();
 const mfgSections = new Set(['dashboard', 'focus', 'collaboration', 'data', 'reality', 'evidence', 'operations', 'skills', 'reports']);
@@ -30,6 +31,37 @@ const profileSummary = computed(() => [
   cockpit.entitlement?.mfg_profile_id,
 ].filter(Boolean).join(' / ') || 'profile unavailable');
 const capabilitySummary = computed(() => `${cockpit.entitlement?.granted?.length || 0} granted · ${cockpit.entitlement?.denied?.length || 0} denied`);
+const deliveryReceiptCount = computed(() => cockpit.reports.reduce(
+  (count, report) => count + (Array.isArray(report?.delivery_receipts) ? report.delivery_receipts.length : 0),
+  0,
+));
+const liveSummary = computed(() => [
+  cockpit.liveStatus,
+  `${cockpit.assignments.length} assignments`,
+  `${cockpit.reports.length} reports`,
+  `${cockpit.reviews.length} reviews`,
+  `${cockpit.receipts.length} receipts`,
+  `${deliveryReceiptCount.value} deliveries`,
+].join(' · '));
+const reportLiveState = computed(() => JSON.stringify(cockpit.reports.map((report) => ({
+  id: report?.report_id,
+  revision: report?.revision,
+  status: report?.status,
+  delivery_receipt_ids: (report?.delivery_receipts || [])
+    .map((receipt: any) => receipt?.delivery_id)
+    .filter(Boolean),
+}))));
+const reviewLiveState = computed(() => JSON.stringify(cockpit.reviews.map((review) => ({
+  id: review?.review_id,
+  report_id: review?.report_id,
+  revision: review?.revision,
+  status: review?.status,
+}))));
+const receiptLiveState = computed(() => JSON.stringify(cockpit.receipts.map((receipt) => ({
+  id: receipt?.receipt_id,
+  revision: receipt?.result_revision,
+  status: receipt?.status,
+}))));
 
 function projectionFiltersFromRoute() {
   const filters: Record<string, string> = {};
@@ -38,6 +70,17 @@ function projectionFiltersFromRoute() {
     if (typeof value === 'string' && value) filters[key] = value;
   }
   return filters;
+}
+
+function openGatewayAuthentication() {
+  void router.push({
+    path: '/settings',
+    query: {
+      section: 'gateway',
+      replaceCredential: '1',
+      reason: cockpit.liveRecoveryReason || 'authentication',
+    },
+  });
 }
 
 async function restoreProfileFromRoute() {
@@ -50,11 +93,10 @@ async function restoreProfileFromRoute() {
 async function refresh() {
   await cockpit.refresh(projectionFiltersFromRoute());
   await restoreProfileFromRoute();
-  cockpit.startLive();
+  if (cockpit.liveAccessGranted) cockpit.startLive();
 }
 
 onMounted(() => { void refresh(); });
-onBeforeUnmount(() => cockpit.stopLive());
 watch(
   () => [route.query.profile, route.query.entity, route.query.metric, route.query.severity, route.query.status, route.query.from, route.query.to],
   () => { void restoreProfileFromRoute(); },
@@ -72,9 +114,32 @@ watch(
           <div><dt>Profile</dt><dd>{{ profileSummary }}</dd></div>
           <div><dt>Permissions</dt><dd>{{ capabilitySummary }}</dd></div>
           <div><dt>Freshness</dt><dd>{{ cockpit.lastUpdatedAt || cockpit.liveStatus }}</dd></div>
+          <div
+            data-mfg-live-diagnostics
+            :data-live-status="cockpit.liveStatus"
+            :data-assignment-count="cockpit.assignments.length"
+            :data-report-count="cockpit.reports.length"
+            :data-review-count="cockpit.reviews.length"
+            :data-receipt-count="cockpit.receipts.length"
+            :data-delivery-receipt-count="deliveryReceiptCount"
+            :data-live-consumer-generation="cockpit.liveConsumerGeneration"
+            :data-report-state="reportLiveState"
+            :data-review-state="reviewLiveState"
+            :data-receipt-state="receiptLiveState"
+          ><dt>Live</dt><dd>{{ liveSummary }}</dd></div>
         </dl>
       </div>
-      <button class="ghost-action" type="button" :disabled="cockpit.loading" @click="refresh"><RefreshCw :size="15" />{{ t('mfg.shell.refresh') }}</button>
+      <div class="mfg-page__header-actions">
+        <button
+          v-if="cockpit.liveStatus === 'stopped' && cockpit.liveRecoveryReason"
+          class="primary-action"
+          data-mfg-auth-recovery
+          :data-recovery-reason="cockpit.liveRecoveryReason"
+          type="button"
+          @click="openGatewayAuthentication"
+        >{{ cockpit.liveRecoveryReason === 'forbidden' ? t('settings.gateway.replaceCredential') : t('settings.gateway.login') }}</button>
+        <button class="ghost-action" type="button" :disabled="cockpit.loading" @click="refresh"><RefreshCw :size="15" />{{ t('mfg.shell.refresh') }}</button>
+      </div>
     </header>
 
     <ApiStateBanner
@@ -106,7 +171,8 @@ watch(
 .mfg-page__diagnostics div { display: inline-flex; min-width: 0; gap: 5px; font: 11px var(--font-mono); }
 .mfg-page__diagnostics dt { color: var(--text-faint); }
 .mfg-page__diagnostics dd { min-width: 0; margin: 0; color: var(--text-muted); overflow-wrap: anywhere; }
+.mfg-page__header-actions { display: flex; align-items: center; gap: 8px; }
 .mfg-page__workspace { min-width: 0; }
-@media (max-width: 820px) { .mfg-page__header { align-items: stretch; flex-direction: column; } .mfg-page__header .ghost-action { align-self: start; } }
+@media (max-width: 820px) { .mfg-page__header { align-items: stretch; flex-direction: column; } .mfg-page__header-actions { justify-content: flex-start; } }
 @media (pointer: coarse) { .mfg-page__header .ghost-action { min-width: 44px; min-height: 44px; } }
 </style>

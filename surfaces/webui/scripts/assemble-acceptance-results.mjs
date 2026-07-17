@@ -136,6 +136,339 @@ if (mfg.status !== 'pass' || mfg.degraded_count !== 0 || (mfg.steps || []).lengt
   failures.push(`Matrix/MFG report is incomplete: status=${mfg.status} degraded=${mfg.degraded_count} steps=${mfg.steps?.length}`);
 }
 
+const mfgSurfacePointerPath = path.join(context.backend.root, 'target/acceptance/latest-mfg-surface.json');
+const mfgSurfacePointer = readJson(mfgSurfacePointerPath, 'MFG Surface artifact pointer');
+const expectedMfgArtifactRoot = path.join(context.backend.root, 'target/acceptance');
+const mfgSurfaceArtifactDir = path.resolve(mfgSurfacePointer.artifact_dir || '/missing');
+if (!mfgSurfaceArtifactDir.startsWith(`${expectedMfgArtifactRoot}${path.sep}`)) {
+  failures.push(`MFG Surface artifact directory escapes ${expectedMfgArtifactRoot}`);
+}
+const mfgSurfaceIndexPath = path.resolve(
+  mfgSurfacePointer.index || path.join(mfgSurfaceArtifactDir, 'artifact-index.json'),
+);
+if (!mfgSurfaceIndexPath.startsWith(`${mfgSurfaceArtifactDir}${path.sep}`)) {
+  failures.push('MFG Surface structured artifact index escapes its scenario directory');
+}
+const mfgSurfaceIndex = readJson(
+  mfgSurfaceIndexPath,
+  'MFG Surface structured artifact index',
+);
+if (mfgSurfaceIndex.producer !== 'mfg-surface-acceptance.v2'
+  || mfgSurfacePointer.scenario_id !== mfgSurfaceIndex.scenario_id) {
+  failures.push('MFG Surface artifact pointer is not bound to the v2 structured producer');
+}
+const mfgSurfaceInventory = Array.isArray(mfgSurfaceIndex.artifacts)
+  ? mfgSurfaceIndex.artifacts
+  : [];
+if (mfgSurfaceInventory.length === 0) {
+  failures.push('MFG Surface artifact inventory is empty or invalid');
+}
+const mfgSurfaceInventorySet = new Set();
+for (const artifact of mfgSurfaceInventory) {
+  if (typeof artifact !== 'string' || !artifact.trim()) {
+    failures.push('MFG Surface artifact inventory contains a non-path entry');
+    continue;
+  }
+  if (mfgSurfaceInventorySet.has(artifact)) {
+    failures.push(`MFG Surface artifact inventory contains a duplicate: ${artifact}`);
+    continue;
+  }
+  mfgSurfaceInventorySet.add(artifact);
+  const artifactPath = path.resolve(mfgSurfaceArtifactDir, artifact);
+  if (!artifactPath.startsWith(`${mfgSurfaceArtifactDir}${path.sep}`)) {
+    failures.push(`MFG Surface artifact inventory escapes its scenario directory: ${artifact}`);
+    continue;
+  }
+  requireFile(artifactPath, `MFG Surface inventory artifact ${artifact}`);
+}
+for (const [checkId, check] of Object.entries(mfgSurfaceIndex.checks || {})) {
+  for (const artifact of check?.evidence || []) {
+    if (!mfgSurfaceInventorySet.has(artifact)) {
+      failures.push(`${checkId} evidence is absent from the MFG Surface artifact inventory: ${artifact}`);
+    }
+  }
+}
+const mfgSurfaceMetrics = readJson(
+  path.join(mfgSurfaceArtifactDir, 'metrics.json'),
+  'MFG Surface metrics',
+);
+const mfgSurfaceTuiA = readJson(
+  path.join(mfgSurfaceArtifactDir, 'tui-a-state.json'),
+  'MFG Surface TUI-A state',
+);
+const mfgSurfaceTuiB = readJson(
+  path.join(mfgSurfaceArtifactDir, 'tui-b-state.json'),
+  'MFG Surface TUI-B state',
+);
+const mfgSurfaceBrowser = readJson(
+  path.join(mfgSurfaceArtifactDir, 'webui-browser.json'),
+  'MFG Surface browser state',
+);
+const mfgSurfaceReport = readJson(
+  path.join(mfgSurfaceArtifactDir, 'report-generate.json'),
+  'MFG Surface generated report',
+);
+const mfgSurfaceFinalReport = readJson(
+  path.join(mfgSurfaceArtifactDir, 'report-final.json'),
+  'MFG Surface final report',
+);
+const mfgSurfaceReview = readJson(
+  path.join(mfgSurfaceArtifactDir, 'report-review-request.json'),
+  'MFG Surface report review',
+);
+const mfgSurfaceTuiABeforeRestart = readJson(
+  path.join(mfgSurfaceArtifactDir, 'tui-a-before-restart.json'),
+  'MFG Surface TUI-A pre-restart live state',
+);
+const mfgSurfaceTuiBBeforeRestart = readJson(
+  path.join(mfgSurfaceArtifactDir, 'tui-b-before-restart.json'),
+  'MFG Surface TUI-B pre-restart live state',
+);
+const mfgSurfaceTuiAAfterRestart = readJson(
+  path.join(mfgSurfaceArtifactDir, 'tui-a-after-restart.json'),
+  'MFG Surface TUI-A post-restart live state',
+);
+const mfgSurfaceTuiBAfterRestart = readJson(
+  path.join(mfgSurfaceArtifactDir, 'tui-b-after-restart.json'),
+  'MFG Surface TUI-B post-restart live state',
+);
+const mfgSurfaceWebuiBeforeRestart = readJson(
+  path.join(mfgSurfaceArtifactDir, 'webui-before-restart.json'),
+  'MFG Surface WebUI pre-restart state',
+);
+const mfgSurfaceWebuiAfterRestart = readJson(
+  path.join(mfgSurfaceArtifactDir, 'webui-after-restart.json'),
+  'MFG Surface WebUI post-restart state',
+);
+const mfgSurfaceProfileSnapshot = readJson(
+  path.join(mfgSurfaceArtifactDir, 'snapshot-after-profile-change.json'),
+  'MFG Surface recropped snapshot',
+);
+const mfgSurfaceRestartSnapshot = readJson(
+  path.join(mfgSurfaceArtifactDir, 'snapshot-after-restart.json'),
+  'MFG Surface post-restart snapshot',
+);
+const mfgSurfaceHiddenBefore = readJson(
+  path.join(mfgSurfaceArtifactDir, 'hidden-backlog-before.json'),
+  'MFG Surface hidden-backlog baseline',
+);
+const hiddenHeartbeatPath = path.join(mfgSurfaceArtifactDir, 'hidden-heartbeat-sse.log');
+requireFile(hiddenHeartbeatPath, 'MFG Surface hidden-only heartbeat stream');
+const hiddenHeartbeatPayloads = fs.existsSync(hiddenHeartbeatPath)
+  ? fs.readFileSync(hiddenHeartbeatPath, 'utf8')
+    .replace(/\r\n/g, '\n')
+    .split('\n\n')
+    .map((frame) => frame.split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice('data:'.length).trim())
+      .join('\n'))
+    .filter(Boolean)
+    .map((data) => {
+      try {
+        return JSON.parse(data);
+      } catch {
+        return null;
+      }
+    })
+  : [];
+const convergedReportId = mfgSurfaceReport.report?.report_id;
+const convergedReceiptId = mfgSurfaceReport._mfg_receipt?.receipt_id;
+const convergedReport = mfgSurfaceFinalReport.report;
+const convergedReview = mfgSurfaceReview.review;
+const sorted = (items) => [...(items || [])].sort();
+const convergedDeliveryIds = sorted(
+  (convergedReport?.delivery_receipts || []).map((receipt) => receipt.delivery_id),
+);
+const surfaceHasExactReportReviewReceipt = (state) => (
+  typeof convergedReportId === 'string'
+  && typeof convergedReceiptId === 'string'
+  && (state.reports || []).some((report) => (
+    report.id === convergedReportId
+    && report.revision === convergedReport?.revision
+    && report.status === convergedReport?.status
+    && JSON.stringify(sorted(report.delivery_receipt_ids)) === JSON.stringify(convergedDeliveryIds)
+  ))
+  && (state.reviews || []).some((review) => (
+    review.id === convergedReview?.review_id
+    && review.report_id === convergedReportId
+    && review.revision === convergedReview?.revision
+    && review.status === convergedReview?.status
+  ))
+  && (state.receipts || []).some((receipt) => receipt.id === convergedReceiptId)
+);
+const exactTerminalWebEvent = (mfgSurfaceBrowser.browser?.frames || []).some((frame) => (
+  (frame.events || []).some((event) => (
+    event.subject_ref === 'mfg:assignment:mfg-live-assignment-1'
+    && event.revision === 2
+  ))
+));
+const mfgSurfaceSemanticProof = {
+  'MLIVE-01': () => (
+    mfgSurfaceMetrics.observer_count === 3
+    && (mfgSurfaceBrowser.console_errors || []).length === 0
+    && mfgSurfaceMetrics.receipt_delivery_converged === true
+    && convergedDeliveryIds.length >= 3
+    && surfaceHasExactReportReviewReceipt(mfgSurfaceTuiA)
+    && surfaceHasExactReportReviewReceipt(mfgSurfaceTuiB)
+    && surfaceHasExactReportReviewReceipt({
+      reports: mfgSurfaceBrowser.ui?.live?.reports,
+      reviews: mfgSurfaceBrowser.ui?.live?.reviews,
+      receipts: mfgSurfaceBrowser.ui?.live?.receipt_items,
+    })
+    && (mfgSurfaceBrowser.browser?.frames || []).some((frame) => (
+      (frame.receipt_ids || []).includes(convergedReceiptId)
+    ))
+  ),
+  'MLIVE-03': () => (
+    mfgSurfaceMetrics.event_count >= 1000
+    && mfgSurfaceMetrics.burst_assignment_count >= 1000
+    && String(mfgSurfaceMetrics.queue?.observer_id || '').endsWith('-tui-b')
+    && String(mfgSurfaceMetrics.queue?.pressure_connection_id || '').length > 0
+    && mfgSurfaceMetrics.queue?.peak > 0
+    && mfgSurfaceMetrics.queue?.peak <= mfgSurfaceMetrics.queue?.capacity
+    && mfgSurfaceMetrics.queue?.event_peak >= 2
+    && mfgSurfaceMetrics.queue?.event_peak <= mfgSurfaceMetrics.queue?.event_capacity
+    && mfgSurfaceMetrics.queue?.coalesced > 0
+    && mfgSurfaceMetrics.webui_interaction_latency_ms <= 2000
+    && (mfgSurfaceBrowser.interaction_probes || []).some((probe) => (
+      String(probe.id || '').endsWith('-webui-refresh-during-burst')
+      && probe.status === 'passed'
+      && probe.latency_ms <= 2000
+    ))
+  ),
+  'MLIVE-04': () => (
+    mfgSurfaceMetrics.slow_observer_resumed === true
+    && String(mfgSurfaceMetrics.queue?.observer_id || '').endsWith('-tui-b')
+    && String(mfgSurfaceMetrics.queue?.pressure_connection_id || '').length > 0
+    && mfgSurfaceMetrics.release?.observer_id === mfgSurfaceMetrics.queue?.observer_id
+    && String(mfgSurfaceMetrics.release?.connection_id || '').length > 0
+    && mfgSurfaceMetrics.release?.receiver_closed === true
+    && mfgSurfaceMetrics.webui_interaction_latency_ms <= 2000
+    && (mfgSurfaceBrowser.interaction_probes || []).some((probe) => (
+      String(probe.id || '').endsWith('-webui-refresh-during-burst')
+      && probe.status === 'passed'
+      && probe.latency_ms <= 2000
+    ))
+  ),
+  'MLIVE-05': () => (
+    mfgSurfaceMetrics.gateway_restart_epoch_stable === true
+    && (mfgSurfaceBrowser.console_errors || []).length === 0
+    && mfgSurfaceMetrics.webui_stream_request_count >= 2
+    && mfgSurfaceMetrics.webui_snapshot_request_count > 1
+    && (mfgSurfaceWebuiAfterRestart.browser?.requests || []).filter(
+      (request) => request.url.endsWith('/api/apps/mfg/live/snapshot'),
+    ).length > (mfgSurfaceWebuiBeforeRestart.browser?.requests || []).filter(
+      (request) => request.url.endsWith('/api/apps/mfg/live/snapshot'),
+    ).length
+    && mfgSurfaceMetrics.tui_restart_installed_new_generation === true
+    && mfgSurfaceTuiAAfterRestart.generation > mfgSurfaceTuiABeforeRestart.generation
+    && mfgSurfaceTuiBAfterRestart.generation > mfgSurfaceTuiBBeforeRestart.generation
+    && mfgSurfaceTuiAAfterRestart.cursor === mfgSurfaceRestartSnapshot.cursor
+    && mfgSurfaceTuiBAfterRestart.cursor === mfgSurfaceRestartSnapshot.cursor
+    && mfgSurfaceTuiAAfterRestart.view_epoch === mfgSurfaceRestartSnapshot.view_epoch
+    && mfgSurfaceTuiBAfterRestart.view_epoch === mfgSurfaceRestartSnapshot.view_epoch
+  ),
+  'MLIVE-06': () => {
+    const epoch = mfgSurfaceProfileSnapshot.view_epoch;
+    return (
+      typeof epoch === 'string'
+      && (mfgSurfaceBrowser.console_errors || []).length === 0
+      && mfgSurfaceMetrics.established_streams_rejected_after_profile_change === true
+      && mfgSurfaceMetrics.webui_valid_session_403_recovered_in_same_document === true
+      && mfgSurfaceBrowser.browser?.reauthentication_count >= 1
+      && mfgSurfaceBrowser.browser?.reauthentication_method === 'mfg_recovery_button_settings_form_same_document'
+      && mfgSurfaceBrowser.browser?.authorization_clear_observed === true
+      && mfgSurfaceBrowser.browser?.forbidden_recovery_count === 1
+      && mfgSurfaceBrowser.browser?.profile_reauthentication_count === 1
+      && mfgSurfaceBrowser.browser?.same_document_recovery_count >= 2
+      && (mfgSurfaceBrowser.browser?.consumer_generation_deltas || []).filter(
+        (item) => item.delta === 1,
+      ).length >= 2
+      && (mfgSurfaceBrowser.interaction_probes || []).some((probe) => (
+        probe.status === 'passed'
+        && probe.authorization_error?.code === 'capability_denied'
+        && probe.authorization_error?.http_status === 403
+      ))
+      && (mfgSurfaceBrowser.browser?.stream_errors || []).some((error) => (
+        error.code === 'authentication_required' && error.http_status === 401
+      ))
+      && mfgSurfaceTuiA.live?.reauthentication_count >= 1
+      && mfgSurfaceTuiB.live?.reauthentication_count >= 1
+      && mfgSurfaceTuiA.live?.view_epoch === epoch
+      && mfgSurfaceTuiB.live?.view_epoch === epoch
+    );
+  },
+  'MLIVE-08': () => (
+    mfgSurfaceMetrics.terminal_converged === true
+    && exactTerminalWebEvent
+    && [mfgSurfaceTuiA, mfgSurfaceTuiB].every((state) => (
+      (state.assignments || []).some((assignment) => (
+        assignment.id === 'mfg-live-assignment-1'
+        && assignment.status === 'unassigned'
+        && assignment.revision === 2
+      ))
+    ))
+  ),
+  'MLIVE-09': () => (
+    mfgSurfaceMetrics.profile_change_view_epoch_changed === true
+    && mfgSurfaceMetrics.profile_change_internal_epoch_stable === true
+    && mfgSurfaceMetrics.old_profile_cursor_resynced === true
+    && mfgSurfaceMetrics.hidden_backlog_payload_free_heartbeat === true
+    && hiddenHeartbeatPayloads.length > 0
+    && hiddenHeartbeatPayloads.every((payload) => (
+      payload
+      && payload.kind === 'heartbeat'
+      && payload.view_epoch === mfgSurfaceHiddenBefore.view_epoch
+      && Object.keys(payload).sort().join(',') === 'cursor,generated_at,kind,view_epoch'
+    ))
+    && hiddenHeartbeatPayloads.at(-1)?.cursor !== mfgSurfaceHiddenBefore.cursor
+    && !fs.readFileSync(hiddenHeartbeatPath, 'utf8').includes('hidden-observer')
+  ),
+};
+
+function commandLogIncludes(commandName, needle, label) {
+  const logPath = commands[commandName]?.log_path;
+  requireFile(logPath || '', `${label} log`);
+  const content = logPath && fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
+  if (!content.includes(needle)) failures.push(`${label} did not execute ${needle}`);
+  return logPath;
+}
+
+const mfgLiveUnitProof = {
+  'MLIVE-02': {
+    checks: ['old generation delta is rejected by both WebUI and TUI reducers'],
+    artifacts: [
+      vitestPath,
+      commandLogIncludes(
+        'backend-tui-mfg',
+        'mfg_live_snapshot_delta_and_generation_guard_update_canonical_state',
+        'MLIVE-02 TUI generation guard',
+      ),
+    ],
+    valid: JSON.stringify(vitest).includes('resyncs with a new generation'),
+  },
+  'MLIVE-07': {
+    checks: ['contract mismatch fails fast with a terminal and understandable error'],
+    artifacts: [
+      vitestPath,
+      commandLogIncludes(
+        'backend-tui-mfg',
+        'mfg_contract_validation_fails_fast_on_version_role_route_or_action_drift',
+        'MLIVE-07 TUI contract mismatch',
+      ),
+    ],
+    valid: JSON.stringify(vitest).includes('fails fast on a live contract mismatch'),
+  },
+};
+for (const [id, proof] of Object.entries(mfgLiveUnitProof)) {
+  if (!proof.valid) failures.push(`${id} Vitest result lacks its named reducer/contract proof`);
+}
+const mfgHiddenHeartbeatLog = commandLogIncludes(
+  'backend-gateway-mfg',
+  'hidden_only_changes_advance_only_the_payload_free_heartbeat_cursor',
+  'MLIVE-09 hidden heartbeat',
+);
+
 const artifactGroups = {
   visual: [visualPath, commands['visual-audit']?.log_path],
   vitest: [vitestPath, commands['frontend-vitest']?.log_path],
@@ -294,9 +627,52 @@ for (const entry of manifest.entries || []) {
     continue;
   }
   const [level, groups, checks] = proof;
-  const allGroups = [...groups, 'build', 'openapi', 'global'];
-  const resultArtifacts = artifacts(...allGroups);
-  const execution = commandEvidence(...allGroups);
+  let resultArtifacts;
+  let execution;
+  let resultChecks = checks;
+  if (entry.id.startsWith('MLIVE-')) {
+    const scenarioCheck = mfgSurfaceIndex.checks?.[entry.id];
+    const unitProof = mfgLiveUnitProof[entry.id];
+    if (!scenarioCheck && !unitProof) {
+      failures.push(`${entry.id} has neither structured scenario proof nor named unit proof`);
+      resultArtifacts = [];
+      execution = commandEvidence('mfgSurfaces');
+    } else if (scenarioCheck) {
+      if (scenarioCheck.status !== 'passed'
+        || typeof scenarioCheck.assertion !== 'string'
+        || !Array.isArray(scenarioCheck.evidence)
+        || !scenarioCheck.evidence.length) {
+        failures.push(`${entry.id} structured scenario proof is incomplete`);
+      }
+      if (!mfgSurfaceSemanticProof[entry.id]?.()) {
+        failures.push(`${entry.id} structured evidence does not satisfy its semantic proof`);
+      }
+      const scenarioArtifacts = (scenarioCheck.evidence || []).map((file) => {
+        const artifact = path.resolve(mfgSurfaceArtifactDir, file);
+        if (!artifact.startsWith(`${mfgSurfaceArtifactDir}${path.sep}`)) {
+          failures.push(`${entry.id} evidence escapes the scenario artifact directory: ${file}`);
+        }
+        return requireFile(artifact, `${entry.id} structured scenario evidence`);
+      });
+      resultArtifacts = [...new Set([
+        ...scenarioArtifacts,
+        commands['scenario-mfg-surfaces']?.log_path,
+      ].filter(Boolean))];
+      execution = commandEvidence('mfgSurfaces');
+      resultChecks = [scenarioCheck.assertion];
+    } else {
+      resultArtifacts = [...new Set(unitProof.artifacts.filter(Boolean))];
+      execution = commandEvidence('vitest', 'tuiMfg');
+      resultChecks = unitProof.checks;
+    }
+    if (entry.id === 'MLIVE-09') {
+      if (mfgHiddenHeartbeatLog) resultArtifacts.push(mfgHiddenHeartbeatLog);
+    }
+  } else {
+    const allGroups = [...groups, 'build', 'openapi', 'global'];
+    resultArtifacts = artifacts(...allGroups);
+    execution = commandEvidence(...allGroups);
+  }
   for (const artifact of resultArtifacts) requireFile(artifact, `${entry.id} artifact`);
   results.push({
     acceptance_id: entry.id,
@@ -309,7 +685,7 @@ for (const entry of manifest.entries || []) {
     started_at: execution.started_at || now,
     finished_at: execution.finished_at || now,
     data_source: execution.data_source,
-    checks,
+    checks: resultChecks,
     artifacts: resultArtifacts,
   });
 }

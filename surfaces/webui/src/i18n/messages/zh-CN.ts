@@ -2528,6 +2528,8 @@ export const zhCN: MessageCatalog = {
   "settings.gateway.credential": "Gateway 凭据",
   "settings.gateway.credentialPlaceholder": "仅用于建立当前浏览器会话",
   "settings.gateway.login": "建立安全会话",
+  "settings.gateway.replaceCredential": "更换凭据",
+  "settings.gateway.capabilityDenied": "当前会话有效，但没有 MFG 实时访问权限。请更换具备 mfg.read 的凭据，或联系管理员授予该能力。",
   "settings.gateway.logout": "退出安全会话",
   "settings.gateway.sessionNotice": "凭据不会保存到浏览器、对话、工具环境或日志；Gateway 仅保留短期 HttpOnly 会话。",
   "graph.title.default": "运行图",
