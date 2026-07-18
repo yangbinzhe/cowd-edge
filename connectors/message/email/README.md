@@ -3,5 +3,5 @@
 Builds to `cowd-edge-email-message`. It owns SMTP/IMAP dependencies and keeps those
 dependencies out of the core Cowd binary.
 
-Gateway sends JSONL frames to this connector for delivery and receives JSONL event
+Gateway uses authenticated UDS/H2 streams for delivery and receives sequenced event
 frames for inbound mail.

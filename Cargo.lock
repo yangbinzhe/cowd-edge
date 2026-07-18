@@ -673,19 +673,24 @@ checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
 name = "edge-adapters"
-version = "0.9.548"
+version = "0.9.550"
 dependencies = [
  "aes",
  "async-trait",
  "base64 0.22.1",
+ "bytes",
  "cbc",
  "chrono",
  "edge-contract",
  "futures",
+ "http-body-util",
  "httpmock",
+ "hyper 1.10.1",
+ "hyper-util",
  "imap",
  "imap-proto",
  "lettre",
+ "libc",
  "lru",
  "mail-parser",
  "native-tls",
@@ -709,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "edge-contract"
-version = "0.9.548"
+version = "0.9.550"
 dependencies = [
  "chrono",
  "serde",
@@ -1279,6 +1284,7 @@ dependencies = [
  "http 1.4.2",
  "http-body 1.0.1",
  "httparse",
+ "httpdate",
  "itoa",
  "pin-project-lite",
  "smallvec",

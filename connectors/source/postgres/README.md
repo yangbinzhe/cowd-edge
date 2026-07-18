@@ -1,6 +1,6 @@
 # PostgreSQL Source Connector
 
-Builds to `cowd-edge-postgres-source`.
+Uses `cowd-edge-sql-source` with the `postgres` driver profile.
 
 The connector implements `source.read_batch`, `source.schema_discovery`,
 `source.incremental_plan`, and source event normalization. It reads PostgreSQL

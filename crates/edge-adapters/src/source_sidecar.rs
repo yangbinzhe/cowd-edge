@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
+use crate::managed_server::{ManagedEdgeHandler, ManagedHandlerFactory};
+
 #[cfg(feature = "source-db")]
 use crate::source_db::{self, DatabaseDialect};
 
@@ -20,6 +22,71 @@ struct SourceSidecarState {
     last_error: Option<String>,
     last_run_at_ms: Option<i64>,
     watermarks: BTreeMap<String, SourceWatermark>,
+}
+
+pub struct SourceManagedHandler {
+    surface_id: String,
+    adapter_id: String,
+    default_base_url: String,
+    state: Arc<Mutex<SourceSidecarState>>,
+}
+
+impl SourceManagedHandler {
+    #[must_use]
+    pub fn new(surface_id: &str, adapter_id: &str, default_base_url: &str) -> Self {
+        Self {
+            surface_id: surface_id.to_string(),
+            adapter_id: adapter_id.to_string(),
+            default_base_url: default_base_url.to_string(),
+            state: Arc::new(Mutex::new(SourceSidecarState::default())),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedEdgeHandler for SourceManagedHandler {
+    async fn handle(&self, frame: SurfaceFrame) -> Result<SurfaceFrame, String> {
+        Ok(handle_frame(
+            frame,
+            &self.surface_id,
+            &self.adapter_id,
+            &self.default_base_url,
+            self.state.clone(),
+        )
+        .await)
+    }
+}
+
+#[must_use]
+pub fn managed_source_factory(artifact: &'static str) -> ManagedHandlerFactory {
+    Arc::new(move |bootstrap, _events| {
+        let Some(profile) = crate::driver_profiles::driver_profile(&bootstrap.driver_profile)
+            .filter(|profile| profile.artifact == artifact && !profile.adapter_id.is_empty())
+        else {
+            return Err(format!(
+                "unsupported source profile `{}`",
+                bootstrap.driver_profile
+            ));
+        };
+        if bootstrap.surface_id != profile.surface_id {
+            return Err(format!(
+                "surface `{}` does not match profile surface `{}`",
+                bootstrap.surface_id, profile.surface_id,
+            ));
+        }
+        Ok((
+            Arc::new(SourceManagedHandler::new(
+                profile.surface_id,
+                profile.adapter_id,
+                profile.default_base_url,
+            )),
+            profile
+                .capabilities
+                .iter()
+                .map(|capability| (*capability).to_string())
+                .collect(),
+        ))
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1421,6 +1488,72 @@ pub(crate) fn checksum_rows(rows: &[Value]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edge_contract::{EdgeBootstrapRequest, EDGE_PROTOCOL_V2};
+
+    #[tokio::test]
+    async fn feishu_and_lark_profiles_share_artifact_without_state_or_domain_cross_talk() {
+        let factory = managed_source_factory("cowd-edge-bitable-source");
+        let (events, _event_rx) = tokio::sync::mpsc::channel(8);
+        let make = |surface: &str, profile: &str| EdgeBootstrapRequest {
+            protocol: EDGE_PROTOCOL_V2.to_string(),
+            gateway_version: "test".to_string(),
+            surface_id: surface.to_string(),
+            driver_profile: profile.to_string(),
+            capabilities: crate::driver_profiles::driver_profile(profile)
+                .unwrap()
+                .capabilities
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+        };
+        let (feishu, _) = factory(&make("feishu-bitable", "feishu-bitable"), events.clone())
+            .expect("Feishu profile must bootstrap");
+        let (lark, _) = factory(&make("lark-bitable", "lark-bitable"), events)
+            .expect("Lark profile must bootstrap");
+
+        let feishu_state = feishu
+            .handle(SurfaceFrame::Action {
+                id: "f".to_string(),
+                surface: "feishu-bitable".to_string(),
+                action: "source.state".to_string(),
+                payload: Value::Null,
+            })
+            .await
+            .unwrap();
+        let lark_state = lark
+            .handle(SurfaceFrame::Action {
+                id: "l".to_string(),
+                surface: "lark-bitable".to_string(),
+                action: "source.state".to_string(),
+                payload: Value::Null,
+            })
+            .await
+            .unwrap();
+        let SurfaceFrame::Ok {
+            payload: feishu_payload,
+            ..
+        } = feishu_state
+        else {
+            panic!("unexpected Feishu response")
+        };
+        let SurfaceFrame::Ok {
+            payload: lark_payload,
+            ..
+        } = lark_state
+        else {
+            panic!("unexpected Lark response")
+        };
+        assert_eq!(
+            feishu_payload["state"]["default_base_url"],
+            "https://open.feishu.cn"
+        );
+        assert_eq!(
+            lark_payload["state"]["default_base_url"],
+            "https://open.larksuite.com"
+        );
+        assert_eq!(feishu_payload["state"]["adapter_id"], "feishu_bitable");
+        assert_eq!(lark_payload["state"]["adapter_id"], "lark_bitable");
+    }
 
     #[test]
     fn accepts_wrapped_read_plan_payload() {

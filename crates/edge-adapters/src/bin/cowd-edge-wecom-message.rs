@@ -1,15 +1,7 @@
-#[tokio::main]
+use edge_adapters::managed_server::run_managed_server;
+use edge_adapters::message_sidecar::{managed_message_factory, wecom_adapter};
+
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> std::io::Result<()> {
-    edge_adapters::message_sidecar::run_stdio_platform_message_connector(
-        "wecom",
-        &[
-            "message.ingress",
-            "message.egress",
-            "message.callback",
-            "message.crypto",
-            "message.health",
-        ],
-        edge_adapters::message_sidecar::wecom_adapter,
-    )
-    .await
+    run_managed_server(managed_message_factory("wecom-message", wecom_adapter)).await
 }

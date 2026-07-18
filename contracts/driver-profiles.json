@@ -1,0 +1,177 @@
+{
+  "schema": "cowd.edge.driver-profiles.v1",
+  "templates": {
+    "bitable-source": {
+      "kind": "source-connector",
+      "artifact": "cowd-edge-bitable-source",
+      "capabilities": [
+        "source.schema_discovery",
+        "source.snapshot",
+        "source.incremental",
+        "source.event",
+        "source.health"
+      ],
+      "config_schema": {
+        "required": ["app_id", "app_secret"],
+        "optional": ["base_url", "app_token", "table_id"]
+      }
+    },
+    "sql-source": {
+      "kind": "source-connector",
+      "artifact": "cowd-edge-sql-source",
+      "capabilities": [
+        "source.schema_discovery",
+        "source.snapshot",
+        "source.incremental",
+        "source.event",
+        "source.health"
+      ],
+      "config_schema": {
+        "required": [],
+        "optional": [
+          "database_url",
+          "database_url_env",
+          "host",
+          "port",
+          "database",
+          "database_name",
+          "user",
+          "username",
+          "password"
+        ]
+      }
+    }
+  },
+  "profiles": [
+    {
+      "id": "feishu-message",
+      "surface_id": "feishu",
+      "name": "Feishu Message Connector",
+      "kind": "message-connector",
+      "artifact": "cowd-edge-open-platform-message",
+      "path": "connectors/message/feishu/surface.json",
+      "capabilities": [
+        "message.ingress",
+        "message.egress",
+        "message.send.text",
+        "message.send.image",
+        "message.send.voice",
+        "message.send.document",
+        "message.send.video",
+        "message.send.card",
+        "message.edit",
+        "message.delete",
+        "message.chat.info",
+        "message.callback",
+        "message.health",
+        "message.processing.lifecycle"
+      ],
+      "routes": [
+        {"kind": "callback", "path": "/events", "method": "POST", "public": true}
+      ],
+      "config_schema": {"required": ["app_id", "app_secret"]}
+    },
+    {
+      "id": "email-message",
+      "surface_id": "email",
+      "name": "Email Message Connector",
+      "kind": "message-connector",
+      "artifact": "cowd-edge-email-message",
+      "path": "connectors/message/email/surface.json",
+      "capabilities": [
+        "message.ingress",
+        "message.egress",
+        "message.send.text",
+        "message.send.document",
+        "message.smtp",
+        "message.imap",
+        "message.health"
+      ],
+      "config_schema": {"required": ["smtp_host", "from_address"]}
+    },
+    {
+      "id": "wecom-message",
+      "surface_id": "wecom",
+      "name": "WeCom Message Connector",
+      "kind": "message-connector",
+      "artifact": "cowd-edge-wecom-message",
+      "path": "connectors/message/wecom/surface.json",
+      "capabilities": [
+        "message.ingress",
+        "message.egress",
+        "message.send.text",
+        "message.callback",
+        "message.crypto",
+        "message.health"
+      ],
+      "routes": [
+        {"kind": "callback", "path": "/events", "method": "POST", "public": true}
+      ],
+      "config_schema": {"required": ["corp_id", "corp_secret", "agent_id"]}
+    },
+    {
+      "id": "wechat-ilink-message",
+      "surface_id": "wechat-ilink",
+      "name": "WeChat iLink Message Connector",
+      "kind": "message-connector",
+      "artifact": "cowd-edge-wechat-ilink-message",
+      "path": "connectors/message/wechat-ilink/surface.json",
+      "capabilities": [
+        "message.ingress",
+        "message.egress",
+        "message.send.text",
+        "message.send.image",
+        "message.chat.info",
+        "message.qr_login",
+        "message.long_poll",
+        "message.health"
+      ],
+      "routes": [
+        {"kind": "callback", "path": "/qr", "method": "POST", "public": false}
+      ],
+      "config_schema": {"required": ["bot_id", "bot_secret"]}
+    },
+    {
+      "id": "feishu-bitable",
+      "surface_id": "feishu-bitable",
+      "name": "Feishu Bitable Source Connector",
+      "template": "bitable-source",
+      "path": "connectors/source/feishu-bitable/surface.json",
+      "adapter_id": "feishu_bitable",
+      "default_base_url": "https://open.feishu.cn"
+    },
+    {
+      "id": "lark-bitable",
+      "surface_id": "lark-bitable",
+      "name": "Lark Base Source Connector",
+      "template": "bitable-source",
+      "path": "connectors/source/lark-bitable/surface.json",
+      "adapter_id": "lark_bitable",
+      "default_base_url": "https://open.larksuite.com"
+    },
+    {
+      "id": "postgres",
+      "surface_id": "postgres",
+      "name": "PostgreSQL Source Connector",
+      "template": "sql-source",
+      "path": "connectors/source/postgres/surface.json",
+      "adapter_id": "postgres"
+    },
+    {
+      "id": "mysql",
+      "surface_id": "mysql",
+      "name": "MySQL Source Connector",
+      "template": "sql-source",
+      "path": "connectors/source/mysql/surface.json",
+      "adapter_id": "mysql"
+    },
+    {
+      "id": "mariadb",
+      "surface_id": "mariadb",
+      "name": "MariaDB Source Connector",
+      "template": "sql-source",
+      "path": "connectors/source/mariadb/surface.json",
+      "adapter_id": "mariadb"
+    }
+  ]
+}

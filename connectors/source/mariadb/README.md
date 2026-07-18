@@ -1,6 +1,6 @@
 # MariaDB Source Connector
 
-Builds to `cowd-edge-mariadb-source`.
+Uses `cowd-edge-sql-source` with the `mariadb` driver profile.
 
 The connector implements `source.read_batch`, `source.schema_discovery`,
 `source.incremental_plan`, and source event normalization. It reads MariaDB

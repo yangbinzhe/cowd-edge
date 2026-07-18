@@ -2,20 +2,35 @@
   "schema": "cowd.surface.v1",
   "id": "email",
   "name": "Email Message Connector",
-  "version": "0.9.548",
+  "version": "0.9.550",
   "kind": "message-connector",
-  "entry": "./cowd-edge-email-message",
-  "transport": "stdio-jsonl",
-  "lifecycle": "managed",
-  "capabilities": ["message.ingress", "message.egress", "message.smtp", "message.imap", "message.health"],
+  "runtime": {
+    "kind": "managed",
+    "artifact": "cowd-edge-email-message",
+    "driver_profile": "email-message",
+    "transport": "uds-http2"
+  },
+  "capabilities": [
+    "message.ingress",
+    "message.egress",
+    "message.send.text",
+    "message.send.document",
+    "message.smtp",
+    "message.imap",
+    "message.health"
+  ],
   "routes": [],
   "resources": [],
   "health": {
-    "mode": "jsonl",
-    "interval_ms": 30000
+    "mode": "http2",
+    "interval_ms": 30000,
+    "timeout_ms": 5000
   },
   "config_schema": {
-    "required": ["smtp_host", "from_address"]
+    "required": [
+      "smtp_host",
+      "from_address"
+    ]
   },
   "default_enabled": false
 }

@@ -2,11 +2,14 @@
   "schema": "cowd.surface.v1",
   "id": "lark-bitable",
   "name": "Lark Base Source Connector",
-  "version": "0.9.548",
+  "version": "0.9.550",
   "kind": "source-connector",
-  "entry": "./cowd-edge-lark-bitable-source",
-  "transport": "stdio-jsonl",
-  "lifecycle": "managed",
+  "runtime": {
+    "kind": "managed",
+    "artifact": "cowd-edge-bitable-source",
+    "driver_profile": "lark-bitable",
+    "transport": "uds-http2"
+  },
   "capabilities": [
     "source.schema_discovery",
     "source.snapshot",
@@ -17,13 +20,20 @@
   "routes": [],
   "resources": [],
   "health": {
-    "mode": "jsonl",
+    "mode": "http2",
     "interval_ms": 30000,
     "timeout_ms": 5000
   },
   "config_schema": {
-    "required": ["app_id", "app_secret"],
-    "optional": ["base_url", "app_token", "table_id"]
+    "required": [
+      "app_id",
+      "app_secret"
+    ],
+    "optional": [
+      "base_url",
+      "app_token",
+      "table_id"
+    ]
   },
   "default_enabled": false
 }

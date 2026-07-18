@@ -1,6 +1,6 @@
 # Lark Base Source Connector
 
-Builds to `cowd-edge-lark-bitable-source`.
+Uses `cowd-edge-bitable-source` with the `lark-bitable` driver profile.
 
 The connector implements `source.read_batch`, `source.schema_discovery`,
 `source.incremental_plan`, and source event normalization. It uses the Lark Open

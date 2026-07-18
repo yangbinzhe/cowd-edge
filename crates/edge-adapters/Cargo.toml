@@ -10,8 +10,8 @@ name = "edge_adapters"
 path = "src/lib.rs"
 
 [[bin]]
-name = "cowd-edge-feishu-message"
-path = "src/bin/cowd-edge-feishu-message.rs"
+name = "cowd-edge-open-platform-message"
+path = "src/bin/cowd-edge-open-platform-message.rs"
 
 [[bin]]
 name = "cowd-edge-email-message"
@@ -26,26 +26,12 @@ name = "cowd-edge-wechat-ilink-message"
 path = "src/bin/cowd-edge-wechat-ilink-message.rs"
 
 [[bin]]
-name = "cowd-edge-feishu-bitable-source"
-path = "src/bin/cowd-edge-feishu-bitable-source.rs"
+name = "cowd-edge-bitable-source"
+path = "src/bin/cowd-edge-bitable-source.rs"
 
 [[bin]]
-name = "cowd-edge-lark-bitable-source"
-path = "src/bin/cowd-edge-lark-bitable-source.rs"
-
-[[bin]]
-name = "cowd-edge-postgres-source"
-path = "src/bin/cowd-edge-postgres-source.rs"
-required-features = ["source-db"]
-
-[[bin]]
-name = "cowd-edge-mysql-source"
-path = "src/bin/cowd-edge-mysql-source.rs"
-required-features = ["source-db"]
-
-[[bin]]
-name = "cowd-edge-mariadb-source"
-path = "src/bin/cowd-edge-mariadb-source.rs"
+name = "cowd-edge-sql-source"
+path = "src/bin/cowd-edge-sql-source.rs"
 required-features = ["source-db"]
 
 [features]
@@ -55,8 +41,12 @@ source-db = ["dep:rust_decimal", "dep:sqlx"]
 [dependencies]
 async-trait = "0.1"
 base64 = "0.22"
+bytes = "1"
 chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["http2", "server"] }
+hyper-util = { version = "0.1", features = ["http2", "server", "tokio"] }
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
@@ -65,13 +55,14 @@ rust_decimal = { version = "1", optional = true }
 sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "mysql", "chrono", "json", "rust_decimal"], optional = true }
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time", "io-std", "io-util"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time", "io-std", "io-util", "net", "fs"] }
 tracing = "0.1"
 uuid = { version = "1", features = ["v4"] }
 
 # Platform adapter dependencies.
 native-tls = "0.2"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "tokio1-rustls-tls"] }
+libc = "0.2"
 imap = "3.0.0-alpha.15"
 imap-proto = "0.16"
 mail-parser = "0.9"

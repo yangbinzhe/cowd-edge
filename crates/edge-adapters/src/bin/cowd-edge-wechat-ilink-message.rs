@@ -1,15 +1,11 @@
-#[tokio::main]
+use edge_adapters::managed_server::run_managed_server;
+use edge_adapters::message_sidecar::{managed_message_factory, wechat_ilink_adapter};
+
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> std::io::Result<()> {
-    edge_adapters::message_sidecar::run_stdio_platform_message_connector(
-        "wechat-ilink",
-        &[
-            "message.ingress",
-            "message.egress",
-            "message.callback",
-            "message.qr_login",
-            "message.health",
-        ],
-        edge_adapters::message_sidecar::wechat_ilink_adapter,
-    )
+    run_managed_server(managed_message_factory(
+        "wechat-ilink-message",
+        wechat_ilink_adapter,
+    ))
     .await
 }

@@ -1,6 +1,6 @@
 # Feishu Bitable Source Connector
 
-Builds to `cowd-edge-feishu-bitable-source`.
+Uses `cowd-edge-bitable-source` with the `feishu-bitable` driver profile.
 
 The connector implements `source.read_batch`, `source.schema_discovery`,
 `source.incremental_plan`, and source event normalization. It can read from

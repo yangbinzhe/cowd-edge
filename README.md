@@ -2,7 +2,7 @@
 
 `cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.548`。
+当前版本：`0.9.550`。
 
 ## 1. 定位
 
@@ -31,7 +31,7 @@ connectors
 - Source connector 只返回标准 `SourceRecordBatch`，不直接写 Matrix，不直接创建 memory。
 - Matrix 的 SourceSnapshot、SourcePack、事实/关系/证据落库仍由 core 完成。
 - 平台文档操作、后台操作、业务动作不内置到 message connector；后续通过 skill/tool 安装。
-- sidecar 可以由 Rust 或其他语言实现；当前主协议统一使用 stdio JSONL。
+- managed Edge 可以由 Rust 或其他语言实现；生产协议统一使用私有 UDS 上的 authenticated HTTP/2。stdio JSONL 仅保留给一次一请求的 OneShot 单元。
 
 ## 3. 当前目录
 
@@ -39,7 +39,7 @@ connectors
 
 ```text
 crates/edge-contract
-  Edge JSONL 生命周期与 manifest 合同。
+  Edge 生命周期、sealed runtime manifest 与 v2 wire 合同。
 
 crates/edge-adapters
   sidecar runtime、平台适配实现、消息/资源连接器二进制入口。
@@ -77,23 +77,19 @@ Edge sidecar：
 
 ```bash
 cargo check --workspace --bins
-cargo build --release --workspace --bins
-cargo build --release -p edge-adapters --features source-db --bin cowd-edge-postgres-source --bin cowd-edge-mysql-source --bin cowd-edge-mariadb-source
+cargo build --release -p edge-adapters --bins --features source-db
 ```
 
-构建产物按连接器类型进入对应安装目录：
+9 个逻辑 Connector 使用 6 个依赖族 artifact；安装器将二进制放在 Edge 安装根的 `bin/`，manifest 继续各自独立：
 
 ```text
 surfaces/webui/dist
-connectors/message/feishu/cowd-edge-feishu-message
-connectors/message/email/cowd-edge-email-message
-connectors/message/wecom/cowd-edge-wecom-message
-connectors/message/wechat-ilink/cowd-edge-wechat-ilink-message
-connectors/source/postgres/cowd-edge-postgres-source
-connectors/source/mysql/cowd-edge-mysql-source
-connectors/source/mariadb/cowd-edge-mariadb-source
-connectors/source/feishu-bitable/cowd-edge-feishu-bitable-source
-connectors/source/lark-bitable/cowd-edge-lark-bitable-source
+bin/cowd-edge-open-platform-message
+bin/cowd-edge-email-message
+bin/cowd-edge-wecom-message
+bin/cowd-edge-wechat-ilink-message
+bin/cowd-edge-bitable-source
+bin/cowd-edge-sql-source
 ```
 
 ## 5. Manifest 合同
@@ -107,7 +103,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.466",
+  "version": "0.9.550",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -123,11 +119,14 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.466",
+  "version": "0.9.550",
   "kind": "message-connector",
-  "entry": "./cowd-edge-feishu-message",
-  "transport": "stdio-jsonl",
-  "lifecycle": "managed",
+  "runtime": {
+    "kind": "managed",
+    "artifact": "cowd-edge-open-platform-message",
+    "driver_profile": "feishu-message",
+    "transport": "uds-http2"
+  },
   "capabilities": [
     "message.ingress",
     "message.egress",
@@ -149,11 +148,14 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.466",
+  "version": "0.9.550",
   "kind": "source-connector",
-  "entry": "./cowd-edge-feishu-bitable-source",
-  "transport": "stdio-jsonl",
-  "lifecycle": "managed",
+  "runtime": {
+    "kind": "managed",
+    "artifact": "cowd-edge-bitable-source",
+    "driver_profile": "feishu-bitable",
+    "transport": "uds-http2"
+  },
   "capabilities": [
     "source.schema_discovery",
     "source.snapshot",
@@ -165,33 +167,22 @@ Source connector：
 }
 ```
 
-## 6. JSONL 协议
+## 6. Managed Edge v2 协议
 
-Gateway 与 sidecar 每行传输一个 JSON frame。生命周期帧在 Surface、Message Connector、Source Connector 之间复用：
-
-```json
-{"type":"handshake","id":"req-1","protocol":"cowd.surface.v1","gateway_version":"0.9.466"}
-{"type":"configure","id":"req-2","surface":"feishu","config":{}}
-{"type":"connect","id":"req-3","surface":"feishu"}
-{"type":"health","id":"req-4","surface":"feishu"}
-```
-
-Message connector 使用 `send` 和 message action：
+Gateway 为每个逻辑 Connector 启动独立进程，创建权限为 `0600` 的 UDS 和一次性 credential。Edge 消费 credential 后删除文件，双方在一个持久 H2 连接上多路复用 control、message、source 与 event stream；JSON 仅作为 DTO 编码。
 
 ```json
-{"type":"send","id":"req-5","surface":"feishu","recipient":"oc_xxx","thread":null,"text":"hello","metadata":{}}
-{"type":"action","id":"req-6","surface":"feishu","action":"message.processing_complete","payload":{"message_id":"om_xxx"}}
+POST /_cowd/edge/v2/handshake
+POST /_cowd/edge/v2/configure
+POST /_cowd/edge/v2/connect
+GET  /_cowd/edge/v2/health
+GET  /_cowd/edge/v2/events
+POST /_cowd/edge/v2/events/ack
 ```
 
-Source connector 使用 source action：
+Message connector 使用 `/message/send` 与 `/action`；Source 使用 `/source/read`、`/source/schema`、`/source/incremental` 和 `/source/watermark/commit`。完整 DTO 规范位于 `contracts/edge/v2/schema.json`，生成物不得手工修改。
 
-```json
-{"type":"action","id":"req-7","surface":"feishu-bitable","action":"source.read_batch","payload":{"adapter_id":"feishu_bitable","resource_ref":"feishu-bitable://app/table","limit":100}}
-{"type":"action","id":"req-8","surface":"postgres","action":"source.schema_discovery","payload":{"adapter_id":"postgres","resource_ref":"postgres://***:***@localhost/db","table":"public.orders"}}
-{"type":"action","id":"req-9","surface":"feishu-bitable","action":"source.event.normalize","payload":{"events":[{"event_type":"record.changed","app_token":"app","table_id":"tbl","record_ids":["rec_1"]}]}}
-```
-
-响应必须返回标准 payload；Source connector 的 `source.read_batch` 必须返回 core `connector::SourceRecordBatch` 兼容结构。
+响应仍使用共享 `SurfaceFrame` 业务 DTO；H2 stream 提供 correlation、取消和流控，event 使用 sequence + ACK 重放合同。
 
 ## 7. Gateway 对接
 

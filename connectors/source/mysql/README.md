@@ -1,6 +1,6 @@
 # MySQL Source Connector
 
-Builds to `cowd-edge-mysql-source`.
+Uses `cowd-edge-sql-source` with the `mysql` driver profile.
 
 The connector implements `source.read_batch`, `source.schema_discovery`,
 `source.incremental_plan`, and source event normalization. It reads MySQL

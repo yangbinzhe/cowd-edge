@@ -1,15 +1,7 @@
-#[tokio::main]
+use edge_adapters::managed_server::run_managed_server;
+use edge_adapters::message_sidecar::{email_adapter, managed_message_factory};
+
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> std::io::Result<()> {
-    edge_adapters::message_sidecar::run_stdio_platform_message_connector(
-        "email",
-        &[
-            "message.ingress",
-            "message.egress",
-            "message.smtp",
-            "message.imap",
-            "message.health",
-        ],
-        edge_adapters::message_sidecar::email_adapter,
-    )
-    .await
+    run_managed_server(managed_message_factory("email-message", email_adapter)).await
 }

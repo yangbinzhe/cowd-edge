@@ -7,14 +7,15 @@ use edge_contract::{
     SurfaceFrame,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 
+use crate::managed_server::{ManagedEdgeHandler, ManagedHandlerFactory};
 use crate::platform::{
     InboundMessage, OutboundMessage, Platform, PlatformAdapter, PlatformError, PlatformEvent,
     PlatformResult, SessionKey,
 };
 
-type AdapterFactory = fn(&serde_json::Value) -> PlatformResult<Box<dyn PlatformAdapter>>;
+pub type AdapterFactory = fn(&serde_json::Value) -> PlatformResult<Box<dyn PlatformAdapter>>;
 
 #[derive(Default)]
 struct MessageSidecarState {
@@ -25,6 +26,84 @@ struct MessageSidecarState {
     last_error: Option<String>,
 }
 
+pub struct MessageManagedHandler {
+    surface_id: &'static str,
+    capabilities: &'static [&'static str],
+    factory: AdapterFactory,
+    state: Arc<Mutex<MessageSidecarState>>,
+    events: mpsc::Sender<SurfaceFrame>,
+}
+
+impl MessageManagedHandler {
+    #[must_use]
+    pub fn new(
+        surface_id: &'static str,
+        capabilities: &'static [&'static str],
+        factory: AdapterFactory,
+        events: mpsc::Sender<SurfaceFrame>,
+    ) -> Self {
+        Self {
+            surface_id,
+            capabilities,
+            factory,
+            state: Arc::new(Mutex::new(MessageSidecarState::default())),
+            events,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl ManagedEdgeHandler for MessageManagedHandler {
+    async fn handle(&self, frame: SurfaceFrame) -> Result<SurfaceFrame, String> {
+        Ok(handle_frame(
+            self.surface_id,
+            self.capabilities,
+            self.factory,
+            frame,
+            self.state.clone(),
+            self.events.clone(),
+        )
+        .await)
+    }
+}
+
+#[must_use]
+pub fn managed_message_factory(
+    expected_profile: &'static str,
+    factory: AdapterFactory,
+) -> ManagedHandlerFactory {
+    Arc::new(move |bootstrap, events| {
+        let profile = crate::driver_profiles::driver_profile(expected_profile)
+            .filter(|profile| profile.adapter_id.is_empty())
+            .ok_or_else(|| format!("unknown message profile `{expected_profile}`"))?;
+        if bootstrap.driver_profile != expected_profile {
+            return Err(format!(
+                "profile `{}` is not supported by `{expected_profile}`",
+                bootstrap.driver_profile
+            ));
+        }
+        if bootstrap.surface_id != profile.surface_id {
+            return Err(format!(
+                "surface `{}` does not match profile surface `{}`",
+                bootstrap.surface_id, profile.surface_id
+            ));
+        }
+        Ok((
+            Arc::new(MessageManagedHandler::new(
+                profile.surface_id,
+                profile.capabilities,
+                factory,
+                events,
+            )),
+            profile
+                .capabilities
+                .iter()
+                .map(|capability| (*capability).to_string())
+                .collect(),
+        ))
+    })
+}
+
 pub async fn run_stdio_platform_message_connector(
     surface_id: &'static str,
     capabilities: &'static [&'static str],
@@ -32,6 +111,15 @@ pub async fn run_stdio_platform_message_connector(
 ) -> io::Result<()> {
     let state = Arc::new(Mutex::new(MessageSidecarState::default()));
     let stdout = Arc::new(Mutex::new(tokio::io::stdout()));
+    let (events, mut event_rx) = mpsc::channel::<SurfaceFrame>(4096);
+    let event_stdout = stdout.clone();
+    tokio::spawn(async move {
+        while let Some(event) = event_rx.recv().await {
+            if write_frame(&event_stdout, &event).await.is_err() {
+                break;
+            }
+        }
+    });
     let stdin = BufReader::new(tokio::io::stdin());
     let mut lines = stdin.lines();
 
@@ -47,7 +135,7 @@ pub async fn run_stdio_platform_message_connector(
                     factory,
                     frame,
                     state.clone(),
-                    stdout.clone(),
+                    events.clone(),
                 )
                 .await
             }
@@ -69,7 +157,7 @@ async fn handle_frame(
     factory: AdapterFactory,
     frame: SurfaceFrame,
     state: Arc<Mutex<MessageSidecarState>>,
-    stdout: Arc<Mutex<tokio::io::Stdout>>,
+    events: mpsc::Sender<SurfaceFrame>,
 ) -> SurfaceFrame {
     match frame {
         SurfaceFrame::Handshake {
@@ -88,8 +176,8 @@ async fn handle_frame(
             id,
             surface: _,
             config,
-        } => configure_adapter(surface_id, id, config, factory, state, stdout).await,
-        SurfaceFrame::Connect { id, .. } => connect_adapter(surface_id, id, state, stdout).await,
+        } => configure_adapter(surface_id, id, config, factory, state, events).await,
+        SurfaceFrame::Connect { id, .. } => connect_adapter(surface_id, id, state, events).await,
         SurfaceFrame::Disconnect { id, .. } => disconnect_adapter(surface_id, id, state).await,
         SurfaceFrame::Health { id, .. } => health_frame(surface_id, id, state).await,
         SurfaceFrame::Send {
@@ -105,7 +193,7 @@ async fn handle_frame(
             action,
             payload,
             ..
-        } => action_frame(surface_id, id, action, payload, state, stdout).await,
+        } => action_frame(surface_id, id, action, payload, state, events).await,
         SurfaceFrame::Handshake { id, .. } => SurfaceFrame::Error {
             id: Some(id),
             code: "surface_protocol_mismatch".to_string(),
@@ -131,7 +219,7 @@ async fn configure_adapter(
     config: serde_json::Value,
     factory: AdapterFactory,
     state: Arc<Mutex<MessageSidecarState>>,
-    stdout: Arc<Mutex<tokio::io::Stdout>>,
+    events: mpsc::Sender<SurfaceFrame>,
 ) -> SurfaceFrame {
     match factory(&config) {
         Ok(mut adapter) => match adapter.connect().await {
@@ -145,7 +233,7 @@ async fn configure_adapter(
                     state.receive_loop_running = false;
                     state.last_error = None;
                 }
-                spawn_receive_loop(surface_id, adapter, state, stdout).await;
+                spawn_receive_loop(surface_id, adapter, state, events).await;
                 SurfaceFrame::Ok {
                     id,
                     payload: serde_json::json!({
@@ -192,7 +280,7 @@ async fn connect_adapter(
     surface_id: &'static str,
     id: String,
     state: Arc<Mutex<MessageSidecarState>>,
-    stdout: Arc<Mutex<tokio::io::Stdout>>,
+    events: mpsc::Sender<SurfaceFrame>,
 ) -> SurfaceFrame {
     let adapter = {
         let state = state.lock().await;
@@ -214,7 +302,7 @@ async fn connect_adapter(
                 state.receive_loop_running = false;
                 state.last_error = None;
             }
-            spawn_receive_loop(surface_id, adapter, state, stdout).await;
+            spawn_receive_loop(surface_id, adapter, state, events).await;
             SurfaceFrame::Ok {
                 id,
                 payload: serde_json::json!({
@@ -369,7 +457,7 @@ async fn action_frame(
     action: String,
     payload: serde_json::Value,
     state: Arc<Mutex<MessageSidecarState>>,
-    stdout: Arc<Mutex<tokio::io::Stdout>>,
+    events: mpsc::Sender<SurfaceFrame>,
 ) -> SurfaceFrame {
     let Some(kind) = MessageActionKind::parse(&action) else {
         return SurfaceFrame::Error {
@@ -397,7 +485,7 @@ async fn action_frame(
     };
 
     if kind == MessageActionKind::CallbackDispatch {
-        return dispatch_callback_action(surface_id, id, payload, adapter, stdout).await;
+        return dispatch_callback_action(surface_id, id, payload, adapter, events).await;
     }
 
     dispatch_message_action(surface_id, id, kind, payload, adapter).await
@@ -446,7 +534,7 @@ async fn dispatch_callback_action(
     id: String,
     payload: serde_json::Value,
     adapter: Arc<Mutex<Box<dyn PlatformAdapter>>>,
-    stdout: Arc<Mutex<tokio::io::Stdout>>,
+    events: mpsc::Sender<SurfaceFrame>,
 ) -> SurfaceFrame {
     let event_payload = payload.get("payload").cloned().unwrap_or(payload);
     let event_type = event_payload
@@ -467,7 +555,7 @@ async fn dispatch_callback_action(
     };
     match callback_result {
         Ok(Some(message)) => {
-            let _ = emit_inbound_event(surface_id, &stdout, message).await;
+            let _ = emit_inbound_event(surface_id, &events, message).await;
             SurfaceFrame::Ok {
                 id,
                 payload: serde_json::json!({"status": "received", "surface": surface_id}),
@@ -749,7 +837,7 @@ async fn spawn_receive_loop(
     surface_id: &'static str,
     adapter: Arc<Mutex<Box<dyn PlatformAdapter>>>,
     state: Arc<Mutex<MessageSidecarState>>,
-    stdout: Arc<Mutex<tokio::io::Stdout>>,
+    events: mpsc::Sender<SurfaceFrame>,
 ) {
     {
         let mut state = state.lock().await;
@@ -763,7 +851,7 @@ async fn spawn_receive_loop(
             let receive = adapter.lock().await.receive().await;
             match receive {
                 Ok(Some(message)) => {
-                    let _ = emit_inbound_event(surface_id, &stdout, message).await;
+                    let _ = emit_inbound_event(surface_id, &events, message).await;
                 }
                 Ok(None) => {
                     let connected = state.lock().await.connected;
@@ -788,12 +876,11 @@ async fn spawn_receive_loop(
 
 async fn emit_inbound_event(
     surface_id: &'static str,
-    stdout: &Arc<Mutex<tokio::io::Stdout>>,
+    events: &mpsc::Sender<SurfaceFrame>,
     message: InboundMessage,
-) -> io::Result<()> {
-    write_frame(
-        stdout,
-        &SurfaceFrame::Event {
+) -> Result<(), mpsc::error::SendError<SurfaceFrame>> {
+    events
+        .send(SurfaceFrame::Event {
             surface: surface_id.to_string(),
             event: "message.received".to_string(),
             payload: serde_json::json!({
@@ -811,9 +898,8 @@ async fn emit_inbound_event(
                 "media_urls": message.media_urls,
                 "media_types": message.media_types,
             }),
-        },
-    )
-    .await
+        })
+        .await
 }
 
 fn session_key_from_target(surface_id: &str, recipient: &str, thread: Option<&str>) -> SessionKey {

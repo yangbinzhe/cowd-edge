@@ -2,12 +2,30 @@
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.548",
+  "version": "0.9.550",
   "kind": "message-connector",
-  "entry": "./cowd-edge-feishu-message",
-  "transport": "stdio-jsonl",
-  "lifecycle": "managed",
-  "capabilities": ["message.ingress", "message.egress", "message.callback", "message.health", "message.processing_lifecycle"],
+  "runtime": {
+    "kind": "managed",
+    "artifact": "cowd-edge-open-platform-message",
+    "driver_profile": "feishu-message",
+    "transport": "uds-http2"
+  },
+  "capabilities": [
+    "message.ingress",
+    "message.egress",
+    "message.send.text",
+    "message.send.image",
+    "message.send.voice",
+    "message.send.document",
+    "message.send.video",
+    "message.send.card",
+    "message.edit",
+    "message.delete",
+    "message.chat.info",
+    "message.callback",
+    "message.health",
+    "message.processing.lifecycle"
+  ],
   "routes": [
     {
       "kind": "callback",
@@ -18,11 +36,15 @@
   ],
   "resources": [],
   "health": {
-    "mode": "jsonl",
-    "interval_ms": 30000
+    "mode": "http2",
+    "interval_ms": 30000,
+    "timeout_ms": 5000
   },
   "config_schema": {
-    "required": ["app_id", "app_secret"]
+    "required": [
+      "app_id",
+      "app_secret"
+    ]
   },
   "default_enabled": false
 }

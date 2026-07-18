@@ -2,11 +2,14 @@
   "schema": "cowd.surface.v1",
   "id": "postgres",
   "name": "PostgreSQL Source Connector",
-  "version": "0.9.548",
+  "version": "0.9.550",
   "kind": "source-connector",
-  "entry": "./cowd-edge-postgres-source",
-  "transport": "stdio-jsonl",
-  "lifecycle": "managed",
+  "runtime": {
+    "kind": "managed",
+    "artifact": "cowd-edge-sql-source",
+    "driver_profile": "postgres",
+    "transport": "uds-http2"
+  },
   "capabilities": [
     "source.schema_discovery",
     "source.snapshot",
@@ -17,7 +20,7 @@
   "routes": [],
   "resources": [],
   "health": {
-    "mode": "jsonl",
+    "mode": "http2",
     "interval_ms": 30000,
     "timeout_ms": 5000
   },
