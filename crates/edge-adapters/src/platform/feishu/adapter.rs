@@ -167,7 +167,7 @@ pub struct FeishuAdapter {
     pub reactions: ProcessingReactions,
     pub batch_manager: Option<TextBatchManager>,
     pub processing_queue: ChatProcessingQueue,
-    ws_events: Arc<Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<serde_json::Value>>>>,
+    ws_events: Arc<Mutex<Option<tokio::sync::mpsc::Receiver<serde_json::Value>>>>,
     approval_id_counter: Arc<AtomicU64>,
 }
 
@@ -1180,7 +1180,7 @@ impl PlatformAdapter for FeishuAdapter {
         "feishu"
     }
 
-    async fn connect(&mut self) -> PlatformResult<()> {
+    async fn connect(&self) -> PlatformResult<()> {
         let token = self.authenticate().await?;
         *self.access_token.write().await = Some(token);
         *self.connected.write().await = true;
@@ -1207,7 +1207,7 @@ impl PlatformAdapter for FeishuAdapter {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> PlatformResult<()> {
+    async fn disconnect(&self) -> PlatformResult<()> {
         *self.ws_events.lock().await = None;
         *self.connected.write().await = false;
         *self.access_token.write().await = None;
@@ -1220,7 +1220,7 @@ impl PlatformAdapter for FeishuAdapter {
         self.connected.try_read().map(|g| *g).unwrap_or(false)
     }
 
-    async fn receive(&mut self) -> PlatformResult<Option<InboundMessage>> {
+    async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
         let mut guard = self.ws_events.lock().await;
         let rx = match guard.as_mut() {
             Some(rx) => rx,

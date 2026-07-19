@@ -648,7 +648,7 @@ impl PlatformAdapter for WeComAdapter {
         "wecom"
     }
 
-    async fn connect(&mut self) -> PlatformResult<()> {
+    async fn connect(&self) -> PlatformResult<()> {
         let token = self.authenticate().await?;
         *self.access_token.write().await = Some(token);
         self.connected.store(true, Ordering::Relaxed);
@@ -656,7 +656,7 @@ impl PlatformAdapter for WeComAdapter {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> PlatformResult<()> {
+    async fn disconnect(&self) -> PlatformResult<()> {
         self.connected.store(false, Ordering::Relaxed);
         *self.access_token.write().await = None;
         *self.token_expires_at.write().await = None;
@@ -668,7 +668,7 @@ impl PlatformAdapter for WeComAdapter {
         self.connected.load(Ordering::Relaxed)
     }
 
-    async fn receive(&mut self) -> PlatformResult<Option<InboundMessage>> {
+    async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
         Ok(None)
     }
 

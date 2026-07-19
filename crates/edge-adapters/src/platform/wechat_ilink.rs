@@ -431,7 +431,7 @@ impl WeChatLinkAdapter {
         }
     }
 
-    async fn try_reconnect(&mut self) -> PlatformResult<()> {
+    async fn try_reconnect(&self) -> PlatformResult<()> {
         let should_retry = {
             let last = self.last_connect_attempt.read().await;
             let fails = *self.consecutive_failures.read().await;
@@ -1003,7 +1003,7 @@ impl PlatformAdapter for WeChatLinkAdapter {
         "wechat_ilink"
     }
 
-    async fn connect(&mut self) -> PlatformResult<()> {
+    async fn connect(&self) -> PlatformResult<()> {
         tracing::info!("wechat_ilink adapter: attempting connection...");
         *self.last_connect_attempt.write().await = Some(std::time::Instant::now());
         let token = self.authenticate().await?;
@@ -1018,7 +1018,7 @@ impl PlatformAdapter for WeChatLinkAdapter {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> PlatformResult<()> {
+    async fn disconnect(&self) -> PlatformResult<()> {
         *self.connected.write().await = false;
         *self.token.write().await = None;
         *self.context_token.write().await = String::new();
@@ -1033,7 +1033,7 @@ impl PlatformAdapter for WeChatLinkAdapter {
         *connected
     }
 
-    async fn receive(&mut self) -> PlatformResult<Option<InboundMessage>> {
+    async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
         let connected = *self.connected.read().await;
         if !connected {
             if let Err(e) = self.try_reconnect().await {
@@ -1355,7 +1355,7 @@ mod tests {
     async fn test_connect_disconnect_state() {
         let config =
             WeChatLinkConfig::new("test_bot", "test_secret").with_base_url("https://localhost:1"); // unreachable, will fail auth
-        let mut adapter = WeChatLinkAdapter::new(config);
+        let adapter = WeChatLinkAdapter::new(config);
 
         // Initially not connected (check directly via RwLock, avoid
         // is_connected() which uses blocking_read and panics inside tokio runtime)
@@ -1523,7 +1523,7 @@ mod tests {
     #[tokio::test]
     async fn test_receive_returns_none_when_disconnected() {
         let config = WeChatLinkConfig::new("bot", "secret");
-        let mut adapter = WeChatLinkAdapter::new(config);
+        let adapter = WeChatLinkAdapter::new(config);
         // Not connected by default
         let result = adapter.receive().await;
         assert!(result.is_ok());

@@ -5,9 +5,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 // Re-export types for backward compatibility.
-pub use crate::platform::types::{
-    ChatInfo, MessageType, OutboundPayloadKind, Platform, PlatformEvent, SendResult,
-};
+pub use crate::platform::types::{ChatInfo, MessageType, Platform, PlatformEvent, SendResult};
 
 /// Errors that can occur during platform operations.
 #[derive(Error, Debug)]
@@ -80,33 +78,6 @@ pub struct OutboundMessage {
     pub metadata: serde_json::Value,
 }
 
-/// Typed outbound dispatch request.
-#[derive(Debug, Clone)]
-pub struct OutboundDispatch {
-    pub session_key: SessionKey,
-    pub kind: OutboundPayloadKind,
-    pub payload_ref: String,
-    pub caption: Option<String>,
-    pub file_name: Option<String>,
-    pub reply_to: Option<String>,
-    pub metadata: serde_json::Value,
-}
-
-impl OutboundDispatch {
-    #[must_use]
-    pub fn text(msg: OutboundMessage) -> Self {
-        Self {
-            session_key: msg.session_key,
-            kind: OutboundPayloadKind::Text,
-            payload_ref: msg.text,
-            caption: None,
-            file_name: None,
-            reply_to: msg.reply_to,
-            metadata: msg.metadata,
-        }
-    }
-}
-
 /// Trait for platform adapters.
 ///
 /// Implement this trait to add support for new platforms.
@@ -119,10 +90,10 @@ pub trait PlatformAdapter: Send + Sync {
     fn platform_name(&self) -> &str;
 
     /// Initialize and connect to the platform.
-    async fn connect(&mut self) -> Result<(), PlatformError>;
+    async fn connect(&self) -> Result<(), PlatformError>;
 
     /// Disconnect from the platform.
-    async fn disconnect(&mut self) -> Result<(), PlatformError>;
+    async fn disconnect(&self) -> Result<(), PlatformError>;
 
     /// Check if connected.
     fn is_connected(&self) -> bool;
@@ -131,7 +102,7 @@ pub trait PlatformAdapter: Send + Sync {
     ///
     /// Returns `None` if there are no messages pending (non-blocking).
     /// Returns an error if the receive operation fails.
-    async fn receive(&mut self) -> Result<Option<InboundMessage>, PlatformError>;
+    async fn receive(&self) -> Result<Option<InboundMessage>, PlatformError>;
 
     /// Send an outbound message.
     async fn send(&self, msg: &OutboundMessage) -> Result<SendResult, PlatformError>;
@@ -261,11 +232,11 @@ impl PlatformAdapter for NullAdapter {
         "null"
     }
 
-    async fn connect(&mut self) -> PlatformResult<()> {
+    async fn connect(&self) -> PlatformResult<()> {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> PlatformResult<()> {
+    async fn disconnect(&self) -> PlatformResult<()> {
         Ok(())
     }
 
@@ -273,7 +244,7 @@ impl PlatformAdapter for NullAdapter {
         true
     }
 
-    async fn receive(&mut self) -> PlatformResult<Option<InboundMessage>> {
+    async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
         Ok(None)
     }
 

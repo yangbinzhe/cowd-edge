@@ -6,21 +6,6 @@
 
 pub mod mirror;
 
-pub mod config {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-    #[serde(rename_all = "lowercase")]
-    pub enum SessionResetPolicy {
-        Daily,
-        Idle,
-        Both,
-        Always,
-        #[default]
-        None,
-    }
-}
-
 pub mod cowd_dirs;
 
 pub mod driver_profiles {

@@ -411,7 +411,7 @@ impl PlatformAdapter for EmailAdapter {
         "email"
     }
 
-    async fn connect(&mut self) -> PlatformResult<()> {
+    async fn connect(&self) -> PlatformResult<()> {
         if self.config.is_smtp_configured() {
             tracing::info!(host = %self.config.smtp_host, port = self.config.smtp_port, "email adapter: SMTP configured");
         }
@@ -426,7 +426,7 @@ impl PlatformAdapter for EmailAdapter {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> PlatformResult<()> {
+    async fn disconnect(&self) -> PlatformResult<()> {
         self.connected.store(false, Ordering::Relaxed);
         Ok(())
     }
@@ -435,7 +435,7 @@ impl PlatformAdapter for EmailAdapter {
         self.connected.load(Ordering::Relaxed)
     }
 
-    async fn receive(&mut self) -> PlatformResult<Option<InboundMessage>> {
+    async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
         if !self.connected.load(Ordering::Relaxed) {
             return Ok(None);
         }

@@ -42,6 +42,9 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
+const EVENT_CHANNEL_CAPACITY: usize = 1024;
+const WRITE_CHANNEL_CAPACITY: usize = 128;
+
 // ---------------------------------------------------------------------------
 // Pin registration types
 // ---------------------------------------------------------------------------
@@ -148,14 +151,14 @@ impl FeishuWsClient {
 
     /// Connect to Feishu event push and start receiving events.
     ///
-    /// Returns an unbounded receiver that yields [`serde_json::Value`] for every
+    /// Returns a bounded receiver that yields [`serde_json::Value`] for every
     /// incoming data-frame payload (decoded from protobuf).
     ///
     /// The background reader task decodes protobuf [`Frame`] messages, handles
     /// PING/PONG control frames, assembles multi-part messages, and
     /// auto-reconnects on disconnect up to `reconnect_max_attempts` times.
     /// Drop the receiver to trigger graceful shutdown.
-    pub async fn connect(&self) -> PlatformResult<mpsc::UnboundedReceiver<serde_json::Value>> {
+    pub async fn connect(&self) -> PlatformResult<mpsc::Receiver<serde_json::Value>> {
         // Register pin — get WebSocket URL and client config
         let result = register_pin(&self.app_id, &self.app_secret, &self.base_url).await?;
         let ws_url = result.ws_url;
@@ -181,7 +184,7 @@ impl FeishuWsClient {
         tracing::info!("Feishu WS: initial websocket probe succeeded");
 
         // Create event channel
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
 
         // Spawn background reader with reconnect loop
         let app_id = self.app_id.clone();
@@ -283,7 +286,7 @@ async fn reader_loop(
     app_id: String,
     app_secret: String,
     base_url: String,
-    tx: mpsc::UnboundedSender<serde_json::Value>,
+    tx: mpsc::Sender<serde_json::Value>,
     max_attempts: u32,
     interval_secs: u64,
     mut ping_interval_secs: u64,
@@ -336,7 +339,7 @@ async fn reader_loop(
         attempt = 0;
 
         let (ws_sink, ws_source) = ws_stream.split();
-        let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(WRITE_CHANNEL_CAPACITY);
 
         // Writer task: forward outgoing protobuf bytes to WebSocket
         tokio::spawn(async move {
@@ -356,7 +359,7 @@ async fn reader_loop(
             loop {
                 tokio::time::sleep(Duration::from_secs(ping_secs)).await;
                 let ping_frame = create_ping_frame(ping_service_id);
-                if ping_tx.send(ping_frame.encode_to_vec()).is_err() {
+                if ping_tx.send(ping_frame.encode_to_vec()).await.is_err() {
                     break;
                 }
             }
@@ -387,8 +390,8 @@ async fn reader_loop(
 async fn ws_read_loop(
     mut ws_source: impl futures::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>>
         + Unpin,
-    tx: &mpsc::UnboundedSender<serde_json::Value>,
-    ws_sender: mpsc::UnboundedSender<Vec<u8>>,
+    tx: &mpsc::Sender<serde_json::Value>,
+    ws_sender: mpsc::Sender<Vec<u8>>,
     service_id: i32,
 ) -> Result<bool, ()> {
     let mut fragment_buffer = FragmentBuffer::new();
@@ -454,9 +457,9 @@ async fn ws_read_loop(
                         let json_str = String::from_utf8_lossy(&payload_bytes);
                         match serde_json::from_str::<serde_json::Value>(&json_str) {
                             Ok(value) => {
-                                send_response_frame(&ws_sender, &frame, service_id, 200);
+                                send_response_frame(&ws_sender, &frame, service_id, 200).await;
 
-                                if tx.send(value).is_err() {
+                                if tx.send(value).await.is_err() {
                                     return Ok(true);
                                 }
                             }
@@ -464,7 +467,7 @@ async fn ws_read_loop(
                                 tracing::warn!(
                                     "Feishu WS: payload JSON parse error: {e}, type={msg_type}"
                                 );
-                                send_response_frame(&ws_sender, &frame, service_id, 500);
+                                send_response_frame(&ws_sender, &frame, service_id, 500).await;
                             }
                         }
                         continue;
@@ -507,8 +510,8 @@ async fn ws_read_loop(
 /// Feishu requires an acknowledgement frame for every DATA frame received.
 /// The response carries the same `seq_id`, `log_id`, `service`, and `method`
 /// as the request, with a JSON payload `{"code": status_code}`.
-fn send_response_frame(
-    sender: &mpsc::UnboundedSender<Vec<u8>>,
+async fn send_response_frame(
+    sender: &mpsc::Sender<Vec<u8>>,
     request_frame: &Frame,
     service_id: i32,
     status_code: i32,
@@ -532,7 +535,7 @@ fn send_response_frame(
         value: "0".to_string(),
     });
 
-    let _ = sender.send(response.encode_to_vec());
+    let _ = sender.send(response.encode_to_vec()).await;
 }
 
 /// Build a protobuf PING frame for the heartbeat task.
@@ -742,10 +745,10 @@ mod tests {
     #[tokio::test]
     async fn test_channel_creation_and_single_event() {
         // Verify mpsc channel mechanics without actual network
-        let (tx, mut rx) = mpsc::unbounded_channel::<serde_json::Value>();
+        let (tx, mut rx) = mpsc::channel::<serde_json::Value>(64);
 
         let event = serde_json::json!({"type": "im.message.receive_v1", "data": {}});
-        tx.send(event.clone()).expect("send event");
+        tx.send(event.clone()).await.expect("send event");
 
         let received = rx.recv().await.expect("receive event");
         assert_eq!(received, event);
@@ -755,22 +758,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_shutdown_drop_receiver_propagates_to_sender() {
-        let (tx, rx) = mpsc::unbounded_channel::<serde_json::Value>();
+        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
 
         // Drop receiver
         drop(rx);
 
         // Sender should detect closed channel
-        let result = tx.send(serde_json::Value::Null);
+        let result = tx.send(serde_json::Value::Null).await;
         assert!(result.is_err(), "send should fail after receiver dropped");
     }
 
     #[tokio::test]
     async fn test_shutdown_receiver_returns_none_after_drop() {
-        let (tx, rx) = mpsc::unbounded_channel::<serde_json::Value>();
+        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
 
         // Send one event then drop sender
-        tx.send(serde_json::json!({"msg": "hello"})).expect("send");
+        tx.send(serde_json::json!({"msg": "hello"}))
+            .await
+            .expect("send");
         drop(tx);
 
         let mut rx = rx;
@@ -825,9 +830,9 @@ mod tests {
         assert!(frame.payload.is_none());
     }
 
-    #[test]
-    fn test_send_response_frame() {
-        let (tx, mut rx) = mpsc::unbounded_channel::<Vec<u8>>();
+    #[tokio::test]
+    async fn test_send_response_frame() {
+        let (tx, mut rx) = mpsc::channel::<Vec<u8>>(64);
 
         let request = Frame {
             seq_id: 99,
@@ -844,10 +849,10 @@ mod tests {
             log_id_new: None,
         };
 
-        send_response_frame(&tx, &request, 5, 200);
+        send_response_frame(&tx, &request, 5, 200).await;
         drop(tx);
 
-        let bytes = rx.blocking_recv().expect("should receive response");
+        let bytes = rx.recv().await.expect("should receive response");
         let response = Frame::decode(bytes.as_ref()).expect("valid protobuf");
 
         assert_eq!(response.seq_id, 99);
@@ -939,8 +944,8 @@ mod tests {
         let messages: Vec<Result<Message, tokio_tungstenite::tungstenite::Error>> =
             vec![Ok(Message::Binary(encoded.into()))];
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<serde_json::Value>();
-        let (write_tx, mut write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (tx, mut rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(64);
 
         let handle =
             tokio::spawn(
@@ -988,8 +993,8 @@ mod tests {
             Ok(Message::Close(None)),
         ];
 
-        let (tx, rx) = mpsc::unbounded_channel::<serde_json::Value>();
-        let (write_tx, _write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(64);
 
         drop(rx); // No events expected
 
@@ -1006,8 +1011,8 @@ mod tests {
         let messages: Vec<Result<Message, tokio_tungstenite::tungstenite::Error>> =
             vec![Ok(Message::Close(None))];
 
-        let (tx, _rx) = mpsc::unbounded_channel::<serde_json::Value>();
-        let (write_tx, _write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (tx, _rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(64);
 
         let result = ws_read_loop(stream::iter(messages), &tx, write_tx, 5).await;
 
@@ -1038,8 +1043,8 @@ mod tests {
         let messages: Vec<Result<Message, tokio_tungstenite::tungstenite::Error>> =
             vec![Ok(Message::Binary(encoded.into()))];
 
-        let (tx, rx) = mpsc::unbounded_channel::<serde_json::Value>();
-        let (write_tx, mut _write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, mut _write_rx) = mpsc::channel::<Vec<u8>>(64);
 
         drop(rx); // Receiver already dropped
 
@@ -1059,8 +1064,8 @@ mod tests {
             Ok(Message::Close(None)),
         ];
 
-        let (tx, rx) = mpsc::unbounded_channel::<serde_json::Value>();
-        let (write_tx, _write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(64);
 
         drop(rx);
 
@@ -1077,8 +1082,8 @@ mod tests {
         let messages: Vec<Result<Message, tokio_tungstenite::tungstenite::Error>> =
             vec![Err(tokio_tungstenite::tungstenite::Error::ConnectionClosed)];
 
-        let (tx, _rx) = mpsc::unbounded_channel::<serde_json::Value>();
-        let (write_tx, _write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (tx, _rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(64);
 
         let result = ws_read_loop(stream::iter(messages), &tx, write_tx, 5).await;
 
@@ -1157,8 +1162,8 @@ mod tests {
             Ok(Message::Binary(frame2.encode_to_vec().into())),
         ];
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<serde_json::Value>();
-        let (write_tx, mut _write_rx) = mpsc::unbounded_channel::<Vec<u8>>();
+        let (tx, mut rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, mut _write_rx) = mpsc::channel::<Vec<u8>>(64);
 
         let handle =
             tokio::spawn(

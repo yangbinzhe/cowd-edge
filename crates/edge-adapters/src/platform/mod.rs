@@ -13,7 +13,7 @@
 //!                               │
 //!                               ▼
 //! ┌─────────────────────────────────────────────────────────────┐
-//! │                    PlatformRuntime                          │
+//! │                MessageConnectorRuntime                     │
 //! │  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐  │
 //! │  │  Feishu   │ │  WeChat   │ │   Email   │ │  Custom   │  │
 //! │  │ Adapter   │ │ Adapter   │ │ Adapter   │ │ Adapter   │  │
@@ -32,19 +32,16 @@ pub mod config;
 pub mod dedup;
 pub mod email;
 pub mod feishu;
-pub mod runtime;
 pub mod types;
 pub mod wechat_ilink;
 pub mod wecom;
 
 pub use adapter::{ChatInfo, MessageType, PlatformEvent, SendResult};
 pub use adapter::{
-    InboundMessage, OutboundDispatch, OutboundMessage, OutboundPayloadKind, Platform,
-    PlatformAdapter, PlatformError, PlatformResult,
+    InboundMessage, OutboundMessage, Platform, PlatformAdapter, PlatformError, PlatformResult,
 };
 pub use config::PlatformConfig;
-pub use runtime::PlatformRuntime;
-pub use types::{PlatformSession, SessionKey};
+pub use types::SessionKey;
 
 pub use email::EmailAdapter;
 pub use feishu::FeishuAdapter;

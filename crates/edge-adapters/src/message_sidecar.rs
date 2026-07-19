@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::io;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, Weak};
 
 use chrono::Utc;
 use edge_contract::{
@@ -7,7 +9,7 @@ use edge_contract::{
     SurfaceFrame,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 
 use crate::managed_server::{ManagedEdgeHandler, ManagedHandlerFactory};
 use crate::platform::{
@@ -18,20 +20,84 @@ use crate::platform::{
 pub type AdapterFactory = fn(&serde_json::Value) -> PlatformResult<Box<dyn PlatformAdapter>>;
 
 #[derive(Default)]
-struct MessageSidecarState {
-    adapter: Option<Arc<Mutex<Box<dyn PlatformAdapter>>>>,
-    configured: bool,
-    connected: bool,
-    receive_loop_running: bool,
-    last_error: Option<String>,
+struct SessionLaneRegistry {
+    lanes: StdMutex<HashMap<String, Weak<Mutex<()>>>>,
+}
+
+impl SessionLaneRegistry {
+    fn lane(&self, key: &SessionKey) -> Arc<Mutex<()>> {
+        let key = key.as_str();
+        let mut lanes = self.lanes.lock().unwrap_or_else(|error| error.into_inner());
+        lanes.retain(|_, lane| lane.strong_count() > 0);
+        if let Some(lane) = lanes.get(&key).and_then(Weak::upgrade) {
+            return lane;
+        }
+        let lane = Arc::new(Mutex::new(()));
+        lanes.insert(key, Arc::downgrade(&lane));
+        lane
+    }
+}
+
+/// 唯一拥有 Message adapter 生命周期、接收循环、健康状态和按会话发送顺序的运行时。
+struct MessageConnectorRuntime {
+    surface_id: &'static str,
+    adapter: RwLock<Option<Arc<dyn PlatformAdapter>>>,
+    configured: AtomicBool,
+    connected: AtomicBool,
+    generation: AtomicU64,
+    receive_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    last_error: RwLock<Option<String>>,
+    lanes: Arc<SessionLaneRegistry>,
+    events: mpsc::Sender<SurfaceFrame>,
+}
+
+impl MessageConnectorRuntime {
+    fn new(surface_id: &'static str, events: mpsc::Sender<SurfaceFrame>) -> Self {
+        Self {
+            surface_id,
+            adapter: RwLock::new(None),
+            configured: AtomicBool::new(false),
+            connected: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
+            receive_task: Mutex::new(None),
+            last_error: RwLock::new(None),
+            lanes: Arc::new(SessionLaneRegistry::default()),
+            events,
+        }
+    }
+
+    async fn adapter(&self) -> Option<Arc<dyn PlatformAdapter>> {
+        self.adapter.read().await.clone()
+    }
+
+    async fn stop_receive(&self) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        if let Some(task) = self.receive_task.lock().await.take() {
+            task.abort();
+            let _ = task.await;
+        }
+    }
+
+    async fn start_receive(self: &Arc<Self>, adapter: Arc<dyn PlatformAdapter>) {
+        self.stop_receive().await;
+        let generation = self.generation.load(Ordering::Acquire);
+        let runtime = self.clone();
+        let task = tokio::spawn(async move {
+            run_receive_loop(runtime, adapter, generation).await;
+        });
+        *self.receive_task.lock().await = Some(task);
+    }
+
+    async fn set_error(&self, error: Option<String>) {
+        *self.last_error.write().await = error;
+    }
 }
 
 pub struct MessageManagedHandler {
     surface_id: &'static str,
     capabilities: &'static [&'static str],
     factory: AdapterFactory,
-    state: Arc<Mutex<MessageSidecarState>>,
-    events: mpsc::Sender<SurfaceFrame>,
+    runtime: Arc<MessageConnectorRuntime>,
 }
 
 impl MessageManagedHandler {
@@ -46,8 +112,7 @@ impl MessageManagedHandler {
             surface_id,
             capabilities,
             factory,
-            state: Arc::new(Mutex::new(MessageSidecarState::default())),
-            events,
+            runtime: Arc::new(MessageConnectorRuntime::new(surface_id, events)),
         }
     }
 }
@@ -60,8 +125,7 @@ impl ManagedEdgeHandler for MessageManagedHandler {
             self.capabilities,
             self.factory,
             frame,
-            self.state.clone(),
-            self.events.clone(),
+            self.runtime.clone(),
         )
         .await)
     }
@@ -109,9 +173,9 @@ pub async fn run_stdio_platform_message_connector(
     capabilities: &'static [&'static str],
     factory: AdapterFactory,
 ) -> io::Result<()> {
-    let state = Arc::new(Mutex::new(MessageSidecarState::default()));
     let stdout = Arc::new(Mutex::new(tokio::io::stdout()));
     let (events, mut event_rx) = mpsc::channel::<SurfaceFrame>(4096);
+    let runtime = Arc::new(MessageConnectorRuntime::new(surface_id, events.clone()));
     let event_stdout = stdout.clone();
     tokio::spawn(async move {
         while let Some(event) = event_rx.recv().await {
@@ -129,15 +193,7 @@ pub async fn run_stdio_platform_message_connector(
         }
         let response = match SurfaceFrame::decode_jsonl(&line) {
             Ok(frame) => {
-                handle_frame(
-                    surface_id,
-                    capabilities,
-                    factory,
-                    frame,
-                    state.clone(),
-                    events.clone(),
-                )
-                .await
+                handle_frame(surface_id, capabilities, factory, frame, runtime.clone()).await
             }
             Err(error) => SurfaceFrame::Error {
                 id: None,
@@ -156,8 +212,7 @@ async fn handle_frame(
     capabilities: &'static [&'static str],
     factory: AdapterFactory,
     frame: SurfaceFrame,
-    state: Arc<Mutex<MessageSidecarState>>,
-    events: mpsc::Sender<SurfaceFrame>,
+    runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
     match frame {
         SurfaceFrame::Handshake {
@@ -176,10 +231,10 @@ async fn handle_frame(
             id,
             surface: _,
             config,
-        } => configure_adapter(surface_id, id, config, factory, state, events).await,
-        SurfaceFrame::Connect { id, .. } => connect_adapter(surface_id, id, state, events).await,
-        SurfaceFrame::Disconnect { id, .. } => disconnect_adapter(surface_id, id, state).await,
-        SurfaceFrame::Health { id, .. } => health_frame(surface_id, id, state).await,
+        } => configure_adapter(surface_id, id, config, factory, runtime).await,
+        SurfaceFrame::Connect { id, .. } => connect_adapter(surface_id, id, runtime).await,
+        SurfaceFrame::Disconnect { id, .. } => disconnect_adapter(surface_id, id, runtime).await,
+        SurfaceFrame::Health { id, .. } => health_frame(surface_id, id, runtime).await,
         SurfaceFrame::Send {
             id,
             recipient,
@@ -187,13 +242,13 @@ async fn handle_frame(
             text,
             metadata,
             ..
-        } => send_text_frame(surface_id, id, recipient, thread, text, metadata, state).await,
+        } => send_text_frame(surface_id, id, recipient, thread, text, metadata, runtime).await,
         SurfaceFrame::Action {
             id,
             action,
             payload,
             ..
-        } => action_frame(surface_id, id, action, payload, state, events).await,
+        } => action_frame(surface_id, id, action, payload, runtime).await,
         SurfaceFrame::Handshake { id, .. } => SurfaceFrame::Error {
             id: Some(id),
             code: "surface_protocol_mismatch".to_string(),
@@ -218,22 +273,21 @@ async fn configure_adapter(
     id: String,
     config: serde_json::Value,
     factory: AdapterFactory,
-    state: Arc<Mutex<MessageSidecarState>>,
-    events: mpsc::Sender<SurfaceFrame>,
+    runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
     match factory(&config) {
-        Ok(mut adapter) => match adapter.connect().await {
+        Ok(adapter) => match adapter.connect().await {
             Ok(()) => {
-                let adapter = Arc::new(Mutex::new(adapter));
-                {
-                    let mut state = state.lock().await;
-                    state.adapter = Some(adapter.clone());
-                    state.configured = true;
-                    state.connected = true;
-                    state.receive_loop_running = false;
-                    state.last_error = None;
+                let adapter: Arc<dyn PlatformAdapter> = Arc::from(adapter);
+                runtime.stop_receive().await;
+                let previous = runtime.adapter.write().await.replace(adapter.clone());
+                if let Some(previous) = previous {
+                    let _ = previous.disconnect().await;
                 }
-                spawn_receive_loop(surface_id, adapter, state, events).await;
+                runtime.configured.store(true, Ordering::Release);
+                runtime.connected.store(true, Ordering::Release);
+                runtime.set_error(None).await;
+                runtime.start_receive(adapter).await;
                 SurfaceFrame::Ok {
                     id,
                     payload: serde_json::json!({
@@ -246,12 +300,14 @@ async fn configure_adapter(
             }
             Err(error) => {
                 let message = error.to_string();
-                let mut state = state.lock().await;
-                state.adapter = None;
-                state.configured = true;
-                state.connected = false;
-                state.receive_loop_running = false;
-                state.last_error = Some(message.clone());
+                runtime.stop_receive().await;
+                let previous = runtime.adapter.write().await.take();
+                if let Some(previous) = previous {
+                    let _ = previous.disconnect().await;
+                }
+                runtime.configured.store(true, Ordering::Release);
+                runtime.connected.store(false, Ordering::Release);
+                runtime.set_error(Some(message.clone())).await;
                 SurfaceFrame::Error {
                     id: Some(id),
                     code: format!("{surface_id}_connect_failed"),
@@ -261,12 +317,14 @@ async fn configure_adapter(
         },
         Err(error) => {
             let message = error.to_string();
-            let mut state = state.lock().await;
-            state.adapter = None;
-            state.configured = false;
-            state.connected = false;
-            state.receive_loop_running = false;
-            state.last_error = Some(message.clone());
+            runtime.stop_receive().await;
+            let previous = runtime.adapter.write().await.take();
+            if let Some(previous) = previous {
+                let _ = previous.disconnect().await;
+            }
+            runtime.configured.store(false, Ordering::Release);
+            runtime.connected.store(false, Ordering::Release);
+            runtime.set_error(Some(message.clone())).await;
             SurfaceFrame::Error {
                 id: Some(id),
                 code: format!("{surface_id}_config_invalid"),
@@ -279,13 +337,9 @@ async fn configure_adapter(
 async fn connect_adapter(
     surface_id: &'static str,
     id: String,
-    state: Arc<Mutex<MessageSidecarState>>,
-    events: mpsc::Sender<SurfaceFrame>,
+    runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
-    let adapter = {
-        let state = state.lock().await;
-        state.adapter.clone()
-    };
+    let adapter = runtime.adapter().await;
     let Some(adapter) = adapter else {
         return SurfaceFrame::Error {
             id: Some(id),
@@ -293,16 +347,12 @@ async fn connect_adapter(
             message: format!("configure {surface_id} before connect"),
         };
     };
-    let connect_result = adapter.lock().await.connect().await;
+    let connect_result = adapter.connect().await;
     match connect_result {
         Ok(()) => {
-            {
-                let mut state = state.lock().await;
-                state.connected = true;
-                state.receive_loop_running = false;
-                state.last_error = None;
-            }
-            spawn_receive_loop(surface_id, adapter, state, events).await;
+            runtime.connected.store(true, Ordering::Release);
+            runtime.set_error(None).await;
+            runtime.start_receive(adapter).await;
             SurfaceFrame::Ok {
                 id,
                 payload: serde_json::json!({
@@ -314,10 +364,8 @@ async fn connect_adapter(
         }
         Err(error) => {
             let message = error.to_string();
-            let mut state = state.lock().await;
-            state.connected = false;
-            state.receive_loop_running = false;
-            state.last_error = Some(message.clone());
+            runtime.connected.store(false, Ordering::Release);
+            runtime.set_error(Some(message.clone())).await;
             SurfaceFrame::Error {
                 id: Some(id),
                 code: format!("{surface_id}_connect_failed"),
@@ -330,18 +378,14 @@ async fn connect_adapter(
 async fn disconnect_adapter(
     surface_id: &'static str,
     id: String,
-    state: Arc<Mutex<MessageSidecarState>>,
+    runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
-    let adapter = {
-        let state = state.lock().await;
-        state.adapter.clone()
-    };
+    runtime.stop_receive().await;
+    let adapter = runtime.adapter().await;
     if let Some(adapter) = adapter {
-        let _ = adapter.lock().await.disconnect().await;
+        let _ = adapter.disconnect().await;
     }
-    let mut state = state.lock().await;
-    state.connected = false;
-    state.receive_loop_running = false;
+    runtime.connected.store(false, Ordering::Release);
     SurfaceFrame::Ok {
         id,
         payload: serde_json::json!({"status": "disconnected", "surface": surface_id}),
@@ -351,12 +395,14 @@ async fn disconnect_adapter(
 async fn health_frame(
     surface_id: &'static str,
     id: String,
-    state: Arc<Mutex<MessageSidecarState>>,
+    runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
-    let state = state.lock().await;
-    let status = if state.connected {
+    let configured = runtime.configured.load(Ordering::Acquire);
+    let connected = runtime.connected.load(Ordering::Acquire);
+    let last_error = runtime.last_error.read().await.clone();
+    let status = if connected {
         "ready"
-    } else if state.configured {
+    } else if configured {
         "degraded"
     } else {
         "config_missing"
@@ -366,11 +412,11 @@ async fn health_frame(
         payload: serde_json::json!({
             "status": status,
             "surface": surface_id,
-            "configured": state.configured,
-            "connected": state.connected,
+            "configured": configured,
+            "connected": connected,
             "transport": "edge-message-sidecar",
-            "last_error": state.last_error,
-            "descriptor": message_descriptor_payload(surface_id, status, state.last_error.as_deref(), false),
+            "last_error": last_error,
+            "descriptor": message_descriptor_payload(surface_id, status, last_error.as_deref(), false),
         }),
     }
 }
@@ -399,12 +445,9 @@ async fn send_text_frame(
     thread: Option<String>,
     text: String,
     metadata: serde_json::Value,
-    state: Arc<Mutex<MessageSidecarState>>,
+    runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
-    let adapter = {
-        let state = state.lock().await;
-        state.adapter.clone()
-    };
+    let adapter = runtime.adapter().await;
     let Some(adapter) = adapter else {
         return SurfaceFrame::Error {
             id: Some(id),
@@ -418,8 +461,9 @@ async fn send_text_frame(
             .or_else(|| metadata.get("chat_id"))
             .and_then(serde_json::Value::as_str)
     });
+    let session_key = session_key_from_target(surface_id, &recipient, thread_hint);
     let message = OutboundMessage {
-        session_key: session_key_from_target(surface_id, &recipient, thread_hint),
+        session_key: session_key.clone(),
         text,
         reply_to: metadata
             .get("reply_to")
@@ -427,7 +471,9 @@ async fn send_text_frame(
             .map(str::to_string),
         metadata,
     };
-    let send_result = adapter.lock().await.send(&message).await;
+    let lane = runtime.lanes.lane(&session_key);
+    let _lane_guard = lane.lock().await;
+    let send_result = adapter.send(&message).await;
     match send_result {
         Ok(result) if result.success => SurfaceFrame::Ok {
             id,
@@ -456,8 +502,7 @@ async fn action_frame(
     id: String,
     action: String,
     payload: serde_json::Value,
-    state: Arc<Mutex<MessageSidecarState>>,
-    events: mpsc::Sender<SurfaceFrame>,
+    runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
     let Some(kind) = MessageActionKind::parse(&action) else {
         return SurfaceFrame::Error {
@@ -466,10 +511,7 @@ async fn action_frame(
             message: format!("unsupported {surface_id} action `{action}`"),
         };
     };
-    let adapter = {
-        let state = state.lock().await;
-        state.adapter.clone()
-    };
+    let adapter = runtime.adapter().await;
     if matches!(
         kind,
         MessageActionKind::ProcessingComplete | MessageActionKind::ProcessingFailed
@@ -485,10 +527,19 @@ async fn action_frame(
     };
 
     if kind == MessageActionKind::CallbackDispatch {
-        return dispatch_callback_action(surface_id, id, payload, adapter, events).await;
+        return dispatch_callback_action(surface_id, id, payload, adapter, runtime.events.clone())
+            .await;
     }
 
-    dispatch_message_action(surface_id, id, kind, payload, adapter).await
+    dispatch_message_action(
+        surface_id,
+        id,
+        kind,
+        payload,
+        adapter,
+        runtime.lanes.clone(),
+    )
+    .await
 }
 
 async fn dispatch_lifecycle_action(
@@ -496,7 +547,7 @@ async fn dispatch_lifecycle_action(
     id: String,
     action: String,
     payload: serde_json::Value,
-    adapter: Option<Arc<Mutex<Box<dyn PlatformAdapter>>>>,
+    adapter: Option<Arc<dyn PlatformAdapter>>,
 ) -> SurfaceFrame {
     let adapter_payload = if let Some(adapter) = adapter {
         let event = PlatformEvent {
@@ -505,7 +556,7 @@ async fn dispatch_lifecycle_action(
             data: payload.clone(),
             timestamp: Utc::now(),
         };
-        match adapter.lock().await.on_event(&event).await {
+        match adapter.on_event(&event).await {
             Ok(Some(message)) => serde_json::json!({
                 "status": "received",
                 "message": message.text,
@@ -533,7 +584,7 @@ async fn dispatch_callback_action(
     surface_id: &'static str,
     id: String,
     payload: serde_json::Value,
-    adapter: Arc<Mutex<Box<dyn PlatformAdapter>>>,
+    adapter: Arc<dyn PlatformAdapter>,
     events: mpsc::Sender<SurfaceFrame>,
 ) -> SurfaceFrame {
     let event_payload = payload.get("payload").cloned().unwrap_or(payload);
@@ -549,10 +600,7 @@ async fn dispatch_callback_action(
         data: event_payload,
         timestamp: Utc::now(),
     };
-    let callback_result = {
-        let adapter = adapter.lock().await;
-        adapter.on_event(&event).await
-    };
+    let callback_result = adapter.on_event(&event).await;
     match callback_result {
         Ok(Some(message)) => {
             let _ = emit_inbound_event(surface_id, &events, message).await;
@@ -578,7 +626,8 @@ async fn dispatch_message_action(
     id: String,
     kind: MessageActionKind,
     payload: serde_json::Value,
-    adapter: Arc<Mutex<Box<dyn PlatformAdapter>>>,
+    adapter: Arc<dyn PlatformAdapter>,
+    lanes: Arc<SessionLaneRegistry>,
 ) -> SurfaceFrame {
     let action = kind.as_str();
     let session_key = match session_key_from_action_payload(surface_id, &payload) {
@@ -596,6 +645,8 @@ async fn dispatch_message_action(
         .as_deref()
         .unwrap_or(&session_key.user_id)
         .to_string();
+    let lane = lanes.lane(&session_key);
+    let _lane_guard = lane.lock().await;
     let result = match kind {
         MessageActionKind::SendText => {
             let text = match payload_text(&payload) {
@@ -609,8 +660,6 @@ async fn dispatch_message_action(
                 }
             };
             adapter
-                .lock()
-                .await
                 .send(&OutboundMessage {
                     session_key,
                     text,
@@ -636,7 +685,6 @@ async fn dispatch_message_action(
                     return missing_payload_ref(surface_id, id, action);
                 }
             };
-            let adapter = adapter.lock().await;
             let result = if is_remote_ref(&payload_ref) {
                 adapter
                     .send_image(&chat_id, &payload_ref, payload_caption(&payload).as_deref())
@@ -653,8 +701,6 @@ async fn dispatch_message_action(
                 return missing_payload_ref(surface_id, id, action);
             };
             adapter
-                .lock()
-                .await
                 .send_voice(&chat_id, &payload_ref, payload_caption(&payload).as_deref())
                 .await
                 .map(|()| serde_json::json!({"status": "sent"}))
@@ -664,8 +710,6 @@ async fn dispatch_message_action(
                 return missing_payload_ref(surface_id, id, action);
             };
             adapter
-                .lock()
-                .await
                 .send_document(
                     &chat_id,
                     &payload_ref,
@@ -680,8 +724,6 @@ async fn dispatch_message_action(
                 return missing_payload_ref(surface_id, id, action);
             };
             adapter
-                .lock()
-                .await
                 .send_video(&chat_id, &payload_ref, payload_caption(&payload).as_deref())
                 .await
                 .map(|()| serde_json::json!({"status": "sent"}))
@@ -691,8 +733,6 @@ async fn dispatch_message_action(
                 .or_else(|| payload.get("card").map(serde_json::Value::to_string))
                 .unwrap_or_else(|| payload.to_string());
             adapter
-                .lock()
-                .await
                 .send_card(&chat_id, &card_json)
                 .await
                 .map(|message_id| serde_json::json!({"status": "sent", "message_id": message_id}))
@@ -706,8 +746,6 @@ async fn dispatch_message_action(
                 return missing_field(surface_id, id, action, "text");
             };
             adapter
-                .lock()
-                .await
                 .edit_message(&chat_id, &message_id, &content)
                 .await
                 .map(|()| serde_json::json!({"status": "edited", "message_id": message_id}))
@@ -718,15 +756,11 @@ async fn dispatch_message_action(
                 return missing_field(surface_id, id, action, "message_id");
             };
             adapter
-                .lock()
-                .await
                 .delete_message(&chat_id, &message_id)
                 .await
                 .map(|()| serde_json::json!({"status": "deleted", "message_id": message_id}))
         }
         MessageActionKind::ChatInfo => adapter
-            .lock()
-            .await
             .get_chat_info(&chat_id)
             .await
             .map(|chat| serde_json::json!({"status": "ok", "chat": chat})),
@@ -833,45 +867,39 @@ fn missing_field(surface_id: &'static str, id: String, action: &str, field: &str
     }
 }
 
-async fn spawn_receive_loop(
-    surface_id: &'static str,
-    adapter: Arc<Mutex<Box<dyn PlatformAdapter>>>,
-    state: Arc<Mutex<MessageSidecarState>>,
-    events: mpsc::Sender<SurfaceFrame>,
+async fn run_receive_loop(
+    runtime: Arc<MessageConnectorRuntime>,
+    adapter: Arc<dyn PlatformAdapter>,
+    generation: u64,
 ) {
-    {
-        let mut state = state.lock().await;
-        if state.receive_loop_running {
-            return;
+    loop {
+        if runtime.generation.load(Ordering::Acquire) != generation
+            || !runtime.connected.load(Ordering::Acquire)
+        {
+            break;
         }
-        state.receive_loop_running = true;
-    }
-    tokio::spawn(async move {
-        loop {
-            let receive = adapter.lock().await.receive().await;
-            match receive {
-                Ok(Some(message)) => {
-                    let _ = emit_inbound_event(surface_id, &events, message).await;
+        match adapter.receive().await {
+            Ok(Some(message)) => {
+                if runtime.generation.load(Ordering::Acquire) != generation {
+                    break;
                 }
-                Ok(None) => {
-                    let connected = state.lock().await.connected;
-                    if !connected {
-                        let mut state = state.lock().await;
-                        state.receive_loop_running = false;
-                        break;
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                }
-                Err(error) => {
-                    let mut state = state.lock().await;
-                    state.connected = false;
-                    state.receive_loop_running = false;
-                    state.last_error = Some(error.to_string());
+                if emit_inbound_event(runtime.surface_id, &runtime.events, message)
+                    .await
+                    .is_err()
+                {
                     break;
                 }
             }
+            Ok(None) => tokio::time::sleep(std::time::Duration::from_millis(100)).await,
+            Err(error) => {
+                if runtime.generation.load(Ordering::Acquire) == generation {
+                    runtime.connected.store(false, Ordering::Release);
+                    runtime.set_error(Some(error.to_string())).await;
+                }
+                break;
+            }
         }
-    });
+    }
 }
 
 async fn emit_inbound_event(
@@ -978,7 +1006,9 @@ pub fn config_error(message: impl Into<String>) -> PlatformError {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
     use std::sync::{Arc, Mutex as StdMutex};
+    use tokio::sync::Notify;
 
     use crate::platform::{ChatInfo, SendResult};
 
@@ -1009,10 +1039,9 @@ mod tests {
     #[tokio::test]
     async fn typed_image_action_dispatches_to_adapter() {
         let calls = Arc::new(StdMutex::new(Vec::new()));
-        let adapter: Arc<Mutex<Box<dyn PlatformAdapter>>> =
-            Arc::new(Mutex::new(Box::new(FakeAdapter {
-                calls: calls.clone(),
-            })));
+        let adapter: Arc<dyn PlatformAdapter> = Arc::new(FakeAdapter {
+            calls: calls.clone(),
+        });
 
         let frame = dispatch_message_action(
             "feishu",
@@ -1024,6 +1053,7 @@ mod tests {
                 "caption": "preview"
             }),
             adapter,
+            Arc::new(SessionLaneRegistry::default()),
         )
         .await;
 
@@ -1037,10 +1067,9 @@ mod tests {
     #[tokio::test]
     async fn typed_delete_action_dispatches_to_adapter() {
         let calls = Arc::new(StdMutex::new(Vec::new()));
-        let adapter: Arc<Mutex<Box<dyn PlatformAdapter>>> =
-            Arc::new(Mutex::new(Box::new(FakeAdapter {
-                calls: calls.clone(),
-            })));
+        let adapter: Arc<dyn PlatformAdapter> = Arc::new(FakeAdapter {
+            calls: calls.clone(),
+        });
 
         let frame = dispatch_message_action(
             "feishu",
@@ -1051,11 +1080,170 @@ mod tests {
                 "message_id": "om_123"
             }),
             adapter,
+            Arc::new(SessionLaneRegistry::default()),
         )
         .await;
 
         assert_ok_status(frame, "deleted");
         assert_eq!(calls.lock().unwrap().as_slice(), &["delete:chat-1:om_123"]);
+    }
+
+    #[tokio::test]
+    async fn outbound_is_serial_per_session_and_parallel_across_sessions() {
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let adapter: Arc<dyn PlatformAdapter> = Arc::new(DelayAdapter {
+            active: active.clone(),
+            max_active: max_active.clone(),
+        });
+        let (events, _event_rx) = mpsc::channel(4);
+        let runtime = Arc::new(MessageConnectorRuntime::new("fake", events));
+        *runtime.adapter.write().await = Some(adapter);
+
+        let same_started = std::time::Instant::now();
+        let same_a = send_text_frame(
+            "fake",
+            "same-a".into(),
+            "user-1".into(),
+            None,
+            "a".into(),
+            serde_json::Value::Null,
+            runtime.clone(),
+        );
+        let same_b = send_text_frame(
+            "fake",
+            "same-b".into(),
+            "user-1".into(),
+            None,
+            "b".into(),
+            serde_json::Value::Null,
+            runtime.clone(),
+        );
+        let _ = tokio::join!(same_a, same_b);
+        let same_elapsed = same_started.elapsed();
+        assert_eq!(max_active.load(AtomicOrdering::SeqCst), 1);
+
+        max_active.store(0, AtomicOrdering::SeqCst);
+        let cross_started = std::time::Instant::now();
+        let other_a = send_text_frame(
+            "fake",
+            "other-a".into(),
+            "user-1".into(),
+            None,
+            "a".into(),
+            serde_json::Value::Null,
+            runtime.clone(),
+        );
+        let other_b = send_text_frame(
+            "fake",
+            "other-b".into(),
+            "user-2".into(),
+            None,
+            "b".into(),
+            serde_json::Value::Null,
+            runtime,
+        );
+        let _ = tokio::join!(other_a, other_b);
+        let cross_elapsed = cross_started.elapsed();
+        assert!(max_active.load(AtomicOrdering::SeqCst) >= 2);
+        assert!(cross_elapsed < same_elapsed);
+        eprintln!(
+            "message_fixture same_session_ms={} cross_session_ms={}",
+            same_elapsed.as_millis(),
+            cross_elapsed.as_millis()
+        );
+    }
+
+    #[tokio::test]
+    async fn receive_wait_does_not_block_outbound_send() {
+        let receive_started = Arc::new(Notify::new());
+        let release_receive = Arc::new(Notify::new());
+        let adapter: Arc<dyn PlatformAdapter> = Arc::new(BlockingReceiveAdapter {
+            receive_started: receive_started.clone(),
+            release_receive: release_receive.clone(),
+        });
+        let (events, _event_rx) = mpsc::channel(4);
+        let runtime = Arc::new(MessageConnectorRuntime::new("fake", events));
+        *runtime.adapter.write().await = Some(adapter.clone());
+        runtime.connected.store(true, Ordering::Release);
+        runtime.start_receive(adapter).await;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            receive_started.notified(),
+        )
+        .await
+        .expect("receive loop did not start");
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            send_text_frame(
+                "fake",
+                "send".into(),
+                "user-1".into(),
+                None,
+                "hello".into(),
+                serde_json::Value::Null,
+                runtime.clone(),
+            ),
+        )
+        .await;
+        assert!(
+            result.is_ok(),
+            "receive must not hold the outbound adapter path"
+        );
+        release_receive.notify_one();
+        runtime.stop_receive().await;
+    }
+
+    #[tokio::test]
+    async fn managed_handler_routes_configure_send_and_disconnect_to_runtime() {
+        let (events, _event_rx) = mpsc::channel(8);
+        let handler = MessageManagedHandler::new(
+            "fake",
+            &["message.send.text"],
+            test_adapter_factory,
+            events,
+        );
+
+        let configured = handler
+            .handle(SurfaceFrame::Configure {
+                id: "configure".into(),
+                surface: "fake".into(),
+                config: serde_json::json!({}),
+            })
+            .await
+            .expect("configure response");
+        assert_ok_status(configured, "ready");
+
+        let sent = handler
+            .handle(SurfaceFrame::Send {
+                id: "send".into(),
+                surface: "fake".into(),
+                recipient: "user-1".into(),
+                thread: None,
+                text: "hello".into(),
+                metadata: serde_json::Value::Null,
+            })
+            .await
+            .expect("send response");
+        assert_ok_status(sent, "sent");
+
+        let disconnected = handler
+            .handle(SurfaceFrame::Disconnect {
+                id: "disconnect".into(),
+                surface: "fake".into(),
+            })
+            .await
+            .expect("disconnect response");
+        assert_ok_status(disconnected, "disconnected");
+    }
+
+    fn test_adapter_factory(
+        _settings: &serde_json::Value,
+    ) -> PlatformResult<Box<dyn PlatformAdapter>> {
+        Ok(Box::new(FakeAdapter {
+            calls: Arc::new(StdMutex::new(Vec::new())),
+        }))
     }
 
     fn assert_ok_status(frame: SurfaceFrame, expected: &str) {
@@ -1071,6 +1259,84 @@ mod tests {
         calls: Arc<StdMutex<Vec<String>>>,
     }
 
+    struct DelayAdapter {
+        active: Arc<AtomicUsize>,
+        max_active: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl PlatformAdapter for DelayAdapter {
+        fn platform(&self) -> Platform {
+            Platform::Custom("delay".into())
+        }
+
+        fn platform_name(&self) -> &str {
+            "delay"
+        }
+
+        async fn connect(&self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        async fn disconnect(&self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            true
+        }
+
+        async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
+            Ok(None)
+        }
+
+        async fn send(&self, _msg: &OutboundMessage) -> PlatformResult<SendResult> {
+            let active = self.active.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+            self.max_active.fetch_max(active, AtomicOrdering::SeqCst);
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+            self.active.fetch_sub(1, AtomicOrdering::SeqCst);
+            Ok(SendResult::success(None))
+        }
+    }
+
+    struct BlockingReceiveAdapter {
+        receive_started: Arc<Notify>,
+        release_receive: Arc<Notify>,
+    }
+
+    #[async_trait]
+    impl PlatformAdapter for BlockingReceiveAdapter {
+        fn platform(&self) -> Platform {
+            Platform::Custom("blocking-receive".into())
+        }
+
+        fn platform_name(&self) -> &str {
+            "blocking-receive"
+        }
+
+        async fn connect(&self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        async fn disconnect(&self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            true
+        }
+
+        async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
+            self.receive_started.notify_one();
+            self.release_receive.notified().await;
+            Ok(None)
+        }
+
+        async fn send(&self, _msg: &OutboundMessage) -> PlatformResult<SendResult> {
+            Ok(SendResult::success(None))
+        }
+    }
+
     #[async_trait]
     impl PlatformAdapter for FakeAdapter {
         fn platform(&self) -> Platform {
@@ -1081,11 +1347,11 @@ mod tests {
             "fake"
         }
 
-        async fn connect(&mut self) -> PlatformResult<()> {
+        async fn connect(&self) -> PlatformResult<()> {
             Ok(())
         }
 
-        async fn disconnect(&mut self) -> PlatformResult<()> {
+        async fn disconnect(&self) -> PlatformResult<()> {
             Ok(())
         }
 
@@ -1093,7 +1359,7 @@ mod tests {
             true
         }
 
-        async fn receive(&mut self) -> PlatformResult<Option<InboundMessage>> {
+        async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
             Ok(None)
         }
 

@@ -90,26 +90,6 @@ impl SendResult {
     }
 }
 
-/// Typed payload kind for runtime dispatch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum OutboundPayloadKind {
-    Text,
-    Image,
-    File,
-}
-
-impl OutboundPayloadKind {
-    #[must_use]
-    pub fn operation(self) -> &'static str {
-        match self {
-            Self::Text => "send_text",
-            Self::Image => "send_image",
-            Self::File => "send_file",
-        }
-    }
-}
-
 /// Basic chat/group information.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatInfo {
@@ -185,46 +165,5 @@ impl From<&str> for SessionKey {
             2 => Self::new(parts[0], parts[1]),
             _ => Self::with_thread(parts[0], parts[1], parts[2]),
         }
-    }
-}
-
-/// Session metadata associated with a platform session.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlatformSession {
-    /// The session key.
-    pub key: SessionKey,
-    /// Session creation timestamp.
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    /// Last activity timestamp.
-    pub last_activity: chrono::DateTime<chrono::Utc>,
-    /// Number of messages exchanged.
-    pub message_count: usize,
-    /// Optional user display name.
-    pub display_name: Option<String>,
-}
-
-impl PlatformSession {
-    /// Create a new platform session.
-    pub fn new(key: SessionKey) -> Self {
-        let now = chrono::Utc::now();
-        Self {
-            key,
-            created_at: now,
-            last_activity: now,
-            message_count: 0,
-            display_name: None,
-        }
-    }
-
-    /// Update the last activity timestamp.
-    pub fn touch(&mut self) {
-        self.last_activity = chrono::Utc::now();
-        self.message_count += 1;
-    }
-
-    /// Set the display name.
-    pub fn with_display_name(mut self, name: impl Into<String>) -> Self {
-        self.display_name = Some(name.into());
-        self
     }
 }
