@@ -2,7 +2,7 @@
 
 `cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.552`。
+当前版本：`0.9.559`。
 
 ## 1. 定位
 
@@ -103,7 +103,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.552",
+  "version": "0.9.559",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -119,7 +119,7 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.552",
+  "version": "0.9.559",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
@@ -148,7 +148,7 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.552",
+  "version": "0.9.559",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",
