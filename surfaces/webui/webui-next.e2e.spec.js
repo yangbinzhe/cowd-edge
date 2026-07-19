@@ -535,6 +535,8 @@ test('real gateway cockpit editing and concurrent observers close without silent
   await page.getByRole('button', { name: 'Revert saved version' }).click();
   await expect(nameInput).toHaveValue('E2E saved cockpit');
   await page.getByRole('button', { name: 'Finish editing' }).click();
+  const profileOptions = page.locator('.mfg-cockpit__toolbar select option');
+  const profileCountBeforeClone = await profileOptions.count();
   const cloneResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/clone`) && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Clone' }).click();
   expect((await cloneResponsePromise).ok()).toBeTruthy();
@@ -542,7 +544,7 @@ test('real gateway cockpit editing and concurrent observers close without silent
   // response.  Wait for that refresh to settle before opening two independent
   // editor views; otherwise an in-flight pre-clone refresh can win the route
   // restoration race and make this a timing test rather than a revision test.
-  await expect(page.locator('.mfg-cockpit__toolbar select option')).toHaveCount(2);
+  await expect(profileOptions).toHaveCount(profileCountBeforeClone + 1);
   await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
 
   const observer = await page.context().newPage();
