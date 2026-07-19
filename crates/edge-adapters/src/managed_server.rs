@@ -20,7 +20,7 @@ use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{broadcast, mpsc, Mutex, Notify, RwLock, Semaphore};
+use tokio::sync::{broadcast, mpsc, Mutex, Notify, OwnedSemaphorePermit, RwLock, Semaphore};
 
 const AUTH_HEADER: &str = "x-cowd-edge-token";
 const MAX_REQUEST_BODY: usize = 1024 * 1024;
@@ -29,10 +29,17 @@ const EVENT_REPLAY_CAPACITY: usize = 4096;
 
 type ResponseBody = UnsyncBoxBody<Bytes, Infallible>;
 type HandlerFuture = Pin<Box<dyn Future<Output = Result<SurfaceFrame, String>> + Send>>;
+pub type ManagedFrameStream =
+    Pin<Box<dyn futures::Stream<Item = Result<SurfaceFrame, String>> + Send>>;
 
 #[async_trait]
 pub trait ManagedEdgeHandler: Send + Sync + 'static {
     async fn handle(&self, frame: SurfaceFrame) -> Result<SurfaceFrame, String>;
+
+    async fn handle_stream(&self, frame: SurfaceFrame) -> Result<ManagedFrameStream, String> {
+        let response = self.handle(frame).await?;
+        Ok(Box::pin(stream::once(async move { Ok(response) })))
+    }
 }
 
 pub type ManagedHandlerFactory = Arc<
@@ -215,7 +222,7 @@ async fn handle_request(
     if !authorized(&request, &state.token) {
         return Ok(json_error(StatusCode::UNAUTHORIZED, "edge_auth_failed"));
     }
-    let Ok(_permit) = state.in_flight.clone().try_acquire_owned() else {
+    let Ok(permit) = state.in_flight.clone().try_acquire_owned() else {
         return Ok(json_error(StatusCode::TOO_MANY_REQUESTS, "edge_overloaded"));
     };
     let path = request.uri().path().to_string();
@@ -233,9 +240,8 @@ async fn handle_request(
         | (Method::POST, "/_cowd/edge/v2/action")
         | (Method::POST, "/_cowd/edge/v2/source/read")
         | (Method::POST, "/_cowd/edge/v2/source/schema")
-        | (Method::POST, "/_cowd/edge/v2/source/incremental")
-        | (Method::POST, "/_cowd/edge/v2/source/watermark/commit") => {
-            dispatch_frame(request, &state).await
+        | (Method::POST, "/_cowd/edge/v2/source/incremental") => {
+            dispatch_frame(request, &state, permit).await
         }
         _ => json_error(StatusCode::NOT_FOUND, "edge_endpoint_not_found"),
     };
@@ -296,7 +302,9 @@ async fn bootstrap_response(
 async fn dispatch_frame(
     request: Request<Incoming>,
     state: &ManagedServerState,
+    permit: OwnedSemaphorePermit,
 ) -> Response<ResponseBody> {
+    let stream_response = request.uri().path() == "/_cowd/edge/v2/source/incremental";
     let frame = match decode_json::<SurfaceFrame>(request).await {
         Ok(value) => value,
         Err(response) => return response,
@@ -304,12 +312,59 @@ async fn dispatch_frame(
     let Some(handler) = state.handler.read().await.clone() else {
         return json_error(StatusCode::PRECONDITION_REQUIRED, "edge_not_bootstrapped");
     };
+    if stream_response {
+        return match tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            handler.handle_stream(frame),
+        )
+        .await
+        {
+            Ok(Ok(frames)) => frame_stream_response(frames, permit),
+            Ok(Err(error)) => json_message(StatusCode::BAD_GATEWAY, "edge_handler_failed", error),
+            Err(_) => json_error(StatusCode::GATEWAY_TIMEOUT, "edge_handler_timeout"),
+        };
+    }
     let future: HandlerFuture = Box::pin(async move { handler.handle(frame).await });
     match tokio::time::timeout(std::time::Duration::from_secs(30), future).await {
         Ok(Ok(response)) => json_response(StatusCode::OK, &response),
         Ok(Err(error)) => json_message(StatusCode::BAD_GATEWAY, "edge_handler_failed", error),
         Err(_) => json_error(StatusCode::GATEWAY_TIMEOUT, "edge_handler_timeout"),
     }
+}
+
+fn frame_stream_response(
+    frames: ManagedFrameStream,
+    permit: OwnedSemaphorePermit,
+) -> Response<ResponseBody> {
+    let frames = stream::unfold((frames, permit), |(mut frames, permit)| async move {
+        frames.next().await.map(|frame| (frame, (frames, permit)))
+    });
+    let body = frames.map(|frame| {
+        let encoded = match frame {
+            Ok(frame) => serde_json::to_vec(&frame).unwrap_or_else(|error| {
+                serde_json::to_vec(&SurfaceFrame::Error {
+                    id: None,
+                    code: "edge_stream_encode_failed".to_string(),
+                    message: error.to_string(),
+                })
+                .unwrap_or_default()
+            }),
+            Err(error) => serde_json::to_vec(&SurfaceFrame::Error {
+                id: None,
+                code: "edge_handler_stream_failed".to_string(),
+                message: error,
+            })
+            .unwrap_or_default(),
+        };
+        let mut line = encoded;
+        line.push(b'\n');
+        Ok::<_, Infallible>(Frame::data(Bytes::from(line)))
+    });
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, "application/x-ndjson")
+        .body(StreamBody::new(body).boxed_unsync())
+        .expect("valid managed edge stream response")
 }
 
 async fn ack_events(

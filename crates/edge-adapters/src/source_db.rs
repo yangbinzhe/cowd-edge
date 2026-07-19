@@ -1,20 +1,66 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
+use edge_contract::{
+    SourceBatchCursor, SourceFieldSchema, SourceReadPlan, SourceRecordBatch, SourceTableSchema,
+};
 use serde_json::{Map, Value};
 use sqlx::mysql::{MySqlPoolOptions, MySqlRow};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Column, Row, TypeInfo, ValueRef};
+use tokio::sync::{Mutex, OnceCell};
 
-use crate::source_sidecar::{
-    checksum_rows, SourceBatchCursor, SourceFieldSchema, SourceReadPlan, SourceRecordBatch,
-    SourceTableSchema,
-};
+use crate::source_sidecar::checksum_rows;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DatabaseDialect {
     Postgres,
     MySql,
     MariaDb,
+}
+
+enum DatabasePool {
+    Postgres(sqlx::Pool<sqlx::Postgres>),
+    MySql(sqlx::Pool<sqlx::MySql>),
+}
+
+/// 一个配置 generation 内按真实连接地址复用的有界数据库连接池注册表。
+#[derive(Default)]
+pub(crate) struct DatabasePoolRegistry {
+    entries: Mutex<HashMap<String, Arc<OnceCell<Arc<DatabasePool>>>>>,
+}
+
+impl DatabasePoolRegistry {
+    async fn pool(&self, url: &str, dialect: DatabaseDialect) -> Result<Arc<DatabasePool>, String> {
+        let key = format!("{}\0{url}", dialect.adapter_id());
+        let cell = {
+            let mut entries = self.entries.lock().await;
+            entries
+                .entry(key)
+                .or_insert_with(|| Arc::new(OnceCell::new()))
+                .clone()
+        };
+        cell.get_or_try_init(|| async move {
+            match dialect {
+                DatabaseDialect::Postgres => PgPoolOptions::new()
+                    .max_connections(8)
+                    .connect(url)
+                    .await
+                    .map(DatabasePool::Postgres)
+                    .map(Arc::new)
+                    .map_err(|error| format!("postgres connect failed: {error}")),
+                DatabaseDialect::MySql | DatabaseDialect::MariaDb => MySqlPoolOptions::new()
+                    .max_connections(8)
+                    .connect(&normalize_mysql_url(url))
+                    .await
+                    .map(DatabasePool::MySql)
+                    .map(Arc::new)
+                    .map_err(|error| format!("mysql/mariadb connect failed: {error}")),
+            }
+        })
+        .await
+        .cloned()
+    }
 }
 
 impl DatabaseDialect {
@@ -61,6 +107,7 @@ pub(crate) async fn read_database_batch(
     mut plan: SourceReadPlan,
     config: Value,
     dialect: DatabaseDialect,
+    pools: &DatabasePoolRegistry,
 ) -> Result<SourceRecordBatch, String> {
     let table = table_ref(&plan)?;
     let limit = plan.limit.unwrap_or(100).clamp(1, 1000);
@@ -71,20 +118,13 @@ pub(crate) async fn read_database_batch(
     if plan.resource_ref.trim().is_empty() || resolved.structured {
         plan.resource_ref = sanitize_resource_ref(&url);
     }
-    match dialect {
-        DatabaseDialect::Postgres => {
-            read_postgres_batch(plan, table, fields, limit, offset, &url).await
+    let pool = pools.pool(&url, dialect).await?;
+    match pool.as_ref() {
+        DatabasePool::Postgres(pool) => {
+            read_postgres_batch(plan, table, fields, limit, offset, pool).await
         }
-        DatabaseDialect::MySql | DatabaseDialect::MariaDb => {
-            read_mysql_batch(
-                plan,
-                table,
-                fields,
-                limit,
-                offset,
-                &normalize_mysql_url(&url),
-            )
-            .await
+        DatabasePool::MySql(pool) => {
+            read_mysql_batch(plan, table, fields, limit, offset, pool).await
         }
     }
 }
@@ -93,6 +133,7 @@ pub(crate) async fn discover_database_schema(
     payload: Value,
     adapter_id: &str,
     config: Value,
+    pools: &DatabasePoolRegistry,
 ) -> Result<Value, String> {
     let dialect = DatabaseDialect::from_adapter(adapter_id).ok_or_else(|| {
         format!("unsupported database adapter for schema discovery: {adapter_id}")
@@ -106,11 +147,10 @@ pub(crate) async fn discover_database_schema(
     } else {
         sanitize_resource_ref(&plan.resource_ref)
     };
-    let tables = match dialect {
-        DatabaseDialect::Postgres => discover_postgres_schema(&url, table_filter).await?,
-        DatabaseDialect::MySql | DatabaseDialect::MariaDb => {
-            discover_mysql_schema(&normalize_mysql_url(&url), table_filter).await?
-        }
+    let pool = pools.pool(&url, dialect).await?;
+    let tables = match pool.as_ref() {
+        DatabasePool::Postgres(pool) => discover_postgres_schema(pool, table_filter).await?,
+        DatabasePool::MySql(pool) => discover_mysql_schema(pool, table_filter).await?,
     };
     Ok(serde_json::json!({
         "status": "ok",
@@ -187,14 +227,9 @@ async fn read_postgres_batch(
     requested_fields: Vec<String>,
     limit: usize,
     offset: usize,
-    url: &str,
+    pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> Result<SourceRecordBatch, String> {
-    let pool = PgPoolOptions::new()
-        .max_connections(2)
-        .connect(url)
-        .await
-        .map_err(|error| format!("postgres connect failed: {error}"))?;
-    let schema = postgres_table_schema(&pool, &table).await?;
+    let schema = postgres_table_schema(pool, &table).await?;
     let fields = selected_fields(&schema, requested_fields)?;
     let strategy = incremental_strategy(&plan, &schema)?;
     let mut sql = format!(
@@ -223,12 +258,12 @@ async fn read_postgres_batch(
         query = query.bind(limit as i64).bind(offset as i64);
     }
     let rows = query
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .map_err(|error| format!("postgres read failed: {error}"))?;
     let total =
         sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) FROM {}", quote_pg_table(&table)))
-            .fetch_one(&pool)
+            .fetch_one(pool)
             .await
             .map_err(|error| format!("postgres count failed: {error}"))? as usize;
     let values = rows.iter().map(pg_row_to_json).collect::<Vec<_>>();
@@ -243,14 +278,9 @@ async fn read_mysql_batch(
     requested_fields: Vec<String>,
     limit: usize,
     offset: usize,
-    url: &str,
+    pool: &sqlx::Pool<sqlx::MySql>,
 ) -> Result<SourceRecordBatch, String> {
-    let pool = MySqlPoolOptions::new()
-        .max_connections(2)
-        .connect(url)
-        .await
-        .map_err(|error| format!("mysql/mariadb connect failed: {error}"))?;
-    let schema = mysql_table_schema(&pool, &table).await?;
+    let schema = mysql_table_schema(pool, &table).await?;
     let fields = selected_fields(&schema, requested_fields)?;
     let strategy = incremental_strategy(&plan, &schema)?;
     let mut sql = format!(
@@ -278,14 +308,14 @@ async fn read_mysql_batch(
         query = query.bind(limit as i64).bind(offset as i64);
     }
     let rows = query
-        .fetch_all(&pool)
+        .fetch_all(pool)
         .await
         .map_err(|error| format!("mysql/mariadb read failed: {error}"))?;
     let total = sqlx::query_scalar::<_, i64>(&format!(
         "SELECT COUNT(*) FROM {}",
         quote_mysql_table(&table)
     ))
-    .fetch_one(&pool)
+    .fetch_one(pool)
     .await
     .map_err(|error| format!("mysql/mariadb count failed: {error}"))? as usize;
     let values = rows.iter().map(mysql_row_to_json).collect::<Vec<_>>();
@@ -295,16 +325,11 @@ async fn read_mysql_batch(
 }
 
 async fn discover_postgres_schema(
-    url: &str,
+    pool: &sqlx::Pool<sqlx::Postgres>,
     table_filter: Option<TableRef>,
 ) -> Result<Vec<SourceTableSchema>, String> {
-    let pool = PgPoolOptions::new()
-        .max_connections(2)
-        .connect(url)
-        .await
-        .map_err(|error| format!("postgres connect failed: {error}"))?;
     if let Some(table) = table_filter {
-        return Ok(vec![postgres_table_schema(&pool, &table).await?]);
+        return Ok(vec![postgres_table_schema(pool, &table).await?]);
     }
     let rows = sqlx::query(
         "SELECT table_schema, table_name, column_name, data_type, is_nullable
@@ -312,7 +337,7 @@ async fn discover_postgres_schema(
          WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
          ORDER BY table_schema, table_name, ordinal_position",
     )
-    .fetch_all(&pool)
+    .fetch_all(pool)
     .await
     .map_err(|error| format!("postgres schema discovery failed: {error}"))?;
     Ok(group_schema_rows(rows.into_iter().map(|row| {
@@ -331,16 +356,11 @@ async fn discover_postgres_schema(
 }
 
 async fn discover_mysql_schema(
-    url: &str,
+    pool: &sqlx::Pool<sqlx::MySql>,
     table_filter: Option<TableRef>,
 ) -> Result<Vec<SourceTableSchema>, String> {
-    let pool = MySqlPoolOptions::new()
-        .max_connections(2)
-        .connect(url)
-        .await
-        .map_err(|error| format!("mysql/mariadb connect failed: {error}"))?;
     if let Some(table) = table_filter {
-        return Ok(vec![mysql_table_schema(&pool, &table).await?]);
+        return Ok(vec![mysql_table_schema(pool, &table).await?]);
     }
     let rows = sqlx::query(
         "SELECT table_schema, table_name, column_name, data_type, is_nullable
@@ -348,7 +368,7 @@ async fn discover_mysql_schema(
          WHERE table_schema = DATABASE()
          ORDER BY table_schema, table_name, ordinal_position",
     )
-    .fetch_all(&pool)
+    .fetch_all(pool)
     .await
     .map_err(|error| format!("mysql/mariadb schema discovery failed: {error}"))?;
     Ok(group_schema_rows(rows.into_iter().map(|row| {

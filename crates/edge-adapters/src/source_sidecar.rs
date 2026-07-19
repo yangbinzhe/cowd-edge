@@ -1,34 +1,114 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, Weak};
+use std::time::{Duration, Instant};
 
-use edge_contract::SurfaceFrame;
-use serde::{Deserialize, Serialize};
+use edge_contract::{
+    SourceBatchCursor, SourceFieldSchema, SourceIncrementalRunRequest, SourceReadPlan,
+    SourceRecordBatch, SourceTableSchema, SourceWatermark, SurfaceFrame,
+};
+use futures::stream;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
-use crate::managed_server::{ManagedEdgeHandler, ManagedHandlerFactory};
+use crate::managed_server::{ManagedEdgeHandler, ManagedFrameStream, ManagedHandlerFactory};
+
+const SOURCE_STREAM_MAX_ROWS: usize = 128;
+const SOURCE_STREAM_MAX_BYTES: usize = 256 * 1024;
 
 #[cfg(feature = "source-db")]
-use crate::source_db::{self, DatabaseDialect};
+use crate::source_db::{self, DatabaseDialect, DatabasePoolRegistry};
 
-#[derive(Debug, Default)]
-struct SourceSidecarState {
+struct CachedBitableToken {
+    value: String,
+    expires_at: Instant,
+}
+
+struct SourceBackendGeneration {
     config: Value,
-    configured: bool,
-    last_error: Option<String>,
-    last_run_at_ms: Option<i64>,
-    watermarks: BTreeMap<String, SourceWatermark>,
+    http: reqwest::Client,
+    bitable_token: Mutex<Option<CachedBitableToken>>,
+    #[cfg(feature = "source-db")]
+    database_pools: DatabasePoolRegistry,
+}
+
+impl SourceBackendGeneration {
+    fn new(config: Value) -> Result<Self, String> {
+        let http = reqwest::Client::builder()
+            .pool_max_idle_per_host(8)
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|error| format!("source http client build failed: {error}"))?;
+        Ok(Self {
+            config,
+            http,
+            bitable_token: Mutex::new(None),
+            #[cfg(feature = "source-db")]
+            database_pools: DatabasePoolRegistry::default(),
+        })
+    }
+}
+
+#[derive(Default)]
+struct ResourceLaneRegistry {
+    lanes: StdMutex<HashMap<String, Weak<Mutex<()>>>>,
+}
+
+impl ResourceLaneRegistry {
+    fn lane(&self, resource_key: String) -> Arc<Mutex<()>> {
+        let mut lanes = self.lanes.lock().unwrap_or_else(|error| error.into_inner());
+        lanes.retain(|_, lane| lane.strong_count() > 0);
+        if let Some(lane) = lanes.get(&resource_key).and_then(Weak::upgrade) {
+            return lane;
+        }
+        let lane = Arc::new(Mutex::new(()));
+        lanes.insert(resource_key, Arc::downgrade(&lane));
+        lane
+    }
+}
+
+/// Source 配置 generation、健康状态与同 resource 增量顺序的唯一 owner。
+struct SourceConnectorRuntime {
+    generation: RwLock<Option<Arc<SourceBackendGeneration>>>,
+    configured: AtomicBool,
+    last_error: RwLock<Option<String>>,
+    last_run_at_ms: AtomicI64,
+    lanes: ResourceLaneRegistry,
+}
+
+impl SourceConnectorRuntime {
+    fn new() -> Self {
+        Self {
+            generation: RwLock::new(None),
+            configured: AtomicBool::new(false),
+            last_error: RwLock::new(None),
+            last_run_at_ms: AtomicI64::new(-1),
+            lanes: ResourceLaneRegistry::default(),
+        }
+    }
+
+    async fn generation(&self) -> Result<Arc<SourceBackendGeneration>, String> {
+        self.generation
+            .read()
+            .await
+            .clone()
+            .ok_or_else(|| "source connector is not configured".to_string())
+    }
+
+    async fn set_error(&self, error: Option<String>) {
+        *self.last_error.write().await = error;
+    }
 }
 
 pub struct SourceManagedHandler {
     surface_id: String,
     adapter_id: String,
     default_base_url: String,
-    state: Arc<Mutex<SourceSidecarState>>,
+    runtime: Arc<SourceConnectorRuntime>,
 }
 
 impl SourceManagedHandler {
@@ -38,7 +118,7 @@ impl SourceManagedHandler {
             surface_id: surface_id.to_string(),
             adapter_id: adapter_id.to_string(),
             default_base_url: default_base_url.to_string(),
-            state: Arc::new(Mutex::new(SourceSidecarState::default())),
+            runtime: Arc::new(SourceConnectorRuntime::new()),
         }
     }
 }
@@ -51,10 +131,116 @@ impl ManagedEdgeHandler for SourceManagedHandler {
             &self.surface_id,
             &self.adapter_id,
             &self.default_base_url,
-            self.state.clone(),
+            self.runtime.clone(),
         )
         .await)
     }
+
+    async fn handle_stream(&self, frame: SurfaceFrame) -> Result<ManagedFrameStream, String> {
+        let incremental = matches!(
+            &frame,
+            SurfaceFrame::Action { action, .. }
+                if action == "source.incremental.run" || action == "source.incremental_run"
+        );
+        let response = self.handle(frame).await?;
+        if !incremental {
+            return Ok(Box::pin(stream::once(async move { Ok(response) })));
+        }
+        source_incremental_frame_stream(response)
+    }
+}
+
+struct SourceIncrementalChunkState {
+    id: String,
+    payload: Map<String, Value>,
+    batch: SourceRecordBatch,
+    rows: VecDeque<Value>,
+    watermark_after: Value,
+    chunk_index: usize,
+    emitted_empty: bool,
+}
+
+fn source_incremental_frame_stream(response: SurfaceFrame) -> Result<ManagedFrameStream, String> {
+    let SurfaceFrame::Ok { id, payload } = response else {
+        return Ok(Box::pin(stream::once(async move { Ok(response) })));
+    };
+    let Value::Object(mut payload) = payload else {
+        return Err("source incremental response payload must be an object".to_string());
+    };
+    let batch_value = payload
+        .remove("batch")
+        .ok_or_else(|| "source incremental response missing batch".to_string())?;
+    let mut batch = serde_json::from_value::<SourceRecordBatch>(batch_value)
+        .map_err(|error| format!("source incremental batch encode failed: {error}"))?;
+    for row in &batch.rows {
+        let row_bytes = serde_json::to_vec(row)
+            .map_err(|error| format!("source row encode failed: {error}"))?
+            .len();
+        if row_bytes > SOURCE_STREAM_MAX_BYTES {
+            return Err(format!(
+                "source row exceeds stream chunk limit: {row_bytes} > {SOURCE_STREAM_MAX_BYTES}"
+            ));
+        }
+    }
+    let rows = std::mem::take(&mut batch.rows).into();
+    let watermark_after = payload.remove("watermark_after").unwrap_or(Value::Null);
+    let state = SourceIncrementalChunkState {
+        id,
+        payload,
+        batch,
+        rows,
+        watermark_after,
+        chunk_index: 0,
+        emitted_empty: false,
+    };
+    Ok(Box::pin(stream::unfold(state, |mut state| async move {
+        if state.rows.is_empty() && (state.chunk_index > 0 || state.emitted_empty) {
+            return None;
+        }
+        let mut rows = Vec::new();
+        let mut bytes = 0usize;
+        while rows.len() < SOURCE_STREAM_MAX_ROWS {
+            let Some(row) = state.rows.front() else {
+                break;
+            };
+            let row_bytes =
+                serde_json::to_vec(row).map_or(SOURCE_STREAM_MAX_BYTES, |row| row.len());
+            if !rows.is_empty() && bytes.saturating_add(row_bytes) > SOURCE_STREAM_MAX_BYTES {
+                break;
+            }
+            bytes = bytes.saturating_add(row_bytes);
+            rows.push(state.rows.pop_front().expect("source row exists"));
+        }
+        if rows.is_empty() {
+            state.emitted_empty = true;
+        }
+        let final_chunk = state.rows.is_empty();
+        let mut batch = state.batch.clone();
+        batch.row_count = rows.len();
+        batch.checksum = checksum_rows(&rows);
+        batch.rows = rows;
+        let mut payload = state.payload.clone();
+        payload.insert(
+            "batch".to_string(),
+            serde_json::to_value(batch).unwrap_or(Value::Null),
+        );
+        payload.insert("chunk_index".to_string(), Value::from(state.chunk_index));
+        payload.insert("final_chunk".to_string(), Value::Bool(final_chunk));
+        payload.insert(
+            "watermark_after".to_string(),
+            if final_chunk {
+                state.watermark_after.clone()
+            } else {
+                Value::Null
+            },
+        );
+        let frame = SurfaceFrame::Ok {
+            id: state.id.clone(),
+            payload: Value::Object(payload),
+        };
+        state.chunk_index = state.chunk_index.saturating_add(1);
+        Some((Ok(frame), state))
+    })))
 }
 
 #[must_use]
@@ -89,100 +275,12 @@ pub fn managed_source_factory(artifact: &'static str) -> ManagedHandlerFactory {
     })
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SourceReadPlan {
-    #[serde(default)]
-    pub(crate) adapter_id: String,
-    #[serde(default)]
-    pub(crate) resource_ref: String,
-    #[serde(default)]
-    pub(crate) table: Option<String>,
-    #[serde(default)]
-    pub(crate) fields: Vec<String>,
-    #[serde(default)]
-    pub(crate) limit: Option<usize>,
-    #[serde(default)]
-    pub(crate) offset: Option<usize>,
-    #[serde(default)]
-    pub(crate) cursor: Option<String>,
-    #[serde(default)]
-    pub(crate) metadata: Value,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SourceFieldSchema {
-    pub(crate) name: String,
-    pub(crate) data_type: String,
-    pub(crate) nullable: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SourceTableSchema {
-    pub(crate) table_name: String,
-    pub(crate) fields: Vec<SourceFieldSchema>,
-    pub(crate) primary_key: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub(crate) struct SourceBatchCursor {
-    pub(crate) offset: usize,
-    pub(crate) limit: usize,
-    #[serde(default)]
-    pub(crate) next_offset: Option<usize>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct SourceRecordBatch {
-    pub(crate) adapter_id: String,
-    pub(crate) resource_ref: String,
-    #[serde(default)]
-    pub(crate) table: Option<String>,
-    pub(crate) schema: SourceTableSchema,
-    pub(crate) rows: Vec<Value>,
-    pub(crate) cursor: SourceBatchCursor,
-    pub(crate) row_count: usize,
-    pub(crate) checksum: String,
-    pub(crate) truncated: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct SourceWatermark {
-    pub(crate) adapter_id: String,
-    pub(crate) resource_ref: String,
-    #[serde(default)]
-    pub(crate) table: Option<String>,
-    pub(crate) strategy: String,
-    #[serde(default)]
-    pub(crate) cursor: Option<String>,
-    #[serde(default)]
-    pub(crate) offset: Option<usize>,
-    #[serde(default)]
-    pub(crate) high_watermark: Option<String>,
-    #[serde(default)]
-    pub(crate) checksum: Option<String>,
-    pub(crate) updated_at_ms: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SourceIncrementalRunRequest {
-    adapter_id: String,
-    resource_ref: String,
-    #[serde(default)]
-    table: Option<String>,
-    #[serde(default)]
-    limit: Option<usize>,
-    #[serde(default)]
-    watermark: Option<SourceWatermark>,
-    #[serde(default)]
-    metadata: Value,
-}
-
 pub async fn run_stdio_source_connector(
     surface_id: &'static str,
     adapter_id: &'static str,
     default_base_url: &'static str,
 ) -> io::Result<()> {
-    let state = Arc::new(Mutex::new(SourceSidecarState::default()));
+    let runtime = Arc::new(SourceConnectorRuntime::new());
     let stdout = Arc::new(Mutex::new(tokio::io::stdout()));
     let stdin = BufReader::new(tokio::io::stdin());
     let mut lines = stdin.lines();
@@ -198,7 +296,7 @@ pub async fn run_stdio_source_connector(
                     surface_id,
                     adapter_id,
                     default_base_url,
-                    state.clone(),
+                    runtime.clone(),
                 )
                 .await
             }
@@ -218,7 +316,7 @@ async fn handle_frame(
     surface_id: &str,
     adapter_id: &str,
     default_base_url: &str,
-    state: Arc<Mutex<SourceSidecarState>>,
+    runtime: Arc<SourceConnectorRuntime>,
 ) -> SurfaceFrame {
     match frame {
         SurfaceFrame::Handshake {
@@ -233,25 +331,34 @@ async fn handle_frame(
                 "source.snapshot".to_string(),
                 "source.incremental".to_string(),
                 "source.state".to_string(),
-                "source.watermark".to_string(),
                 "source.event".to_string(),
                 "source.health".to_string(),
             ],
         },
-        SurfaceFrame::Configure { id, config, .. } => {
-            let mut state = state.lock().await;
-            state.config = config;
-            state.configured = true;
-            state.last_error = None;
-            SurfaceFrame::Ok {
-                id,
-                payload: serde_json::json!({
-                    "status": "ok",
-                    "surface": surface_id,
-                    "adapter_id": adapter_id,
-                }),
+        SurfaceFrame::Configure { id, config, .. } => match SourceBackendGeneration::new(config) {
+            Ok(generation) => {
+                *runtime.generation.write().await = Some(Arc::new(generation));
+                runtime.configured.store(true, Ordering::Release);
+                runtime.set_error(None).await;
+                SurfaceFrame::Ok {
+                    id,
+                    payload: serde_json::json!({
+                        "status": "ok",
+                        "surface": surface_id,
+                        "adapter_id": adapter_id,
+                    }),
+                }
             }
-        }
+            Err(error) => {
+                runtime.configured.store(false, Ordering::Release);
+                runtime.set_error(Some(error.clone())).await;
+                SurfaceFrame::Error {
+                    id: Some(id),
+                    code: "source_config_invalid".to_string(),
+                    message: error,
+                }
+            }
+        },
         SurfaceFrame::Connect { id, .. } | SurfaceFrame::Disconnect { id, .. } => {
             SurfaceFrame::Ok {
                 id,
@@ -263,14 +370,15 @@ async fn handle_frame(
             }
         }
         SurfaceFrame::Health { id, .. } => {
-            let state = state.lock().await;
+            let configured = runtime.configured.load(Ordering::Acquire);
+            let last_error = runtime.last_error.read().await.clone();
             SurfaceFrame::Ok {
                 id,
                 payload: serde_json::json!({
-                    "status": if state.configured { "ready" } else { "config_missing" },
+                    "status": if configured { "ready" } else { "config_missing" },
                     "surface": surface_id,
                     "adapter_id": adapter_id,
-                    "last_error": state.last_error,
+                    "last_error": last_error,
                 }),
             }
         }
@@ -279,54 +387,17 @@ async fn handle_frame(
             action,
             payload: _,
             ..
-        } if action == "source.state" => {
-            let state = state.lock().await;
-            SurfaceFrame::Ok {
-                id,
-                payload: source_state_payload(surface_id, adapter_id, default_base_url, &state),
-            }
-        }
-        SurfaceFrame::Action {
+        } if action == "source.state" => SurfaceFrame::Ok {
             id,
-            action,
-            payload,
-            ..
-        } if action == "source.watermark.get" => {
-            let state = state.lock().await;
-            SurfaceFrame::Ok {
-                id,
-                payload: serde_json::json!({
-                    "status": "ok",
-                    "adapter_id": adapter_id,
-                    "watermark": get_watermark_from_state(adapter_id, &payload, &state),
-                }),
-            }
-        }
-        SurfaceFrame::Action {
-            id,
-            action,
-            payload,
-            ..
-        } if action == "source.watermark.commit" => {
-            match commit_watermark(payload, adapter_id, state.clone()).await {
-                Ok(payload) => SurfaceFrame::Ok { id, payload },
-                Err(error) => {
-                    state.lock().await.last_error = Some(error.clone());
-                    SurfaceFrame::Error {
-                        id: Some(id),
-                        code: "source_watermark_commit_failed".to_string(),
-                        message: error,
-                    }
-                }
-            }
-        }
+            payload: source_state_payload(surface_id, adapter_id, default_base_url, &runtime).await,
+        },
         SurfaceFrame::Action {
             id,
             action,
             payload,
             ..
         } if action == "source.read_batch" => {
-            match read_source_batch(payload, adapter_id, default_base_url, state.clone()).await {
+            match read_source_batch(payload, adapter_id, default_base_url, runtime.clone()).await {
                 Ok(batch) => SurfaceFrame::Ok {
                     id,
                     payload: serde_json::json!({
@@ -335,7 +406,7 @@ async fn handle_frame(
                     }),
                 },
                 Err(error) => {
-                    state.lock().await.last_error = Some(error.clone());
+                    runtime.set_error(Some(error.clone())).await;
                     SurfaceFrame::Error {
                         id: Some(id),
                         code: "source_read_batch_failed".to_string(),
@@ -350,11 +421,12 @@ async fn handle_frame(
             payload,
             ..
         } if action == "source.schema_discovery" || action == "source.discover_schema" => {
-            match discover_source_schema(payload, adapter_id, default_base_url, state.clone()).await
+            match discover_source_schema(payload, adapter_id, default_base_url, runtime.clone())
+                .await
             {
                 Ok(payload) => SurfaceFrame::Ok { id, payload },
                 Err(error) => {
-                    state.lock().await.last_error = Some(error.clone());
+                    runtime.set_error(Some(error.clone())).await;
                     SurfaceFrame::Error {
                         id: Some(id),
                         code: "source_schema_discovery_failed".to_string(),
@@ -369,11 +441,12 @@ async fn handle_frame(
             payload,
             ..
         } if action == "source.incremental.run" || action == "source.incremental_run" => {
-            match run_incremental_source(payload, adapter_id, default_base_url, state.clone()).await
+            match run_incremental_source(payload, adapter_id, default_base_url, runtime.clone())
+                .await
             {
                 Ok(payload) => SurfaceFrame::Ok { id, payload },
                 Err(error) => {
-                    state.lock().await.last_error = Some(error.clone());
+                    runtime.set_error(Some(error.clone())).await;
                     SurfaceFrame::Error {
                         id: Some(id),
                         code: "source_incremental_run_failed".to_string(),
@@ -391,7 +464,7 @@ async fn handle_frame(
             match incremental_source_plan(payload, adapter_id) {
                 Ok(payload) => SurfaceFrame::Ok { id, payload },
                 Err(error) => {
-                    state.lock().await.last_error = Some(error.clone());
+                    runtime.set_error(Some(error.clone())).await;
                     SurfaceFrame::Error {
                         id: Some(id),
                         code: "source_incremental_plan_failed".to_string(),
@@ -409,7 +482,7 @@ async fn handle_frame(
             match normalize_source_events(payload, adapter_id) {
                 Ok(payload) => SurfaceFrame::Ok { id, payload },
                 Err(error) => {
-                    state.lock().await.last_error = Some(error.clone());
+                    runtime.set_error(Some(error.clone())).await;
                     SurfaceFrame::Error {
                         id: Some(id),
                         code: "source_event_normalize_failed".to_string(),
@@ -427,10 +500,10 @@ async fn handle_frame(
             || action == "source.poll_events"
             || action == "source.event_poll" =>
         {
-            match poll_source_events(payload, adapter_id, state.clone()).await {
+            match poll_source_events(payload, adapter_id, runtime.clone()).await {
                 Ok(payload) => SurfaceFrame::Ok { id, payload },
                 Err(error) => {
-                    state.lock().await.last_error = Some(error.clone());
+                    runtime.set_error(Some(error.clone())).await;
                     SurfaceFrame::Error {
                         id: Some(id),
                         code: "source_event_poll_failed".to_string(),
@@ -474,34 +547,55 @@ async fn read_source_batch(
     payload: Value,
     adapter_id: &str,
     default_base_url: &str,
-    state: Arc<Mutex<SourceSidecarState>>,
+    runtime: Arc<SourceConnectorRuntime>,
 ) -> Result<SourceRecordBatch, String> {
     let plan = source_plan_from_payload(payload, adapter_id)?;
+
+    #[cfg(test)]
+    if let Some(delay_ms) = plan
+        .metadata
+        .get("fixture_delay_ms")
+        .and_then(Value::as_u64)
+    {
+        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+    }
 
     if let Some(rows) = rows_from_metadata(&plan.metadata)? {
         return Ok(record_batch_from_rows(plan, rows, false));
     }
 
-    let config = state.lock().await.config.clone();
+    let generation = runtime.generation().await?;
     #[cfg(feature = "source-db")]
     if let Some(dialect) = DatabaseDialect::from_adapter(adapter_id) {
-        return source_db::read_database_batch(plan, config, dialect).await;
+        return source_db::read_database_batch(
+            plan,
+            generation.config.clone(),
+            dialect,
+            &generation.database_pools,
+        )
+        .await;
     }
-    read_feishu_bitable_batch(plan, config, default_base_url).await
+    read_feishu_bitable_batch(plan, &generation, default_base_url).await
 }
 
 async fn discover_source_schema(
     payload: Value,
     adapter_id: &str,
     default_base_url: &str,
-    state: Arc<Mutex<SourceSidecarState>>,
+    runtime: Arc<SourceConnectorRuntime>,
 ) -> Result<Value, String> {
-    let config = state.lock().await.config.clone();
+    let generation = runtime.generation().await?;
     #[cfg(feature = "source-db")]
     if DatabaseDialect::from_adapter(adapter_id).is_some() {
-        return source_db::discover_database_schema(payload, adapter_id, config).await;
+        return source_db::discover_database_schema(
+            payload,
+            adapter_id,
+            generation.config.clone(),
+            &generation.database_pools,
+        )
+        .await;
     }
-    discover_bitable_schema(payload, adapter_id, config, default_base_url).await
+    discover_bitable_schema(payload, adapter_id, &generation, default_base_url).await
 }
 
 fn incremental_source_plan(payload: Value, adapter_id: &str) -> Result<Value, String> {
@@ -516,19 +610,29 @@ async fn run_incremental_source(
     payload: Value,
     adapter_id: &str,
     default_base_url: &str,
-    state: Arc<Mutex<SourceSidecarState>>,
+    runtime: Arc<SourceConnectorRuntime>,
 ) -> Result<Value, String> {
     let mut request = incremental_request_from_payload(payload, adapter_id)?;
-    let state_watermark = {
-        let state_guard = state.lock().await;
-        request.watermark.clone().or_else(|| {
-            get_watermark_from_state(
-                adapter_id,
-                &serde_json::to_value(&request).unwrap_or_default(),
-                &state_guard,
-            )
-        })
-    };
+    if let Some(expected_revision) = request.expected_revision {
+        let actual_revision = request
+            .watermark
+            .as_ref()
+            .map_or(0, |watermark| watermark.revision);
+        if expected_revision != actual_revision {
+            return Err(format!(
+                "source watermark revision mismatch: expected {expected_revision}, got {actual_revision}"
+            ));
+        }
+    }
+    let state_watermark = request.watermark.clone();
+    let resource_key = format!(
+        "{}\0{}\0{}",
+        request.adapter_id,
+        sanitize_resource_ref(&request.resource_ref),
+        request.table.as_deref().unwrap_or("")
+    );
+    let lane = runtime.lanes.lane(resource_key);
+    let _lane_guard = lane.lock().await;
     request.watermark = state_watermark.clone();
     let mut plan = SourceReadPlan {
         adapter_id: request.adapter_id.clone(),
@@ -552,16 +656,13 @@ async fn run_incremental_source(
         serde_json::json!({ "read_plan": plan }),
         adapter_id,
         default_base_url,
-        state.clone(),
+        runtime.clone(),
     )
     .await?;
     let watermark_after =
         watermark_after_batch(&batch, state_watermark.as_ref(), &request.metadata);
-    {
-        let mut state_guard = state.lock().await;
-        state_guard.last_run_at_ms = Some(now_ms());
-        state_guard.last_error = None;
-    }
+    runtime.last_run_at_ms.store(now_ms(), Ordering::Release);
+    runtime.set_error(None).await;
     let degraded_reason = degraded_reason_for_incremental(&request.metadata, &watermark_after);
     Ok(serde_json::json!({
         "status": if degraded_reason.is_some() { "degraded" } else { "ok" },
@@ -667,9 +768,10 @@ fn read_fixture_rows(path: PathBuf) -> Result<Vec<Value>, String> {
 
 async fn read_feishu_bitable_batch(
     plan: SourceReadPlan,
-    config: Value,
+    generation: &SourceBackendGeneration,
     default_base_url: &str,
 ) -> Result<SourceRecordBatch, String> {
+    let config = &generation.config;
     let app_id = config
         .get("app_id")
         .and_then(Value::as_str)
@@ -684,7 +786,7 @@ async fn read_feishu_bitable_batch(
         .unwrap_or(default_base_url)
         .trim_end_matches('/');
     let (app_token, table_id) = resolve_bitable_target(&plan)?;
-    let token = tenant_access_token(base_url, app_id, app_secret).await?;
+    let token = tenant_access_token(generation, base_url, app_id, app_secret).await?;
     let limit = plan.limit.unwrap_or(100).clamp(1, 500);
     let page_token = plan
         .cursor
@@ -697,7 +799,8 @@ async fn read_feishu_bitable_batch(
         url.push_str("&page_token=");
         url.push_str(page_token);
     }
-    let response = reqwest::Client::new()
+    let response = generation
+        .http
         .get(url)
         .bearer_auth(token)
         .send()
@@ -740,7 +843,7 @@ async fn read_feishu_bitable_batch(
 async fn discover_bitable_schema(
     payload: Value,
     adapter_id: &str,
-    config: Value,
+    generation: &SourceBackendGeneration,
     default_base_url: &str,
 ) -> Result<Value, String> {
     let plan = source_plan_from_payload(payload, adapter_id)?;
@@ -756,6 +859,7 @@ async fn discover_bitable_schema(
         }));
     }
 
+    let config = &generation.config;
     let app_id = config
         .get("app_id")
         .and_then(Value::as_str)
@@ -770,8 +874,9 @@ async fn discover_bitable_schema(
         .unwrap_or(default_base_url)
         .trim_end_matches('/');
     let (app_token, table_id) = resolve_bitable_target(&plan)?;
-    let token = tenant_access_token(base_url, app_id, app_secret).await?;
-    let response = reqwest::Client::new()
+    let token = tenant_access_token(generation, base_url, app_id, app_secret).await?;
+    let response = generation
+        .http
         .get(format!(
             "{base_url}/open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/fields?page_size=100"
         ))
@@ -887,12 +992,12 @@ fn bitable_incremental_plan(payload: Value, adapter_id: &str) -> Result<Value, S
 async fn poll_source_events(
     payload: Value,
     adapter_id: &str,
-    state: Arc<Mutex<SourceSidecarState>>,
+    runtime: Arc<SourceConnectorRuntime>,
 ) -> Result<Value, String> {
-    let config = state.lock().await.config.clone();
+    let generation = runtime.generation().await?;
     let mut events = events_from_value(&payload)?;
     if events.is_empty() {
-        events = events_from_value(&config)?;
+        events = events_from_value(&generation.config)?;
     }
     if events.is_empty() {
         return Ok(serde_json::json!({
@@ -967,122 +1072,50 @@ fn normalized_events_payload(adapter_id: &str, events: Vec<Value>) -> Value {
     })
 }
 
-fn source_state_payload(
+async fn source_state_payload(
     surface_id: &str,
     adapter_id: &str,
     default_base_url: &str,
-    state: &SourceSidecarState,
+    runtime: &SourceConnectorRuntime,
 ) -> Value {
-    let has_event_fixture = !events_from_value(&state.config)
-        .unwrap_or_default()
-        .is_empty();
-    let supports_real_events = state
-        .config
+    let generation = runtime.generation.read().await.clone();
+    let config = generation
+        .as_ref()
+        .map_or(&Value::Null, |generation| &generation.config);
+    let has_event_fixture = !events_from_value(config).unwrap_or_default().is_empty();
+    let supports_real_events = config
         .get("event_poll_url")
         .and_then(Value::as_str)
         .is_some();
+    let configured = runtime.configured.load(Ordering::Acquire);
+    let last_run_at_ms = runtime.last_run_at_ms.load(Ordering::Acquire);
+    let last_error = runtime.last_error.read().await.clone();
     serde_json::json!({
         "status": "ok",
         "state": {
             "adapter_id": adapter_id,
             "surface_id": surface_id,
-            "status": if state.configured { "ready" } else { "config_missing" },
+            "status": if configured { "ready" } else { "config_missing" },
             "capabilities": [
                 "source.schema_discovery",
                 "source.snapshot",
                 "source.incremental",
-                "source.watermark",
                 "source.event.poll"
             ],
-            "last_run_at_ms": state.last_run_at_ms,
-            "last_error": state.last_error,
+            "last_run_at_ms": (last_run_at_ms >= 0).then_some(last_run_at_ms),
+            "last_error": last_error,
             "degraded_reason": if !supports_real_events && !has_event_fixture {
                 Some("requires_external_event_source")
             } else {
                 None
             },
-            "watermarks": state.watermarks.values().cloned().collect::<Vec<_>>(),
-            "configured": state.configured,
+            "watermarks": [],
+            "watermark_owner": "gateway_matrix",
+            "configured": configured,
             "supports_real_event_poll": supports_real_events,
             "default_base_url": default_base_url,
         }
     })
-}
-
-fn get_watermark_from_state(
-    adapter_id: &str,
-    payload: &Value,
-    state: &SourceSidecarState,
-) -> Option<SourceWatermark> {
-    payload
-        .get("watermark")
-        .cloned()
-        .and_then(|value| serde_json::from_value::<SourceWatermark>(value).ok())
-        .or_else(|| {
-            let resource_ref = payload
-                .get("resource_ref")
-                .and_then(Value::as_str)
-                .or_else(|| {
-                    payload
-                        .get("request")
-                        .and_then(|request| request.get("resource_ref"))
-                        .and_then(Value::as_str)
-                })
-                .unwrap_or("");
-            let table = payload.get("table").and_then(Value::as_str).or_else(|| {
-                payload
-                    .get("request")
-                    .and_then(|request| request.get("table"))
-                    .and_then(Value::as_str)
-            });
-            let probe = SourceWatermark {
-                adapter_id: adapter_id.to_string(),
-                resource_ref: sanitize_resource_ref(resource_ref),
-                table: table.map(ToString::to_string),
-                strategy: "offset".to_string(),
-                cursor: None,
-                offset: Some(0),
-                high_watermark: None,
-                checksum: None,
-                updated_at_ms: now_ms(),
-            };
-            state.watermarks.get(&watermark_key(&probe)).cloned()
-        })
-}
-
-async fn commit_watermark(
-    payload: Value,
-    adapter_id: &str,
-    state: Arc<Mutex<SourceSidecarState>>,
-) -> Result<Value, String> {
-    let mut watermark = payload
-        .get("watermark")
-        .cloned()
-        .or_else(|| payload.get("watermark_after").cloned())
-        .ok_or_else(|| "source.watermark.commit requires watermark".to_string())
-        .and_then(|value| {
-            serde_json::from_value::<SourceWatermark>(value)
-                .map_err(|error| format!("invalid source watermark: {error}"))
-        })?;
-    if watermark.adapter_id.trim().is_empty() {
-        watermark.adapter_id = adapter_id.to_string();
-    }
-    if watermark.adapter_id != adapter_id {
-        return Err(format!(
-            "adapter mismatch: watermark `{}` routed to `{adapter_id}`",
-            watermark.adapter_id
-        ));
-    }
-    watermark.updated_at_ms = now_ms();
-    let mut state = state.lock().await;
-    state
-        .watermarks
-        .insert(watermark_key(&watermark), watermark.clone());
-    Ok(serde_json::json!({
-        "status": "ok",
-        "adapter_id": adapter_id,
-        "watermark": watermark,
-    }))
 }
 
 fn watermark_after_batch(
@@ -1134,6 +1167,7 @@ fn watermark_after_batch(
         ),
         high_watermark,
         checksum: Some(batch.checksum.clone()),
+        revision: before.map_or(0, |watermark| watermark.revision),
         updated_at_ms: now_ms(),
     }
 }
@@ -1173,6 +1207,7 @@ fn event_watermark(adapter_id: &str, object: &Map<String, Value>) -> SourceWater
                 .map(Vec::as_slice)
                 .unwrap_or(&[]),
         )),
+        revision: 0,
         updated_at_ms: now_ms(),
     }
 }
@@ -1203,15 +1238,6 @@ fn max_string_field(rows: &[Value], field: &str) -> Option<String> {
                 .or_else(|| value.as_u64().map(|number| number.to_string()))
         })
         .max()
-}
-
-fn watermark_key(watermark: &SourceWatermark) -> String {
-    format!(
-        "{}|{}|{}",
-        watermark.adapter_id,
-        watermark.resource_ref,
-        watermark.table.as_deref().unwrap_or("")
-    )
 }
 
 fn now_ms() -> i64 {
@@ -1319,11 +1345,20 @@ fn array_strings_at(value: &Value, path: &[&str]) -> Option<Vec<String>> {
 }
 
 async fn tenant_access_token(
+    generation: &SourceBackendGeneration,
     base_url: &str,
     app_id: &str,
     app_secret: &str,
 ) -> Result<String, String> {
-    let response = reqwest::Client::new()
+    let mut cached = generation.bitable_token.lock().await;
+    if let Some(token) = cached
+        .as_ref()
+        .filter(|token| token.expires_at > Instant::now() + Duration::from_secs(60))
+    {
+        return Ok(token.value.clone());
+    }
+    let response = generation
+        .http
         .post(format!(
             "{base_url}/open-apis/auth/v3/tenant_access_token/internal"
         ))
@@ -1349,11 +1384,22 @@ async fn tenant_access_token(
     if value.get("code").and_then(Value::as_i64).unwrap_or(0) != 0 {
         return Err(format!("tenant access token api error: {body}"));
     }
-    value
+    let token = value
         .get("tenant_access_token")
         .and_then(Value::as_str)
         .map(ToString::to_string)
-        .ok_or_else(|| "tenant access token response missing token".to_string())
+        .ok_or_else(|| "tenant access token response missing token".to_string())?;
+    let expires_in = value
+        .get("expire")
+        .or_else(|| value.get("expire_in"))
+        .and_then(Value::as_u64)
+        .unwrap_or(7200)
+        .max(120);
+    *cached = Some(CachedBitableToken {
+        value: token.clone(),
+        expires_at: Instant::now() + Duration::from_secs(expires_in),
+    });
+    Ok(token)
 }
 
 fn resolve_bitable_target(plan: &SourceReadPlan) -> Result<(String, String), String> {
@@ -1489,6 +1535,7 @@ pub(crate) fn checksum_rows(rows: &[Value]) -> String {
 mod tests {
     use super::*;
     use edge_contract::{EdgeBootstrapRequest, EDGE_PROTOCOL_V2};
+    use futures::StreamExt;
 
     #[tokio::test]
     async fn feishu_and_lark_profiles_share_artifact_without_state_or_domain_cross_talk() {
@@ -1586,10 +1633,11 @@ mod tests {
                 ]
             }
         });
+        let generation = SourceBackendGeneration::new(Value::Null).unwrap();
         let schema = discover_bitable_schema(
             payload,
             "feishu_bitable",
-            Value::Null,
+            &generation,
             "https://open.feishu.cn",
         )
         .await
@@ -1649,17 +1697,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn source_incremental_run_fixture_updates_watermark_without_committing() {
-        let state = Arc::new(Mutex::new(SourceSidecarState {
-            configured: true,
-            ..SourceSidecarState::default()
-        }));
+    async fn source_incremental_run_fixture_returns_candidate_without_edge_commit() {
+        let runtime = Arc::new(SourceConnectorRuntime::new());
+        *runtime.generation.write().await = Some(Arc::new(
+            SourceBackendGeneration::new(serde_json::json!({})).unwrap(),
+        ));
+        runtime.configured.store(true, Ordering::Release);
         let payload = serde_json::json!({
             "request": {
                 "adapter_id": "feishu_bitable",
                 "resource_ref": "bitable://app/orders",
                 "table": "orders",
                 "limit": 10,
+                "watermark": {
+                    "adapter_id": "feishu_bitable",
+                    "resource_ref": "bitable://app/orders",
+                    "table": "orders",
+                    "strategy": "updated_at_field",
+                    "high_watermark": "2026-07-08T00:00:00Z",
+                    "revision": 7,
+                    "updated_at_ms": 1
+                },
                 "metadata": {
                     "rows": [
                         {"order_id": "O-1", "updated_at": "2026-07-08T01:00:00Z"},
@@ -1669,14 +1727,10 @@ mod tests {
                 }
             }
         });
-        let result = run_incremental_source(
-            payload,
-            "feishu_bitable",
-            "https://open.feishu.cn",
-            state.clone(),
-        )
-        .await
-        .unwrap();
+        let result =
+            run_incremental_source(payload, "feishu_bitable", "https://open.feishu.cn", runtime)
+                .await
+                .unwrap();
 
         assert_eq!(result["status"], "ok");
         assert_eq!(result["batch"]["rows"].as_array().unwrap().len(), 2);
@@ -1684,20 +1738,70 @@ mod tests {
             result["watermark_after"]["high_watermark"],
             "2026-07-08T02:00:00Z"
         );
-        assert!(state.lock().await.watermarks.is_empty());
-        commit_watermark(
-            serde_json::json!({"watermark": result["watermark_after"].clone()}),
-            "feishu_bitable",
-            state.clone(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(state.lock().await.watermarks.len(), 1);
+        assert_eq!(result["watermark_after"]["revision"], 7);
+    }
+
+    #[tokio::test]
+    async fn incremental_runs_are_serial_per_resource_and_parallel_across_resources() {
+        let runtime = configured_runtime(serde_json::json!({})).await;
+        let payload = |resource: &str| {
+            serde_json::json!({
+                "request": {
+                    "adapter_id": "feishu_bitable",
+                    "resource_ref": resource,
+                    "table": "orders",
+                    "metadata": {
+                        "rows": [{"order_id": "O-1"}],
+                        "fixture_delay_ms": 30
+                    }
+                }
+            })
+        };
+
+        let same_started = Instant::now();
+        let _ = tokio::join!(
+            run_incremental_source(
+                payload("bitable://app/orders"),
+                "feishu_bitable",
+                "https://open.feishu.cn",
+                runtime.clone(),
+            ),
+            run_incremental_source(
+                payload("bitable://app/orders"),
+                "feishu_bitable",
+                "https://open.feishu.cn",
+                runtime.clone(),
+            )
+        );
+        let same_elapsed = same_started.elapsed();
+
+        let cross_started = Instant::now();
+        let _ = tokio::join!(
+            run_incremental_source(
+                payload("bitable://app/orders-a"),
+                "feishu_bitable",
+                "https://open.feishu.cn",
+                runtime.clone(),
+            ),
+            run_incremental_source(
+                payload("bitable://app/orders-b"),
+                "feishu_bitable",
+                "https://open.feishu.cn",
+                runtime,
+            )
+        );
+        let cross_elapsed = cross_started.elapsed();
+        assert!(cross_elapsed < same_elapsed);
+        eprintln!(
+            "source_fixture same_resource_ms={} cross_resource_ms={}",
+            same_elapsed.as_millis(),
+            cross_elapsed.as_millis()
+        );
     }
 
     #[tokio::test]
     async fn source_event_poll_fixture_returns_event_batch() {
-        let state = Arc::new(Mutex::new(SourceSidecarState::default()));
+        let runtime = configured_runtime(serde_json::json!({})).await;
         let payload = poll_source_events(
             serde_json::json!({
                 "events": [{
@@ -1709,7 +1813,7 @@ mod tests {
                 }]
             }),
             "feishu_bitable",
-            state,
+            runtime,
         )
         .await
         .unwrap();
@@ -1721,13 +1825,75 @@ mod tests {
 
     #[tokio::test]
     async fn source_event_poll_without_event_source_returns_degraded() {
-        let state = Arc::new(Mutex::new(SourceSidecarState::default()));
-        let payload = poll_source_events(Value::Null, "feishu_bitable", state)
+        let runtime = configured_runtime(serde_json::json!({})).await;
+        let payload = poll_source_events(Value::Null, "feishu_bitable", runtime)
             .await
             .unwrap();
 
         assert_eq!(payload["status"], "degraded");
         assert_eq!(payload["degraded_reason"], "requires_external_event_source");
+    }
+
+    #[tokio::test]
+    async fn incremental_response_is_bounded_and_only_final_chunk_carries_watermark() {
+        let rows = (0..300)
+            .map(|index| serde_json::json!({"index": index, "value": "fixture"}))
+            .collect::<Vec<_>>();
+        let batch = SourceRecordBatch {
+            adapter_id: "postgres".to_string(),
+            resource_ref: "postgres://fixture/orders".to_string(),
+            table: Some("orders".to_string()),
+            schema: infer_schema("orders", &rows),
+            checksum: checksum_rows(&rows),
+            row_count: rows.len(),
+            rows,
+            cursor: SourceBatchCursor {
+                offset: 0,
+                limit: 300,
+                next_offset: Some(300),
+            },
+            truncated: false,
+        };
+        let response = SurfaceFrame::Ok {
+            id: "stream-test".to_string(),
+            payload: serde_json::json!({
+                "status": "ok",
+                "batch": batch,
+                "watermark_before": null,
+                "watermark_after": {"revision": 0, "cursor": "300"}
+            }),
+        };
+        let mut stream = source_incremental_frame_stream(response).unwrap();
+        let mut chunks = Vec::new();
+        while let Some(frame) = stream.next().await {
+            let SurfaceFrame::Ok { payload, .. } = frame.unwrap() else {
+                panic!("expected source stream chunk");
+            };
+            chunks.push(payload);
+        }
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0]["chunk_index"], 0);
+        assert_eq!(chunks[0]["final_chunk"], false);
+        assert!(chunks[0]["watermark_after"].is_null());
+        assert_eq!(chunks[2]["final_chunk"], true);
+        assert_eq!(chunks[2]["watermark_after"]["cursor"], "300");
+        assert_eq!(
+            chunks
+                .iter()
+                .map(|chunk| chunk["batch"]["rows"].as_array().unwrap().len())
+                .sum::<usize>(),
+            300
+        );
+    }
+
+    async fn configured_runtime(config: Value) -> Arc<SourceConnectorRuntime> {
+        let runtime = Arc::new(SourceConnectorRuntime::new());
+        *runtime.generation.write().await = Some(Arc::new(
+            SourceBackendGeneration::new(config).expect("generation"),
+        ));
+        runtime.configured.store(true, Ordering::Release);
+        runtime
     }
 }
 
