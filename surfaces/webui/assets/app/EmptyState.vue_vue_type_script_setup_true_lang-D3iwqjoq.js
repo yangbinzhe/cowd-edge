@@ -1,0 +1,1 @@
+import{b as o,e as t,q as n,t as a,m as c,o as s}from"./vendor-vue-xT2AloMM.js";const i={class:"empty-state"},l={key:0},p=o({__name:"EmptyState",props:{title:{},detail:{}},setup(e){return(r,m)=>(s(),t("div",i,[n("strong",null,a(e.title),1),e.detail?(s(),t("p",l,a(e.detail),1)):c("",!0)]))}});export{p as _};

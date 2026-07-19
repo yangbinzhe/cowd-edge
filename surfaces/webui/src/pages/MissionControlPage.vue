@@ -490,13 +490,13 @@ onUnmounted(() => projections.release('mission'));
         <div class="mission-preview-grid">
           <MissionActionPreview
             :title="t('page.mission.control.page.title.96c5455ed4')"
-            action="Replay and recover runtime gaps only after recovery report is visible."
+            :action="t('mission.recovery.action')"
             :target="activeSession || 'runtime'"
             :affected="recoveryPreview.affected"
             :expected="recoveryPreview.expected"
             :risk="recoveryPreview.risk"
             :approval="recoveryPreview.approval"
-            :source="recoveryReport ? 'runtime recovery report' : 'report required'"
+            :source="recoveryReport ? t('mission.recovery.reportVisible') : t('mission.recovery.reportRequired')"
           />
         </div>
         <DataTable

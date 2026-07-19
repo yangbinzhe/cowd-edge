@@ -26,7 +26,6 @@ const selectedDetail = ref<Record<string, unknown> | null>(null);
 const lastSavedSection = ref('');
 const lastRestoredSection = ref('');
 const theme = ref(document.documentElement.dataset.theme || localStorage.getItem('cowd-theme') || 'dark');
-const draftLocale = ref<Locale>(locale.value);
 const approvalDraft = ref('');
 const origin = computed(() => location.origin);
 const accessModeLabels = {
@@ -76,6 +75,14 @@ const activeSettingsSection = computed({
   },
 });
 const currentSettingsSection = computed(() => settingsSections.value.find((section) => section.id === activeSettingsSection.value) || settingsSections.value[0]);
+const currentSettingsSaveLabel = computed(() => {
+  if (activeSettingsSection.value === 'gateway') return t('settings.action.verifyGateway');
+  if (activeSettingsSection.value === 'profile' && !profileName.value.trim()) return t('settings.action.refreshProfiles');
+  return t('settings.action.saveCurrent');
+});
+const currentSettingsRestoreLabel = computed(() => activeSettingsSection.value === 'gateway'
+  ? t('settings.action.clearVerification')
+  : t('settings.action.restoreCurrent'));
 const modelConfigContract = computed(() => ({
   id: 'settings.runtime.model',
   domain: 'settings',
@@ -121,9 +128,9 @@ const approvalPolicyContract = computed(() => ({
 }));
 
 const uiLocale = computed({
-  get: () => draftLocale.value,
+  get: () => locale.value,
   set: (value: Locale) => {
-    draftLocale.value = value;
+    setLocale(value);
   },
 });
 
@@ -145,7 +152,7 @@ const approvalDraftParsed = computed(() => {
 });
 const settingsSectionDirty = computed(() => {
   const section = activeSettingsSection.value;
-  if (section === 'ui') return theme.value !== (document.documentElement.dataset.theme || 'dark') || draftLocale.value !== locale.value;
+  if (section === 'ui') return theme.value !== (document.documentElement.dataset.theme || 'dark');
   if (section === 'providers') return !!defaultModel.value && defaultModel.value !== configuredModel.value;
   if (section === 'profile') return !!profileName.value.trim();
   if (section === 'policy') return approvalDraft.value.trim() !== savedApprovalJson.value.trim();
@@ -207,12 +214,6 @@ watch(
   },
   { deep: true, immediate: true },
 );
-
-watch(locale, (value) => {
-  if (activeSettingsSection.value !== 'ui' || !settingsSectionDirty.value) {
-    draftLocale.value = value;
-  }
-});
 
 watch(activeSettingsSection, (section) => {
   if (section === 'gateway' && !authResult.value) void verifyAuth();
@@ -354,7 +355,7 @@ async function saveCurrentSettingsSection() {
   if (section === 'ui') {
     document.documentElement.dataset.theme = theme.value;
     localStorage.setItem('cowd-theme', theme.value);
-    setLocale(draftLocale.value);
+    setLocale(uiLocale.value);
     settingsReceipt.value = {
       ok: true,
       endpoint: 'localStorage:webui.ui',
@@ -406,7 +407,6 @@ async function restoreCurrentSettingsSection() {
   const section = activeSettingsSection.value;
   if (section === 'ui') {
     theme.value = document.documentElement.dataset.theme || localStorage.getItem('cowd-theme') || 'dark';
-    draftLocale.value = locale.value;
     markSettingsRestored(section);
     return;
   }
@@ -454,6 +454,14 @@ function selectSettingsSection(id: string) {
     <p v-if="settingsError" class="settings-alert">{{ settingsError }}</p>
 
     <div class="settings-workbench">
+      <label class="settings-mobile-nav">
+        <span>{{ t('settings.nav.aria') }}</span>
+        <select v-model="activeSettingsSection">
+          <option v-for="section in settingsSections" :key="section.id" :value="section.id">
+            {{ section.label }} · {{ section.status }}
+          </option>
+        </select>
+      </label>
       <aside class="settings-nav" :aria-label="t('settings.nav.aria')">
         <button
           v-for="section in settingsSections"
@@ -464,7 +472,7 @@ function selectSettingsSection(id: string) {
         >
           <strong>{{ section.label }}</strong>
           <span>{{ section.description }}</span>
-          <small>{{ displayStatus(section.status) }}</small>
+          <small>{{ section.status }}</small>
         </button>
       </aside>
 
@@ -474,15 +482,15 @@ function selectSettingsSection(id: string) {
             <h2>{{ currentSettingsSection.label }}</h2>
             <p>{{ currentSettingsSection.description }}</p>
           </div>
-          <span class="status-badge">{{ displayStatus(currentSettingsSection.status) }}</span>
+          <span class="status-badge">{{ currentSettingsSection.status }}</span>
         </header>
-        <div class="settings-action-rail" :data-dirty="settingsSectionDirty">
+        <div v-if="activeSettingsSection !== 'receipts'" class="settings-action-rail" :data-dirty="settingsSectionDirty">
           <span class="settings-dirty-state">{{ settingsSectionState }}</span>
           <button class="primary-action" type="button" :disabled="!!busyAction" @click="saveCurrentSettingsSection">
-            {{ t('settings.action.saveCurrent') }}
+            {{ currentSettingsSaveLabel }}
           </button>
           <button class="ghost-action" type="button" :disabled="!!busyAction" @click="restoreCurrentSettingsSection">
-            {{ t('settings.action.restoreCurrent') }}
+            {{ currentSettingsRestoreLabel }}
           </button>
         </div>
 
@@ -620,6 +628,7 @@ function selectSettingsSection(id: string) {
 
       <section v-else class="settings-section" data-section="receipts">
         <h2>{{ t('page.settings.page.text.13785bef59') }}</h2>
+        <button v-if="settingsReceipt" class="ghost-action" type="button" @click="settingsReceipt = null">{{ t('settings.action.clearReceipt') }}</button>
         <RequestReceipt v-if="settingsReceipt" :receipt="settingsReceipt" :title="t('page.settings.page.title.39519790d9')" />
         <section v-else class="request-receipt">
           <header>

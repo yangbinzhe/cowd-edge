@@ -44,7 +44,7 @@ const growthEvents = ref<any>({});
 const actionResult = ref<any>(null);
 const leaseOwner = ref('webui');
 const leaseMode = ref('shared');
-const turnPrompt = ref('Summarize current runtime state and blockers');
+const turnPrompt = ref(t('runtime.defaultPrompt'));
 const selectedTurnId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const sessionId = computed(() => store.activeSessionId || 'api-context');
@@ -314,8 +314,8 @@ onUnmounted(() => projections.release('runtime-page'));
       </article>
       <article class="metric-card" :data-tone="store.configReloadInvalid ? 'danger' : (store.configReloadNeedsRestart ? 'warn' : 'success')">
         <span>{{ t('config.reload.label') }}</span>
-        <strong>{{ configReloadStatusLabel }}</strong>
-        <small>{{ store.configReloadNeedsRestart ? configReloadRestartFields : (configReloadStatus.trigger || 'auto') }}</small>
+        <strong>{{ displayStatus(configReloadStatusLabel) }}</strong>
+        <small>{{ store.configReloadNeedsRestart ? configReloadRestartFields : displayStatus(configReloadStatus.trigger || 'auto') }}</small>
       </article>
     </section>
 

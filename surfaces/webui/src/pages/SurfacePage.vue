@@ -499,7 +499,7 @@ onMounted(refresh);
       <article class="metric-card" data-tone="success">
         <span>{{ t('page.surface.page.text.89e795a427') }}</span>
         <strong>{{ surfaces.length }}</strong>
-        <small>{{ externalSurfaces }} external</small>
+        <small>{{ t('page.surface.summary.external', { count: externalSurfaces }) }}</small>
       </article>
       <article class="metric-card">
         <span>{{ t('page.surface.page.text.713ff0b8f0') }}</span>
@@ -509,12 +509,12 @@ onMounted(refresh);
       <article class="metric-card" :data-tone="deadLetterItems.length ? 'warn' : 'success'">
         <span>{{ t('page.surface.page.text.c215d81d09') }}</span>
         <strong>{{ activeInboxItems.length + activeOutboxItems.length }}</strong>
-        <small>{{ t('page.surface.summary.deliveryQueue', { total: outboxRows.length, dlq: deadLetterItems.length }) }} · archived {{ archivedOutboxItems.length }}</small>
+        <small>{{ t('page.surface.summary.deliveryQueue', { total: outboxRows.length, dlq: deadLetterItems.length }) }} · {{ t('page.surface.summary.archived', { count: archivedOutboxItems.length }) }}</small>
       </article>
       <article class="metric-card" :data-tone="configReloadStatus.restart_required?.required ? 'warn' : (configReloadStatus.status === 'invalid' ? 'danger' : 'success')">
         <span>{{ t('config.reload.label') }}</span>
-        <strong>{{ configReloadStatus.status || 'unknown' }}</strong>
-        <small>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : (configReloadStatus.trigger || 'auto') }}</small>
+        <strong>{{ displayStatus(configReloadStatus.status || 'unknown') }}</strong>
+        <small>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : displayStatus(configReloadStatus.trigger || 'auto') }}</small>
       </article>
     </section>
 

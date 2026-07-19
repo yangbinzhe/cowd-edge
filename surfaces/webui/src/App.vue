@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { t } from './i18n';
+import { t, useI18n } from './i18n';
 import { computed, onBeforeUnmount, onMounted, provide, readonly, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Activity, Brain, Boxes, CircleDot, ClipboardCheck, Crosshair, Layers, MessageSquare,
-  Network, PanelsTopLeft, RadioTower, Settings, Wrench,
+  Menu, Network, PanelsTopLeft, RadioTower, Settings, Wrench, X,
 } from 'lucide-vue-next';
 import { useAppStore } from './stores/app';
 import type { NavId, NavItem } from './types';
@@ -17,6 +17,7 @@ import CapabilitySectionNav from './components/layout/CapabilitySectionNav.vue';
 import { activeCapabilitySectionKey } from './composables/useCapabilitySection';
 
 const store = useAppStore();
+const { locale, setLocale } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const capabilitySpecs = buildCapabilitySpecs();
@@ -37,8 +38,39 @@ const nav: NavItem[] = [
   { id: 'audit', label: 'Audit', route: '/audit', icon: ClipboardCheck, group: 'System' },
   { id: 'settings', label: 'Settings', route: '/settings', icon: Settings, group: 'System' },
 ];
+const mobilePrimaryIds = new Set<NavId>(['chat', 'mission', 'runtime', 'reality']);
+const mobileNavOpen = ref(false);
+const nextLocale = computed(() => locale.value === 'zh-CN' ? 'en-US' : 'zh-CN');
+const localeSwitchLabel = computed(() => locale.value === 'zh-CN' ? t('locale.switchToEnglish') : t('locale.switchToChinese'));
+
+function toggleLocale() {
+  setLocale(nextLocale.value);
+}
+
+const navLabelKeys: Partial<Record<NavId, string>> = {
+  chat: 'nav.chat',
+  mission: 'nav.mission',
+  runtime: 'nav.runtime',
+  context: 'nav.context',
+  reality: 'nav.reality',
+  memory: 'nav.memory',
+  skills: 'nav.skills',
+  agents: 'nav.agents',
+  tools: 'nav.tools',
+  surfaces: 'nav.surfaces',
+  gateway: 'nav.gateway',
+  mfg: 'nav.mfg',
+  audit: 'nav.audit',
+  settings: 'nav.settings',
+};
+
+function navLabel(item: NavItem) {
+  const key = navLabelKeys[item.id];
+  return key ? t(key) : item.label;
+}
 
 function go(item: NavItem) {
+  mobileNavOpen.value = false;
   router.push(item.route);
 }
 
@@ -56,6 +88,10 @@ function defaultSectionFor(page: NavId) {
 }
 
 const currentPage = computed<NavId>(() => pageFromRoute(route.path));
+function isMobilePrimary(item: NavItem) {
+  return mobilePrimaryIds.has(item.id);
+}
+const isSecondaryMobileRoute = computed(() => !mobilePrimaryIds.has(currentPage.value));
 const isChatRoute = computed(() => currentPage.value === 'chat');
 const isSettingsRoute = computed(() => currentPage.value === 'settings');
 const currentCapabilitySpec = computed(() => {
@@ -145,15 +181,51 @@ onBeforeUnmount(() => {
         v-for="item in nav"
         :key="item.id"
         class="rail-button"
-        :class="{ active: route.path === item.route || (item.id === 'chat' && route.path === '/') }"
-        :title="item.label"
-        :aria-label="item.label"
+        :class="{
+          active: route.path === item.route || (item.id === 'chat' && route.path === '/'),
+          'mobile-primary': isMobilePrimary(item),
+        }"
+        :title="navLabel(item)"
+        :aria-label="navLabel(item)"
         type="button"
         @click="go(item)"
       >
         <component :is="item.icon" :size="19" stroke-width="1.8" />
       </button>
+      <button
+        class="rail-button mobile-more"
+        :class="{ active: mobileNavOpen || isSecondaryMobileRoute }"
+        type="button"
+        :aria-label="t('nav.more')"
+        :aria-expanded="mobileNavOpen"
+        @click="mobileNavOpen = !mobileNavOpen"
+      >
+        <X v-if="mobileNavOpen" :size="19" />
+        <Menu v-else :size="19" />
+      </button>
+      <section v-if="mobileNavOpen" class="mobile-nav-menu" :aria-label="t('nav.all')">
+        <button
+          v-for="item in nav"
+          :key="`mobile-${item.id}`"
+          type="button"
+          :class="{ active: item.id === currentPage }"
+          @click="go(item)"
+        >
+          <component :is="item.icon" :size="18" stroke-width="1.8" />
+          <span>{{ navLabel(item) }}</span>
+        </button>
+      </section>
     </nav>
+
+    <button
+      class="global-locale-switch"
+      type="button"
+      :title="localeSwitchLabel"
+      :aria-label="localeSwitchLabel"
+      @click="toggleLocale"
+    >
+      {{ locale === 'zh-CN' ? 'EN' : '中' }}
+    </button>
 
     <SessionSidebar v-if="isChatRoute" />
     <CapabilitySidebar v-else-if="!isSettingsRoute" />

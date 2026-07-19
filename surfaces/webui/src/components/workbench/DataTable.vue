@@ -163,7 +163,11 @@ function fullCell(value: unknown) {
 </script>
 
 <template>
-  <div class="data-table-shell" :data-compact="compact">
+  <div
+    class="data-table-shell"
+    :data-compact="compact"
+    :style="{ '--data-column-count': visibleColumns.length + (selectable ? 1 : 0) + (hasActions ? 1 : 0) }"
+  >
     <div v-if="searchable" class="data-table-toolbar">
       <label class="search-field">
         <span>{{ t('component.workbench.data.table.text.d79b22c9c0') }}</span>
@@ -216,7 +220,7 @@ function fullCell(value: unknown) {
           @click="emit('rowClick', row)"
           @keydown="handleRowKeydown($event, row, pageOffset + index)"
         >
-          <td v-if="selectable" class="data-table-select" @click.stop>
+          <td v-if="selectable" class="data-table-select" :data-label="t('component.workbench.data.table.selectRow')" @click.stop>
             <label class="data-table-checkbox">
               <input
                 type="checkbox"
@@ -226,12 +230,18 @@ function fullCell(value: unknown) {
               />
             </label>
           </td>
-          <td v-for="column in visibleColumns" :key="column" :data-kind="cellKind(column, row[column])" :title="fullCell(row[column])">
+          <td
+            v-for="column in visibleColumns"
+            :key="column"
+            :data-kind="cellKind(column, row[column])"
+            :data-label="columnLabel(column)"
+            :title="fullCell(row[column])"
+          >
             <StatusPill v-if="cellKind(column, row[column]) === 'status'" :status="String(row[column] || 'empty')" />
             <code v-else-if="cellKind(column, row[column]) === 'code'">{{ formatCell(column, row[column]) }}</code>
             <span v-else>{{ formatCell(column, row[column]) }}</span>
           </td>
-          <td v-if="hasActions" class="data-table-actions">
+          <td v-if="hasActions" class="data-table-actions" :data-label="t('component.workbench.data.table.actions')">
             <div class="data-table-actions-cell">
               <button v-if="copyable" class="icon-action" type="button" :aria-label="t('component.workbench.data.table.copyRow')" @click.stop="copyRow(row)">
                 <Copy :size="14" />

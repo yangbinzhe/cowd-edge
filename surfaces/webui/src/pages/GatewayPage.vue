@@ -285,36 +285,36 @@ const grantRows = computed(() => grants.value.slice(0, 12).map((item: any) => ({
 })));
 const gatewayAlignmentRows = computed(() => [
   {
-    lane: 'EdgeHost',
-    owner: 'Gateway',
-    backend: edgeHealth.value.status || 'unknown',
-    webui: `${edgeRows.value.length} edges`,
-    tui: 'surface unchanged',
-    action: edgeRows.value.length ? 'monitor edge domains' : 'refresh /api/edges projection',
+    lane: t('gateway.alignment.edgeHost'),
+    owner: t('gateway.alignment.gatewayOwner'),
+    backend: displayStatus(edgeHealth.value.status || 'unknown'),
+    webui: t('gateway.alignment.edgeCount', { count: edgeRows.value.length }),
+    tui: t('gateway.alignment.surfaceUnchanged'),
+    action: edgeRows.value.length ? t('gateway.alignment.monitorEdges') : t('gateway.alignment.refreshEdges'),
   },
   {
-    lane: 'Connectors',
-    owner: 'Gateway',
-    backend: state.value.summary?.status || 'registry',
-    webui: `${accounts.value.length} accounts / ${capabilities.value.length} capabilities`,
-    tui: 'status and receipts',
-    action: accounts.value.length ? 'manage grants' : 'configure connector accounts',
+    lane: t('gateway.alignment.connectors'),
+    owner: t('gateway.alignment.gatewayOwner'),
+    backend: displayStatus(state.value.summary?.status || 'registry'),
+    webui: t('gateway.alignment.accountCapabilityCount', { accounts: accounts.value.length, capabilities: capabilities.value.length }),
+    tui: t('gateway.alignment.statusReceipts'),
+    action: accounts.value.length ? t('gateway.alignment.manageGrants') : t('gateway.alignment.configureAccounts'),
   },
   {
-    lane: 'Resources',
-    owner: 'Gateway -> Reality Core',
-    backend: resources.value.length ? 'indexed' : 'empty',
-    webui: `${resources.value.length} resources`,
-    tui: 'evidence projection',
-    action: resources.value.length ? 'revalidate or promote memory' : 'ingest connector resources',
+    lane: t('gateway.alignment.resources'),
+    owner: t('gateway.alignment.realityOwner'),
+    backend: displayStatus(resources.value.length ? 'indexed' : 'empty'),
+    webui: t('gateway.alignment.resourceCount', { count: resources.value.length }),
+    tui: t('gateway.alignment.evidenceProjection'),
+    action: resources.value.length ? t('gateway.alignment.revalidateResources') : t('gateway.alignment.ingestResources'),
   },
   {
-    lane: 'Cross-plane',
-    owner: 'Gateway policy gate',
-    backend: state.value.crossPlane?.status || 'preflight',
-    webui: `${identities.value.length} identities / ${grants.value.length} grants`,
-    tui: 'approval cockpit',
-    action: executions.value.length ? 'review execution evidence' : 'simulate policy before commit',
+    lane: t('gateway.alignment.crossPlane'),
+    owner: t('gateway.alignment.policyOwner'),
+    backend: displayStatus(state.value.crossPlane?.status || 'preflight'),
+    webui: t('gateway.alignment.identityGrantCount', { identities: identities.value.length, grants: grants.value.length }),
+    tui: t('gateway.alignment.approvalCockpit'),
+    action: executions.value.length ? t('gateway.alignment.reviewEvidence') : t('gateway.alignment.simulatePolicy'),
   },
 ]);
 const gatewayAlignmentStatus = computed(() => {
@@ -869,8 +869,8 @@ onMounted(refresh);
       </article>
       <article class="metric-card" :data-tone="configReloadStatus.restart_required?.required ? 'warn' : (configReloadStatus.status === 'invalid' ? 'danger' : 'success')">
         <span>{{ t('config.reload.label') }}</span>
-        <strong>{{ configReloadStatus.status || 'unknown' }}</strong>
-        <small>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : (configReloadStatus.trigger || 'auto') }}</small>
+        <strong>{{ displayStatus(configReloadStatus.status || 'unknown') }}</strong>
+        <small>{{ configReloadStatus.restart_required?.required ? configReloadRestartFields : displayStatus(configReloadStatus.trigger || 'auto') }}</small>
       </article>
     </section>
 

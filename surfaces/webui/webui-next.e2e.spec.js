@@ -26,7 +26,7 @@ test.beforeEach(async ({ page }) => {
 
 test('new shell uses icon rail and right Activity/Workspace companion tabs', async ({ page }) => {
   await page.goto('/index.html#/chat');
-  await expect(page.locator('.rail-button')).toHaveCount(14);
+  await expect(page.locator('.rail-button:not(.mobile-more)')).toHaveCount(14);
   await expect(page.locator('.session-sidebar')).toBeVisible();
   await expect(page.locator('.companion-tabs')).toContainText('Activity');
   await expect(page.locator('.companion-tabs')).toContainText('Workspace');
@@ -604,6 +604,34 @@ test('settings page is reachable and theme control is usable', async ({ page }) 
   await expect(page.locator('.settings-action-rail')).toContainText('pending changes');
   await page.getByRole('button', { name: 'Save current section' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+});
+
+test('global locale switch and settings locale stay synchronized and persistent', async ({ page }) => {
+  await page.goto('/index.html#/chat');
+  await page.getByRole('button', { name: 'Switch to Chinese' }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+  await expect(page.getByRole('heading', { name: 'Cowd 对话' })).toBeVisible();
+
+  await page.goto('/index.html#/settings?section=ui');
+  const localeSelect = page.locator('[data-section="ui"] select');
+  await expect(localeSelect).toHaveValue('zh-CN');
+  await localeSelect.selectOption('en-US');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(localeSelect).toHaveValue('en-US');
+});
+
+test('mobile shell exposes all routes through a stable more menu', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/index.html#/chat');
+  await expect(page.getByRole('button', { name: 'More features' })).toBeVisible();
+  await page.getByRole('button', { name: 'More features' }).click();
+  await expect(page.locator('.mobile-nav-menu')).toBeVisible();
+  await expect(page.locator('.mobile-nav-menu button')).toHaveCount(14);
+  await page.locator('.mobile-nav-menu button').filter({ hasText: 'Settings' }).click();
+  await expect(page).toHaveURL(/#\/settings/);
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
 });
 
 test('composer model workspace and command controls are clickable', async ({ page }) => {

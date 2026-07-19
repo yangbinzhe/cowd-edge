@@ -91,9 +91,14 @@ function evaluateLayout(metrics, route, viewport) {
   if (!metrics.expectedSectionVisible) addFinding(findings, 'fail', 'deep-linked section is not visible');
   if (metrics.visibleSectionCount > 1) addFinding(findings, 'fail', `${metrics.visibleSectionCount} page sections are simultaneously visible`);
   if (metrics.horizontalOverflow > 2) addFinding(findings, 'fail', `page has ${metrics.horizontalOverflow}px horizontal overflow`);
+  if (metrics.wrappedDataHeaderCount > 0) addFinding(findings, 'fail', `${metrics.wrappedDataHeaderCount} data table headers wrap across lines`);
   if (metrics.croppedCriticalControls > 0) {
     const details = (metrics.croppedCriticalControlDetails || []).slice(0, 3).map((item) => item.label).join(', ');
     addFinding(findings, 'fail', `${metrics.croppedCriticalControls} critical controls are clipped outside the viewport${details ? `: ${details}` : ''}`);
+  }
+  if (metrics.fixedControlOverlapCount > 0) {
+    const details = (metrics.fixedControlOverlapDetails || []).slice(0, 3).join(', ');
+    addFinding(findings, 'fail', `${metrics.fixedControlOverlapCount} controls overlap the global page controls${details ? `: ${details}` : ''}`);
   }
   if (metrics.bodyTextLength < 80) addFinding(findings, 'review', 'rendered text density is low');
 
@@ -140,6 +145,9 @@ function evaluateLayout(metrics, route, viewport) {
 
   if (viewport.width < 820 && metrics.smallTouchTargetCount > 0) {
     addFinding(findings, 'review', `${metrics.smallTouchTargetCount} visible controls are below 44px touch target`);
+  }
+  if (viewport.width < 820 && !metrics.mobileMoreNavigationVisible) {
+    addFinding(findings, 'fail', 'mobile navigation has no visible all-features entry');
   }
 
   if (viewport.width < 820 && metrics.bodyScrollRatio > 10) {
@@ -240,7 +248,8 @@ try {
             return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
           });
         }, { pageId: route.pageId || route.id, section: route.section || '' });
-        await page.waitForTimeout(75);
+        await page.waitForFunction(() => !document.querySelector('.page-header .primary-action:disabled, [data-mfg-workspace-refresh]:disabled'), undefined, { timeout: 3_000 }).catch(() => {});
+        await page.waitForTimeout(120);
         await page.evaluate(() => {
           window.scrollTo(0, 0);
           for (const element of document.querySelectorAll('*')) {
@@ -368,12 +377,36 @@ try {
             };
           });
           const croppedCriticalControls = croppedCriticalControlElements.length;
+          const fixedControls = Array.from(document.querySelectorAll('.global-locale-switch, .companion-toggle')).filter(visible);
+          const fixedControlOverlapDetails = [];
+          const overlaps = (left, right) => {
+            const a = left.getBoundingClientRect();
+            const b = right.getBoundingClientRect();
+            return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 2
+              && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 2;
+          };
+          for (const fixed of fixedControls) {
+            for (const control of visibleControls) {
+              if (control === fixed || fixedControls.includes(control) || fixed.contains(control) || control.contains(fixed)) continue;
+              if (!overlaps(fixed, control)) continue;
+              const fixedLabel = fixed.getAttribute('aria-label') || fixed.className;
+              const controlLabel = control.getAttribute('aria-label') || control.getAttribute('title') || control.textContent?.trim().replace(/\s+/g, ' ').slice(0, 48) || control.tagName.toLowerCase();
+              fixedControlOverlapDetails.push(`${fixedLabel} ↔ ${controlLabel}`);
+            }
+          }
+          const fixedControlOverlapCount = fixedControlOverlapDetails.length;
           const unlabeledIconButtons = Array.from(document.querySelectorAll('button.icon-action'))
             .filter((element) => visible(element))
             .filter((element) => !element.getAttribute('aria-label') && !element.getAttribute('title') && !element.textContent?.trim()).length;
           const workflowHeights = Array.from(document.querySelectorAll('.workflow-strip'))
             .filter((element) => visible(element))
             .map((element) => Math.round(element.getBoundingClientRect().height));
+          const wrappedDataHeaderCount = Array.from(document.querySelectorAll('.data-table th button'))
+            .filter((element) => visible(element))
+            .filter((element) => {
+              const lineHeight = Number.parseFloat(getComputedStyle(element).lineHeight) || 16;
+              return element.getBoundingClientRect().height > lineHeight * 1.55;
+            }).length;
           const mainDataVisible = [
             '.data-table',
             'table',
@@ -418,6 +451,8 @@ try {
             horizontalOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
             croppedCriticalControls,
             croppedCriticalControlDetails,
+            fixedControlOverlapCount,
+            fixedControlOverlapDetails,
             firstViewportChromeShare: chromeHeight / Math.max(window.innerHeight, 1),
             composer: rectOf('.composer'),
             settingsContent: rectOf('.settings-content'),
@@ -431,6 +466,8 @@ try {
             workspaceTreeVisible: visible(document.querySelector('.workspace-tree')),
             rawI18nKeyCount: (bodyText.match(/\b(?:status|unit|page|component|script|template|common)\.[a-zA-Z0-9_.-]+|\bstore\.app\.[a-zA-Z0-9_.-]+/g) || []).length,
             rawToolEvidenceCount: (bodyText.match(/Raw evidence ref:|Summary:\s*[\[{]/g) || []).length,
+            wrappedDataHeaderCount,
+            mobileMoreNavigationVisible: visible(document.querySelector('.mobile-more')),
           };
         }, route.section || null);
         const findings = evaluateLayout(metrics, { ...route, id: route.pageId || route.id }, { ...viewport, ...layoutViewport(viewport) });

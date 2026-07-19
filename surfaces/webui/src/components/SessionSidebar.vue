@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { t } from '../i18n';
 import { displayStatus } from '../i18n/domain/status';
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Plus, Radio, Search } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
+import { releaseProjection } from '../release';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
+const release = computed(() => releaseProjection(store.gatewayOpenApi));
+const releaseTitle = computed(() => t('release.versions', {
+  edge: release.value.edge,
+  gateway: release.value.gateway,
+}));
 const SIDEBAR_WIDTH_KEY = 'cowd.webui.sessionSidebarWidth';
 const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 420;
@@ -160,9 +166,10 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <footer class="sidebar-foot">
+    <footer class="sidebar-foot" :data-version-mismatch="release.mismatch" :title="releaseTitle">
       <span>{{ t('component.session.sidebar.text.85eb9812ae') }}</span>
-      <strong>{{ store.settings?.version || '0.9.212' }}</strong>
+      <strong>{{ release.label }}</strong>
+      <small v-if="release.mismatch">{{ t('release.mismatch') }}</small>
     </footer>
   </aside>
 </template>

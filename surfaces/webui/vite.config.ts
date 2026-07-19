@@ -1,10 +1,16 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { readFileSync } from 'node:fs';
 
 const gatewayProxyTarget = process.env.COWD_VITE_GATEWAY_URL || 'http://127.0.0.1:8642';
+const workspaceManifest = readFileSync(new URL('../../Cargo.toml', import.meta.url), 'utf8');
+const edgeVersion = workspaceManifest.match(/\[workspace\.package\][\s\S]*?version\s*=\s*"([^"]+)"/)?.[1] || 'unknown';
 
 export default defineConfig({
   plugins: [vue()],
+  define: {
+    __COWD_EDGE_VERSION__: JSON.stringify(edgeVersion),
+  },
   root: '.',
   base: './',
   build: {
@@ -16,6 +22,11 @@ export default defineConfig({
         entryFileNames: 'assets/app/[name]-[hash].js',
         chunkFileNames: 'assets/app/[name]-[hash].js',
         assetFileNames: 'assets/app/[name]-[hash][extname]',
+        manualChunks: {
+          'vendor-vue': ['vue', 'vue-router', 'pinia'],
+          'vendor-icons': ['lucide-vue-next'],
+          'vendor-markdown': ['markdown-it'],
+        },
       },
     },
   },

@@ -13,6 +13,7 @@ import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
+import ApiStateBanner from '../components/workbench/ApiStateBanner.vue';
 import { displayStatus } from '../i18n/domain/status';
 
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true });
@@ -205,7 +206,8 @@ onMounted(refresh);
       </button>
     </header>
 
-    <p v-if="error" class="settings-alert">{{ error }}</p>
+    <ApiStateBanner v-if="error" status="degraded" :title="t('skills.state.errorTitle')" :detail="error" endpoint="/api/skills" />
+    <ApiStateBanner v-else-if="loading && !items.length" status="loading" :title="t('skills.state.loadingTitle')" :detail="t('skills.state.loadingDetail')" />
 
     <section class="skills-console">
       <aside class="skills-catalog" v-show="isSectionActive('catalog')" data-section="catalog">

@@ -54,10 +54,10 @@ const toolOperationsGraph = computed(() => adaptToolOperationsGraph(result.value
 
 const toolRows = computed(() => tools.value.map((tool: any) => ({
   name: tool.name,
-  enabled: tool.enabled === false ? 'no' : 'yes',
+  enabled: tool.enabled !== false,
   safety: tool.safety_category || '-',
   cache: tool.cache_policy || '-',
-  readonly: tool.prepared_readonly_supported ? 'yes' : 'no',
+  readonly: Boolean(tool.prepared_readonly_supported),
   concurrency: tool.max_concurrency || '-',
   tags: Array.isArray(tool.managed_tags) ? tool.managed_tags.join(', ') : '-',
 })));
@@ -299,7 +299,7 @@ onMounted(refresh);
       <article class="metric-card" data-tone="success">
         <span>{{ t('page.tools.page.text.e8caaa5188') }}</span>
         <strong>{{ tools.length }}</strong>
-        <small>{{ toolRows.filter((row) => row.readonly === 'yes').length }} {{ t('page.tools.readonlyPrepared') }}</small>
+        <small>{{ toolRows.filter((row) => row.readonly).length }} {{ t('page.tools.readonlyPrepared') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
         <span>{{ t('page.tools.page.text.111e726ea3') }}</span>
