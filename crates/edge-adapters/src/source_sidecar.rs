@@ -640,15 +640,8 @@ async fn run_incremental_source(
         table: request.table.clone(),
         fields: Vec::new(),
         limit: request.limit,
-        offset: state_watermark
-            .as_ref()
-            .and_then(|watermark| watermark.offset),
-        cursor: state_watermark.as_ref().and_then(|watermark| {
-            watermark
-                .cursor
-                .clone()
-                .or_else(|| watermark.high_watermark.clone())
-        }),
+        offset: None,
+        cursor: None,
         metadata: request.metadata.clone(),
     };
     apply_incremental_watermark_to_plan(&mut plan, state_watermark.as_ref());
@@ -703,14 +696,24 @@ fn apply_incremental_watermark_to_plan(
     let Some(watermark) = watermark else {
         return;
     };
-    if plan.cursor.is_none() {
-        plan.cursor = watermark
-            .cursor
-            .clone()
-            .or_else(|| watermark.high_watermark.clone());
-    }
-    if plan.offset.is_none() {
-        plan.offset = watermark.offset;
+    match watermark.strategy.as_str() {
+        "updated_at_field" => {
+            plan.cursor = watermark.high_watermark.clone();
+            plan.offset = watermark.offset;
+        }
+        "cursor_field" => {
+            plan.cursor = watermark.cursor.clone();
+            plan.offset = watermark.offset;
+        }
+        "offset" => {
+            plan.cursor = None;
+            plan.offset = watermark.offset;
+        }
+        _ => {
+            // 未知策略不猜测字段语义，避免把数字 offset 注入时间/字段游标。
+            plan.cursor = None;
+            plan.offset = None;
+        }
     }
     if !plan.metadata.is_object() {
         plan.metadata = Value::Object(Default::default());
@@ -1134,7 +1137,23 @@ fn watermark_after_batch(
                 .map(|_| "cursor_field")
         })
         .unwrap_or("offset");
-    let high_watermark = match strategy {
+    let continuation_offset = batch.truncated.then(|| {
+        batch
+            .cursor
+            .next_offset
+            .unwrap_or(batch.cursor.offset.saturating_add(batch.rows.len()))
+    });
+    let previous_incremental_value = |watermark: &SourceWatermark| {
+        if strategy == "updated_at_field" {
+            watermark.high_watermark.clone()
+        } else {
+            watermark
+                .cursor
+                .clone()
+                .or_else(|| watermark.high_watermark.clone())
+        }
+    };
+    let observed_incremental_value = || match strategy {
         "updated_at_field" => metadata
             .get("updated_at_field")
             .and_then(Value::as_str)
@@ -1145,13 +1164,28 @@ fn watermark_after_batch(
             .and_then(|field| max_string_field(&batch.rows, field)),
         _ => None,
     };
-    let cursor = match strategy {
-        "cursor_field" => high_watermark.clone(),
-        _ => batch
-            .cursor
-            .next_offset
-            .map(|offset| offset.to_string())
-            .or_else(|| before.and_then(|watermark| watermark.cursor.clone())),
+    let incremental_value = if batch.truncated {
+        before.and_then(previous_incremental_value)
+    } else {
+        observed_incremental_value().or_else(|| before.and_then(previous_incremental_value))
+    };
+    let (high_watermark, cursor, offset) = match strategy {
+        "updated_at_field" => (incremental_value, None, continuation_offset),
+        "cursor_field" => (
+            incremental_value.clone(),
+            incremental_value,
+            continuation_offset,
+        ),
+        _ => (
+            None,
+            None,
+            Some(
+                batch
+                    .cursor
+                    .next_offset
+                    .unwrap_or(batch.cursor.offset.saturating_add(batch.rows.len())),
+            ),
+        ),
     };
     SourceWatermark {
         adapter_id: batch.adapter_id.clone(),
@@ -1159,12 +1193,7 @@ fn watermark_after_batch(
         table: batch.table.clone(),
         strategy: strategy.to_string(),
         cursor,
-        offset: Some(
-            batch
-                .cursor
-                .next_offset
-                .unwrap_or(batch.cursor.offset.saturating_add(batch.rows.len())),
-        ),
+        offset,
         high_watermark,
         checksum: Some(batch.checksum.clone()),
         revision: before.map_or(0, |watermark| watermark.revision),
@@ -1512,13 +1541,13 @@ fn sanitize_resource_ref(resource_ref: &str) -> String {
     let Some((scheme, tail)) = resource_ref.split_once("://") else {
         return resource_ref.to_string();
     };
-    let Some((userinfo, rest)) = tail.split_once('@') else {
+    let Some((userinfo, rest)) = tail.rsplit_once('@') else {
         return resource_ref.to_string();
     };
-    if userinfo.contains(':') {
-        format!("{scheme}://***:***@{rest}")
-    } else {
+    if userinfo.is_empty() {
         resource_ref.to_string()
+    } else {
+        format!("{scheme}://***:***@{rest}")
     }
 }
 
@@ -1739,6 +1768,224 @@ mod tests {
             "2026-07-08T02:00:00Z"
         );
         assert_eq!(result["watermark_after"]["revision"], 7);
+        assert!(result["watermark_after"]["cursor"].is_null());
+        assert!(result["watermark_after"]["offset"].is_null());
+    }
+
+    #[cfg(feature = "source-db")]
+    #[tokio::test]
+    async fn live_postgres_schema_snapshot_and_paged_incremental_are_continuous() {
+        let Some(database_url) =
+            std::env::var_os("COWD_LIVE_POSTGRES_URL").and_then(|value| value.into_string().ok())
+        else {
+            return;
+        };
+        let pool = sqlx::PgPool::connect(&database_url)
+            .await
+            .expect("connect live PostgreSQL");
+        let table = format!("cowd_v560_{}", uuid::Uuid::new_v4().simple());
+        sqlx::query(&format!(
+            "CREATE TABLE {table} (id BIGINT PRIMARY KEY, name TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL)"
+        ))
+        .execute(&pool)
+        .await
+        .expect("create live source table");
+        sqlx::query(&format!(
+            "INSERT INTO {table} (id, name, updated_at) VALUES (1, 'first', '2026-07-19T01:00:00Z'), (2, 'second', '2026-07-19T01:00:00Z'), (3, 'third', '2026-07-19T01:00:00Z')"
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed live source table");
+
+        let runtime = configured_runtime(serde_json::json!({
+            "database_url": database_url
+        }))
+        .await;
+        let schema = discover_source_schema(
+            serde_json::json!({
+                "adapter_id": "postgres",
+                "resource_ref": database_url,
+                "table": table
+            }),
+            "postgres",
+            "",
+            runtime.clone(),
+        )
+        .await
+        .expect("discover live PostgreSQL schema");
+        assert_eq!(
+            schema["source_schema"]["tables"][0]["primary_key"],
+            serde_json::json!(["id"])
+        );
+
+        let snapshot = read_source_batch(
+            serde_json::json!({
+                "read_plan": {
+                    "adapter_id": "postgres",
+                    "resource_ref": database_url,
+                    "table": table,
+                    "limit": 100,
+                    "metadata": {}
+                }
+            }),
+            "postgres",
+            "",
+            runtime.clone(),
+        )
+        .await
+        .expect("read live PostgreSQL snapshot");
+        assert_eq!(snapshot.row_count, 3);
+        assert!(!snapshot.resource_ref.contains("cowd_v560:cowd_v560"));
+
+        let request = |watermark: Option<SourceWatermark>| {
+            serde_json::json!({
+                "request": {
+                    "adapter_id": "postgres",
+                    "resource_ref": database_url,
+                    "table": table,
+                    "limit": 1,
+                    "watermark": watermark,
+                    "metadata": {"updated_at_field": "updated_at"}
+                }
+            })
+        };
+        let first = run_incremental_source(request(None), "postgres", "", runtime.clone())
+            .await
+            .expect("first live incremental run");
+        assert_eq!(first["batch"]["row_count"], 1);
+        assert!(first["batch"]["truncated"].as_bool().unwrap());
+        assert!(first["watermark_after"]["high_watermark"].is_null());
+        assert!(first["watermark_after"]["cursor"].is_null());
+        assert_eq!(first["watermark_after"]["offset"], 1);
+        let first_watermark =
+            serde_json::from_value::<SourceWatermark>(first["watermark_after"].clone())
+                .expect("decode first watermark");
+
+        let second = run_incremental_source(
+            request(Some(first_watermark)),
+            "postgres",
+            "",
+            runtime.clone(),
+        )
+        .await
+        .expect("second paged live incremental run");
+        assert_eq!(second["batch"]["row_count"], 1);
+        assert!(second["batch"]["truncated"].as_bool().unwrap());
+        assert!(second["watermark_after"]["high_watermark"].is_null());
+        assert_eq!(second["watermark_after"]["offset"], 2);
+        let second_watermark =
+            serde_json::from_value::<SourceWatermark>(second["watermark_after"].clone())
+                .expect("decode second watermark");
+
+        let third = run_incremental_source(
+            request(Some(second_watermark)),
+            "postgres",
+            "",
+            runtime.clone(),
+        )
+        .await
+        .expect("third paged live incremental run");
+        assert_eq!(third["batch"]["row_count"], 1);
+        assert!(!third["batch"]["truncated"].as_bool().unwrap());
+        assert_eq!(third["batch"]["rows"][0]["id"], 3);
+        assert_eq!(
+            third["watermark_after"]["high_watermark"],
+            "2026-07-19T01:00:00+00:00"
+        );
+        assert!(third["watermark_after"]["offset"].is_null());
+        let third_watermark =
+            serde_json::from_value::<SourceWatermark>(third["watermark_after"].clone())
+                .expect("decode third watermark");
+
+        sqlx::query(&format!(
+            "INSERT INTO {table} (id, name, updated_at) VALUES (4, 'fourth', '2026-07-19T02:00:00Z')"
+        ))
+        .execute(&pool)
+        .await
+        .expect("append live source row");
+        let fourth =
+            run_incremental_source(request(Some(third_watermark)), "postgres", "", runtime)
+                .await
+                .expect("fourth live incremental run");
+        eprintln!(
+            "first_watermark={} third_watermark={} fourth_batch={}",
+            first["watermark_after"], third["watermark_after"], fourth["batch"]
+        );
+
+        sqlx::query(&format!("DROP TABLE {table}"))
+            .execute(&pool)
+            .await
+            .expect("drop live source table");
+        assert_eq!(fourth["batch"]["row_count"], 1);
+        assert_eq!(fourth["batch"]["rows"][0]["id"], 4);
+        assert_eq!(
+            fourth["watermark_after"]["high_watermark"],
+            "2026-07-19T02:00:00+00:00"
+        );
+        assert!(fourth["watermark_after"]["cursor"].is_null());
+    }
+
+    #[test]
+    fn updated_at_watermark_pages_a_stable_window_without_coercing_offset_to_cursor() {
+        let before = SourceWatermark {
+            adapter_id: "postgres".to_string(),
+            resource_ref: "postgres://***:***@localhost/orders".to_string(),
+            table: Some("orders".to_string()),
+            strategy: "updated_at_field".to_string(),
+            cursor: None,
+            offset: None,
+            high_watermark: Some("2026-07-19T01:00:00Z".to_string()),
+            checksum: None,
+            revision: 4,
+            updated_at_ms: 1,
+        };
+        let mut plan = SourceReadPlan {
+            adapter_id: "postgres".to_string(),
+            resource_ref: before.resource_ref.clone(),
+            table: before.table.clone(),
+            fields: Vec::new(),
+            limit: Some(100),
+            offset: None,
+            cursor: None,
+            metadata: serde_json::json!({"updated_at_field": "updated_at"}),
+        };
+        apply_incremental_watermark_to_plan(&mut plan, Some(&before));
+        assert_eq!(plan.cursor.as_deref(), Some("2026-07-19T01:00:00Z"));
+        assert_eq!(plan.offset, None);
+
+        let batch = record_batch_from_rows(
+            plan,
+            vec![serde_json::json!({
+                "id": 2,
+                "updated_at": "2026-07-19T02:00:00Z"
+            })],
+            true,
+        );
+        let after = watermark_after_batch(
+            &batch,
+            Some(&before),
+            &serde_json::json!({"updated_at_field": "updated_at"}),
+        );
+        assert_eq!(
+            after.high_watermark.as_deref(),
+            Some("2026-07-19T01:00:00Z")
+        );
+        assert_eq!(after.cursor, None);
+        assert_eq!(after.offset, Some(1));
+
+        let mut next_plan = SourceReadPlan {
+            adapter_id: "postgres".to_string(),
+            resource_ref: before.resource_ref,
+            table: before.table,
+            fields: Vec::new(),
+            limit: Some(100),
+            offset: None,
+            cursor: None,
+            metadata: serde_json::json!({"updated_at_field": "updated_at"}),
+        };
+        apply_incremental_watermark_to_plan(&mut next_plan, Some(&after));
+        assert_eq!(next_plan.cursor.as_deref(), Some("2026-07-19T01:00:00Z"));
+        assert_eq!(next_plan.offset, Some(1));
     }
 
     #[tokio::test]

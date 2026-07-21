@@ -99,7 +99,7 @@ struct TableRef {
 struct IncrementalStrategy {
     mode: String,
     field: String,
-    value: String,
+    value: Option<String>,
     data_type: String,
 }
 
@@ -202,11 +202,20 @@ pub(crate) fn incremental_plan(payload: Value, adapter_id: &str) -> Result<Value
 }
 
 fn plan_from_payload(payload: Value, adapter_id: &str) -> Result<SourceReadPlan, String> {
-    let value = payload
+    let mut value = payload
         .get("read_plan")
         .or_else(|| payload.get("source_read_plan"))
         .cloned()
         .unwrap_or(payload);
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "source read plan must be an object".to_string())?;
+    object
+        .entry("adapter_id".to_string())
+        .or_insert_with(|| Value::String(adapter_id.to_string()));
+    object
+        .entry("resource_ref".to_string())
+        .or_insert_with(|| Value::String(String::new()));
     let mut plan = serde_json::from_value::<SourceReadPlan>(value)
         .map_err(|error| format!("invalid source read plan: {error}"))?;
     if plan.adapter_id.trim().is_empty() {
@@ -229,6 +238,7 @@ async fn read_postgres_batch(
     offset: usize,
     pool: &sqlx::Pool<sqlx::Postgres>,
 ) -> Result<SourceRecordBatch, String> {
+    let fetch_limit = limit.saturating_add(1);
     let schema = postgres_table_schema(pool, &table).await?;
     let fields = selected_fields(&schema, requested_fields)?;
     let strategy = incremental_strategy(&plan, &schema)?;
@@ -242,33 +252,38 @@ async fn read_postgres_batch(
         quote_pg_table(&table)
     );
     if let Some(strategy) = strategy.as_ref() {
-        let placeholder = postgres_incremental_placeholder(strategy);
-        sql.push_str(&format!(
-            " WHERE {} > {placeholder} ORDER BY {} ASC LIMIT $2",
-            quote_pg_ident(&strategy.field),
-            quote_pg_ident(&strategy.field),
-        ));
+        let field = quote_pg_ident(&strategy.field);
+        if strategy.value.is_some() {
+            let placeholder = postgres_incremental_placeholder(strategy);
+            sql.push_str(&format!(
+                " WHERE {field} > {placeholder} ORDER BY {field} ASC LIMIT $2 OFFSET $3"
+            ));
+        } else {
+            sql.push_str(&format!(" ORDER BY {field} ASC LIMIT $1 OFFSET $2"));
+        }
     } else {
         sql.push_str(" LIMIT $1 OFFSET $2");
     }
     let mut query = sqlx::query(&sql);
     if let Some(strategy) = strategy {
-        query = query.bind(strategy.value).bind(limit as i64);
+        if let Some(value) = strategy.value {
+            query = query
+                .bind(value)
+                .bind(fetch_limit as i64)
+                .bind(offset as i64);
+        } else {
+            query = query.bind(fetch_limit as i64).bind(offset as i64);
+        }
     } else {
-        query = query.bind(limit as i64).bind(offset as i64);
+        query = query.bind(fetch_limit as i64).bind(offset as i64);
     }
     let rows = query
         .fetch_all(pool)
         .await
         .map_err(|error| format!("postgres read failed: {error}"))?;
-    let total =
-        sqlx::query_scalar::<_, i64>(&format!("SELECT COUNT(*) FROM {}", quote_pg_table(&table)))
-            .fetch_one(pool)
-            .await
-            .map_err(|error| format!("postgres count failed: {error}"))? as usize;
     let values = rows.iter().map(pg_row_to_json).collect::<Vec<_>>();
     Ok(record_batch_from_database_rows(
-        plan, schema, values, total, limit, offset,
+        plan, schema, values, limit, offset,
     ))
 }
 
@@ -280,6 +295,7 @@ async fn read_mysql_batch(
     offset: usize,
     pool: &sqlx::Pool<sqlx::MySql>,
 ) -> Result<SourceRecordBatch, String> {
+    let fetch_limit = limit.saturating_add(1);
     let schema = mysql_table_schema(pool, &table).await?;
     let fields = selected_fields(&schema, requested_fields)?;
     let strategy = incremental_strategy(&plan, &schema)?;
@@ -293,34 +309,37 @@ async fn read_mysql_batch(
         quote_mysql_table(&table)
     );
     if let Some(strategy) = strategy.as_ref() {
-        sql.push_str(&format!(
-            " WHERE {} > ? ORDER BY {} ASC LIMIT ?",
-            quote_mysql_ident(&strategy.field),
-            quote_mysql_ident(&strategy.field),
-        ));
+        let field = quote_mysql_ident(&strategy.field);
+        if strategy.value.is_some() {
+            sql.push_str(&format!(
+                " WHERE {field} > ? ORDER BY {field} ASC LIMIT ? OFFSET ?"
+            ));
+        } else {
+            sql.push_str(&format!(" ORDER BY {field} ASC LIMIT ? OFFSET ?"));
+        }
     } else {
         sql.push_str(" LIMIT ? OFFSET ?");
     }
     let mut query = sqlx::query(&sql);
     if let Some(strategy) = strategy {
-        query = query.bind(strategy.value).bind(limit as i64);
+        if let Some(value) = strategy.value {
+            query = query
+                .bind(value)
+                .bind(fetch_limit as i64)
+                .bind(offset as i64);
+        } else {
+            query = query.bind(fetch_limit as i64).bind(offset as i64);
+        }
     } else {
-        query = query.bind(limit as i64).bind(offset as i64);
+        query = query.bind(fetch_limit as i64).bind(offset as i64);
     }
     let rows = query
         .fetch_all(pool)
         .await
         .map_err(|error| format!("mysql/mariadb read failed: {error}"))?;
-    let total = sqlx::query_scalar::<_, i64>(&format!(
-        "SELECT COUNT(*) FROM {}",
-        quote_mysql_table(&table)
-    ))
-    .fetch_one(pool)
-    .await
-    .map_err(|error| format!("mysql/mariadb count failed: {error}"))? as usize;
     let values = rows.iter().map(mysql_row_to_json).collect::<Vec<_>>();
     Ok(record_batch_from_database_rows(
-        plan, schema, values, total, limit, offset,
+        plan, schema, values, limit, offset,
     ))
 }
 
@@ -591,14 +610,12 @@ fn incremental_strategy(
                 .and_then(|watermark| watermark.get("cursor"))
                 .and_then(Value::as_str)
         })
-        .unwrap_or("");
-    if value.trim().is_empty() {
-        return Ok(None);
-    }
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string);
     Ok(Some(IncrementalStrategy {
         mode: mode.to_string(),
         field: field.to_string(),
-        value: value.to_string(),
+        value,
         data_type: field_schema.data_type.clone(),
     }))
 }
@@ -620,17 +637,15 @@ fn postgres_incremental_placeholder(strategy: &IncrementalStrategy) -> &'static 
 fn record_batch_from_database_rows(
     mut plan: SourceReadPlan,
     schema: SourceTableSchema,
-    rows: Vec<Value>,
-    total: usize,
+    mut rows: Vec<Value>,
     limit: usize,
     offset: usize,
 ) -> SourceRecordBatch {
     plan.resource_ref = sanitize_resource_ref(&plan.resource_ref);
-    let next_offset = if offset + rows.len() < total {
-        Some(offset + rows.len())
-    } else {
-        None
-    };
+    let truncated = rows.len() > limit;
+    rows.truncate(limit);
+    let row_count = rows.len();
+    let next_offset = truncated.then_some(offset.saturating_add(row_count));
     let checksum = checksum_rows(&rows);
     SourceRecordBatch {
         adapter_id: plan.adapter_id,
@@ -642,8 +657,8 @@ fn record_batch_from_database_rows(
             limit,
             next_offset,
         },
-        row_count: total,
-        truncated: next_offset.is_some(),
+        row_count,
+        truncated,
         checksum,
         rows,
     }
@@ -999,13 +1014,13 @@ fn sanitize_resource_ref(resource_ref: &str) -> String {
     let Some((scheme, tail)) = resource_ref.split_once("://") else {
         return resource_ref.to_string();
     };
-    let Some((userinfo, rest)) = tail.split_once('@') else {
+    let Some((userinfo, rest)) = tail.rsplit_once('@') else {
         return resource_ref.to_string();
     };
-    if userinfo.contains(':') {
-        format!("{scheme}://***:***@{rest}")
-    } else {
+    if userinfo.is_empty() {
         resource_ref.to_string()
+    } else {
+        format!("{scheme}://***:***@{rest}")
     }
 }
 
@@ -1042,6 +1057,10 @@ mod tests {
     fn masks_database_url_credentials() {
         assert_eq!(
             sanitize_resource_ref("postgres://user:secret@localhost/db"),
+            "postgres://***:***@localhost/db"
+        );
+        assert_eq!(
+            sanitize_resource_ref("postgres://user@localhost/db"),
             "postgres://***:***@localhost/db"
         );
     }
