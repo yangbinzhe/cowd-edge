@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { appRepositoryPath, appWebUiPath, appWebUiSourceRoot } from './app-source-paths.mjs';
 import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
@@ -32,7 +33,7 @@ const modules = [
   { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/slash'], tui: ['tool_ops_panel.rs', 'gateway_client.rs', 'runtime_activity_panel.rs'], cli: ['prompt'] },
   { id: 'surfaces', page: 'SurfacePage.vue', routes: ['/api/surfaces'], tui: ['surface_panel.rs', 'gateway_panel.rs'], cli: ['gateway'] },
   { id: 'gateway', page: 'GatewayPage.vue', routes: ['/api/connectors', '/api/cross-plane', '/api/platforms'], tui: ['gateway_panel.rs', 'approval_cockpit_panel.rs'], cli: ['gateway'] },
-  { id: 'mfg', page: 'MfgPage.vue', routes: ['/api/apps/mfg'], tui: ['goal_workbench_panel.rs', 'task_decomposition_view.rs'], cli: ['gateway'] },
+  { id: 'mfg', page: appWebUiPath('mfg', 'MfgApp.vue'), routes: ['/api/apps/mfg'], tui: ['goal_workbench_panel.rs', 'task_decomposition_view.rs'], cli: ['gateway'] },
   { id: 'audit', page: 'AuditPage.vue', routes: ['/api/audit', '/api/usage', '/api/cowd/release-gate'], tui: ['export_dialog.rs', 'approval_cockpit_panel.rs'], cli: ['Doctor'] },
 ];
 
@@ -58,6 +59,7 @@ function parseMessageCatalog(file) {
 const messageCatalogs = [
   parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/en-US.ts')),
   parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/zh-CN.ts')),
+  parseMessageCatalog(appWebUiPath('mfg', 'messages.ts')),
 ];
 
 function renderablePageEvidence(pageText) {
@@ -85,6 +87,7 @@ function walk(target) {
 function extractBackendRoutes() {
   const files = [
     ...walk(path.join(backendRoot, 'crates/gateway/src/api_routes')).filter((file) => file.endsWith('.rs')),
+    ...walk(appRepositoryPath('mfg', 'crates', 'app-mfg-contract', 'src')).filter((file) => file.endsWith('.rs')),
   ];
   const routes = [];
   for (const file of files) {
@@ -94,25 +97,41 @@ function extractBackendRoutes() {
     while ((match = regex.exec(text))) {
       routes.push({ path: match[1], file: path.relative(backendRoot, file) });
     }
+    if (file.startsWith(appRepositoryPath('mfg'))) {
+      const appRouteRegex = /["'](\/api\/apps\/mfg[^"']*)["']/g;
+      while ((match = appRouteRegex.exec(text))) {
+        routes.push({ path: match[1], file: path.relative(appRepositoryPath('mfg'), file) });
+      }
+    }
   }
   return routes;
 }
 
 function extractClientEndpoints() {
-  const text = read(path.join(webuiRoot, 'src/api/client.ts'));
+  const texts = [
+    read(path.join(webuiRoot, 'src/api/client.ts')),
+    read(appWebUiPath('mfg', 'api', 'mfgApi.ts')),
+  ];
   const endpoints = new Set();
-  const regex = /(?:read|write|readText)\s*(?:<[^>]+>)?\(\s*([`'"])([\s\S]*?)\1/g;
-  let match;
-  while ((match = regex.exec(text))) endpoints.add(match[2]);
+  for (const text of texts) {
+    const regex = /(?:read|write|readText|mfgWrite)\s*(?:<[^>]+>)?\(\s*([`'"])([\s\S]*?)\1/g;
+    let match;
+    while ((match = regex.exec(text))) endpoints.add(match[2]);
+  }
   return Array.from(endpoints).sort();
 }
 
 function extractCapabilityEndpoints() {
-  const text = read(path.join(webuiRoot, 'src/data/capabilities.ts'));
+  const texts = [
+    read(path.join(webuiRoot, 'src/data/capabilities.ts')),
+    read(appWebUiPath('mfg', 'index.ts')),
+  ];
   const endpoints = new Set();
-  const regex = /endpoint:\s*['"`]([^'"`]+)['"`]/g;
-  let match;
-  while ((match = regex.exec(text))) endpoints.add(match[1]);
+  for (const text of texts) {
+    const regex = /(?:endpoint|appApi|contractApi):\s*['"`]([^'"`]+)['"`]/g;
+    let match;
+    while ((match = regex.exec(text))) endpoints.add(match[1]);
+  }
   return Array.from(endpoints).sort();
 }
 
@@ -138,17 +157,23 @@ const cliMain = read(path.join(backendRoot, 'crates/cli/src/main.rs')) || read(p
 const cliMod = read(path.join(backendRoot, 'crates/cli/src/lib.rs')) || read(path.join(backendRoot, 'crates/cowd-cli/src/cli/mod.rs'));
 const cliText = `${cliMain}\n${cliMod}`;
 const runtimeCapability = read(path.join(backendRoot, 'crates/runtime/src/infrastructure/capability.rs'));
-const apiClientText = read(path.join(webuiRoot, 'src/api/client.ts'));
+const apiClientText = [
+  read(path.join(webuiRoot, 'src/api/client.ts')),
+  read(appWebUiPath('mfg', 'api', 'mfgApi.ts')),
+].join('\n');
 const matrixBoundaryTest = [
   read(path.join(backendRoot, 'crates/gateway/tests/gateway_runtimehost_architecture.rs')),
-  read(path.join(backendRoot, 'crates/runtime/tests/matrix_mfg_boundary.rs')),
 ].join('\n');
 const matrixMfgRoutes = [
   read(path.join(backendRoot, 'crates/gateway/src/api_routes/matrix_routes.rs')),
-  read(path.join(backendRoot, 'crates/gateway/src/api_routes/mfg_routes.rs')),
-  read(path.join(backendRoot, 'crates/cowd-cli/src/api_routes/matrix_mfg_routes.rs')),
+  ...walk(appRepositoryPath('mfg', 'crates', 'app-mfg-contract', 'src'))
+    .filter((file) => file.endsWith('.rs'))
+    .map(read),
+  ...walk(appRepositoryPath('mfg', 'crates', 'app-mfg-adapter', 'src'))
+    .filter((file) => file.endsWith('.rs'))
+    .map(read),
 ].join('\n');
-const mfgContracts = read(path.join(webuiRoot, 'src/data/mfgWriteContracts.json'));
+const mfgContracts = read(appWebUiPath('mfg', 'data', 'mfgWriteContracts.json'));
 const contractConsumptionSources = {
   client: read(path.join(webuiRoot, 'src/api/client.ts')),
   store: read(path.join(webuiRoot, 'src/stores/app.ts')),
@@ -180,7 +205,7 @@ function contractConsumptionFindings() {
 }
 
 const moduleReports = modules.map((module) => {
-  const pagePath = path.join(webuiRoot, 'src/pages', module.page);
+  const pagePath = path.isAbsolute(module.page) ? module.page : path.join(webuiRoot, 'src/pages', module.page);
   const pageText = read(pagePath);
   const pageEvidenceText = renderablePageEvidence(pageText);
   const backend = module.routes.flatMap((prefix) => backendRoutes.filter((route) => route.path.startsWith(prefix)));
@@ -202,7 +227,7 @@ const moduleReports = modules.map((module) => {
     if (!runtimeCapability.includes('cowd.matrix.engine') || !runtimeCapability.includes('CowdCapabilityKind::StructuredData')) {
       findings.push('Matrix Engine must be declared as a Reality Core structured-data engine');
     }
-    if (!runtimeCapability.includes('capability_registry_declares_matrix_as_reality_core_engine_without_mfg_ownership')) {
+    if (!runtimeCapability.includes('capability_registry_declares_matrix_as_reality_core_engine_without_application_ownership')) {
       findings.push('Runtime capability registry must guard Matrix as Reality Core engine without MFG ownership');
     }
     if (runtimeCapability.includes('cowd.matrix.runtime')) {

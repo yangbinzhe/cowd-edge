@@ -4,6 +4,7 @@ import { computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { capabilityPageEndpointsFromContract } from '../api/client';
 import { buildCapabilitySpecs } from '../data/capabilities';
+import { appPluginForRoute, pluginCapabilitySpecs } from '../plugins/registry';
 import { useAppStore } from '../stores/app';
 import type { NavId } from '../types';
 import EndpointHealthList from './workbench/EndpointHealthList.vue';
@@ -13,12 +14,13 @@ const router = useRouter();
 const store = useAppStore();
 
 function capabilityPageId(path: string): Exclude<NavId, 'chat' | 'settings'> {
-  if (path.startsWith('/apps/mfg')) return 'mfg';
+  const plugin = appPluginForRoute(path);
+  if (plugin) return plugin.appId;
   return path.replace(/^\/+/, '').split('/')[0] as Exclude<NavId, 'chat' | 'settings'>;
 }
 
 const pageId = computed(() => capabilityPageId(route.path));
-const spec = computed(() => buildCapabilitySpecs()[pageId.value]);
+const spec = computed(() => ({ ...buildCapabilitySpecs(), ...pluginCapabilitySpecs })[pageId.value]);
 const snapshots = computed(() => store.capabilitySnapshots[pageId.value] || []);
 const contract = computed(() => store.gatewayCapabilityContract);
 const openAiTools = computed(() => store.gatewayOpenAiTools);

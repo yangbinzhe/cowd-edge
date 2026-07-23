@@ -15,6 +15,20 @@ const catalogs: Record<Locale, MessageCatalog> = {
 
 export const isChinese = computed(() => locale.value === 'zh-CN');
 
+/** 构建期装配 APP 的翻译仅在内存合并，不能覆盖宿主既有词条。 */
+export function registerMessages(messages: Partial<Record<Locale, MessageCatalog>>) {
+  for (const localeName of Object.keys(messages) as Locale[]) {
+    const incoming = messages[localeName];
+    if (!incoming) continue;
+    for (const [key, value] of Object.entries(incoming)) {
+      if (catalogs[localeName][key] && catalogs[localeName][key] !== value) {
+        throw new Error(`APP i18n key collision: ${key}`);
+      }
+      catalogs[localeName][key] = value;
+    }
+  }
+}
+
 function interpolate(template: string, params?: MessageParams): string {
   if (!params) return template;
   return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, name) => {

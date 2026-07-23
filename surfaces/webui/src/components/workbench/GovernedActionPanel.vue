@@ -7,7 +7,7 @@ import PayloadEditor from './PayloadEditor.vue';
 import SchemaForm from './SchemaForm.vue';
 import RequestReceipt from './RequestReceipt.vue';
 
-type MfgWriteContract = {
+type GovernedWriteContract = {
   id: string;
   domain: string;
   title: string;
@@ -30,7 +30,7 @@ type MfgWriteContract = {
 };
 
 const props = defineProps<{
-  contract: MfgWriteContract;
+  contract: GovernedWriteContract;
   payload?: Record<string, unknown>;
   receipt?: unknown;
 }>();
@@ -59,18 +59,8 @@ const capabilityRows = computed(() => [
   [t('component.workbench.governed.action.panel.field.changedRefs'), props.contract.changed_refs ? t('status.required') : t('status.missing')],
 ]);
 
-const contractDomainKeys: Record<string, string> = {
-  'Data Plane': 'mfg.contract.domain.dataPlane',
-  Facts: 'mfg.contract.domain.facts',
-  Entities: 'mfg.contract.domain.entities',
-  Metrics: 'mfg.contract.domain.metrics',
-  Evidence: 'mfg.contract.domain.evidence',
-  Incidents: 'mfg.contract.domain.incidents',
-  Cockpit: 'mfg.contract.domain.cockpit',
-};
-
 function displayContractDomain(domain: string) {
-  return t(contractDomainKeys[domain] || 'mfg.contract.domain.unknown', { domain });
+  return domain || t('status.notDeclared');
 }
 
 function run() {

@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { appCheckoutRoot, appWebUiSourceRoot } from './app-source-paths.mjs';
 import { evidenceContext, manifestPath, writeJsonReport } from './evidence-context.mjs';
 
 const final = process.argv.includes('--final');
@@ -51,6 +52,18 @@ function source(root, relative) {
   return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
 }
 
+const sourceRoots = {
+  frontend: context.frontend.root,
+  backend: context.backend.root,
+  'app-webui': appWebUiSourceRoot('mfg'),
+  app: appCheckoutRoot('mfg'),
+};
+
+function repositorySource(repository, file) {
+  const root = sourceRoots[repository];
+  return root ? source(root, file) : '';
+}
+
 const requiredSource = [
   ['frontend', 'surfaces/webui/src/App.vue', 'useCapabilitySection'],
   ['frontend', 'surfaces/webui/src/stores/projectionRegistry.ts', 'MAX_ACTIVE_PROJECTION_STREAMS'],
@@ -59,81 +72,79 @@ const requiredSource = [
   ['frontend', 'surfaces/webui/src/components/graph/GraphSurface.vue', 'exportGraph'],
   ['frontend', 'surfaces/webui/src/components/evidence/EvidenceInspector.vue', 'evidenceDisplayState'],
   ['frontend', 'surfaces/webui/src/composables/useGraphQueryState.ts', 'cursor'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgCockpitWorkspace.vue', 'beginDirectManipulation'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgCockpitWorkspace.vue', 'saveAsCopy'],
-  ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'refreshWidget'],
-  ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'cancelWidgetRefresh'],
-  ['frontend', 'surfaces/webui/src/stores/mfgCockpit.ts', 'activeProjectionFilters'],
-  ['frontend', 'surfaces/webui/src/stores/mutationIntents.ts', 'retry_same_intent'],
-  ['frontend', 'surfaces/webui/src/components/mfg/RecoveryActions.vue', 'recovery_actions'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgReportReviewDrawer.vue', 'mfgDecideReportReview'],
-  ['frontend', 'surfaces/webui/src/types/mfg.ts', 'MFG_GENERATED_CONTRACT_KIND'],
-  ['frontend', 'surfaces/webui/src/types/mfg.ts', 'MfgWireApiErrorV1'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgFocusWorkspace.vue', 'conditionThreshold'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgFocusWorkspace.vue', 'conditionWindowMinutes'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgCollaborationWorkspace.vue', "command(assignment, 'unassign')"],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'validateSourcePack'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'planComputeJob'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'evaluateEvidenceQuality'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'recommendPlaybooks'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'recordExecutionFeedback'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'planAction'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'openIncidentFromReality'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'qualityDecision.required_actions'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'api.mfgReports'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', 'reportDeliveryState.dead_lettered'],
-  ['frontend', 'surfaces/webui/src/pages/MfgPage.vue', 'overflow: auto'],
-  ['frontend', 'surfaces/webui/src/adapters/graph/mfgDecisionTrace.ts', 'adaptMfgDecisionTrace'],
+  ['app-webui', 'components/mfg/MfgCockpitWorkspace.vue', 'beginDirectManipulation'],
+  ['app-webui', 'components/mfg/MfgCockpitWorkspace.vue', 'saveAsCopy'],
+  ['app-webui', 'stores/mfgCockpit.ts', 'refreshWidget'],
+  ['app-webui', 'stores/mfgCockpit.ts', 'cancelWidgetRefresh'],
+  ['app-webui', 'stores/mfgCockpit.ts', 'activeProjectionFilters'],
+  ['app-webui', 'stores/mutationIntents.ts', 'retry_same_intent'],
+  ['app-webui', 'components/mfg/RecoveryActions.vue', 'recovery_actions'],
+  ['app-webui', 'components/mfg/MfgReportReviewDrawer.vue', 'mfgDecideReportReview'],
+  ['app-webui', 'types/mfg.ts', 'MFG_GENERATED_CONTRACT_KIND'],
+  ['app-webui', 'types/mfg.ts', 'MfgWireApiErrorV1'],
+  ['app-webui', 'components/mfg/MfgFocusWorkspace.vue', 'conditionThreshold'],
+  ['app-webui', 'components/mfg/MfgFocusWorkspace.vue', 'conditionWindowMinutes'],
+  ['app-webui', 'components/mfg/MfgCollaborationWorkspace.vue', "command(assignment, 'unassign')"],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'validateSourcePack'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'planComputeJob'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'evaluateEvidenceQuality'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'recommendPlaybooks'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'recordExecutionFeedback'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'planAction'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'openIncidentFromReality'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'qualityDecision.required_actions'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'api.mfgReports'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', 'reportDeliveryState.dead_lettered'],
+  ['app-webui', 'MfgApp.vue', 'overflow: auto'],
+  ['app-webui', 'adapters/graph/mfgDecisionTrace.ts', 'adaptMfgDecisionTrace'],
   ['frontend', 'surfaces/webui/src/components/workbench/DataTable.vue', 'pagedRows'],
-  ['frontend', 'surfaces/webui/src/api/client.ts', '/widgets/${encodeURIComponent(instanceId)}/projection'],
-  ['frontend', 'surfaces/webui/src/api/client.ts', 'withoutServerActor'],
-  ['backend', 'crates/gateway/src/api_routes/mfg_routes.rs', '/api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection'],
-  ['backend', 'crates/gateway/src/api_routes/mfg_routes/cockpit.rs', 'mfg_revision_conflict'],
-  ['backend', 'crates/app-mfg/src/cockpit.rs', 'mfg.cockpit.filters.widget_overrides.v1'],
-  ['backend', 'crates/app-mfg/src/cockpit.rs', 'retry_attempt_count'],
-  ['backend', 'crates/app-mfg/src/cockpit.rs', 'delivery_dead_lettered'],
-  ['backend', 'crates/app-mfg/src/repository.rs', 'effective_cockpit_profile'],
-  ['backend', 'crates/app-mfg/src/repository.rs', 'attention_matches_alert_condition'],
-  ['backend', 'crates/app-mfg/src/repository.rs', 'window_minutes'],
-  ['backend', 'crates/app-mfg/src/repository.rs', 'cockpit_projection_with_filters'],
-  ['backend', 'crates/app-mfg/src/repository.rs', 'legacy_four_widget_profile_migrates_losslessly_without_dual_write'],
-  ['backend', 'crates/gateway/src/api_routes/mfg_routes.rs', '/api/apps/mfg/cockpit/reports'],
-  ['backend', 'crates/gateway/src/api_routes/mfg_routes.rs', 'MfgActionExecutionIntent'],
-  ['backend', 'crates/gateway/src/api_routes/mfg_routes/cockpit.rs', 'cockpit_report_accessible_to'],
+  ['app-webui', 'api/mfgApi.ts', '/widgets/${encodeURIComponent(instanceId)}/projection'],
+  ['app-webui', 'api/mfgApi.ts', 'withoutServerActor'],
+  ['app', 'crates/app-mfg-contract/src/route.rs', '/api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection'],
+  ['app', 'crates/app-mfg-adapter/src/lib.rs', '"revision_conflict"'],
+  ['app', 'crates/app-mfg-core/src/cockpit.rs', 'mfg.cockpit.filters.widget_overrides.v1'],
+  ['app', 'crates/app-mfg-core/src/cockpit.rs', 'retry_attempt_count'],
+  ['app', 'crates/app-mfg-core/src/cockpit.rs', 'delivery_dead_lettered'],
+  ['app', 'crates/app-mfg-core/src/repository.rs', 'effective_cockpit_profile'],
+  ['app', 'crates/app-mfg-core/src/repository.rs', 'attention_matches_alert_condition'],
+  ['app', 'crates/app-mfg-core/src/repository.rs', 'window_minutes'],
+  ['app', 'crates/app-mfg-core/src/repository.rs', 'cockpit_projection_with_filters'],
+  ['app', 'crates/app-mfg-core/src/repository.rs', 'legacy_four_widget_profile_migrates_losslessly_without_dual_write'],
+  ['app', 'crates/app-mfg-contract/src/route.rs', '/api/apps/mfg/cockpit/reports'],
+  ['app', 'crates/app-mfg-adapter/src/lib.rs', 'MfgActionExecutionIntent'],
+  ['app', 'crates/app-mfg-adapter/src/lib.rs', 'cockpit_report_accessible_to'],
 ];
 
 for (const [repository, file, needle] of requiredSource) {
-  const root = repository === 'frontend' ? context.frontend.root : context.backend.root;
-  if (!source(root, file).includes(needle)) failures.push(`required source wiring missing ${repository}:${file}:${needle}`);
+  if (!repositorySource(repository, file).includes(needle)) failures.push(`required source wiring missing ${repository}:${file}:${needle}`);
 }
 
 const forbiddenSource = [
   ['frontend', 'surfaces/webui/src/App.vue', /syncSectionVisibility|querySelectorAll\([^)]*data-section|\.hidden\s*=/, 'imperative section visibility'],
   ['frontend', 'surfaces/webui/src/components/graph/GraphSurface.vue', /\.slice\(0,\s*220\)/, 'first-220 graph truncation'],
   ['frontend', 'surfaces/webui/src/components/graph/GraphSurface.vue', /internal_reasoning|chain_of_thought/i, 'sensitive graph export field'],
-  ['backend', 'crates/gateway/src/api_routes/mfg_routes/cockpit.rs', /"team"\s*\|\s*"public"/, 'team widened to public visibility'],
-  ['backend', 'crates/app-mfg/src/cockpit.rs', /query_schema:[^\n]*additionalProperties"\s*:\s*true/, 'open cockpit query schema'],
-  ['backend', 'crates/app-mfg/src/repository.rs', /build_cockpit_projection/, 'legacy cockpit projection dual truth'],
-  ['frontend', 'surfaces/webui/src/components/mfg/MfgDomainWorkspace.vue', /operator_id\s*:|actor_principal\s*:/, 'client supplied MFG effect actor'],
+  ['app', 'crates/app-mfg-adapter/src/lib.rs', /"team"\s*\|\s*"public"/, 'team widened to public visibility'],
+  ['app', 'crates/app-mfg-core/src/cockpit.rs', /query_schema:[^\n]*additionalProperties"\s*:\s*true/, 'open cockpit query schema'],
+  ['app', 'crates/app-mfg-core/src/repository.rs', /build_cockpit_projection/, 'legacy cockpit projection dual truth'],
+  ['app-webui', 'components/mfg/MfgDomainWorkspace.vue', /operator_id\s*:|actor_principal\s*:/, 'client supplied MFG effect actor'],
   ['frontend', 'surfaces/webui/src/pages/GatewayPage.vue', /actor_principal\s*:/, 'client supplied Gateway effect actor'],
   ['frontend', 'surfaces/webui/src/pages/ToolsPage.vue', /actor_principal\s*:/, 'client supplied Tools effect actor'],
 ];
 
 for (const [repository, file, pattern, label] of forbiddenSource) {
-  const root = repository === 'frontend' ? context.frontend.root : context.backend.root;
-  if (pattern.test(source(root, file))) failures.push(`forbidden source returned: ${label} in ${repository}:${file}`);
+  if (pattern.test(repositorySource(repository, file))) failures.push(`forbidden source returned: ${label} in ${repository}:${file}`);
 }
 
 const coreTodoFiles = [
-  'surfaces/webui/src/components/mfg/MfgCockpitWorkspace.vue',
-  'surfaces/webui/src/stores/mfgCockpit.ts',
-  'surfaces/webui/src/components/graph/GraphSurface.vue',
-  'surfaces/webui/src/stores/projectionRegistry.ts',
-  'surfaces/webui/src/stores/chatSessions.ts',
+  ['app-webui', 'components/mfg/MfgCockpitWorkspace.vue'],
+  ['app-webui', 'stores/mfgCockpit.ts'],
+  ['frontend', 'surfaces/webui/src/components/graph/GraphSurface.vue'],
+  ['frontend', 'surfaces/webui/src/stores/projectionRegistry.ts'],
+  ['frontend', 'surfaces/webui/src/stores/chatSessions.ts'],
 ];
-for (const file of coreTodoFiles) {
-  const matches = source(context.frontend.root, file).match(/\b(?:TODO|FIXME|HACK)\b[^\n]*/g) || [];
-  for (const match of matches) failures.push(`unclassified core TODO in ${file}: ${match}`);
+for (const [repository, file] of coreTodoFiles) {
+  const matches = repositorySource(repository, file).match(/\b(?:TODO|FIXME|HACK)\b[^\n]*/g) || [];
+  for (const match of matches) failures.push(`unclassified core TODO in ${repository}:${file}: ${match}`);
 }
 
 function satisfiesLevel(actual, required) {

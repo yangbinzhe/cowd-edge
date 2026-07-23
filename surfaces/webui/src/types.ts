@@ -1,7 +1,8 @@
 import type { Component } from 'vue';
 import type { components as GatewayComponents } from './generated/gateway-api';
 
-export type NavId = 'chat' | 'mission' | 'runtime' | 'context' | 'reality' | 'memory' | 'skills' | 'agents' | 'tools' | 'surfaces' | 'gateway' | 'mfg' | 'audit' | 'settings';
+export type CoreNavId = 'chat' | 'mission' | 'runtime' | 'context' | 'reality' | 'memory' | 'skills' | 'agents' | 'tools' | 'surfaces' | 'gateway' | 'audit' | 'settings';
+export type NavId = CoreNavId | (string & {});
 export type CompanionTab = 'activity' | 'thinking' | 'workspace' | 'evidence' | 'inspector';
 export type Tone = 'neutral' | 'info' | 'success' | 'warn' | 'danger';
 export type ChatDisplayMode = 'panorama' | 'clean';
@@ -18,6 +19,7 @@ export interface ApiReadState {
 export interface NavItem {
   id: NavId;
   label: string;
+  labelKey?: string;
   route: string;
   icon: Component;
   group: string;

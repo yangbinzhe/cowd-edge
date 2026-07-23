@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { appWebUiPath, appWebUiSourceRoot } from './app-source-paths.mjs';
 import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
@@ -76,6 +77,7 @@ function parseMessageCatalog(file) {
 const messageCatalogs = [
   parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/en-US.ts')),
   parseMessageCatalog(path.join(webuiRoot, 'src/i18n/messages/zh-CN.ts')),
+  parseMessageCatalog(appWebUiPath('mfg', 'messages.ts')),
 ];
 
 function resolveMessage(key) {
@@ -98,12 +100,15 @@ function titleOf(tag) {
   return '';
 }
 
-const files = walk(path.join(webuiRoot, 'src')).filter((file) => /\.(vue|ts)$/.test(file));
+const files = [
+  ...walk(path.join(webuiRoot, 'src')),
+  ...walk(appWebUiSourceRoot('mfg')),
+].filter((file) => /\.(vue|ts)$/.test(file));
 const entries = [];
 const failures = [];
 const pageRequirements = [
   {
-    file: 'src/pages/MfgPage.vue',
+    file: appWebUiPath('mfg', 'MfgApp.vue'),
     terms: ['MfgCockpitWorkspace', 'MfgFocusWorkspace', 'MfgCollaborationWorkspace', 'MfgDomainWorkspace', 'data-section="dashboard"', 'data-section="collaboration"', 'data-section="reports"'],
   },
   {
@@ -164,15 +169,16 @@ for (const file of files) {
 }
 
 for (const requirement of pageRequirements) {
-  const file = path.join(webuiRoot, requirement.file);
+  const file = path.isAbsolute(requirement.file) ? requirement.file : path.join(webuiRoot, requirement.file);
+  const displayFile = path.relative(webuiRoot, file);
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   const pageEvidence = renderablePageEvidence(text);
   if (!text) {
-    failures.push(`${requirement.file}: missing page for structured primary view audit`);
+    failures.push(`${displayFile}: missing page for structured primary view audit`);
     continue;
   }
   for (const term of requirement.terms) {
-    if (!pageEvidence.includes(term)) failures.push(`${requirement.file}: missing structured primary view term ${term}`);
+    if (!pageEvidence.includes(term)) failures.push(`${displayFile}: missing structured primary view term ${term}`);
   }
 }
 

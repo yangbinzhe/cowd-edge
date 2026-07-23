@@ -175,7 +175,7 @@ function route(path: string, query: Record<string, string>) {
   return encoded ? `${path}?${encoded}` : path;
 }
 
-export function resolveMfgRuntimeExecutionId(
+export function resolveAppRuntimeExecutionId(
   receiptPayload: unknown,
   workspaceData: unknown,
 ) {

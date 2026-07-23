@@ -229,6 +229,14 @@ const completedInteractionProbes = new Set();
 const consumerGenerationDeltas = [];
 let artifactSequence = 0;
 
+// The browser can legitimately receive a burst of transactional snapshots
+// while the Gateway coalesces a large write fan-out.  The observer is an
+// evidence consumer, not a second unbounded replica: serialising every full
+// historical snapshot made the observer itself fall behind the product it was
+// measuring.  Keep a compact, queryable aggregate for convergence assertions
+// and a bounded tail for ordering/revision evidence.
+const ARTIFACT_FRAME_TAIL_LIMIT = 64;
+
 function inExpectedFailureWindow(failure, reason) {
   const timestamp = Date.parse(failure.at);
   return expectedHttpFailureWindows.some((window) => (
@@ -261,8 +269,41 @@ function isExpectedHttpFailure(failure) {
 }
 
 async function writeArtifact(status) {
-  const currentEvidence = await page.evaluate(() => window.__cowdMfgLiveEvidence);
-  const liveFrames = (currentEvidence.frames || []).filter((frame) => (
+  // Do the reduction in the browser execution context. Returning every
+  // historical snapshot over the Playwright protocol before truncating it in
+  // Node made the evidence observer contend with a high-throughput page.
+  const currentEvidence = await page.evaluate((tailLimit) => {
+    const evidence = window.__cowdMfgLiveEvidence || { frames: [], stream_errors: [], requests: [] };
+    const frames = evidence.frames || [];
+    const uniqueStrings = (values) => [...new Set(values.filter(
+      (value) => typeof value === 'string' && value.length > 0,
+    ))];
+    const compactFrames = frames.slice(-tailLimit).map((frame) => {
+      const assignmentIds = frame.assignment_ids || [];
+      const receiptIds = frame.receipt_ids || [];
+      return {
+        ...frame,
+        // Identity is retained once in `frame_summary`; duplicating every
+        // snapshot's full arrays defeats the bounded artifact contract.
+        assignment_count: assignmentIds.length,
+        receipt_count: receiptIds.length,
+        assignment_ids: undefined,
+        receipt_ids: undefined,
+      };
+    });
+    return {
+      frames: compactFrames,
+      frame_summary: {
+        total: frames.length,
+        assignment_ids: uniqueStrings(frames.flatMap((frame) => frame.assignment_ids || [])),
+        receipt_ids: uniqueStrings(frames.flatMap((frame) => frame.receipt_ids || [])),
+        subject_refs: uniqueStrings(frames.flatMap((frame) => frame.subject_refs || [])),
+      },
+      stream_errors: evidence.stream_errors || [],
+      requests: evidence.requests || [],
+    };
+  }, ARTIFACT_FRAME_TAIL_LIMIT);
+  const liveFrames = currentEvidence.frames.filter((frame) => (
     (frame.kind === 'snapshot' || frame.kind === 'delta' || frame.kind === 'heartbeat')
       && typeof frame.view_epoch === 'string'
       && frame.view_epoch.length > 0
@@ -271,9 +312,10 @@ async function writeArtifact(status) {
     ? liveFrames[liveFrames.length - 1].view_epoch
     : '';
   const browserEvidence = {
-    frames: currentEvidence.frames || [],
-    stream_errors: currentEvidence.stream_errors || [],
-    requests: currentEvidence.requests || [],
+    frames: currentEvidence.frames,
+    frame_summary: currentEvidence.frame_summary,
+    stream_errors: currentEvidence.stream_errors,
+    requests: currentEvidence.requests,
     reauthentication_count: reauthenticationCount,
     reauthentication_method: reauthenticationMethod,
     authorization_clear_observed: authorizationClearObserved,
@@ -285,24 +327,30 @@ async function writeArtifact(status) {
     expected_http_failures: httpFailures.filter(isExpectedHttpFailure),
     unexpected_http_failures: httpFailures.filter((failure) => !isExpectedHttpFailure(failure)),
   };
-  const ui = await page.locator('.mfg-page').evaluate((element, viewEpoch) => ({
-    diagnostics: element.querySelector('.mfg-page__diagnostics')?.textContent?.trim() || '',
-    degraded: Boolean(element.querySelector('.api-state-banner[data-status="degraded"]')),
-    live: {
-      status: element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-live-status') || '',
-      view_epoch: viewEpoch,
-      assignment_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-assignment-count') || 0),
-      report_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-report-count') || 0),
-      review_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-review-count') || 0),
-      receipt_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-receipt-count') || 0),
-      delivery_receipt_count: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-delivery-receipt-count') || 0),
-      consumer_generation: Number(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-live-consumer-generation') || 0),
-      reports: JSON.parse(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-report-state') || '[]'),
-      reviews: JSON.parse(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-review-state') || '[]'),
-      receipt_items: JSON.parse(element.querySelector('[data-mfg-live-diagnostics]')?.getAttribute('data-receipt-state') || '[]'),
-    },
-    text_sample: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 2_000),
-  }), currentViewEpoch);
+  // A direct query intentionally avoids Locator's auto-retry while Vue is
+  // applying an otherwise healthy burst of state changes.  Receipt identity
+  // remains in the compact stream summary; the UI snapshot needs only its
+  // visible count and domain summaries.
+  const ui = await page.evaluate((viewEpoch) => {
+    const element = document.querySelector('.mfg-page');
+    const diagnostics = element?.querySelector('[data-mfg-live-diagnostics]');
+    return {
+      diagnostics: element?.querySelector('.mfg-page__diagnostics')?.textContent?.trim() || '',
+      degraded: Boolean(element?.querySelector('.api-state-banner[data-status="degraded"]')),
+      live: {
+        status: diagnostics?.getAttribute('data-live-status') || '',
+        view_epoch: viewEpoch,
+        assignment_count: Number(diagnostics?.getAttribute('data-assignment-count') || 0),
+        report_count: Number(diagnostics?.getAttribute('data-report-count') || 0),
+        review_count: Number(diagnostics?.getAttribute('data-review-count') || 0),
+        receipt_count: Number(diagnostics?.getAttribute('data-receipt-count') || 0),
+        delivery_receipt_count: Number(diagnostics?.getAttribute('data-delivery-receipt-count') || 0),
+        consumer_generation: Number(diagnostics?.getAttribute('data-live-consumer-generation') || 0),
+        reports: JSON.parse(diagnostics?.getAttribute('data-report-state') || '[]'),
+        reviews: JSON.parse(diagnostics?.getAttribute('data-review-state') || '[]'),
+      },
+    };
+  }, currentViewEpoch);
   const artifact = {
     surface: 'webui',
     status,
@@ -366,7 +414,12 @@ async function recoverThroughProductUi(expectedReason) {
     { count: beforeSnapshotCount },
     { timeout: 30_000 },
   );
-  await page.getByRole('button', { name: 'MFG', exact: true }).click();
+  // App navigation is localized and intentionally owned by the external APP
+  // catalog, so recovery must not couple to a display label.  Use the normal
+  // in-document route transition the shell exposes to a user who returns to
+  // the app after replacing a credential.
+  await page.evaluate(() => { window.location.hash = '#/apps/mfg'; });
+  await page.waitForURL(/#\/apps\/mfg/, { timeout: 30_000 });
   await page.locator('.mfg-page').waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForFunction(
     ({ generation }) => {

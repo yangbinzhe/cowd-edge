@@ -49,7 +49,7 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
 
 test('workspace tab supports folder browsing and editable preview surface', async ({ page }) => {
   await page.goto('/index.html#/chat');
-  await page.getByRole('button', { name: 'Workspace' }).click();
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click();
   await expect(page.locator('.workspace-root')).toBeVisible();
   await expect(page.locator('.upload-drop')).toContainText('Drop workspace files here');
   await expect(page.getByRole('button', { name: 'New folder' })).toBeVisible();
@@ -312,8 +312,8 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const profileId = `e2e-cockpit-${suffix}`;
   const profileResponse = await page.request.post('/api/apps/mfg/cockpit/profiles/upsert', {
+    headers: { 'Idempotency-Key': `e2e-profile-${suffix}` },
     data: {
-      idempotency_key: `e2e-profile-${suffix}`,
       profile: {
         profile_id: profileId,
         owner_ref: 'client-value-is-ignored',
@@ -343,8 +343,8 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   await expect(page.getByLabel('from')).toHaveValue('2026-07-01T00:00:00Z');
 
   const alertResponse = await page.request.post('/api/apps/mfg/focus/alert-rules', {
+    headers: { 'Idempotency-Key': `e2e-alert-${suffix}` },
     data: {
-      idempotency_key: `e2e-alert-${suffix}`,
       rule: { owner_ref: 'ignored', name: 'E2E output risk', metric_refs: ['metric:e2e-output'], entity_refs: ['entity:e2e-line'], condition: { field: 'priority_score', operator: 'gte', threshold: 0.8 }, severity: 'critical', enabled: true },
     },
   });
@@ -383,8 +383,8 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   const task = await taskResponse.json();
 
   const assignmentResponse = await page.request.post('/api/apps/mfg/assignments', {
+    headers: { 'Idempotency-Key': `e2e-assignment-${suffix}` },
     data: {
-      idempotency_key: `e2e-assignment-${suffix}`,
       assignment: { task_ref: `task:${task.id}`, assignee_ref: 'user:e2e-owner', assignee_kind: 'user', watcher_refs: ['role:operations'], priority: 'high', sla_minutes: 30, visibility: 'team' },
     },
   });
@@ -409,13 +409,18 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   const deliveryResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/reports/${report.report_id}/deliver`) && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Deliver report' }).click();
   const deliveryResponse = await deliveryResponsePromise;
-  expect(deliveryResponse.ok()).toBeTruthy();
-  expect(await deliveryResponse.json()).toMatchObject({ status: 'blocked', dispatch_status: 'policy_blocked' });
+  const deliveryText = await deliveryResponse.text();
+  expect(deliveryResponse.ok(), deliveryText).toBeTruthy();
+  const deliveryResult = JSON.parse(deliveryText);
+  expect(deliveryResult).toMatchObject({ status: 'blocked', dispatch_status: 'policy_blocked' });
   await expect(page.locator('.request-receipt')).toContainText('blocked by policy');
   await expect(page.locator('.object-inspector').filter({ hasText: 'Delivery state' })).toContainText('not_delivered');
   await expect(page.getByRole('button', { name: 'Retry delivery' })).toBeEnabled();
 
-  const deleteResponse = await page.request.delete(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${savedProfile.revision}&idempotency_key=e2e-delete-${suffix}`);
+  const deleteResponse = await page.request.delete(
+    `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${savedProfile.revision}&idempotency_key=e2e-delete-${suffix}`,
+    { headers: { 'Idempotency-Key': `e2e-delete-${suffix}` } },
+  );
   expect(deleteResponse.ok()).toBeTruthy();
   const completeTaskResponse = await page.request.post(`/api/tasks/${encodeURIComponent(task.id)}/complete`);
   expect(completeTaskResponse.ok()).toBeTruthy();
@@ -481,8 +486,8 @@ test('real gateway cockpit editing and concurrent observers close without silent
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const profileId = `e2e-cockpit-conflict-${suffix}`;
   const createResponse = await page.request.post('/api/apps/mfg/cockpit/profiles/upsert', {
+    headers: { 'Idempotency-Key': `e2e-cockpit-create-${suffix}` },
     data: {
-      idempotency_key: `e2e-cockpit-create-${suffix}`,
       profile: {
         profile_id: profileId,
         owner_ref: 'client-value-is-ignored',

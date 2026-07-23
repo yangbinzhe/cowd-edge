@@ -555,15 +555,6 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .primary-context-bar[data-density="compact"] strong { font-size: 13px; }
 .chat-workbench-links { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 24px 0; }
 .chat-workbench-links .ghost-action { min-height: 30px; font-size: 12px; }
-.mfg-lanes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 14px 24px 0; }
-.mfg-lane { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); padding: 11px; text-decoration: none; text-align: left; }
-.mfg-lane:hover { background: var(--surface-2); border-color: var(--border-2); }
-.mfg-lane span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; font-size: 13px; }
-.mfg-lane strong { color: var(--text); font-size: 18px; line-height: 1; }
-.mfg-lane p { grid-column: 1 / -1; margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
-.mfg-lane[data-status="ready"] strong, .mfg-lane[data-status="done"] strong { color: var(--success); }
-.mfg-lane[data-status="active"] strong { color: var(--info); }
-.mfg-lane[data-status="blocked"] strong { color: var(--warn); }
 .detail-drawer { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); padding: 12px; display: grid; gap: 10px; }
 .detail-drawer header, .evidence-trace header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; background: inherit; }
 .detail-drawer h2, .evidence-trace h2 { margin: 0; font-size: 13px; }
@@ -813,7 +804,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .app-shell[data-companion="collapsed"] .global-locale-switch,
   .app-shell[data-companion="open"] .global-locale-switch { right: 64px; }
   .companion-toggle, .app-shell[data-companion="open"] .companion-toggle { right: 12px; top: 10px; width: 44px; height: 44px; }
-  .composer-bar, .chat-top-actions, .capability-grid, .settings-workbench, .management-grid, .modal-columns, .memory-workbench, .memory-main, .memory-split, .memory-tabs, .memory-form-row, .agents-workbench-grid, .agents-task-layout, .agent-graph-lanes, .runtime-grid, .context-grid, .context-builder-row, .gateway-grid, .reality-grid, .reality-toolbar, .mfg-lanes { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; }
+  .composer-bar, .chat-top-actions, .capability-grid, .settings-workbench, .management-grid, .modal-columns, .memory-workbench, .memory-main, .memory-split, .memory-tabs, .memory-form-row, .agents-workbench-grid, .agents-task-layout, .agent-graph-lanes, .runtime-grid, .context-grid, .context-builder-row, .gateway-grid, .reality-grid, .reality-toolbar { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; }
   .page-header { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); padding: 10px 14px; align-items: start; gap: 9px; }
   .page-header > * { min-width: 0; }
   .page-header > :last-child:not(:first-child) { justify-self: stretch; }
@@ -915,7 +906,6 @@ html[data-locale="zh-CN"] .modal-note {
 html[data-locale="zh-CN"] .stage-pill span,
 html[data-locale="zh-CN"] .stage-row strong,
 html[data-locale="zh-CN"] .workflow-step-label,
-html[data-locale="zh-CN"] .mfg-lane span,
 html[data-locale="zh-CN"] .skill-row span,
 html[data-locale="zh-CN"] .skill-row small,
 html[data-locale="zh-CN"] .memory-entry-row span,

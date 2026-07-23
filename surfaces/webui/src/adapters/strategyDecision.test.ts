@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fixture from './fixtures/strategy-projection-v1.json';
 import redactionCorpus from './fixtures/strategy-public-redaction-corpus.json';
-import { adaptStrategyDecision, resolveMfgRuntimeExecutionId } from './strategyDecision';
+import { adaptStrategyDecision, resolveAppRuntimeExecutionId } from './strategyDecision';
 import type { StrategyDecisionProjection } from '../types';
 
 describe('adaptStrategyDecision', () => {
@@ -201,14 +201,14 @@ describe('adaptStrategyDecision', () => {
   });
 
   it('uses only explicit MFG Runtime backlinks and never the MFG execution id', () => {
-    expect(resolveMfgRuntimeExecutionId({
+    expect(resolveAppRuntimeExecutionId({
       execution: { execution_id: 'mfg-execution' },
       cross_plane_execution_receipt: { execution_graph_id: 'runtime-graph-1' },
     }, {})).toBe('runtime-graph-1');
-    expect(resolveMfgRuntimeExecutionId({
+    expect(resolveAppRuntimeExecutionId({
       execution: { execution_id: 'mfg-only' },
     }, {})).toBe('');
-    expect(resolveMfgRuntimeExecutionId({
+    expect(resolveAppRuntimeExecutionId({
       skill_run: { runtime_execution_ref: 'runtime-execution://skill-graph-1' },
     }, {})).toBe('skill-graph-1');
   });

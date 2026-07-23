@@ -30,7 +30,6 @@ import { buildWorkspacePreviewHtml, isWorkspaceTextPreview, workspacePreviewKind
 import { activitySummary, normalizeTurnActivity } from '../utils/turnSettlement';
 import { useChatSessionsStore } from './chatSessions';
 import { useProjectionRegistryStore } from './projectionRegistry';
-import type { MfgEntitlementProjection } from '../types/mfg';
 
 const PINNED_SESSION_KEY = 'cowd.webui.sessions.pinned';
 const VIEWED_SESSION_KEY = 'cowd.webui.sessions.viewedCounts';
@@ -204,7 +203,7 @@ export const useAppStore = defineStore('app', () => {
   const gatewayOpenApi = ref<Record<string, any> | null>(null);
   const gatewayOpenAiTools = ref<GatewayOpenAiTools | null>(null);
   const gatewayContractError = ref('');
-  const authEntitlement = ref<MfgEntitlementProjection | null>(null);
+  const authEntitlement = ref<Record<string, unknown> | null>(null);
   const capabilitySnapshots = ref<Record<string, EndpointSnapshot[]>>({});
   const capabilityLoading = ref<Record<string, boolean>>({});
   const capabilityError = ref<Record<string, string>>({});

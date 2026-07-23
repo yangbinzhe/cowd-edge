@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { appRepositoryPath, appWebUiPath, appWebUiSourceRoot } from './app-source-paths.mjs';
 import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
@@ -42,18 +43,25 @@ const version = argValue('--version', provenance.version).replace(/^v/, '');
 if (version !== provenance.version) throw new Error(`api matrix version ${version} does not match provenance ${provenance.version}`);
 const requiredRoutes = argValues('--require');
 
-const clientPath = path.join(webuiRoot, 'src/api/client.ts');
+const mfgSourceRoot = appWebUiSourceRoot('mfg');
+const clientSources = [
+  { file: path.join(webuiRoot, 'src/api/client.ts'), marker: 'export const api = {' },
+  { file: appWebUiPath('mfg', 'api', 'mfgApi.ts'), marker: 'export const mfgApi = {' },
+];
 const sourceDirs = [
   path.join(webuiRoot, 'src/pages'),
   path.join(webuiRoot, 'src/components'),
   path.join(webuiRoot, 'src/stores'),
+  mfgSourceRoot,
 ];
 const testDirs = [
   path.join(webuiRoot, 'src'),
+  mfgSourceRoot,
   webuiRoot,
 ];
 const routeDirs = [
   path.join(backendRoot, 'crates/gateway/src/api_routes'),
+  appRepositoryPath('mfg', 'crates', 'app-mfg-contract', 'src'),
 ];
 
 const criticalMethods = {
@@ -133,16 +141,12 @@ function stripTemplateExpressions(route) {
 function normalizeRoute(route) {
   return stripTemplateExpressions(route)
     .replace(/\?.*$/, '')
-    .replace(/:id/g, ':param')
-    .replace(/:name/g, ':param')
-    .replace(/:reference/g, ':param')
-    .replace(/:run_id/g, ':param')
-    .replace(/:phase_id/g, ':param')
+    .replace(/:[A-Za-z_][A-Za-z0-9_]*/g, ':param')
     .replace(/\/+/g, '/');
 }
 
 function firstRequestRoute(body) {
-  const call = /(?:read|write|writeWithReceipt|readText)\s*(?:<[^>]+>)?\s*\(\s*/.exec(body);
+  const call = /(?:read|write|writeWithReceipt|readText|mfgWrite)\s*(?:<[^>]+>)?\s*\(\s*/.exec(body);
   if (!call) return null;
   const start = call.index + call[0].length;
   const quote = body[start];
@@ -171,37 +175,42 @@ function firstRequestRoute(body) {
 function inferMethod(body) {
   const method = body.match(/method:\s*['"`]([A-Z]+)['"`]/)?.[1];
   if (method) return method;
-  if (body.includes('write<') || body.includes('write(') || body.includes('writeWithReceipt(')) return 'POST';
+  if (body.includes("'DELETE'") || body.includes('"DELETE"') || body.includes('`DELETE`')) return 'DELETE';
+  if (body.includes('write<') || body.includes('write(') || body.includes('writeWithReceipt(') || body.includes('mfgWrite(') || body.includes('mfgWrite<')) return 'POST';
   return 'GET';
 }
 
 function extractClientMethods() {
-  const text = read(clientPath);
-  const apiStart = text.indexOf('export const api = {');
-  const apiText = text.slice(apiStart);
-  const members = Array.from(apiText.matchAll(/^\s{2}([A-Za-z0-9_]+):/gm));
   const entries = [];
-  for (let index = 0; index < members.length; index += 1) {
-    const member = members[index];
-    const [, name] = member;
-    const memberStart = member.index;
-    const memberEnd = members[index + 1]?.index ?? apiText.indexOf('\n};', memberStart);
-    const memberText = apiText.slice(memberStart, memberEnd < 0 ? apiText.length : memberEnd);
-    const arrow = memberText.indexOf('=>');
-    if (arrow < 0) continue;
-    const body = memberText.slice(arrow + 2);
-    const route = firstRequestRoute(body)?.trim();
-    if (!route) continue;
-    entries.push({
-      client_method: name,
-      method: inferMethod(body),
-      path: route,
-      normalized_path: normalizeRoute(route),
-      operation: inferMethod(body) === 'GET' ? 'read' : 'write',
-      criticality: criticalMethods[name]?.criticality || 'p2',
-      page: criticalMethods[name]?.page || inferPage(name, route),
-      governed_receipt_required: Boolean(criticalMethods[name]?.governedReceiptRequired),
-    });
+  for (const source of clientSources) {
+    const text = read(source.file);
+    const apiStart = text.indexOf(source.marker);
+    if (apiStart < 0) throw new Error(`API object ${source.marker} is missing from ${source.file}`);
+    const apiText = text.slice(apiStart);
+    const members = Array.from(apiText.matchAll(/^\s{2}([A-Za-z0-9_]+):/gm));
+    for (let index = 0; index < members.length; index += 1) {
+      const member = members[index];
+      const [, name] = member;
+      const memberStart = member.index;
+      const memberEnd = members[index + 1]?.index ?? apiText.indexOf('\n};', memberStart);
+      const memberText = apiText.slice(memberStart, memberEnd < 0 ? apiText.length : memberEnd);
+      const arrow = memberText.indexOf('=>');
+      if (arrow < 0) continue;
+      const body = memberText.slice(arrow + 2);
+      const route = firstRequestRoute(body)?.trim();
+      if (!route) continue;
+      const method = inferMethod(body);
+      entries.push({
+        client_method: name,
+        method,
+        path: route,
+        normalized_path: normalizeRoute(route),
+        operation: method === 'GET' ? 'read' : 'write',
+        criticality: criticalMethods[name]?.criticality || 'p2',
+        page: criticalMethods[name]?.page || inferPage(name, route),
+        governed_receipt_required: Boolean(criticalMethods[name]?.governedReceiptRequired),
+      });
+    }
   }
   return entries;
 }
@@ -250,6 +259,20 @@ function extractRoutes() {
   const routes = [];
   for (const file of routeDirs.flatMap(walk).filter((item) => item.endsWith('.rs'))) {
     const text = read(file);
+    // External APPs own a declarative route contract. This macro input is the
+    // authoritative method/path source even though Axum registration happens
+    // later through the compiled APP contribution.
+    const appContractRegex = /^\s*[A-Za-z0-9_]+,\s*"[^"]+",\s*"([A-Z]+)",\s*"([^"]+)"/gm;
+    let appContract;
+    while ((appContract = appContractRegex.exec(text))) {
+      const [, method, route] = appContract;
+      routes.push({
+        method,
+        path: route,
+        normalized_path: normalizeRoute(route),
+        file: path.relative(webuiRoot, file),
+      });
+    }
     // TypedRouteSpec is the authoritative route declaration for the
     // projection family. Do not make the matrix claim those APIs disappeared
     // simply because their Axum registration uses `spec.path` instead of a
@@ -306,11 +329,11 @@ function routeMatches(entry, route) {
 function hasGovernedReceiptEvidence(entry) {
   if (!entry.governed_receipt_required) return true;
   const sources = [
-    read(path.join(webuiRoot, 'src/components/mfg/MfgCockpitWorkspace.vue')),
-    read(path.join(webuiRoot, 'src/components/mfg/MfgFocusWorkspace.vue')),
-    read(path.join(webuiRoot, 'src/components/mfg/MfgCollaborationWorkspace.vue')),
-    read(path.join(webuiRoot, 'src/components/mfg/MfgDomainWorkspace.vue')),
-    read(path.join(webuiRoot, 'src/stores/mfgCockpit.ts')),
+    read(appWebUiPath('mfg', 'components', 'mfg', 'MfgCockpitWorkspace.vue')),
+    read(appWebUiPath('mfg', 'components', 'mfg', 'MfgFocusWorkspace.vue')),
+    read(appWebUiPath('mfg', 'components', 'mfg', 'MfgCollaborationWorkspace.vue')),
+    read(appWebUiPath('mfg', 'components', 'mfg', 'MfgDomainWorkspace.vue')),
+    read(appWebUiPath('mfg', 'stores', 'mfgCockpit.ts')),
   ].join('\n');
   const hasReceiptOrTerminalState = /RequestReceipt|cockpit\.saving|operationError|\bbusy\b/.test(sources);
   return sources.includes(entry.client_method) && hasReceiptOrTerminalState;

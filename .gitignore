@@ -5,4 +5,5 @@ plan/
 surfaces/plan/
 test-results/
 coverage/
+.cowd/
 .DS_Store

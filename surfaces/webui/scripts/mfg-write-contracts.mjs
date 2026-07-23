@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { appWebUiPath } from './app-source-paths.mjs';
 import { evidenceContext } from './evidence-context.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -10,7 +11,7 @@ const webuiRoot = resolve(__dirname, '..');
 const provenance = evidenceContext('mfg-write-contracts');
 const planRoot = provenance.plan_root;
 const version = provenance.version;
-const sourcePath = resolve(webuiRoot, 'src', 'data', 'mfgWriteContracts.json');
+const sourcePath = appWebUiPath('mfg', 'data', 'mfgWriteContracts.json');
 const reportPath = resolve(planRoot, 'reports', version, `${version}-mfg-write-contracts.json`);
 
 const contracts = JSON.parse(await readFile(sourcePath, 'utf8'));

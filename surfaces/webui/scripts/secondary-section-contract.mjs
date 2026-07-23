@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { appWebUiPath } from './app-source-paths.mjs';
 import { evidenceContext } from './evidence-context.mjs';
 
 const provenance = evidenceContext('secondary-section-contract');
@@ -20,12 +21,16 @@ const pages = {
   tools: { file: 'ToolsPage.vue', sections: ['registry', 'operations', 'mutations', 'checkpoints', 'cache', 'ledger', 'risk'] },
   surfaces: { file: 'SurfacePage.vue', sections: ['health', 'registry', 'routes', 'dispatch', 'delivery', 'trigger-events', 'events'] },
   gateway: { file: 'GatewayPage.vue', sections: ['alignment', 'connectors', 'resources', 'executions', 'identities'] },
-  mfg: { file: 'MfgPage.vue', sections: ['dashboard', 'focus', 'collaboration', 'data', 'reality', 'evidence', 'operations', 'skills', 'reports'] },
+  mfg: {
+    file: appWebUiPath('mfg', 'MfgApp.vue'),
+    capabilityFile: appWebUiPath('mfg', 'index.ts'),
+    sections: ['dashboard', 'focus', 'collaboration', 'data', 'reality', 'evidence', 'operations', 'skills', 'reports'],
+  },
   audit: { file: 'AuditPage.vue', sections: ['global-timeline', 'logs', 'usage', 'release', 'harness-eval', 'harness-eval-runs', 'harness-eval-scenarios', 'evolution', 'evaluation-policy', 'approvals', 'cross-plane'] },
 };
 
-function read(relativePath) {
-  return fs.readFileSync(path.join(webuiRoot, relativePath), 'utf8');
+function read(file) {
+  return fs.readFileSync(path.isAbsolute(file) ? file : path.join(webuiRoot, file), 'utf8');
 }
 
 function unique(values) {
@@ -42,7 +47,9 @@ const failures = [];
 const pageReports = [];
 
 for (const [pageId, page] of Object.entries(pages)) {
-  const pageText = read(path.join('src/pages', page.file));
+  const pageFile = path.isAbsolute(page.file) ? page.file : path.join(webuiRoot, 'src/pages', page.file);
+  const pageText = read(pageFile);
+  const pageCapabilityText = page.capabilityFile ? read(page.capabilityFile) : capabilityText;
   const sectionTags = Array.from(pageText.matchAll(/<[^>]*data-section="([^"]+)"[^>]*>/gs));
   const actualSections = unique(Array.from(pageText.matchAll(/data-section="([^"]+)"/g))
     .map((match) => match[1])
@@ -50,8 +57,10 @@ for (const [pageId, page] of Object.entries(pages)) {
   const expectedSections = [...page.sections].sort();
   const missingInPage = expectedSections.filter((sectionId) => !actualSections.includes(sectionId));
   const unexpectedInPage = actualSections.filter((sectionId) => !expectedSections.includes(sectionId));
-  const missingInCapability = expectedSections.filter((sectionId) => !hasCapabilitySection(capabilityText, sectionId));
-  const hasPageSpec = capabilityText.includes(`${pageId}: spec(`);
+  const missingInCapability = expectedSections.filter((sectionId) => !hasCapabilitySection(pageCapabilityText, sectionId));
+  const hasPageSpec = pageId === 'mfg'
+    ? pageCapabilityText.includes("appId: 'mfg'") && pageCapabilityText.includes('capability:')
+    : pageCapabilityText.includes(`${pageId}: spec(`);
   const missingVisibilityBindings = sectionTags.filter((match) => {
     const sectionId = match[1];
     if (pageId === 'mfg') {
@@ -68,7 +77,7 @@ for (const [pageId, page] of Object.entries(pages)) {
 
   pageReports.push({
     page: pageId,
-    file: page.file,
+    file: path.relative(webuiRoot, pageFile),
     expected_sections: expectedSections,
     actual_sections: actualSections,
     explicit_visibility_bindings: sectionTags.length - missingVisibilityBindings.length,

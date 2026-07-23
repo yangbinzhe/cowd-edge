@@ -20,6 +20,7 @@ import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
+import { appPluginForId } from '../plugins/registry';
 
 const store = useAppStore();
 const projections = useProjectionRegistryStore();
@@ -253,16 +254,14 @@ async function releaseLease() {
 }
 
 async function respondApproval(approval: any, approved: boolean) {
-  if (String(approval?.source?.kind || '').toLowerCase() === 'mfg') {
+  const sourceApp = appPluginForId(String(approval?.source?.kind || '').toLowerCase());
+  if (sourceApp) {
     const reportRef = String(approval?.source?.resource_ref || '');
-    const reportId = reportRef.startsWith('mfg:cockpit-report:')
-      ? reportRef.slice('mfg:cockpit-report:'.length)
-      : '';
     await router.push({
-      path: '/apps/mfg',
+      path: sourceApp.route,
       query: {
         section: 'reports',
-        report: reportId || undefined,
+        report: reportRef || undefined,
         review: approval?.source?.review_ref || undefined,
       },
     });

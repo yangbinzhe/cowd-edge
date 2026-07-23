@@ -14,22 +14,6 @@ import type {
   SessionTurnProjection,
   WorkspaceFile,
 } from '../types';
-import type {
-  MfgApiErrorV1,
-  MfgEntitlementProjection,
-  MfgFrontendContract,
-  MfgMutationIntent,
-  MfgReportDeliveryReview,
-  MfgReportDeliveryReviewCollection,
-  MfgReportDeliveryReviewDecision,
-  MfgReportDeliveryReviewRerouteTarget,
-  MfgWireApiErrorV1,
-} from '../types/mfg';
-import {
-  classifyMfgIntentFailure,
-  MFG_RETRY_SAME_INTENT_ACTION,
-  updateMfgMutationIntent,
-} from '../stores/mutationIntents';
 
 export interface EndpointSnapshot extends ApiReadState {
   id: string;
@@ -62,6 +46,16 @@ export interface HarnessEvalRunOptions {
   objective?: string;
 }
 
+export interface CowdApiError {
+  code?: string;
+  message?: string;
+  http_status?: number;
+  details?: Record<string, unknown> | null;
+  retryable?: boolean;
+  recovery_actions?: Array<Record<string, unknown>>;
+  request_id?: string | null;
+}
+
 export class ApiWriteError extends Error {
   endpoint: string;
   method: string;
@@ -70,10 +64,10 @@ export class ApiWriteError extends Error {
   status_text: string;
   body: string;
   retryable: boolean;
-  apiError: MfgApiErrorV1 | null;
+  apiError: CowdApiError | null;
   code: string;
   details: Record<string, unknown> | null;
-  recoveryActions: MfgApiErrorV1['recovery_actions'];
+  recoveryActions: Array<Record<string, unknown>>;
   requestId: string | null;
 
   constructor(message: string, options: {
@@ -83,7 +77,7 @@ export class ApiWriteError extends Error {
     status: number;
     status_text: string;
     body: string;
-    api_error?: MfgApiErrorV1 | null;
+    api_error?: CowdApiError | null;
   }) {
     super(message);
     this.name = 'ApiWriteError';
@@ -94,7 +88,7 @@ export class ApiWriteError extends Error {
     this.status_text = options.status_text;
     this.body = options.body;
     this.apiError = options.api_error || null;
-    this.code = this.apiError?.code || `http_${options.status || 0}`;
+    this.code = this.apiError?.code || ('http_' + (options.status || 0));
     this.details = this.apiError?.details && typeof this.apiError.details === 'object'
       ? this.apiError.details
       : null;
@@ -168,22 +162,30 @@ export const WEBUI_REQUESTED_CAPABILITIES = [
   'evolution.release.manage',
   'runtime.maintenance.manage',
   'runtime.outbox.retry',
-  'mfg.read',
-  'mfg.incident.operate',
-  'mfg.playbook.manage',
-  'mfg.alert.respond',
-  'mfg.alert.manage',
-  'mfg.assignment.manage',
-  'mfg.assignment.lifecycle',
-  'mfg.execution.operate',
-  'mfg.execution.feedback',
-  'mfg.report.generate',
-  'mfg.report.deliver',
-  'mfg.report.review',
-  'mfg.skill.run',
-  'mfg.cockpit.manage',
-  'mfg.data.manage',
 ] as const;
+
+const registeredAppCapabilities = new Set<string>();
+
+export function registerRequestedCapabilities(capabilities: readonly string[]) {
+  for (const capability of capabilities) {
+    if (typeof capability === 'string' && capability) registeredAppCapabilities.add(capability);
+  }
+}
+
+/** Replace APP-requested capabilities with the Gateway-confirmed APP set.
+ *
+ * The browser may contain statically bundled APP contributions that the
+ * current Gateway deliberately disabled. Replacing rather than accumulating
+ * prevents inactive APP capabilities from being requested at login.
+ */
+export function setRequestedAppCapabilities(capabilities: readonly string[]) {
+  registeredAppCapabilities.clear();
+  registerRequestedCapabilities(capabilities);
+}
+
+function requestedCapabilities() {
+  return [...new Set([...WEBUI_REQUESTED_CAPABILITIES, ...registeredAppCapabilities])];
+}
 
 function readStatusFor(response: Response): ApiReadStatus {
   if (response.status === 401 || response.status === 403) return 'forbidden';
@@ -198,7 +200,7 @@ function withReadState<T>(data: T, state: ApiReadState): T & ApiReadState {
   return { value: data, ...state } as T & ApiReadState;
 }
 
-async function read<T>(path: string, fallback: T, init: RequestInit = {}): Promise<T & ApiReadState> {
+export async function read<T>(path: string, fallback: T, init: RequestInit = {}): Promise<T & ApiReadState> {
   try {
     const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
     if (!response.ok) {
@@ -241,79 +243,28 @@ function payloadSummary(body: BodyInit | null | undefined): string {
   return text.length > 280 ? `${text.slice(0, 280)}...` : text;
 }
 
-function normalizeMfgApiError(value: MfgWireApiErrorV1): MfgApiErrorV1 {
-  return {
-    ...value,
-    details: value.details && typeof value.details === 'object'
-      ? value.details as Record<string, unknown>
-      : null,
-    recovery_actions: (value.recovery_actions || []).map((action) => ({
-      ...action,
-      kind: action.kind,
-      target: action.target,
-    })),
-  };
-}
-
-async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
   if (!response.ok) {
     const body = await response.text();
-    let apiError: MfgApiErrorV1 | null = null;
+    let apiError: CowdApiError | null = null;
     try {
-      const parsed = JSON.parse(body);
+      const parsed = JSON.parse(body) as Record<string, unknown>;
       if (parsed && typeof parsed.code === 'string' && typeof parsed.message === 'string') {
-        const wire = parsed as MfgWireApiErrorV1;
         apiError = {
-          ...normalizeMfgApiError(wire),
-          http_status: Number(wire.http_status || response.status),
-          retryable: Boolean(wire.retryable),
-          recovery_actions: Array.isArray(wire.recovery_actions)
-            ? normalizeMfgApiError(wire).recovery_actions
-            : [],
+          code: parsed.code,
+          message: parsed.message,
+          http_status: Number(parsed.http_status || response.status),
+          details: parsed.details && typeof parsed.details === 'object' ? parsed.details as Record<string, unknown> : null,
+          retryable: Boolean(parsed.retryable),
+          recovery_actions: Array.isArray(parsed.recovery_actions) ? parsed.recovery_actions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')) : [],
+          request_id: typeof parsed.request_id === 'string' ? parsed.request_id : null,
         };
       }
     } catch {
       apiError = null;
     }
-    if (!apiError) {
-      const requestId = response.headers.get('x-request-id')
-        || response.headers.get('x-cowd-request-id');
-      const retryAfter = response.headers.get('retry-after');
-      const recoveryActions = response.status === 401
-        ? [{ kind: 'reauthenticate', label: 'Sign in', target: '/#/settings?section=gateway', enabled: true }]
-        : response.status === 403
-          ? [{ kind: 'request_access', label: 'Review access', target: '/#/settings?section=gateway', enabled: true }]
-          : response.status === 409
-            ? [
-              { kind: 'reload', label: 'Reload', enabled: true },
-              { kind: 'compare', label: 'Compare', enabled: true },
-              { kind: 'save_as', label: 'Save as', enabled: true },
-            ]
-            : response.status === 429 || response.status >= 500
-              ? [{ kind: MFG_RETRY_SAME_INTENT_ACTION, label: 'Retry', enabled: true }]
-              : [{ kind: 'reload', label: 'Reload', enabled: true }];
-      apiError = {
-        code: `http_${response.status}`,
-        message: response.status >= 500
-          ? 'The service could not complete this request.'
-          : response.status === 429
-            ? 'The service is busy. Retry after the indicated delay.'
-            : response.status === 401
-              ? 'Authentication is required.'
-              : response.status === 403
-                ? 'This action is not permitted by the current entitlement.'
-                : response.status === 409
-                  ? 'The resource changed before this action completed.'
-                  : 'The request could not be completed.',
-        http_status: response.status,
-        details: retryAfter ? { retry_after: retryAfter } : null,
-        retryable: response.status === 429 || response.status >= 500,
-        recovery_actions: recoveryActions,
-        request_id: requestId,
-      };
-    }
-    throw new ApiWriteError(apiError?.message || body || `${response.status} ${response.statusText}`, {
+    throw new ApiWriteError(apiError?.message || body || (response.status + ' ' + response.statusText), {
       endpoint: path,
       method: init.method || 'POST',
       payload_summary: payloadSummary(init.body),
@@ -324,71 +275,6 @@ async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
     });
   }
   return await parseResponse(response, path) as T;
-}
-
-async function mfgWrite<T>(
-  path: string,
-  intent: MfgMutationIntent,
-  body: Record<string, unknown> = {},
-  method = 'POST',
-): Promise<T> {
-  if (!intent?.idempotency_key || !intent.action_id || !intent.resource_ref) {
-    throw new Error('MFG mutation requires an explicit persisted intent');
-  }
-  updateMfgMutationIntent(intent, { status: 'submitting', error: null });
-  const requestBody = withoutServerActor({
-    ...body,
-    idempotency_key: intent.idempotency_key,
-  }, ['actor_principal', 'actor_ref', 'operator_id']);
-  try {
-    const result = await write<T>(path, {
-      method,
-      headers: { 'Idempotency-Key': intent.idempotency_key },
-      body: method === 'DELETE' ? undefined : JSON.stringify(requestBody),
-    });
-    const value = result && typeof result === 'object'
-      ? result as Record<string, unknown>
-      : {};
-    const receipt = value?.receipt || value?.review || result;
-    const receiptRecord = receipt && typeof receipt === 'object'
-      ? receipt as Record<string, unknown>
-      : {};
-    const idempotentReplay = value?.idempotent_replay === true
-      || receiptRecord.idempotent_replay === true
-      || receiptRecord.status === 'replayed';
-    updateMfgMutationIntent(intent, {
-      status: idempotentReplay ? 'replayed' : 'succeeded',
-      receipt,
-      error: null,
-    });
-    return result;
-  } catch (error) {
-    const typed = error instanceof ApiWriteError
-      ? error.apiError || {
-        code: error.code,
-        message: error.message,
-        http_status: error.status,
-        details: error.details,
-        retryable: error.retryable,
-        recovery_actions: error.recoveryActions,
-        request_id: error.requestId,
-      }
-      : {
-        code: 'network_error',
-        message: error instanceof Error ? error.message : String(error),
-        http_status: 0,
-        retryable: true,
-        recovery_actions: [{ kind: MFG_RETRY_SAME_INTENT_ACTION, label: 'Retry', enabled: true }],
-      };
-    updateMfgMutationIntent(intent, {
-      status: classifyMfgIntentFailure(typed.http_status, typed.retryable),
-      error: typed,
-    });
-    if (typed.http_status === 403 && typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('cowd:mfg-entitlement-stale'));
-    }
-    throw error;
-  }
 }
 
 async function writeWithReceipt<T>(path: string, init: RequestInit = {}): Promise<ApiReceipt<T>> {
@@ -476,7 +362,6 @@ const pageContractDomains: Record<CapabilityPageId, string[]> = {
   tools: ['tool', 'slash'],
   surfaces: ['surface', 'edge'],
   gateway: ['connector', 'cross_plane', 'resource', 'public', 'profile'],
-  mfg: ['mfg', 'apps'],
   audit: ['audit', 'harness_eval', 'approval', 'cross_plane'],
 };
 
@@ -491,7 +376,6 @@ const pageContractPrefixes: Record<CapabilityPageId, string[]> = {
   tools: ['/api/tools', '/api/slash'],
   surfaces: ['/api/surfaces', '/api/edges', '/api/cowd/surfaces'],
   gateway: ['/api/gateway', '/api/connectors', '/api/cross-plane', '/api/platforms', '/api/message-connectors', '/api/resources'],
-  mfg: ['/api/apps/mfg'],
   audit: ['/api/audit', '/api/usage', '/api/harness-eval', '/api/approval/history', '/api/cross-plane/audit'],
 };
 
@@ -628,16 +512,6 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
       ['WeChat QR', '/api/message-connectors/wechat-ilink/actions/account.login_qr.start'],
       ['WeChat accounts', '/api/message-connectors/wechat-ilink/accounts'],
     ],
-    mfg: [
-      ['App descriptor', '/api/apps/mfg/app'],
-      ['Health', '/api/apps/mfg/reality/health'],
-      ['Metrics', '/api/apps/mfg/reality/metrics'],
-      ['Entities', '/api/apps/mfg/reality/entities'],
-      ['Changes', '/api/apps/mfg/reality/changes'],
-      ['Incidents', '/api/apps/mfg/incidents'],
-      ['Skills', '/api/apps/mfg/skills'],
-      ['Command center', '/api/apps/mfg/command-center'],
-    ],
     audit: [
       ['Audit export', '/api/audit/export?limit=50'],
       ['Approval history', '/api/approval/history?limit=50'],
@@ -696,19 +570,19 @@ export const api = {
   authLogin: (credential: string) => write<{
     success: boolean;
     surface_id: string;
-    entitlement?: MfgEntitlementProjection;
+    entitlement?: Record<string, unknown>;
   }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({
       token: credential,
       surface_id: 'webui',
-      requested_capabilities: WEBUI_REQUESTED_CAPABILITIES,
+      requested_capabilities: requestedCapabilities(),
     }),
   }),
   authVerify: () => read<{
     valid?: boolean;
     auth_required?: boolean;
-    entitlement?: MfgEntitlementProjection;
+    entitlement?: Record<string, unknown>;
   }>('/api/auth/verify', { valid: false, auth_required: true }),
   authLogout: () => write('/api/auth/logout', { method: 'POST' }),
   sessions: (limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(`/api/sessions?limit=${limit}&offset=${offset}`, { sessions: [] }),
@@ -1365,296 +1239,6 @@ export const api = {
     method: 'POST',
   }),
   managedAgentEffects: () => read('/api/runtime/managed-agents/effects', { effects: [] }),
-  mfgContract: () => read<MfgFrontendContract>('/api/apps/mfg/contract', {}),
-  mfgApp: () => read('/api/apps/mfg/app', {}),
-  mfgHealth: () => read('/api/apps/mfg/reality/health', {}),
-  mfgProductionGovernance: () => read('/api/apps/mfg/production/governance', {}),
-  mfgDataPlaneHealth: () => read('/api/apps/mfg/reality/data-plane/health', {}),
-  mfgDataPlaneIngestPlan: (ingest: Record<string, unknown>) => write('/api/apps/mfg/reality/data-plane/ingest-plan', {
-    method: 'POST',
-    body: JSON.stringify({ ingest, session_id: 'webui-mfg' }),
-  }),
-  mfgCommandCenter: () => read('/api/apps/mfg/command-center', {}),
-  mfgCommandCenterLive: () => read('/api/apps/mfg/command-center/live', {}),
-  mfgDecisionTrace: (params: { incident_id?: string; report_id?: string } = {}) => {
-    const query = new URLSearchParams();
-    if (params.incident_id) query.set('incident_id', params.incident_id);
-    if (params.report_id) query.set('report_id', params.report_id);
-    const suffix = query.toString();
-    return read('/api/apps/mfg/decision-trace' + (suffix ? `?${suffix}` : ''), {});
-  },
-  mfgSourcePackUpsert: (source_pack: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/source-packs/upsert',
-    intent,
-    { source_pack, session_id: 'webui-mfg' },
-  ),
-  mfgSourcePack: (id: string) => read(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}`, {}),
-  mfgSourcePackValidate: (id: string) => write(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/validate`, { method: 'POST' }),
-  mfgSourcePackDeltaPlan: (id: string) => write(`/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/delta-plan`, { method: 'POST' }),
-  mfgSourcePackIngestFile: (id: string, facts: Record<string, unknown>[], intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/ingest-file`,
-    intent,
-    { facts, session_id: 'webui-mfg' },
-  ),
-  mfgSourcePackConnectorPlan: (id: string, run: Record<string, unknown> | undefined, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/connector-runs/plan`,
-    intent,
-    { run, session_id: 'webui-mfg' },
-  ),
-  mfgSourcePackConnectorRun: (id: string, run: Record<string, unknown> | undefined, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/reality/source-packs/${encodeURIComponent(id)}/connector-runs/run`,
-    intent,
-    { run, session_id: 'webui-mfg' },
-  ),
-  mfgConnectorRun: (id: string) => read(`/api/apps/mfg/reality/connector-runs/${encodeURIComponent(id)}`, {}),
-  mfgMetrics: () => read('/api/apps/mfg/reality/metrics', {}),
-  mfgMetricDetail: (id: string) => read(`/api/apps/mfg/reality/metrics/${encodeURIComponent(id)}`, {}),
-  mfgMetricLineage: (id: string) => read(`/api/apps/mfg/reality/metrics/${encodeURIComponent(id)}/lineage`, {}),
-  mfgAttentionPlan: (body: Record<string, unknown>) => write('/api/apps/mfg/reality/metrics/attention-plan', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  }),
-  mfgMetricSnapshotMaterialize: (metric_ids: string[], scope_ref: string | undefined, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/metrics/snapshots/materialize',
-    intent,
-    { metric_ids, scope_ref, session_id: 'webui-mfg' },
-  ),
-  mfgMetricRecompute: (intent: MfgMutationIntent) => mfgWrite('/api/apps/mfg/reality/metrics/recompute', intent),
-  mfgMetricDependencyUpsert: (dependency: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/metric-dependencies/upsert',
-    intent,
-    { dependency, session_id: 'webui-mfg' },
-  ),
-  mfgMetricAffectedByFactType: (fact_type: string) => write('/api/apps/mfg/reality/metric-dependencies/affected-by-fact-type', {
-    method: 'POST',
-    body: JSON.stringify({ fact_type, session_id: 'webui-mfg' }),
-  }),
-  mfgComputeJobPlan: (job: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/compute/jobs/plan',
-    intent,
-    { job, session_id: 'webui-mfg' },
-  ),
-  mfgComputeJob: (id: string) => read(`/api/apps/mfg/reality/compute/jobs/${encodeURIComponent(id)}`, {}),
-  mfgComputeJobRun: (id: string, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/reality/compute/jobs/${encodeURIComponent(id)}/run`,
-    intent,
-  ),
-  mfgEntities: () => read('/api/apps/mfg/reality/entities', {}),
-  mfgEntity: (id: string) => read(`/api/apps/mfg/reality/entities/${encodeURIComponent(id)}`, {}),
-  mfgEntityUpsert: (entity: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/entities/upsert',
-    intent,
-    { entity, session_id: 'webui-mfg' },
-  ),
-  mfgEntityResolveSourceKey: (source_system: string, source_key: string) => write('/api/apps/mfg/reality/entities/resolve-source-key', {
-    method: 'POST',
-    body: JSON.stringify({ source_system, source_key, session_id: 'webui-mfg' }),
-  }),
-  mfgEntityMatchCandidate: (left_entity_id: string, right_entity_id: string) => write('/api/apps/mfg/reality/entities/match-candidate', {
-    method: 'POST',
-    body: JSON.stringify({ left_entity_id, right_entity_id, session_id: 'webui-mfg' }),
-  }),
-  mfgEntityConflictDecision: (body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/entities/conflict-decision',
-    intent,
-    { ...body, session_id: 'webui-mfg' },
-  ),
-  mfgEntityRelations: (id: string) => read(`/api/apps/mfg/reality/entities/${encodeURIComponent(id)}/relations`, {}),
-  mfgEntityImpactPath: (id: string) => read(`/api/apps/mfg/reality/entities/${encodeURIComponent(id)}/impact-path`, {}),
-  mfgRelationUpsert: (relation: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/relations/upsert',
-    intent,
-    { relation, session_id: 'webui-mfg' },
-  ),
-  mfgChanges: () => read('/api/apps/mfg/reality/changes', {}),
-  mfgAttentionHot: () => read('/api/apps/mfg/reality/attention/hot', {}),
-  mfgEvidenceBuild: (body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/evidence/build',
-    intent,
-    { ...body, session_id: 'webui-mfg' },
-  ),
-  mfgEvidence: (id: string) => read(`/api/apps/mfg/reality/evidence/${encodeURIComponent(id)}`, {}),
-  mfgEvidenceQualityGate: (id: string, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/reality/evidence/${encodeURIComponent(id)}/quality-gate`,
-    intent,
-  ),
-  mfgEvidenceContext: (id: string) => read(`/api/apps/mfg/reality/evidence/${encodeURIComponent(id)}/context`, {}),
-  mfgQualityGate: (id: string) => read(`/api/apps/mfg/reality/quality-gates/${encodeURIComponent(id)}`, {}),
-  mfgIncidents: () => read('/api/apps/mfg/incidents', {}),
-  mfgIncident: (id: string) => read(`/api/apps/mfg/incidents/${encodeURIComponent(id)}`, {}),
-  mfgSkills: () => read('/api/apps/mfg/skills', {}),
-  mfgSkill: (id: string) => read(`/api/apps/mfg/skills/${encodeURIComponent(id)}`, {}),
-  mfgSkillRun: (id: string) => read(`/api/apps/mfg/skill-runs/${encodeURIComponent(id)}`, {}),
-  mfgCreateIncident: (body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/incidents',
-    intent,
-    body,
-  ),
-  mfgIncidentRoom: (id: string) => read(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/room`, {}),
-  mfgAnalyzeIncident: (id: string, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/incidents/${encodeURIComponent(id)}/analyze`,
-    intent,
-  ),
-  mfgPromoteIncidentCase: (id: string, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/incidents/${encodeURIComponent(id)}/cases/promote`,
-    intent,
-  ),
-  mfgCase: (id: string) => read(`/api/apps/mfg/cases/${encodeURIComponent(id)}`, {}),
-  mfgCaseSearch: (query: string) => read(`/api/apps/mfg/cases/search?q=${encodeURIComponent(query)}`, { cases: [] }),
-  mfgPlaybook: (id: string) => read(`/api/apps/mfg/playbooks/${encodeURIComponent(id)}`, {}),
-  mfgPlaybookUpsert: (body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/playbooks/upsert',
-    intent,
-    { playbook: body, session_id: 'webui-mfg' },
-  ),
-  mfgRecommendPlaybooks: (id: string, limit = 5) => write(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/playbooks/recommend`, {
-    method: 'POST',
-    body: JSON.stringify({ limit }),
-  }),
-  mfgPlanSkills: (id: string, limit = 3) => write(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/skills/plan`, {
-    method: 'POST',
-    body: JSON.stringify({ limit }),
-  }),
-  mfgRunSkill: (id: string, skillId: string, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/incidents/${encodeURIComponent(id)}/skills/${encodeURIComponent(skillId)}/run`,
-    intent,
-    { session_id: id },
-  ),
-  mfgSkillRuns: (id: string) => read(`/api/apps/mfg/incidents/${encodeURIComponent(id)}/skills`, {}),
-  mfgExecuteAction: (analysisId: string, actionId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/analyses/${encodeURIComponent(analysisId)}/actions/${encodeURIComponent(actionId)}/execute`,
-    intent,
-    withoutServerActor(body, ['operator_id', 'actor_principal', 'actor_ref']),
-  ),
-  mfgExecutionBridge: (executionId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/executions/${encodeURIComponent(executionId)}/cross-plane/execute`,
-    intent,
-    withoutServerActor(body),
-  ),
-  mfgExecutionFeedback: (executionId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/executions/${encodeURIComponent(executionId)}/feedback`,
-    intent,
-    withoutServerActor(body, ['actor_ref', 'actor_principal', 'operator_id']),
-  ),
-  mfgExecution: (executionId: string) => read(`/api/apps/mfg/executions/${encodeURIComponent(executionId)}`, {}),
-  mfgUpsertProfile: (profile: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/cockpit/profiles/upsert',
-    intent,
-    { profile },
-  ),
-  mfgCockpitProfiles: (cadence?: string) => read(`/api/apps/mfg/cockpit/profiles${cadence ? `?cadence=${encodeURIComponent(cadence)}` : ''}`, { items: [] }),
-  mfgCockpitProfile: (profileId: string) => read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}`, {}),
-  mfgCockpitWidgetCatalog: () => read('/api/apps/mfg/cockpit/widget-catalog', { items: [] }),
-  mfgCockpitProjection: (profileId: string, filters: Record<string, string> = {}) => {
-    const params = new URLSearchParams(filters);
-    return read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/projection${params.size ? `?${params.toString()}` : ''}`, {});
-  },
-  mfgCockpitWidgetProjection: (profileId: string, instanceId: string, filters: Record<string, string> = {}, signal?: AbortSignal) => {
-    const params = new URLSearchParams(filters);
-    return read(`/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/widgets/${encodeURIComponent(instanceId)}/projection${params.size ? `?${params.toString()}` : ''}`, {}, { signal });
-  },
-  mfgDeleteCockpitProfile: (profileId: string, expectedRevision: number, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}?expected_revision=${encodeURIComponent(expectedRevision)}&idempotency_key=${encodeURIComponent(intent.idempotency_key)}`,
-    intent,
-    {},
-    'DELETE',
-  ),
-  mfgCloneCockpitProfile: (profileId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/clone`,
-    intent,
-    body,
-  ),
-  mfgShareCockpitProfile: (profileId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/share`,
-    intent,
-    body,
-  ),
-  mfgAlertRules: () => read('/api/apps/mfg/focus/alert-rules', { items: [] }),
-  mfgUpsertAlertRule: (rule: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite('/api/apps/mfg/focus/alert-rules', intent, { rule }),
-  mfgAlertOccurrences: (status?: string) => read(`/api/apps/mfg/focus/alerts${status ? `?status=${encodeURIComponent(status)}` : ''}`, { items: [] }),
-  mfgAlertCommand: (occurrenceId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/focus/alerts/${encodeURIComponent(occurrenceId)}/command`,
-    intent,
-    body,
-  ),
-  mfgAlertSubscriptions: () => read('/api/apps/mfg/focus/alert-subscriptions', { items: [] }),
-  mfgUpsertAlertSubscription: (subscription: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite('/api/apps/mfg/focus/alert-subscriptions', intent, { subscription }),
-  mfgForecasts: (metricRefs: string[] = [], horizon = 'next_period') => read(`/api/apps/mfg/focus/forecasts?metric_refs=${encodeURIComponent(metricRefs.join(','))}&horizon=${encodeURIComponent(horizon)}`, { items: [] }),
-  mfgAssignments: (query: Record<string, string> = {}) => {
-    const params = new URLSearchParams(query);
-    const suffix = params.size ? `?${params.toString()}` : '';
-    return read(`/api/apps/mfg/assignments${suffix}`, { items: [] });
-  },
-  mfgAssignment: (assignmentId: string) => read(`/api/apps/mfg/assignments/${encodeURIComponent(assignmentId)}`, {}),
-  mfgUpsertAssignment: (assignment: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite('/api/apps/mfg/assignments', intent, { assignment }),
-  mfgAssignmentCommand: (assignmentId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/assignments/${encodeURIComponent(assignmentId)}/command`,
-    intent,
-    body,
-  ),
-  mfgLiveSnapshot: () => read('/api/apps/mfg/live/snapshot', {}),
-  mfgGenerateReport: (profileId: string, report: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}/reports/generate`,
-    intent,
-    { report },
-  ),
-  mfgReports: (profileId?: string) => read(`/api/apps/mfg/cockpit/reports${profileId ? `?profile_id=${encodeURIComponent(profileId)}` : ''}`, { items: [] }),
-  mfgReportDeliveryState: (reportId: string) => read(`/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/delivery-state`, {}),
-  mfgReport: (reportId: string) => read(`/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}`, {}),
-  mfgDeliverReport: (reportId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/deliver`,
-    intent,
-    withoutServerActor(body),
-  ),
-  mfgRetryReportDelivery: (reportId: string, body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    `/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/delivery/retry`,
-    intent,
-    withoutServerActor(body),
-  ),
-  mfgRunReportSchedule: (body: Record<string, unknown>, intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/cockpit/reports/schedules/run',
-    intent,
-    body,
-  ),
-  mfgRequestReportReview: (
-    reportId: string,
-    body: { expected_report_revision: number; reason: string; evidence_refs: string[] },
-    intent: MfgMutationIntent,
-  ) => mfgWrite<{ review: MfgReportDeliveryReview }>(
-    `/api/apps/mfg/cockpit/reports/${encodeURIComponent(reportId)}/reviews`,
-    intent,
-    body,
-  ),
-  mfgReportReviews: (reportId?: string) => read<MfgReportDeliveryReviewCollection>(
-    `/api/apps/mfg/cockpit/report-reviews${reportId ? `?report_id=${encodeURIComponent(reportId)}` : ''}`,
-    { items: [] },
-  ),
-  mfgReportReview: (reviewId: string) => read<MfgReportDeliveryReview>(
-    `/api/apps/mfg/cockpit/report-reviews/${encodeURIComponent(reviewId)}`,
-    {} as MfgReportDeliveryReview,
-  ),
-  mfgDecideReportReview: (
-    reviewId: string,
-    body: {
-      decision: MfgReportDeliveryReviewDecision;
-      expected_revision: number;
-      reason: string;
-      evidence_refs: string[];
-      reroute?: MfgReportDeliveryReviewRerouteTarget;
-    },
-    intent: MfgMutationIntent,
-  ) => mfgWrite<{ review: MfgReportDeliveryReview }>(
-    `/api/apps/mfg/cockpit/report-reviews/${encodeURIComponent(reviewId)}/decision`,
-    intent,
-    body,
-  ),
-  mfgIngestFact: (facts: Record<string, unknown>[], intent: MfgMutationIntent) => mfgWrite(
-    '/api/apps/mfg/reality/facts/ingest',
-    intent,
-    { facts, session_id: 'webui-mfg' },
-  ),
-  mfgSeedDomain: (intent: MfgMutationIntent) => mfgWrite('/api/apps/mfg/domain/server-manufacturing/seed', intent),
-  mfgSeedOntology: (intent: MfgMutationIntent) => mfgWrite('/api/apps/mfg/ontology/server-manufacturing/seed', intent),
   settings: () => read('/api/config', { model: 'unknown', version: 'unknown' }),
   saveConfig: (config: Record<string, unknown>) => write('/api/config', {
     method: 'PUT',

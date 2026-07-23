@@ -1,7 +1,7 @@
 import { t } from '../i18n';
-import type { CapabilityAction, CapabilitySection, CapabilitySpec, NavId } from '../types';
+import type { CapabilityAction, CapabilitySection, CapabilitySpec, CoreNavId } from '../types';
 
-type CapabilityId = Exclude<NavId, 'chat' | 'settings'>;
+type CapabilityId = Exclude<CoreNavId, 'chat' | 'settings'>;
 
 function spec(
   id: CapabilityId,
@@ -287,32 +287,6 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
       { label: t('script.data.capabilities.label.22b4b0c3c3'), value: '/api/surfaces' },
       { label: t('script.data.capabilities.label.4b1e9501b9'), value: '/api/connectors/resources' },
       { label: t('script.data.capabilities.label.823619e079'), value: t('data.capabilities.string.6c8cca8939') },
-    ],
-  ),
-  mfg: spec(
-    'mfg',
-    t('data.capabilities.string.00e34e2f1e'),
-    t('data.capabilities.string.725f332676'),
-    [
-      section('dashboard', t('mfg.nav.dashboard.label'), t('mfg.nav.dashboard.description'), 'summary', 'compact', 'mfg.cockpit'),
-      section('focus', t('mfg.nav.focus.label'), t('mfg.nav.focus.description'), 'queue', 'standard', 'mfg.alert'),
-      section('collaboration', t('mfg.nav.collaboration.label'), t('mfg.nav.collaboration.description'), 'graph', 'standard', 'mfg.assignment'),
-      section('data', t('mfg.nav.data.label'), t('mfg.nav.data.description'), 'form', 'standard', 'mfg.data-plane'),
-      section('reality', t('mfg.nav.reality.label'), t('mfg.nav.reality.description'), 'graph', 'standard', 'mfg.reality'),
-      section('evidence', t('script.data.capabilities.label.7ea014de7b'), t('capability.section.mfg.evidence.description'), 'reader', 'inspect', 'mfg.evidence'),
-      section('operations', t('mfg.nav.operations.label'), t('mfg.nav.operations.description'), 'governance', 'inspect', 'mfg.incident'),
-      section('skills', t('data.capabilities.string.f2bfdd4a8a'), t('capability.section.mfg.skills.description'), 'table', 'standard', 'mfg.skill'),
-      section('reports', t('capability.section.mfg.reports.label'), t('capability.section.mfg.reports.description'), 'reader', 'standard', 'mfg.report'),
-    ],
-    [
-      { label: t('data.capabilities.string.668c0630e4'), kind: 'primary', endpoint: '/api/apps/mfg/app' },
-      { label: t('data.capabilities.string.9c20a951ff'), kind: 'secondary', endpoint: '/api/apps/mfg/command-center' },
-      { label: t('data.capabilities.string.b607489c3b'), kind: 'secondary', endpoint: '/api/apps/mfg/cockpit/profiles/:id/reports/generate' },
-    ],
-    [
-      { label: t('script.data.capabilities.label.d93d10ff0f'), value: '/api/apps/mfg/app' },
-      { label: t('script.data.capabilities.label.0a5e7a0583'), value: t('data.capabilities.string.05d927676d') },
-      { label: t('data.capabilities.string.a7ce4d08d4'), value: t('data.capabilities.string.9f854ba1d8') },
     ],
   ),
   audit: spec(

@@ -9,7 +9,7 @@ import {
 import { useAppStore } from './stores/app';
 import type { NavId, NavItem } from './types';
 import { buildCapabilitySpecs } from './data/capabilities';
-import { pluginNavItems } from './plugins/registry';
+import { appPluginForRoute, pluginCapabilitySpecs, pluginNavItems } from './plugins/registry';
 import CompanionPanel from './components/CompanionPanel.vue';
 import CapabilitySidebar from './components/CapabilitySidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
@@ -20,7 +20,7 @@ const store = useAppStore();
 const { locale, setLocale } = useI18n();
 const route = useRoute();
 const router = useRouter();
-const capabilitySpecs = buildCapabilitySpecs();
+const capabilitySpecs = { ...buildCapabilitySpecs(), ...pluginCapabilitySpecs };
 
 const nav: NavItem[] = [
   { id: 'chat', label: 'Chat', route: '/chat', icon: MessageSquare, group: 'Core' },
@@ -59,13 +59,12 @@ const navLabelKeys: Partial<Record<NavId, string>> = {
   tools: 'nav.tools',
   surfaces: 'nav.surfaces',
   gateway: 'nav.gateway',
-  mfg: 'nav.mfg',
   audit: 'nav.audit',
   settings: 'nav.settings',
 };
 
 function navLabel(item: NavItem) {
-  const key = navLabelKeys[item.id];
+  const key = item.labelKey || navLabelKeys[item.id];
   return key ? t(key) : item.label;
 }
 
@@ -76,7 +75,8 @@ function go(item: NavItem) {
 
 function pageFromRoute(path: string): NavId {
   if (path === '/' || path === '/chat') return 'chat';
-  if (path.startsWith('/apps/mfg')) return 'mfg';
+  const plugin = appPluginForRoute(path);
+  if (plugin) return plugin.appId;
   const firstSegment = path.replace(/^\/+/, '').split('/')[0];
   return nav.some((item) => item.id === firstSegment) ? firstSegment as NavId : 'chat';
 }
@@ -84,7 +84,7 @@ function pageFromRoute(path: string): NavId {
 function defaultSectionFor(page: NavId) {
   if (page === 'chat') return '';
   if (page === 'settings') return 'ui';
-  return capabilitySpecs[page as Exclude<NavId, 'chat' | 'settings'>]?.sections?.[0]?.id || '';
+  return capabilitySpecs[page]?.sections?.[0]?.id || '';
 }
 
 const currentPage = computed<NavId>(() => pageFromRoute(route.path));
@@ -96,7 +96,7 @@ const isChatRoute = computed(() => currentPage.value === 'chat');
 const isSettingsRoute = computed(() => currentPage.value === 'settings');
 const currentCapabilitySpec = computed(() => {
   if (isChatRoute.value || isSettingsRoute.value) return null;
-  return capabilitySpecs[currentPage.value as Exclude<NavId, 'chat' | 'settings'>] || null;
+  return capabilitySpecs[currentPage.value] || null;
 });
 const currentSections = computed(() => currentCapabilitySpec.value?.sections || []);
 const isCompactViewport = ref(false);
