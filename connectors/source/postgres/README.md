@@ -10,3 +10,9 @@ SourceSnapshot ingestion.
 
 Database drivers stay inside Cowd Edge. Gateway and Runtime only see the source
 connector contract and do not link PostgreSQL dependencies.
+
+Paged reads fetch at most `limit + 1` rows to determine continuation without a
+full-table `COUNT(*)`. For field-based incremental reads, the connector keeps
+the previous high watermark while a stable window still has pages, advances
+only the continuation offset, and publishes the new high watermark on the
+final page. The returned watermark is a candidate; Gateway/Matrix owns commit.

@@ -30,6 +30,10 @@ connectors
 - WebUI 是 surface；飞书、邮件、企微、微信 iLink 是 message connector。
 - Source connector 只返回标准 `SourceRecordBatch`，不直接写 Matrix，不直接创建 memory。
 - Matrix 的 SourceSnapshot、SourcePack、事实/关系/证据落库仍由 core 完成。
+- 数据库 Source 使用 `limit + 1` 判定下一页，不执行全表 `COUNT(*)`；增量窗口分页完成前只推进
+  continuation offset，最后一页才推进字段水位线，避免同一水位值跨页时漏数。
+- 同一资源的增量读取串行，不同资源可以并行；Edge 只返回候选 `watermark_after`，持久提交仍由
+  Gateway/Matrix owner 完成。
 - 平台文档操作、后台操作、业务动作不内置到 message connector；后续通过 skill/tool 安装。
 - managed Edge 可以由 Rust 或其他语言实现；生产协议统一使用私有 UDS 上的 authenticated HTTP/2。stdio JSONL 仅保留给一次一请求的 OneShot 单元。
 

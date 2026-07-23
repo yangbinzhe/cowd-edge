@@ -10,3 +10,9 @@ SourceSnapshot ingestion.
 
 MariaDB uses the MySQL wire protocol internally, but remains a separate Edge
 source connector so Gateway can present it as a first-class data source.
+
+Paged reads fetch at most `limit + 1` rows to determine continuation without a
+full-table `COUNT(*)`. For field-based incremental reads, the connector keeps
+the previous high watermark while a stable window still has pages, advances
+only the continuation offset, and publishes the new high watermark on the
+final page. The returned watermark is a candidate; Gateway/Matrix owns commit.
