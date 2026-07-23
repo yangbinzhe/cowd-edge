@@ -177,13 +177,13 @@ describe('projectionRegistry contract gate', () => {
 
     registry.acquire('execution-retry', 'runtime-page', 'full');
     await vi.advanceTimersByTimeAsync(0);
-    expect(streams).toHaveLength(1);
+    expect(streams).toHaveLength(0);
     expect(registry.activeStreamCount).toBe(0);
-    expect(registry.stateFor('execution-retry')).toBe('reconnecting');
+    expect(registry.stateFor('execution-retry')).toBe('materializing');
 
-    await vi.advanceTimersByTimeAsync(250);
+    await vi.advanceTimersByTimeAsync(50);
     await vi.advanceTimersByTimeAsync(0);
-    expect(streams).toHaveLength(2);
+    expect(streams).toHaveLength(1);
     expect(registry.projectionFor('execution-retry')?.execution_id).toBe('execution-retry');
     registry.release('runtime-page');
   });
@@ -205,16 +205,16 @@ describe('projectionRegistry contract gate', () => {
 
     registry.acquire('execution-forbidden', 'runtime-page', 'full');
     await vi.advanceTimersByTimeAsync(0);
-    streams[0]?.onerror?.(new Event('error'));
+    expect(streams).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(30_000);
 
     expect(registry.projectionFor('execution-forbidden')).toBeNull();
     expect(registry.stateFor('execution-forbidden')).toBe('error');
-    expect(streams).toHaveLength(1);
+    expect(streams).toHaveLength(0);
     registry.release('runtime-page');
   });
 
-  it('closes the transport and frees its budget when a loaded projection is terminal', async () => {
+  it('does not open a transport or consume a budget when the first projection is terminal', async () => {
     const streams: FakeProjectionEventSource[] = [];
     vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
       constructor(url: string) {
@@ -233,8 +233,7 @@ describe('projectionRegistry contract gate', () => {
       expect(registry.stateFor('execution-terminal')).toBe('terminal');
       expect(registry.activeStreamCount).toBe(0);
     });
-    expect(streams).toHaveLength(1);
-    expect(streams[0]?.closed).toBe(true);
+    expect(streams).toHaveLength(0);
     registry.release('runtime-page');
   });
 
@@ -283,8 +282,36 @@ describe('projectionRegistry contract gate', () => {
     await vi.advanceTimersByTimeAsync(250);
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(streams).toHaveLength(3);
+    expect(streams).toHaveLength(2);
     expect(registry.projectionFor('execution-refresh')?.execution_id).toBe('execution-refresh');
+    registry.release('runtime-page');
+  });
+
+  it('caps a missing initial snapshot without creating an EventSource storm', async () => {
+    vi.useFakeTimers();
+    const streams: FakeProjectionEventSource[] = [];
+    vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
+      constructor(url: string) {
+        super(url);
+        streams.push(this);
+      }
+    });
+    const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      __state: 'not_found',
+      __error: 'still materializing',
+    } as any);
+    const registry = useProjectionRegistryStore();
+
+    registry.acquire('execution-never-ready', 'runtime-page', 'full');
+    await vi.advanceTimersByTimeAsync(3_500);
+    await vi.advanceTimersByTimeAsync(0);
+
+    const callsAtBudget = projection.mock.calls.length;
+    expect(callsAtBudget).toBe(7);
+    expect(streams).toHaveLength(0);
+    expect(registry.stateFor('execution-never-ready')).toBe('degraded');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(projection).toHaveBeenCalledTimes(callsAtBudget);
     registry.release('runtime-page');
   });
 });

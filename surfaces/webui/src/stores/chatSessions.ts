@@ -8,13 +8,16 @@ import type {
 } from '../types';
 import { useProjectionRegistryStore } from './projectionRegistry';
 
-type LiveExecutionState = Pick<ExecutionLiveState, 'status'>
+type SurfaceExecutionStatus = ExecutionLiveState['status'] | 'accepted_pending_materialization' | 'running' | 'terminal';
+type LiveExecutionState = Omit<ExecutionLiveState, 'status'>
+  & { status: SurfaceExecutionStatus }
   & Partial<Omit<ExecutionLiveState, 'status'>>;
 
 export type SessionChatState = {
   sessionId: string;
   turns: ChatTurn[];
   executionId: string;
+  terminalId: string;
   live: LiveExecutionState | null;
   evidence: SessionEvidenceProjection | null;
   streamState: 'connected' | 'connecting' | 'reconnecting' | 'degraded' | 'offline';
@@ -37,7 +40,7 @@ export const MAX_ACTIVE_SESSION_STREAMS = 12;
 function stateFor(sessionId: string) {
   if (!states[sessionId]) {
     states[sessionId] = {
-      sessionId, turns: [], executionId: '', live: null, evidence: null, streamState: 'offline',
+      sessionId, turns: [], executionId: '', terminalId: '', live: null, evidence: null, streamState: 'offline',
       requestEpoch: 0, pending: false, lastError: '', unread: 0,
       lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
     };
@@ -89,6 +92,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (activeSessionId.value !== sessionId) state.unread += 1;
   }
 
+  function matchesActiveExecution(state: SessionChatState, payload: any) {
+    return !!state.executionId
+      && typeof payload?.execution_id === 'string'
+      && payload.execution_id === state.executionId;
+  }
+
   async function load(sessionId: string) {
     const state = stateFor(sessionId);
     const epoch = ++state.requestEpoch;
@@ -115,12 +124,18 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (!state.executionId) return;
     const projection = await projections.load(state.executionId, 'full');
     if (projection?.execution_id === state.executionId) {
+      state.degradedReason = '';
       if (projection.live) state.live = projection.live;
       const status = String(projection.live?.status || state.live?.status || '');
       if (['complete', 'error', 'cancelled'].includes(status)) {
         const wasPending = state.pending;
         state.pending = false;
         if (wasPending) await load(sessionId);
+      }
+    } else {
+      const entry = projections.entries[state.executionId];
+      if (entry?.connectionState === 'degraded') {
+        state.degradedReason = entry.degradedReason || entry.lastError;
       }
     }
   }
@@ -156,11 +171,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         refreshProjection(sessionId).catch(() => undefined);
         return;
       }
-      if (payload.type === 'TextDelta') {
+      if (payload.type === 'TextDelta' && matchesActiveExecution(state, payload)) {
         recordProgress(sessionId);
         queueDelta(sessionId, String(payload.text || payload.content || ''));
       }
-      if (payload.type === 'ExecutionPhase') {
+      if (payload.type === 'ExecutionPhase' && matchesActiveExecution(state, payload)) {
         recordProgress(sessionId);
         state.live = {
           ...(state.live || {}),
@@ -169,12 +184,32 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           last_progress_at_ms: Date.now(),
         };
       }
-      if (payload.type === 'TerminalCommitted') {
+      if (payload.type === 'ExecutionGraphSummary' && matchesActiveExecution(state, payload)) {
         recordProgress(sessionId);
-        state.pending = false;
-        state.live = { ...(state.live || {}), status: 'complete', last_progress_at_ms: Date.now() };
+        const status = String(payload.summary?.status || '');
+        if (status) {
+          state.live = {
+            ...(state.live || {}),
+            status: status as SurfaceExecutionStatus,
+            status_detail: String(payload.summary?.status_detail || 'canonical graph registered'),
+            last_progress_at_ms: Date.now(),
+          };
+        }
+      }
+      if (payload.type === 'TerminalCommitted') {
+        const settlesCurrentTurn = !payload.replayed
+          && matchesActiveExecution(state, payload)
+          && !!state.terminalId
+          && payload.terminal_id === state.terminalId;
+        if (settlesCurrentTurn) {
+          recordProgress(sessionId);
+          state.pending = false;
+          state.live = { ...(state.live || {}), status: 'complete', last_progress_at_ms: Date.now() };
+        }
+        // Replayed and unrelated terminals are durable transcript facts, not
+        // lifecycle transitions for the currently selected execution.
         load(sessionId).catch(() => undefined);
-        refreshProjection(sessionId).catch(() => undefined);
+        if (settlesCurrentTurn) refreshProjection(sessionId).catch(() => undefined);
       }
     };
   }
@@ -203,13 +238,18 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     options: { transportContent?: string; resourceIds?: string[] } = {},
   ) {
     const state = stateFor(sessionId);
+    if (state.pending) {
+      state.lastError = 'a primary turn is already running for this session';
+      return false;
+    }
     const epoch = ++state.requestEpoch;
+    const idempotencyKey = `webui:${sessionId}:${epoch}`;
     state.lastError = '';
     state.pending = true;
     state.live = {
       ...(state.live || {}),
       status: 'queued',
-      status_detail: 'message accepted locally',
+      status_detail: 'submitting durable session input',
       last_progress_at_ms: Date.now(),
     };
     state.turns.push({ id: `local:${epoch}`, role: 'user', content, status: 'complete' });
@@ -221,12 +261,19 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         sessionId,
         options.transportContent || content,
         options.resourceIds || [],
-        `webui:${sessionId}:${epoch}`,
+        idempotencyKey,
       );
       if (state.requestEpoch !== epoch) return false;
       state.executionId = String(receipt?.execution?.graph_id || receipt?.execution_id || '');
+      state.terminalId = String(receipt?.execution?.terminal_id || `turn-terminal:${idempotencyKey}`);
+      state.live = {
+        ...(state.live || {}),
+        status: String(receipt?.execution?.status || 'accepted_pending_materialization') as SurfaceExecutionStatus,
+        status_detail: String(receipt?.execution?.materialization?.state || 'accepted_pending_graph'),
+        last_progress_at_ms: Date.now(),
+      };
       if (state.executionId) {
-        projections.acquire(state.executionId, `chat:${sessionId}`, 'full');
+        projections.acquire(state.executionId, `chat:${sessionId}`, 'full', 'bounded');
         await refreshProjection(sessionId);
       }
       return true;

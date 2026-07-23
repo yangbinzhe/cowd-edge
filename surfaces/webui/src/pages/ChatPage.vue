@@ -143,7 +143,7 @@ async function handleComposerKeydown(event: KeyboardEvent) {
 
 async function submit() {
   const text = draft.value.trim();
-  if (!text || sending.value) return;
+  if (!text || sending.value || turnRunning.value) return;
   if (text === '/model') {
     store.openModal('model');
     draft.value = '';
@@ -342,7 +342,7 @@ async function chooseCommand(command: any) {
           <button class="icon-action" type="button" :aria-label="t('component.companion.panel.text.727690de87')" @click="store.openCompanion('workspace')"><Paperclip :size="16" /></button>
           <button class="ghost-action" type="button" @click="store.openModal('commands')"><Zap :size="15" />{{ t('page.chat.page.text.01bed7d85c') }}</button>
           <button v-if="turnRunning" class="icon-action" type="button" :aria-label="t('page.chat.page.text.2090c0732a')" @click="stop"><Square :size="15" /></button>
-          <button class="primary-action" type="button" :disabled="!draft.trim() || sending" @click="submit"><Send :size="15" />{{ t('page.chat.page.text.aeee9b2149') }}</button>
+          <button class="primary-action" type="button" :disabled="!draft.trim() || sending || turnRunning" @click="submit"><Send :size="15" />{{ t('page.chat.page.text.aeee9b2149') }}</button>
         </div>
       </div>
     </footer>

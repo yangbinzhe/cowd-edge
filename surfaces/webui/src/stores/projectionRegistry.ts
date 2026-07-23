@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import type { ExecutionProjection, ExecutionProjectionDelta } from '../types';
 
 export type ProjectionDetailScope = 'summary' | 'full';
-export type ProjectionConnectionState = 'idle' | 'connecting' | 'live' | 'reconnecting' | 'degraded' | 'stale' | 'offline' | 'error' | 'terminal';
+export type ProjectionConnectionState = 'idle' | 'materializing' | 'connecting' | 'live' | 'reconnecting' | 'degraded' | 'stale' | 'offline' | 'error' | 'terminal';
 
 export interface ExecutionProjectionRegistryEntry {
   executionId: string;
@@ -20,19 +20,24 @@ export interface ExecutionProjectionRegistryEntry {
   requestEpoch: number;
   reconnectBlocked: boolean;
   consumers: Record<string, ProjectionDetailScope>;
+  materializingConsumers: Record<string, boolean>;
 }
 
 const terminalStatuses = new Set(['complete', 'cancelled', 'error']);
 export const MAX_ACTIVE_PROJECTION_STREAMS = 8;
+const INITIAL_MATERIALIZATION_DELAYS_MS = [50, 100, 200, 400, 800, 1_600];
 const PROJECTION_RECONNECT_BASE_MS = 250;
 const PROJECTION_RECONNECT_MAX_MS = 5_000;
+const MAX_STREAM_RECONNECT_ATTEMPTS = 8;
 
 export const useProjectionRegistryStore = defineStore('projectionRegistry', () => {
   const entries = reactive<Record<string, ExecutionProjectionRegistryEntry>>({});
   const streams = new Map<string, EventSource>();
   const streamScopes = new Map<string, ProjectionDetailScope>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  const reconnectAttempts = new Map<string, number>();
+  const initialMaterializationAttempts = new Map<string, number>();
+  const streamReconnectAttempts = new Map<string, number>();
+  const connectionLoads = new Set<string>();
   const consumerExecutions = new Map<string, string>();
   const activeStreamCount = computed(() => streams.size);
 
@@ -52,6 +57,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         requestEpoch: 0,
         reconnectBlocked: false,
         consumers: {},
+        materializingConsumers: {},
       };
     }
     return entries[executionId];
@@ -85,22 +91,26 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     return Object.keys(entry.consumers).length > 0;
   }
 
-  // A session receipt may outlive the execution projection it references.
-  // Retrying that missing snapshot from a passive chat restore creates a
-  // permanent 404 loop, whereas an explicitly opened control-plane surface
-  // should retry short-lived materialization and post-login transients.
+  // A restored historical receipt may outlive its graph. Only a fresh send or
+  // an explicitly opened control-plane consumer receives a bounded initial
+  // materialization budget; passive chat restore must never poll forever.
   function allowsInitialSnapshotRetry(entry: ExecutionProjectionRegistryEntry) {
-    return Object.keys(entry.consumers).some((consumer) => !consumer.startsWith('chat:'));
+    return Object.entries(entry.consumers).some(([consumer]) => (
+      !consumer.startsWith('chat:') || entry.materializingConsumers[consumer]
+    ));
   }
 
-  function cancelReconnect(executionId: string, resetAttempt = true) {
+  function cancelReconnect(executionId: string, resetAttempts = true) {
     const timer = reconnectTimers.get(executionId);
     if (timer) clearTimeout(timer);
     reconnectTimers.delete(executionId);
-    if (resetAttempt) reconnectAttempts.delete(executionId);
+    if (resetAttempts) {
+      initialMaterializationAttempts.delete(executionId);
+      streamReconnectAttempts.delete(executionId);
+    }
   }
 
-  function scheduleReconnect(executionId: string, requestedScope?: ProjectionDetailScope) {
+  function scheduleInitialMaterialization(executionId: string, requestedScope?: ProjectionDetailScope) {
     const entry = entries[executionId];
     if (!entry
       || entry.reconnectBlocked
@@ -108,17 +118,49 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       || isTerminal(entry.projection)
       || streams.has(executionId)) return;
     if (reconnectTimers.has(executionId)) return;
-    const attempt = reconnectAttempts.get(executionId) || 0;
+    const attempt = initialMaterializationAttempts.get(executionId) || 0;
+    if (attempt >= INITIAL_MATERIALIZATION_DELAYS_MS.length) {
+      entry.connectionState = 'degraded';
+      entry.degradedReason = 'execution graph did not materialize within the bounded observer window';
+      entry.lastUpdatedAt = Date.now();
+      return;
+    }
+    const delay = INITIAL_MATERIALIZATION_DELAYS_MS[attempt];
+    initialMaterializationAttempts.set(executionId, attempt + 1);
+    entry.connectionState = 'materializing';
+    const timer = setTimeout(() => {
+      reconnectTimers.delete(executionId);
+      if (!hasActiveConsumer(entry) || isTerminal(entry.projection)) return;
+      establishConnection(executionId, requestedScope);
+    }, delay);
+    reconnectTimers.set(executionId, timer);
+  }
+
+  function scheduleStreamReconnect(executionId: string, requestedScope?: ProjectionDetailScope) {
+    const entry = entries[executionId];
+    if (!entry
+      || entry.reconnectBlocked
+      || !hasActiveConsumer(entry)
+      || isTerminal(entry.projection)
+      || streams.has(executionId)
+      || reconnectTimers.has(executionId)) return;
+    const attempt = streamReconnectAttempts.get(executionId) || 0;
+    if (attempt >= MAX_STREAM_RECONNECT_ATTEMPTS) {
+      entry.connectionState = 'degraded';
+      entry.degradedReason = 'execution projection stream reconnect budget exhausted';
+      entry.lastUpdatedAt = Date.now();
+      return;
+    }
     const delay = Math.min(
       PROJECTION_RECONNECT_BASE_MS * (2 ** Math.min(attempt, 5)),
       PROJECTION_RECONNECT_MAX_MS,
     );
-    reconnectAttempts.set(executionId, attempt + 1);
+    streamReconnectAttempts.set(executionId, attempt + 1);
     entry.connectionState = 'reconnecting';
     const timer = setTimeout(() => {
       reconnectTimers.delete(executionId);
       if (!hasActiveConsumer(entry) || isTerminal(entry.projection)) return;
-      connect(executionId, requestedScope);
+      establishConnection(executionId, requestedScope);
     }, delay);
     reconnectTimers.set(executionId, timer);
   }
@@ -129,7 +171,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     const entry = ensureEntry(id);
     const scope = requestedScope || desiredScope(entry);
     const epoch = ++entry.requestEpoch;
-    if (!entry.projection && !entry.degradedReason) entry.connectionState = 'connecting';
+    if (!entry.projection && !entry.degradedReason) entry.connectionState = 'materializing';
     try {
       const projection = await api.executionProjection(id, scope);
       if (entry.requestEpoch !== epoch) return entry.projection;
@@ -141,14 +183,11 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         }
         entry.connectionState = entry.projection ? 'stale' : 'error';
         entry.lastError = message;
-        // A receipt can reference an execution before Gateway has materialized
-        // its projection, or it can reference an execution that no longer
-        // exists. Keeping EventSource alive in that state creates an immediate
-        // 404 reconnect loop in Chromium and can starve every shell control.
-        // A later acquire/load can reconnect after a valid snapshot exists.
+        // The connection owner decides whether this missing snapshot receives
+        // a bounded retry. `load` itself never creates a transport or timer,
+        // so an incidental refresh cannot turn a stale receipt into a loop.
         if (!entry.projection) {
           closeStream(id);
-          if (allowsInitialSnapshotRetry(entry)) scheduleReconnect(id, scope);
         }
         return entry.projection;
       }
@@ -174,6 +213,8 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       }
       entry.projection = projection;
       entry.reconnectBlocked = false;
+      initialMaterializationAttempts.delete(id);
+      streamReconnectAttempts.delete(id);
       entry.cursor = Number(projection.cursor || 0);
       entry.detailScope = scope;
       entry.lastUpdatedAt = Date.now();
@@ -193,7 +234,6 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       entry.connectionState = entry.projection ? 'stale' : 'error';
       if (!entry.projection) {
         closeStream(id);
-        if (allowsInitialSnapshotRetry(entry)) scheduleReconnect(id, scope);
       }
       return entry.projection;
     }
@@ -234,38 +274,59 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
   function promoteDeferredStreams() {
     if (streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) return;
     Object.values(entries)
-      .filter((entry) => entry.connectionState === 'degraded' && Object.keys(entry.consumers).length > 0)
+      .filter((entry) => entry.connectionState === 'degraded'
+        && entry.degradedReason.startsWith('projection connection budget')
+        && Object.keys(entry.consumers).length > 0)
       .sort((left, right) => left.lastUpdatedAt - right.lastUpdatedAt)
       .slice(0, MAX_ACTIVE_PROJECTION_STREAMS - streams.size)
-      .forEach((entry) => connect(entry.executionId));
+      .forEach((entry) => establishConnection(entry.executionId));
   }
 
-  function connect(executionId: string, requestedScope?: ProjectionDetailScope) {
+  function establishConnection(executionId: string, requestedScope?: ProjectionDetailScope) {
     const entry = ensureEntry(executionId);
     const scope = requestedScope || desiredScope(entry);
     if (streams.has(executionId) && streamScopes.get(executionId) === scope) return;
-    cancelReconnect(executionId, false);
-    closeStream(executionId);
     entry.detailScope = scope;
     if (streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) {
       entry.connectionState = 'degraded';
       entry.degradedReason = `projection connection budget reached (${MAX_ACTIVE_PROJECTION_STREAMS})`;
-      void load(executionId, scope);
+      return;
+    }
+    if (connectionLoads.has(executionId)) return;
+    connectionLoads.add(executionId);
+    void (async () => {
+      try {
+        const projection = await load(executionId, scope);
+        if (!hasActiveConsumer(entry) || entry.reconnectBlocked || isTerminal(entry.projection)) return;
+        if (projection?.execution_id === executionId) {
+          openStream(executionId, scope);
+        } else if (!entry.projection && allowsInitialSnapshotRetry(entry)) {
+          scheduleInitialMaterialization(executionId, scope);
+        }
+      } finally {
+        connectionLoads.delete(executionId);
+      }
+    })();
+  }
+
+  function openStream(executionId: string, scope: ProjectionDetailScope) {
+    const entry = ensureEntry(executionId);
+    if (!entry.projection || isTerminal(entry.projection)) return;
+    if (streams.has(executionId) && streamScopes.get(executionId) === scope) return;
+    cancelReconnect(executionId, false);
+    closeStream(executionId);
+    if (typeof EventSource === 'undefined') {
+      entry.connectionState = 'offline';
       return;
     }
     entry.connectionState = 'connecting';
     entry.degradedReason = '';
-    void load(executionId, scope);
-    if (typeof EventSource === 'undefined') {
-      entry.connectionState = entry.projection ? 'offline' : 'connecting';
-      return;
-    }
     const stream = new EventSource(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${entry.cursor}&detail_scope=${scope}`);
     streams.set(executionId, stream);
     streamScopes.set(executionId, scope);
     stream.onopen = () => {
       if (streams.get(executionId) === stream) {
-        reconnectAttempts.delete(executionId);
+        streamReconnectAttempts.delete(executionId);
         entry.lastEventAt = Date.now();
         entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'live';
       }
@@ -297,7 +358,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       if (streams.get(executionId) === stream && !isTerminal(entry.projection)) {
         closeStream(executionId);
         entry.connectionState = 'reconnecting';
-        void load(executionId, scope).then(() => scheduleReconnect(executionId, scope));
+        scheduleStreamReconnect(executionId, scope);
       }
     };
   }
@@ -316,19 +377,32 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       // latch. A transport error or server-side revoke must stay closed until
       // this authenticated user action occurs.
       entry.reconnectBlocked = false;
-      connect(executionId);
+      establishConnection(executionId);
     });
   }
 
-  function acquire(executionId: string, consumer: string, scope: ProjectionDetailScope = 'summary') {
+  function acquire(
+    executionId: string,
+    consumer: string,
+    scope: ProjectionDetailScope = 'summary',
+    initialSnapshotPolicy: 'passive' | 'bounded' = consumer.startsWith('chat:') ? 'passive' : 'bounded',
+  ) {
     const id = executionId.trim();
     if (!id || !consumer.trim()) return;
     const previous = consumerExecutions.get(consumer);
     if (previous && previous !== id) release(consumer);
     const entry = ensureEntry(id);
+    const wasMaterializing = !!entry.materializingConsumers[consumer];
     entry.consumers[consumer] = scope;
+    entry.materializingConsumers[consumer] = initialSnapshotPolicy === 'bounded';
     consumerExecutions.set(consumer, id);
-    connect(id);
+    if (!entry.projection && initialSnapshotPolicy === 'bounded' && !wasMaterializing) {
+      cancelReconnect(id, false);
+      initialMaterializationAttempts.delete(id);
+      entry.degradedReason = '';
+      entry.lastError = '';
+    }
+    establishConnection(id);
   }
 
   function release(consumer: string) {
@@ -338,6 +412,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     const entry = entries[executionId];
     if (!entry) return;
     delete entry.consumers[consumer];
+    delete entry.materializingConsumers[consumer];
     if (!Object.keys(entry.consumers).length) {
       cancelReconnect(executionId);
       closeStream(executionId);
@@ -346,7 +421,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       promoteDeferredStreams();
       return;
     }
-    connect(executionId);
+    establishConnection(executionId);
   }
 
   function projectionFor(executionId: string) {

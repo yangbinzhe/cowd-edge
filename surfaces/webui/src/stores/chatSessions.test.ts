@@ -67,8 +67,8 @@ describe('chatSessions', () => {
     await chat.send('stream-A', 'A');
     const streamA = streams.find((stream) => stream.url.includes('stream-A'));
     const streamB = streams.find((stream) => stream.url.includes('stream-B'));
-    streamA?.onmessage?.({ data: JSON.stringify({ type: 'ExecutionPhase', status: 'calling_tool', detail: 'workspace.read' }) } as MessageEvent);
-    streamA?.onmessage?.({ data: JSON.stringify({ type: 'TextDelta', text: 'one' }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({ type: 'ExecutionPhase', execution_id: 'execution-stream-A', status: 'calling_tool', detail: 'workspace.read' }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({ type: 'TextDelta', execution_id: 'execution-stream-A', text: 'one' }) } as MessageEvent);
     streamB?.onmessage?.({ data: JSON.stringify({ type: 'session_stream_resync', session_id: 'stream-B' }) } as MessageEvent);
 
     expect(chat.states['stream-A'].turns.find((turn) => turn.id === 'stream:stream-A')?.content).toBe('one');
@@ -109,5 +109,70 @@ describe('chatSessions', () => {
     expect(streams).toHaveLength(MAX_ACTIVE_SESSION_STREAMS + 1);
     expect(chat.states[`budget-${MAX_ACTIVE_SESSION_STREAMS}`].streamState).toBe('connecting');
     for (let index = 1; index <= MAX_ACTIVE_SESSION_STREAMS; index += 1) chat.close(`budget-${index}`);
+  });
+
+  it('ignores replayed or unrelated terminals while the current execution is pending', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    const streams: Array<{ url: string; onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(readonly url: string) { streams.push(this); }
+      close() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    vi.spyOn(api, 'messages').mockResolvedValue({ messages: [] } as any);
+    vi.spyOn(api, 'sessionEvidence').mockResolvedValue(emptyEvidence as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({ active_execution_ids: [] } as any);
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found', __error: 'pending' } as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: {
+        graph_id: 'execution-current',
+        terminal_id: 'turn-terminal:webui:terminal-session:1',
+        status: 'accepted_pending_materialization',
+      },
+    } as any);
+
+    await chat.open('terminal-session');
+    await chat.send('terminal-session', 'hello');
+    const stream = streams.find((item) => item.url.includes('terminal-session'));
+    stream?.onmessage?.({ data: JSON.stringify({
+      type: 'TerminalCommitted', replayed: true, execution_id: 'execution-current',
+      terminal_id: 'turn-terminal:webui:terminal-session:1',
+    }) } as MessageEvent);
+    expect(chat.states['terminal-session'].pending).toBe(true);
+    expect(chat.states['terminal-session'].live?.status).toBe('accepted_pending_materialization');
+
+    stream?.onmessage?.({ data: JSON.stringify({
+      type: 'TerminalCommitted', execution_id: 'execution-other', terminal_id: 'turn-terminal:other',
+    }) } as MessageEvent);
+    expect(chat.states['terminal-session'].pending).toBe(true);
+
+    stream?.onmessage?.({ data: JSON.stringify({
+      type: 'TerminalCommitted', execution_id: 'execution-current',
+      terminal_id: 'turn-terminal:webui:terminal-session:1',
+    }) } as MessageEvent);
+    expect(chat.states['terminal-session'].pending).toBe(false);
+    expect(chat.states['terminal-session'].live?.status).toBe('complete');
+    chat.close('terminal-session');
+  });
+
+  it('does not overwrite a session execution with a second primary submission', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found', __error: 'pending' } as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({ execution: { graph_id: 'execution-one' } } as any);
+
+    expect(await chat.send('single-session', 'first')).toBe(true);
+    expect(await chat.send('single-session', 'second')).toBe(false);
+    expect(chat.states['single-session'].executionId).toBe('execution-one');
+    expect(api.sendMessage).toHaveBeenCalledTimes(1);
   });
 });
