@@ -266,6 +266,8 @@ apps:
     ...process.env,
     HOME: homeDir,
     COWD_CONFIG_HOME: configHome,
+    COWD_E2E_HARNESS: '1',
+    COWD_E2E_STRATEGY_FIXTURE: 'explicit-team-negative',
     XDG_RUNTIME_DIR: runtimeDir,
     XDG_DATA_HOME: join(temporaryRoot, 'data'),
     XDG_STATE_HOME: join(temporaryRoot, 'state'),
@@ -367,6 +369,11 @@ apps:
       deterministic: true,
       request_log: providerLogPath,
       stdout_log: providerStdoutPath,
+    },
+    strategy_fixture: {
+      harness: 'isolated-e2e-only',
+      name: 'explicit-team-negative',
+      prompt_marker_required: true,
     },
     authorization_profile: {
       core_profile_id: managerEntitlement.core_profile_id,

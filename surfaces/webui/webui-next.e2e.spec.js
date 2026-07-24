@@ -557,7 +557,7 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
       idempotency_key: `e2e-strategy-${suffix}`,
     },
   });
-  expect(admitted.ok()).toBeTruthy();
+  await expectOk(admitted, 'explicit Team message admission');
   const receipt = await admitted.json();
   const executionId = String(receipt?.execution?.graph_id || receipt?.execution_id || '');
   expect(executionId).toBeTruthy();
@@ -973,6 +973,14 @@ test('composer model workspace and command controls are clickable', async ({ pag
 
 test('all shell controls remain interactive while a conversation is running', async ({ page }) => {
   const sessionId = 'interaction-running-session';
+  let releaseSessionStream;
+  const keepSessionStreamOpen = new Promise((resolve) => {
+    releaseSessionStream = resolve;
+  });
+  let releaseProjectionStream;
+  const keepProjectionStreamOpen = new Promise((resolve) => {
+    releaseProjectionStream = resolve;
+  });
   await page.route(`**/api/sessions/${sessionId}/attach`, async (route) => {
     await route.fulfill({
       status: 200,
@@ -1020,9 +1028,10 @@ test('all shell controls remain interactive while a conversation is running', as
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session_id: sessionId, active_execution_ids: [] }) });
   });
   await page.route(`**/api/sessions/${sessionId}/stream`, async (route) => {
-    // HTTP 204 tells EventSource not to reconnect. This fixture session lives
-    // only inside this test, so letting its SSE request hit the real Gateway
-    // would create an artificial 404 reconnect loop unrelated to shell input.
+    // Keep this deterministic observer request open until the interaction
+    // audit is complete. Returning 204 immediately creates a synthetic
+    // reconnect loop and can hide the canonical queued projection.
+    await keepSessionStreamOpen;
     await route.fulfill({ status: 204 });
   });
   await page.route(`**/api/sessions/${sessionId}/messages`, async (route) => {
@@ -1031,10 +1040,7 @@ test('all shell controls remain interactive while a conversation is running', as
   await page.route(`**/api/sessions/${sessionId}/cancel`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, status: 'cancelled' }) });
   });
-  await page.route('**/api/runtime/executions/interaction-execution/events?*', async (route) => {
-    await route.fulfill({ status: 204 });
-  });
-  await page.route('**/api/runtime/executions/interaction-execution?*', async (route) => {
+  await page.route(/\/api\/runtime\/executions\/interaction-execution(?:\?.*)?$/, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -1047,6 +1053,10 @@ test('all shell controls remain interactive while a conversation is running', as
         graph: {}, goals: [], agents: [], teams: [], relations: [], approvals: [], interventions: [], usage: [], context: [], evidence: [], health: [], recovery: [], available_commands: [],
       }),
     });
+  });
+  await page.route(/\/api\/runtime\/executions\/interaction-execution\/events(?:\?.*)?$/, async (route) => {
+    await keepProjectionStreamOpen;
+    await route.fulfill({ status: 204 });
   });
 
   await page.goto('/index.html#/chat');
@@ -1076,6 +1086,8 @@ test('all shell controls remain interactive while a conversation is running', as
   await expect(page).toHaveURL(/tools/);
   await page.locator('.rail-button[title="Chat"]').click();
   await expect(page.locator('.run-status')).toBeVisible();
+  releaseProjectionStream();
+  releaseSessionStream();
   await page.getByRole('button', { name: /Stop|停止/ }).click();
   await expect(page.locator('.modal-scrim')).toHaveCount(0);
 });
