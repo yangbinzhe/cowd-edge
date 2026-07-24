@@ -535,6 +535,15 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   await expectOk(create, 'real Gateway session creation');
   const session = await create.json();
   expect(session.id).toBeTruthy();
+  const attached = await page.request.post(
+    `/api/sessions/${encodeURIComponent(session.id)}/attach`,
+    { data: { surface: 'webui', role: 'writer' } },
+  );
+  await expectOk(attached, 'explicit Team writer attachment');
+  const lease = await page.request.post('/api/runtime/session-leases/acquire', {
+    data: { session_id: session.id, mode: 'collaborative' },
+  });
+  await expectOk(lease, 'explicit Team writer lease');
 
   // A Team must derive its authority from existing bounded workspace scopes;
   // seed the three independently reviewed domains through the public gateway
@@ -620,6 +629,15 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
     const value = await response.json();
     return value?.health?.some((item) => item?.id === `execution-health:${executionId}` && item?.status === 'terminal') || false;
   }, { timeout: 30_000, intervals: [250, 500, 1_000] }).toBe(true);
+  const released = await page.request.post('/api/runtime/session-leases/release', {
+    data: { session_id: session.id },
+  });
+  await expectOk(released, 'explicit Team writer lease release');
+  const detached = await page.request.post(
+    `/api/sessions/${encodeURIComponent(session.id)}/detach`,
+    { data: { surface: 'webui' } },
+  );
+  await expectOk(detached, 'explicit Team writer detach');
 });
 
 test('real gateway closes MFG profile, filter, alert, assignment and report contracts', async ({ page }) => {
@@ -1060,8 +1078,11 @@ test('all shell controls remain interactive while a conversation is running', as
   });
 
   await page.goto('/index.html#/chat');
+  await expect(page.locator('.session-row.active')).toContainText('Running interaction audit');
   await expect(page.locator('.composer textarea')).toBeVisible();
   await page.locator('.composer textarea').fill('Keep the interface interactive while this task runs');
+  await expect(page.locator('.composer textarea')).toHaveValue('Keep the interface interactive while this task runs');
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.locator('.run-status')).toContainText(/queued|calling|preparing|排队|调用|准备/i);
   await expect(page.getByRole('button', { name: /Stop|停止/ })).toBeVisible();
