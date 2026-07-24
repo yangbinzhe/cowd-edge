@@ -532,16 +532,20 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   test.setTimeout(90_000);
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const writerHeaders = {
+    'x-cowd-observer-id': `webui:playwright-team-${suffix}`,
+  };
   const create = await page.request.post('/api/sessions', { data: {} });
   await expectOk(create, 'real Gateway session creation');
   const session = await create.json();
   expect(session.id).toBeTruthy();
   const attached = await page.request.post(
     `/api/sessions/${encodeURIComponent(session.id)}/attach`,
-    { data: { surface: 'webui', role: 'writer' } },
+    { headers: writerHeaders, data: { surface: 'webui', role: 'writer' } },
   );
   await expectOk(attached, 'explicit Team writer attachment');
   const lease = await page.request.post('/api/runtime/session-leases/acquire', {
+    headers: writerHeaders,
     data: { session_id: session.id, mode: 'collaborative' },
   });
   await expectOk(lease, 'explicit Team writer lease');
@@ -561,6 +565,7 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   }
 
   const admitted = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/messages`, {
+    headers: writerHeaders,
     data: {
       content: `I must actually start a Team to separately audit runtime, gateway, and frontend, then synthesize the result. This explicit Team request must keep its negative estimated lift cost warning visible. [cowd-e2e:explicit-team-negative] ${suffix}`,
       resource_ids: [],
@@ -650,6 +655,7 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
     // This endpoint requires a JSON body. A bare POST is rejected before the
     // cancellation handler and leaves the real Team execution running.
     const cancelled = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/cancel`, {
+      headers: writerHeaders,
       data: { reason: 'e2e Team strategy cleanup' },
     });
     await expectOk(cancelled, 'explicit Team cancellation');
@@ -666,12 +672,13 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
     return value?.health?.some((item) => item?.id === `execution-health:${executionId}` && item?.status === 'terminal') || false;
   }, { timeout: 30_000, intervals: [250, 500, 1_000] }).toBe(true);
   const released = await page.request.post('/api/runtime/session-leases/release', {
+    headers: writerHeaders,
     data: { session_id: session.id },
   });
   await expectOk(released, 'explicit Team writer lease release');
   const detached = await page.request.post(
     `/api/sessions/${encodeURIComponent(session.id)}/detach`,
-    { data: { surface: 'webui' } },
+    { headers: writerHeaders, data: { surface: 'webui' } },
   );
   await expectOk(detached, 'explicit Team writer detach');
 });
