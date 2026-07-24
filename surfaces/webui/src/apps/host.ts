@@ -3,7 +3,17 @@
  * 外部 APP 只能通过这个模块访问通用 UI、认证请求、投影和本地化能力。
  */
 export { api, ApiWriteError } from '../api/client';
-export { read, write, registerRequestedCapabilities } from '../api/client';
+export {
+  read,
+  write,
+  writeWithMetadata,
+  registerRequestedCapabilities,
+} from '../api/client';
+export type {
+  ApiWriteMetadataValidation,
+  ApiWriteResponseMetadata,
+  ApiWriteWithMetadataResult,
+} from '../api/client';
 export { t, tc, useI18n, locale, setLocale, registerMessages } from '../i18n';
 export type { Locale, MessageParams } from '../i18n';
 export type { components as GatewayComponents } from '../generated/gateway-api';
@@ -12,6 +22,10 @@ export { adaptEntityImpact } from '../adapters/graph/entityImpact';
 export { adaptMetricLineage } from '../adapters/graph/metricLineage';
 export { resolveAppRuntimeExecutionId } from '../adapters/strategyDecision';
 export { publicErrorSummary } from '../utils/publicError';
+export {
+  acquireLongLivedConnection,
+  releaseLongLivedConnection,
+} from '../utils/longLivedConnectionBudget';
 export type { GraphViewModel } from '../types/graph';
 
 export { default as ApiStateBanner } from '../components/workbench/ApiStateBanner.vue';

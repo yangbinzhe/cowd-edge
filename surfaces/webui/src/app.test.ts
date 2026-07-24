@@ -22,13 +22,15 @@ import SurfacePage from './pages/SurfacePage.vue';
 import ToolsPage from './pages/ToolsPage.vue';
 import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
 import { useAppStore } from './stores/app';
+import { useChatSessionsStore } from './stores/chatSessions';
 import { useMfgCockpitStore } from '@cowd/app-mfg-webui/stores/mfgCockpit';
 import { createMfgMutationIntent } from '@cowd/app-mfg-webui/stores/mutationIntents';
-import { MAX_ACTIVE_PROJECTION_STREAMS, useProjectionRegistryStore } from './stores/projectionRegistry';
+import { useProjectionRegistryStore } from './stores/projectionRegistry';
 import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
 import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
 import { isWorkspaceTextPreview, workspacePreviewKind } from './utils/workspacePreview';
+import { canonicalMfgMutationResponse } from './testing/mfgReceiptMock';
 
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
 vi.mock('vue-echarts', () => ({ default: { template: '<div class="chart"></div>' } }));
@@ -793,13 +795,26 @@ describe('Cowd Vue WebUI shell', () => {
       close() { closed.push(this.url); }
     }
     vi.stubGlobal('EventSource', FakeEventSource);
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ execution_id: 'exec-1', cursor: 0 }), { status: 200 }))));
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const executionId = String(input).match(/\/executions\/([^/?]+)/)?.[1] || '';
+      return Promise.resolve(new Response(JSON.stringify({
+        schema_version: 1,
+        execution_id: decodeURIComponent(executionId),
+        revision: 1,
+        cursor: 0,
+        live: { status: 'running' },
+      }), { status: 200 }));
+    }));
     setActivePinia(createPinia());
     const registry = useProjectionRegistryStore();
     registry.acquire('exec-1', 'chat:session-1', 'summary');
+    await vi.waitFor(() => expect(urls).toHaveLength(1));
     registry.acquire('exec-1', 'mission', 'full');
+    await vi.waitFor(() => expect(urls).toHaveLength(2));
     registry.release('mission');
+    await vi.waitFor(() => expect(urls).toHaveLength(3));
     registry.acquire('exec-2', 'agents', 'full');
+    await vi.waitFor(() => expect(urls).toHaveLength(4));
     expect(urls).toEqual([
       '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=summary',
       '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=full',
@@ -810,19 +825,11 @@ describe('Cowd Vue WebUI shell', () => {
     registry.release('chat:session-1');
     registry.release('agents');
 
-    for (let index = 0; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) {
-      registry.acquire(`budget-${index}`, `consumer-${index}`, 'summary');
-    }
-    expect(registry.activeStreamCount).toBe(MAX_ACTIVE_PROJECTION_STREAMS);
-    expect(registry.entries[`budget-${MAX_ACTIVE_PROJECTION_STREAMS}`].connectionState).toBe('degraded');
-    registry.release('consumer-0');
-    expect(registry.entries[`budget-${MAX_ACTIVE_PROJECTION_STREAMS}`].connectionState).toBe('connecting');
-    for (let index = 1; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) registry.release(`consumer-${index}`);
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
   });
 
-  it('closes a projection stream when Gateway cannot materialize its initial snapshot', async () => {
+  it('does not open a projection stream when Gateway cannot materialize its initial snapshot', async () => {
     const closed: string[] = [];
     class FakeEventSource {
       constructor(readonly url: string) {}
@@ -840,9 +847,7 @@ describe('Cowd Vue WebUI shell', () => {
       expect(registry.entries['missing-execution'].connectionState).toBe('error');
       expect(registry.activeStreamCount).toBe(0);
     });
-    expect(closed).toEqual([
-      '/api/runtime/executions/missing-execution/events?cursor=0&detail_scope=full',
-    ]);
+    expect(closed).toEqual([]);
     registry.release('chat:missing-session');
     vi.unstubAllGlobals();
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
@@ -883,6 +888,139 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/resources', expect.objectContaining({ method: 'POST' }));
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.body).toBeInstanceOf(FormData);
+  });
+
+  it('recrops only the revoked session shell and preserves another session summary', () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+    store.sessions = [
+      { id: 'session-A', title: 'Private A', model: 'model-A', status: 'active' },
+      { id: 'session-B', title: 'Visible B', model: 'model-B', status: 'idle' },
+    ] as any;
+    store.activeSessionId = 'session-A';
+    store.attachments = [{ ref_id: 'private-A', path: 'secret.md' }] as any;
+    store.currentTimeline = { events: [{ detail: 'secret-A' }] };
+    store.capabilitySnapshots = {
+      runtime: [{ id: 'private-A', data: { secret: 'private-A' } }],
+    } as any;
+    store.actionResults = { 'session-A:runtime:stop': { secret: 'private-A' } };
+
+    window.dispatchEvent(new CustomEvent('cowd:session-authorization-invalidated', {
+      detail: { sessionId: 'session-A', reason: 'scope removed' },
+    }));
+
+    expect(store.sessions.find((session) => session.id === 'session-A')).toMatchObject({
+      model: '',
+      status: 'authorization_revoked',
+    });
+    expect(store.sessions.find((session) => session.id === 'session-A')?.title).not.toBe('Private A');
+    expect(store.sessions.find((session) => session.id === 'session-B')).toMatchObject({
+      title: 'Visible B',
+      model: 'model-B',
+    });
+    expect(store.attachments).toEqual([]);
+    expect(store.currentTimeline).toEqual({});
+    expect(store.capabilitySnapshots).toEqual({});
+    expect(store.actionResults).toEqual({});
+  });
+
+  it('keeps upload busy until every concurrent operation has settled', async () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+    store.activeSessionId = 'session-upload';
+    const completions: Array<(value: any) => void> = [];
+    const upload = vi.spyOn(api, 'uploadResource').mockImplementation(() => (
+      new Promise((resolve) => completions.push(resolve))
+    ));
+
+    const first = store.uploadResource(new File(['A'], 'A.txt'));
+    const second = store.uploadResource(new File(['B'], 'B.txt'));
+    expect(store.uploadBusy).toBe(true);
+    completions[1]({
+      resource: {
+        id: 'resource-B', uri: 'resource://resource-B', original_name: 'B.txt',
+        kind: 'text', size_bytes: 1, sha256: 'B', detected_mime: 'text/plain',
+      },
+    });
+    await second;
+    expect(store.uploadBusy).toBe(true);
+    completions[0]({
+      resource: {
+        id: 'resource-A', uri: 'resource://resource-A', original_name: 'A.txt',
+        kind: 'text', size_bytes: 1, sha256: 'A', detected_mime: 'text/plain',
+      },
+    });
+    await first;
+    expect(store.uploadBusy).toBe(false);
+    upload.mockRestore();
+  });
+
+  it('clears the complete authenticated shell and makes boot eligible after logout', () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+    store.booted = true;
+    store.health = { secret: 'health' };
+    store.settings = { secret: 'settings' };
+    store.sessions = [{ id: 'session-A', title: 'Private A' }] as any;
+    store.workspaceRoot = '/private/workspace';
+    store.workspaceFiles = [{ name: 'secret', path: 'secret.md', kind: 'file' }] as any;
+    const previousViewGeneration = store.authorizationViewGeneration;
+    localStorage.setItem('cowd.webui.sessions.pinned', JSON.stringify(['session-A']));
+    localStorage.setItem('cowd.webui.workspace.recentFiles', JSON.stringify([{ name: 'secret', path: 'secret.md' }]));
+
+    window.dispatchEvent(new CustomEvent('cowd:authorization-invalidated', {
+      detail: { reason: 'operator logged out' },
+    }));
+
+    expect(store.booted).toBe(false);
+    expect(store.health).toBeNull();
+    expect(store.settings).toBeNull();
+    expect(store.sessions).toEqual([]);
+    expect(store.workspaceRoot).toBe('');
+    expect(store.workspaceFiles).toEqual([]);
+    expect(store.authorizationState).toBe('invalidated');
+    expect(store.authorizationViewGeneration).toBe(previousViewGeneration + 1);
+    expect(localStorage.getItem('cowd.webui.sessions.pinned')).toBeNull();
+    expect(localStorage.getItem('cowd.webui.workspace.recentFiles')).toBeNull();
+  });
+
+  it('unmounts protected route content behind one authorization gate after logout', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    expect(wrapper.find('.chat-page').exists()).toBe(true);
+
+    window.dispatchEvent(new CustomEvent('cowd:authorization-invalidated', {
+      detail: { reason: 'credential expired' },
+    }));
+    await settle();
+
+    expect(wrapper.find('.authorization-gate').exists()).toBe(true);
+    expect(wrapper.find('.chat-page').exists()).toBe(false);
+    expect(wrapper.find('.authorization-gate').text()).toContain('Gateway');
+    wrapper.unmount();
+  });
+
+  it('fences a late capability snapshot after the active session changes', async () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'session-A';
+    store.gatewayCapabilityContract = { capabilities: [] } as any;
+    vi.spyOn(chat, 'open').mockImplementation(() => new Promise<void>(() => undefined));
+    let finish!: (value: any) => void;
+    vi.spyOn(api, 'loadCapabilityPage').mockImplementation(() => (
+      new Promise((resolve) => { finish = resolve; })
+    ));
+
+    const pending = store.loadCapability('runtime');
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    void store.loadMessages('session-B');
+    finish([{ id: 'private-A', data: { secret: 'must-not-cross-session' } }]);
+    await pending;
+
+    expect(store.activeSessionId).toBe('session-B');
+    expect(store.capabilitySnapshots.runtime).toBeUndefined();
+    expect(JSON.stringify(store.capabilitySnapshots)).not.toContain('must-not-cross-session');
   });
 
   it('sends resource ids separately from message content', async () => {
@@ -1035,20 +1173,36 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls critical MFG write endpoints with explicit request bodies', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    const fetchMock = vi.fn((_request, init?: RequestInit) => Promise.resolve(
+      canonicalMfgMutationResponse(init, { ok: true }),
+    ));
     vi.stubGlobal('fetch', fetchMock);
     const sourcePack = {
       source_pack_id: 'sp-1', source_name: 'MES events', owner: 'operations', access_mode: 'file', refresh_mode: 'incremental',
       entity_mappings: [], fact_mappings: [{ source_table: 'events', fact_type: 'manufacturing.event', metric_key: 'event_count', dedup_key: 'event_id', delta_signature: 'updated_at' }],
     };
     await mfgApi.mfgSourcePackUpsert(sourcePack, mfgIntent('mfg.reality.source_pack.create', 'mfg:source-pack:sp-1', sourcePack));
-    await mfgApi.mfgSourcePackValidate('sp-1');
-    await mfgApi.mfgSourcePackDeltaPlan('sp-1');
-    await mfgApi.mfgDataPlaneIngestPlan({ source_ref: 'source-pack://sp-1', fact_type: 'manufacturing.event', metric_ids: ['event_count'] });
+    await mfgApi.mfgSourcePackValidate(
+      'sp-1',
+      mfgIntent('mfg.reality.source_pack.validate', 'matrix:source_pack:sp-1'),
+    );
+    await mfgApi.mfgSourcePackDeltaPlan(
+      'sp-1',
+      mfgIntent('mfg.reality.source_pack.delta_plan', 'matrix:source_pack:sp-1'),
+    );
+    const ingestPlan = { source_ref: 'source-pack://sp-1', fact_type: 'manufacturing.event', metric_ids: ['event_count'] };
+    await mfgApi.mfgDataPlaneIngestPlan(
+      ingestPlan,
+      mfgIntent('mfg.reality.data_plane.ingest_plan', 'matrix:data-plane:ingest-plan', ingestPlan),
+    );
     const connector = { resource_ref: 'file:///tmp/events.json', expected_rows: 10 };
     await mfgApi.mfgSourcePackConnectorPlan('sp-1', connector, mfgIntent('mfg.reality.connector_run.plan', 'mfg:source-pack:sp-1', connector));
     await mfgApi.mfgSourcePackConnectorRun('sp-1', connector, mfgIntent('mfg.reality.connector_run.execute', 'mfg:source-pack:sp-1', connector));
-    await mfgApi.mfgAttentionPlan({ trigger_fact_type: 'manufacturing.event', entity_scope: 'line:a' });
+    const attentionPlan = { trigger_fact_type: 'manufacturing.event', entity_scope: 'line:a' };
+    await mfgApi.mfgAttentionPlan(
+      attentionPlan,
+      mfgIntent('mfg.reality.metric.attention_plan', 'matrix:attention-plan', attentionPlan),
+    );
     const computePlan = { trigger_fact_type: 'manufacturing.event', metric_ids: ['event_count'] };
     await mfgApi.mfgComputeJobPlan(computePlan, mfgIntent('mfg.reality.compute_job.plan', 'mfg:compute-plan:test', computePlan));
     await mfgApi.mfgEntityUpsert({ entity_id: 'entity-1' }, mfgIntent('mfg.reality.entity.create', 'mfg:entity:entity-1'));
@@ -1056,7 +1210,11 @@ describe('Cowd Vue WebUI shell', () => {
     const playbook = { playbook_id: 'playbook-1', domain: 'manufacturing', scenario: 'Recover line', quality_gate_policy: 'required', cross_plane_policy: 'governed', created_at: '2026-07-16T00:00:00Z', updated_at: '2026-07-16T00:00:00Z' };
     await mfgApi.mfgPlaybookUpsert(playbook, mfgIntent('mfg.playbook.create', 'mfg:playbook:playbook-1', playbook));
     await mfgApi.mfgEvidenceQualityGate('evidence-1', mfgIntent('mfg.reality.evidence.quality_gate', 'mfg:evidence:evidence-1'));
-    await mfgApi.mfgRecommendPlaybooks('incident-1', 5);
+    await mfgApi.mfgRecommendPlaybooks(
+      'incident-1',
+      5,
+      mfgIntent('mfg.incident.playbook.recommend', 'mfg:incident:incident-1', { limit: 5 }),
+    );
     await mfgApi.mfgComputeJobRun('job-1', mfgIntent('mfg.reality.compute_job.execute', 'mfg:compute-job:job-1'));
     await mfgApi.mfgExecuteAction('analysis-1', 'action-1', { mode: 'dry_run', operator_id: 'forged' }, mfgIntent('mfg.analysis.action.dry_run', 'mfg:analysis:analysis-1'));
     await mfgApi.mfgExecutionBridge('exec-1', { mode: 'dry_run', actor_principal: 'forged' }, mfgIntent('mfg.execution.cross_plane.dry_run', 'mfg:execution:exec-1'));
@@ -1111,7 +1269,9 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls real MFG incident and cockpit report endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: 'test.receipt' }), { status: 200 })));
+    const fetchMock = vi.fn((_request, init?: RequestInit) => Promise.resolve(
+      canonicalMfgMutationResponse(init),
+    ));
     vi.stubGlobal('fetch', fetchMock);
     await mfgApi.mfgCreateIncident({ title: 'Line A deviation' }, mfgIntent('mfg.incident.create', 'mfg:incident-draft:test'));
     await mfgApi.mfgAnalyzeIncident('incident-1', mfgIntent('mfg.incident.analyze', 'mfg:incident:incident-1'));
@@ -1124,7 +1284,9 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls revisioned MFG cockpit, alert, and assignment write endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: 'test.receipt' }), { status: 200 })));
+    const fetchMock = vi.fn((_request, init?: RequestInit) => Promise.resolve(
+      canonicalMfgMutationResponse(init),
+    ));
     vi.stubGlobal('fetch', fetchMock);
     const profileIntent = mfgIntent('mfg.cockpit.profile.update', 'mfg:cockpit-profile:profile-1');
     const deleteIntent = mfgIntent('mfg.cockpit.profile.delete', 'mfg:cockpit-profile:profile-1');
@@ -1149,13 +1311,14 @@ describe('Cowd Vue WebUI shell', () => {
       { profile: { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 } },
       profileIntent.idempotency_key,
     );
-    expect(fetchMock).toHaveBeenCalledWith(
-      `/api/apps/mfg/cockpit/profiles/profile-1?expected_revision=1&idempotency_key=${encodeURIComponent(deleteIntent.idempotency_key)}`,
-      expect.objectContaining({
-        method: 'DELETE',
-        headers: expect.anything(),
-      }),
-    );
+    const deleteCall = fetchMock.mock.calls.find(([url]) => (
+      String(url) === '/api/apps/mfg/cockpit/profiles/profile-1?expected_revision=1'
+    ));
+    expect(deleteCall).toBeTruthy();
+    expect((deleteCall?.[1] as RequestInit).method).toBe('DELETE');
+    expect(new Headers((deleteCall?.[1] as RequestInit).headers).get('Idempotency-Key'))
+      .toBe(deleteIntent.idempotency_key);
+    expect(String(deleteCall?.[0])).not.toContain('idempotency_key=');
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/clone', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/share', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/widgets/widget-1/projection', expect.any(Object));
@@ -1334,6 +1497,72 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/status', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/growth/events', expect.any(Object));
     expect(fetchMock).not.toHaveBeenCalledWith('/api/mission/control', expect.any(Object));
+  });
+
+  it('uses the canonical writer attachment controller for Runtime lease actions', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({})))));
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const appStore = useAppStore();
+    appStore.activeSessionId = 'runtime-lease-session';
+    const chat = useChatSessionsStore();
+    const attach = vi.spyOn(chat, 'attachSurface').mockImplementation(
+      async (sessionId, mode) => {
+        chat.states[sessionId] = {
+          sessionId,
+          turns: [],
+          executionId: '',
+          executionTurnId: '',
+          executionGeneration: 0,
+          latestIngressSequence: -1,
+          streamTurnId: '',
+          terminalId: '',
+          live: null,
+          evidence: null,
+          streamState: 'offline',
+          loadEpoch: 0,
+          submissionEpoch: 0,
+          pending: false,
+          lastError: '',
+          unread: 0,
+          lastEventAtMs: 0,
+          lastProgressAtMs: 0,
+          degradedReason: '',
+          resyncCount: 0,
+          attachmentRole: 'writer',
+          writable: true,
+        };
+        return mode === 'exclusive';
+      },
+    );
+    const detach = vi.spyOn(chat, 'detachSurface').mockImplementation(async (sessionId) => {
+      chat.states[sessionId].attachmentRole = 'detached';
+      chat.states[sessionId].writable = false;
+    });
+    const router = createRouter({
+      history: createWebHashHistory(),
+      routes: [{ path: '/runtime', component: RuntimePage }],
+    });
+    await router.push('/runtime');
+    await router.isReady();
+    const wrapper = mount(RuntimePage, { global: { plugins: [pinia, router] } });
+    await settleAsync();
+
+    const leasePanel = wrapper.get('[data-section="runs"]');
+    expect(leasePanel.find('input').exists()).toBe(false);
+    const mode = leasePanel.get('select');
+    expect(mode.findAll('option').map((option) => option.attributes('value'))).toEqual([
+      'collaborative',
+      'exclusive',
+    ]);
+    await mode.setValue('exclusive');
+    const buttons = leasePanel.findAll('button');
+    await buttons[0].trigger('click');
+    await settleAsync();
+    expect(attach).toHaveBeenCalledWith('runtime-lease-session', 'exclusive');
+    await buttons[1].trigger('click');
+    await settleAsync();
+    expect(detach).toHaveBeenCalledWith('runtime-lease-session');
   });
 
   it('renders Reality Core evidence object detail from flow rows', async () => {

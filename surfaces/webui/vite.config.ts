@@ -49,4 +49,12 @@ export default defineConfig({
       '/readyz': gatewayProxyTarget,
     },
   },
+  preview: {
+    host: '127.0.0.1',
+    proxy: {
+      '/api': gatewayProxyTarget,
+      '/healthz': gatewayProxyTarget,
+      '/readyz': gatewayProxyTarget,
+    },
+  },
 });

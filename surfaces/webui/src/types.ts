@@ -57,6 +57,9 @@ export interface ChatTurn {
   tool_use_id?: string;
   tool_name?: string;
   token_usage?: Record<string, unknown>;
+  execution_id?: string;
+  turn_id?: string;
+  ingress_message_id?: string;
 }
 
 export interface ActivityEvent {
@@ -115,6 +118,8 @@ export interface ExecutionLiveState {
   context_usage?: ContextUsageProjection | null;
   metrics: RunMetricsProjection;
   output_preview?: string | null;
+  output_preview_start_bytes?: number;
+  output_bytes?: number;
   terminal_ref?: string | null;
   error?: string | null;
 }

@@ -47,6 +47,314 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
   await expect(page.locator('.companion-panel')).toHaveCount(0);
 });
 
+test('chat DOM keeps newest history, errors, drafts, scroll and effective telemetry isolated per session', async ({ page }) => {
+  const browserErrors = [];
+  const browserRequestFailures = [];
+  const browserHttpFailures = [];
+  page.on('pageerror', (error) => browserErrors.push(String(error?.stack || error)));
+  page.on('requestfailed', (request) => {
+    browserRequestFailures.push(`${request.url()}: ${request.failure()?.errorText || 'failed'}`);
+  });
+  page.on('response', (response) => {
+    if (response.status() >= 400) {
+      browserHttpFailures.push(`${response.status()} ${response.url()}`);
+    }
+  });
+  const messages = (sessionId, count) => Array.from({ length: count }, (_, sequence) => ({
+    id: `${sessionId}-message-${sequence}`,
+    session_id: sessionId,
+    sequence,
+    role: sequence % 2 === 0 ? 'user' : 'assistant',
+    blocks: [{ type: 'text', text: `${sessionId}-durable-${sequence}` }],
+  }));
+  const historyA = messages('session-A', 205);
+  const json = (route, body, status = 200) => route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+
+  // Match only the Gateway root namespace. A broad `**/api/**` glob also
+  // captures Vite source modules such as `/src/api/client.ts` and silently
+  // replaces executable JavaScript with fixture JSON.
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (path.endsWith('/stream') || path.endsWith('/events')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: ': deterministic browser acceptance\n\n',
+      });
+      return;
+    }
+    if (path === '/api/auth/verify') return json(route, { valid: true, auth_required: false });
+    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.584' });
+    if (path === '/api/sessions' && request.method() === 'GET') {
+      return json(route, {
+        sessions: [
+          { id: 'session-A', title: 'Session A', status: 'idle', model: 'requested-A', message_count: 205, updated_at: '2026-07-24T05:00:00Z' },
+          { id: 'session-B', title: 'Session B', status: 'idle', model: 'requested-B', message_count: 3, updated_at: '2026-07-24T04:00:00Z' },
+        ],
+      });
+    }
+    const historyMatch = path.match(/^\/api\/sessions\/(session-[AB])\/messages$/);
+    if (historyMatch && request.method() === 'GET') {
+      const sessionId = historyMatch[1];
+      if (sessionId === 'session-B') {
+        return json(route, { error: 'browser acceptance history denied' }, 401);
+      }
+      const offset = Number(url.searchParams.get('offset') || 0);
+      const limit = Number(url.searchParams.get('limit') || 100);
+      return json(route, {
+        session_id: sessionId,
+        messages: historyA.slice(offset, offset + limit),
+        total: historyA.length,
+        offset,
+        limit,
+        has_more: offset + limit < historyA.length,
+      });
+    }
+    const sessionMatch = path.match(/^\/api\/sessions\/(session-[AB])\/(attach|detach|evidence|execution|attachments|inputs|turn-inbox)$/);
+    if (sessionMatch) {
+      const [, sessionId, resource] = sessionMatch;
+      if (resource === 'attach') return json(route, { ok: true, session_id: sessionId, role: 'writer' });
+      if (resource === 'detach') return json(route, { ok: true });
+      if (resource === 'evidence') return json(route, { session_id: sessionId, evidence_refs: [], turns: [], freshness: 'ready' });
+      if (resource === 'execution') return json(route, { session_id: sessionId, latest_execution_id: `execution-${sessionId}` });
+      if (resource === 'attachments') return json(route, { attachments: [] });
+      return json(route, {});
+    }
+    if (path === '/api/runtime/session-leases/acquire') return json(route, { ok: true });
+    const executionMatch = path.match(/^\/api\/runtime\/executions\/(execution-session-[AB])$/);
+    if (executionMatch) {
+      const sessionId = executionMatch[1].replace('execution-', '');
+      const metrics = sessionId === 'session-A' ? { tool_calls: 0, memory_recalls: 0, memory_evidence: 0 } : {};
+      return json(route, {
+        schema_version: 1,
+        execution_id: executionMatch[1],
+        revision: 1,
+        cursor: 1,
+        graph: {},
+        goals: [],
+        agents: [],
+        teams: [],
+        relations: [],
+        approvals: [],
+        interventions: [],
+        usage: [],
+        context: [],
+        evidence: [],
+        health: [],
+        recovery: [],
+        available_commands: [],
+        live: {
+          status: 'complete',
+          status_detail: 'durable terminal',
+          metrics,
+          context_usage: {
+            model: `effective-${sessionId.at(-1)}`,
+            input_tokens: 512,
+            window_tokens: 4096,
+            usage_percent_bp: 1250,
+          },
+        },
+      });
+    }
+    if (path === '/api/config') return json(route, { model: 'requested-A', version: '0.9.584' });
+    if (path === '/api/runtime/control-plane') return json(route, { configured_model: 'requested-A' });
+    if (path === '/api/config/providers') return json(route, { providers: [], models: [{ id: 'requested-A' }, { id: 'requested-B' }] });
+    if (path === '/api/profiles') return json(route, { profiles: [], active_profile: 'default' });
+    if (path === '/api/slash') return json(route, { commands: [] });
+    if (path === '/api/workspace') return json(route, { workspace_root: '/workspace', workspace_canonical: '/workspace' });
+    if (path === '/api/workspace/files') return json(route, { dir: '', files: [] });
+    if (path === '/api/gateway/capability-contract') return json(route, { schema_version: 1, capabilities: [] });
+    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.584' }, paths: {} });
+    if (path === '/api/gateway/openai-tools') return json(route, { schema_version: 1, source: 'browser-acceptance', tool_count: 0, tools: [] });
+    return json(route, {});
+  });
+
+  await page.goto('/index.html#/chat');
+  const transcript = page.locator('.transcript');
+  await expect(transcript).toBeVisible();
+  expect(browserErrors).toEqual([]);
+  expect(browserRequestFailures).toEqual([]);
+  expect(browserHttpFailures).toEqual([]);
+  await expect(transcript).toContainText('session-A-durable-105');
+  await expect(transcript).toContainText('session-A-durable-204');
+  await expect(transcript).not.toContainText('session-A-durable-0');
+  await expect(page.locator('.history-controls')).toContainText('106–205 / 205');
+  await expect(page.locator('.composer-context')).toContainText('effective-A');
+  await expect(page.locator('.composer-stats')).toContainText('0');
+
+  await page.locator('.composer textarea').fill('draft belongs only to A');
+  await transcript.evaluate((element) => {
+    element.scrollTop = 120;
+    element.dispatchEvent(new Event('scroll'));
+  });
+  await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
+  await expect(page.locator('[role="alert"]')).toContainText(/401|unauthorized/i);
+  await page.locator('.composer textarea').fill('draft belongs only to B');
+  await expect(page.locator('.composer-stats')).toContainText('—');
+
+  await page.locator('.session-row').filter({ hasText: 'Session A' }).click();
+  await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to A');
+  await expect(transcript).toHaveJSProperty('scrollTop', 120);
+  await page.getByRole('button', { name: 'Load older messages' }).click();
+  await expect(transcript).toContainText('session-A-durable-5');
+  await expect(page.locator('.history-controls')).toContainText('6–205 / 205');
+
+  await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
+  await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to B');
+  await expect(page.locator('[role="alert"]')).toContainText(/401|unauthorized/i);
+});
+
+test('session authorization revocation clears that view, fences reconnects, and leaves another session interactive', async ({ page }) => {
+  const revokedSession = 'revoked-session-A';
+  const healthySession = 'healthy-session-B';
+  let revokedStreamRequests = 0;
+  const json = (route, body, status = 200) => route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (path === '/api/auth/verify') return json(route, { valid: true, auth_required: false });
+    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.584' });
+    if (path === '/api/sessions' && request.method() === 'GET') {
+      return json(route, {
+        sessions: [
+          { id: revokedSession, title: 'Revoked A', status: 'active', model: 'private-model-A', updated_at: '2026-07-24T06:00:00Z' },
+          { id: healthySession, title: 'Healthy B', status: 'idle', model: 'healthy-model-B', updated_at: '2026-07-24T05:00:00Z' },
+        ],
+      });
+    }
+    const sessionMatch = path.match(/^\/api\/sessions\/(revoked-session-A|healthy-session-B)\/(messages|attach|detach|evidence|execution|attachments|inputs|turn-inbox|stream)$/);
+    if (sessionMatch) {
+      const [, sessionId, resource] = sessionMatch;
+      if (resource === 'stream') {
+        if (sessionId === revokedSession) {
+          revokedStreamRequests += 1;
+          return route.fulfill({
+            status: 200,
+            contentType: 'text/event-stream',
+            headers: { 'cache-control': 'no-cache' },
+            body: [
+              `data: ${JSON.stringify({ type: 'Connected', session_id: sessionId })}`,
+              '',
+              `data: ${JSON.stringify({ type: 'SessionAuthorizationRevoked', session_id: sessionId, reason: 'credential epoch revoked' })}`,
+              '',
+              '',
+            ].join('\n'),
+          });
+        }
+        return route.fulfill({ status: 204 });
+      }
+      if (resource === 'messages') {
+        const text = sessionId === revokedSession
+          ? 'SECRET-A-MUST-BE-CLEARED'
+          : 'HEALTHY-B-REMAINS-VISIBLE';
+        return json(route, {
+          session_id: sessionId,
+          total: 1,
+          offset: 0,
+          limit: 100,
+          has_more: false,
+          messages: [{
+            id: `${sessionId}-message-0`,
+            session_id: sessionId,
+            sequence: 0,
+            role: 'assistant',
+            blocks: [{ type: 'text', text }],
+          }],
+        });
+      }
+      if (resource === 'attach') return json(route, { ok: true, session_id: sessionId, role: 'writer' });
+      if (resource === 'detach') return json(route, { ok: true });
+      if (resource === 'evidence') {
+        return json(route, {
+          session_id: sessionId,
+          evidence_refs: sessionId === revokedSession ? ['private-evidence-A'] : [],
+          turns: [],
+          freshness: 'ready',
+        });
+      }
+      if (resource === 'execution') {
+        return json(route, { session_id: sessionId, latest_execution_id: `execution-${sessionId}` });
+      }
+      if (resource === 'attachments') return json(route, { attachments: [] });
+      return json(route, {});
+    }
+    if (path === '/api/runtime/session-leases/acquire' || path === '/api/runtime/session-leases/release') {
+      return json(route, { ok: true });
+    }
+    const executionMatch = path.match(/^\/api\/runtime\/executions\/execution-(revoked-session-A|healthy-session-B)$/);
+    if (executionMatch) {
+      const sessionId = executionMatch[1];
+      return json(route, {
+        schema_version: 1,
+        execution_id: `execution-${sessionId}`,
+        revision: 1,
+        cursor: 1,
+        graph: {},
+        goals: [],
+        agents: [],
+        teams: [],
+        relations: [],
+        approvals: [],
+        interventions: [],
+        usage: [],
+        context: [],
+        evidence: sessionId === revokedSession ? [{ evidence_ref: 'private-evidence-A' }] : [],
+        health: [],
+        recovery: [],
+        available_commands: [],
+        live: {
+          status: 'complete',
+          status_detail: 'terminal',
+          metrics: { tool_calls: 0, memory_recalls: 0, memory_evidence: 0 },
+          context_usage: {
+            model: sessionId === revokedSession ? 'private-effective-A' : 'healthy-effective-B',
+            input_tokens: 10,
+            window_tokens: 100,
+            usage_percent_bp: 1000,
+          },
+        },
+      });
+    }
+    if (path === '/api/config') return json(route, { model: 'private-model-A', version: '0.9.584' });
+    if (path === '/api/runtime/control-plane') return json(route, { configured_model: 'private-model-A' });
+    if (path === '/api/config/providers') return json(route, { providers: [], models: [] });
+    if (path === '/api/profiles') return json(route, { profiles: [], active_profile: 'default' });
+    if (path === '/api/slash') return json(route, { commands: [] });
+    if (path === '/api/workspace') return json(route, { workspace_root: '/workspace', workspace_canonical: '/workspace' });
+    if (path === '/api/workspace/files') return json(route, { dir: '', files: [] });
+    if (path === '/api/gateway/capability-contract') return json(route, { schema_version: 1, capabilities: [] });
+    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.584' }, paths: {} });
+    if (path === '/api/gateway/openai-tools') return json(route, { schema_version: 1, source: 'revocation-e2e', tool_count: 0, tools: [] });
+    return json(route, {});
+  });
+
+  await page.goto('/index.html#/chat');
+  await expect(page.locator('[role="alert"]')).toContainText(/revoked|authorization|credential epoch/i);
+  await expect(page.locator('.transcript')).not.toContainText('SECRET-A-MUST-BE-CLEARED');
+  await expect(page.locator('.composer-context')).not.toContainText('private-effective-A');
+  await page.waitForTimeout(600);
+  expect(revokedStreamRequests).toBe(1);
+
+  await page.locator('.session-row').filter({ hasText: 'Healthy B' }).click();
+  await expect(page.locator('.transcript')).toContainText('HEALTHY-B-REMAINS-VISIBLE');
+  await page.locator('.composer textarea').fill('healthy session remains editable');
+  await expect(page.locator('.composer textarea')).toHaveValue('healthy session remains editable');
+  await page.locator('.status-strip button').click();
+  await expect(page.getByRole('heading', { name: 'Model and profile' })).toBeVisible();
+});
+
 test('workspace tab supports folder browsing and editable preview surface', async ({ page }) => {
   await page.goto('/index.html#/chat');
   await page.getByRole('button', { name: 'Workspace', exact: true }).click();
@@ -658,6 +966,22 @@ test('composer model workspace and command controls are clickable', async ({ pag
 
 test('all shell controls remain interactive while a conversation is running', async ({ page }) => {
   const sessionId = 'interaction-running-session';
+  await page.route(`**/api/sessions/${sessionId}/attach`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, session_id: sessionId }),
+    });
+  });
+  await page.route(`**/api/sessions/${sessionId}/detach`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+  await page.route('**/api/runtime/session-leases/acquire', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+  await page.route('**/api/runtime/session-leases/release', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
   await page.route(/\/api\/sessions\?/, async (route) => {
     await route.fulfill({
       status: 200,
@@ -714,7 +1038,7 @@ test('all shell controls remain interactive while a conversation is running', as
   await page.locator('.status-strip button').click();
   await expect(page.getByRole('heading', { name: 'Model and profile' })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
-  await page.locator('.composer-chip').first().click();
+  await page.getByRole('button', { name: /root/ }).click();
   await expect(page.getByRole('heading', { name: 'Workspace picker' })).toBeVisible();
   await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: /Commands/ }).click();

@@ -3,7 +3,7 @@ import { formatCount, t } from '../i18n';
 import { computed, ref, watch } from 'vue';
 import { Moon, Plus, Shield, Sun, Trash2 } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
-import { api } from '../api/client';
+import { api, invalidateApiReadCache, invalidateAuthentication } from '../api/client';
 import { useI18n, type Locale } from '../i18n';
 import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
@@ -344,7 +344,9 @@ async function loginGateway() {
 
 async function logoutGateway() {
   await run('auth-logout', async () => {
+    invalidateAuthentication('operator signed out of the Gateway');
     await api.authLogout();
+    invalidateApiReadCache();
     authCredential.value = '';
     authResult.value = await store.verifyAuth();
   });

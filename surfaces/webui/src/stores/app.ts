@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
-import { api, normalizeActivity, providerModels, type EndpointSnapshot } from '../api/client';
+import { computed, onScopeDispose, ref } from 'vue';
+import {
+  api,
+  invalidateApiReadCache,
+  normalizeActivity,
+  providerModels,
+  type EndpointSnapshot,
+} from '../api/client';
 import { t } from '../i18n';
 import type {
   ActivityEvent,
@@ -144,7 +150,14 @@ function compactTime(session: SessionSummary) {
 export const useAppStore = defineStore('app', () => {
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   let bootPromise: Promise<void> | null = null;
+  let activeSessionLoadGeneration = 0;
+  let authorizationGeneration = 0;
+  const revokedSessionIds = new Set<string>();
+  let uploadOperationSequence = 0;
+  const activeUploadOperations = new Set<number>();
   const booted = ref(false);
+  const authorizationState = ref<'checking' | 'ready' | 'required' | 'invalidated'>('checking');
+  const authorizationViewGeneration = ref(0);
   const health = ref<any>(null);
   const settings = ref<any>(null);
   const controlPlane = ref<any>(null);
@@ -214,6 +227,31 @@ export const useAppStore = defineStore('app', () => {
     return workspaceFiles.value.filter((file) => `${file.name} ${file.path}`.toLowerCase().includes(query));
   });
   const busy = ref(false);
+
+  function beginUploadOperation() {
+    const operation = ++uploadOperationSequence;
+    activeUploadOperations.add(operation);
+    uploadBusy.value = true;
+    return operation;
+  }
+
+  function finishUploadOperation(operation: number) {
+    activeUploadOperations.delete(operation);
+    uploadBusy.value = activeUploadOperations.size > 0;
+  }
+
+  function clearActiveSessionDerivedState() {
+    attachments.value = [];
+    activity.value = [];
+    currentRun.value = null;
+    currentContextEnvelope.value = null;
+    currentRealityFlow.value = {};
+    currentTimeline.value = {};
+    sessionInputProjection.value = null;
+    turnInbox.value = null;
+    selectedActivity.value = null;
+    openTurnActivity.value = {};
+  }
 
   const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || sessions.value[0]);
   const filteredSessions = computed(() => {
@@ -334,11 +372,27 @@ export const useAppStore = defineStore('app', () => {
   function boot() {
     if (booted.value) return Promise.resolve();
     if (bootPromise) return bootPromise;
-    bootPromise = (async () => {
+    const generation = authorizationGeneration;
+    const isCurrent = () => generation === authorizationGeneration;
+    const pendingBoot = (async () => {
       busy.value = true;
+      authorizationState.value = 'checking';
       try {
         const authState = await api.authVerify();
+        if (!isCurrent()) return;
         authEntitlement.value = authState.entitlement || null;
+        if (
+          String(authState.__state || '') === 'forbidden'
+          || (
+            authState.auth_required === true
+            && authState.valid !== true
+            && String(authState.__state || '') === 'ready'
+          )
+        ) {
+          authorizationState.value = 'required';
+          return;
+        }
+        authorizationState.value = 'ready';
         const [
           manifest,
           sessionData,
@@ -368,6 +422,7 @@ export const useAppStore = defineStore('app', () => {
           api.gatewayOpenApi(),
           api.gatewayOpenAiTools(),
         ]);
+        if (!isCurrent()) return;
         health.value = manifest;
         settings.value = config;
         controlPlane.value = runtime;
@@ -383,7 +438,7 @@ export const useAppStore = defineStore('app', () => {
         const reportedModel = runtime.configured_model || config.model || '';
         selectedModel.value = reportedModel && reportedModel !== 'unknown' ? reportedModel : selectedModel.value;
         selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
-        sessions.value = sessionData.sessions;
+        sessions.value = Array.isArray(sessionData.sessions) ? sessionData.sessions : [];
         sessionOffset.value = sessions.value.length;
         sessionHasMore.value = sessions.value.length >= sessionPageLimit.value;
         if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
@@ -392,15 +447,19 @@ export const useAppStore = defineStore('app', () => {
           activeSessionId.value ? loadMessages(activeSessionId.value) : Promise.resolve(),
           loadWorkspace(''),
         ]);
+        if (!isCurrent()) return;
         booted.value = true;
         startConfigReloadPolling();
       } finally {
-        busy.value = false;
+        if (isCurrent()) busy.value = false;
       }
-    })().finally(() => {
-      bootPromise = null;
     });
-    return bootPromise;
+    let trackedBoot!: Promise<void>;
+    trackedBoot = pendingBoot().finally(() => {
+      if (bootPromise === trackedBoot) bootPromise = null;
+    });
+    bootPromise = trackedBoot;
+    return trackedBoot;
   }
 
   function startConfigReloadPolling() {
@@ -411,29 +470,45 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function refreshConfigReloadStatus() {
+    const generation = authorizationGeneration;
     const status = await api.configReloadStatus();
+    if (generation !== authorizationGeneration) return configReloadStatus.value;
     configReloadStatus.value = status || {};
     return configReloadStatus.value;
   }
 
   async function loadMessages(sessionId: string) {
+    const generation = ++activeSessionLoadGeneration;
     activeSessionId.value = sessionId;
+    const selectedSession = sessions.value.find((session) => session.id === sessionId);
+    if (selectedSession?.model) selectedModel.value = selectedSession.model;
+    // Shell-level projections are not session keyed. Clear them synchronously
+    // at the identity boundary so session B can never display or mutate
+    // session A's attachments, context, activity or input receipts while its
+    // own requests are still in flight.
+    clearActiveSessionDerivedState();
     openTurnActivity.value = loadTurnActivityState(sessionId);
     const chat = useChatSessionsStore();
     await chat.open(sessionId);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     markSessionViewed(sessionId);
     await Promise.all([
-      loadAttachments(sessionId),
-      loadActivity(),
-      refreshSessionInputs(sessionId),
-      chatDisplayMode.value === 'panorama' ? refreshChatProjection(sessionId) : Promise.resolve(),
+      loadAttachments(sessionId, generation),
+      loadActivity(sessionId, generation),
+      refreshSessionInputs(sessionId, generation),
+      chatDisplayMode.value === 'panorama'
+        ? refreshChatProjection(sessionId, '', generation)
+        : Promise.resolve(),
     ]);
   }
 
   async function refreshSessions(query = sessionQuery.value, reset = true) {
+    const generation = authorizationGeneration;
     const offset = reset ? 0 : sessionOffset.value;
     const data = await api.searchSessions(query.trim(), sessionPageLimit.value, offset);
-    const nextSessions = data.sessions || [];
+    if (generation !== authorizationGeneration) return data;
+    const nextSessions = (Array.isArray(data.sessions) ? data.sessions : [])
+      .filter((session) => !revokedSessionIds.has(session.id));
     sessions.value = reset ? nextSessions : [...sessions.value, ...nextSessions.filter((session) => !sessions.value.some((item) => item.id === session.id))];
     sessionOffset.value = sessions.value.length;
     sessionHasMore.value = nextSessions.length >= sessionPageLimit.value;
@@ -454,12 +529,8 @@ export const useAppStore = defineStore('app', () => {
   async function createSession() {
     const session = await api.createSession(selectedModel.value || undefined);
     sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)];
-    activeSessionId.value = session.id;
     selectedModel.value = session.model || selectedModel.value;
-    const chat = useChatSessionsStore();
-    await chat.open(session.id);
-    attachments.value = [];
-    markSessionViewed(session.id);
+    await loadMessages(session.id);
   }
 
   async function deleteSession(sessionId: string) {
@@ -555,39 +626,57 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function compactSession(sessionId: string) {
+    const generation = activeSessionLoadGeneration;
     const result = await api.compactSession(sessionId);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) {
+      return result;
+    }
     activity.value.unshift({ id: `compact-${Date.now()}`, kind: 'runtime', title: t('script.stores.app.title.2b43f89c03'), detail: JSON.stringify(result).slice(0, 220), status: 'complete' });
-    await loadActivity();
+    await loadActivity(sessionId, generation);
+    return result;
   }
 
-  async function loadActivity() {
-    if (!activeSessionId.value) {
+  async function loadActivity(
+    sessionId = activeSessionId.value,
+    generation = activeSessionLoadGeneration,
+  ) {
+    if (!sessionId) {
       activity.value = [];
       return;
     }
-    const data: any = await api.runtimeTimeline(activeSessionId.value);
+    const data: any = await api.runtimeTimeline(sessionId);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     currentTimeline.value = data;
     activity.value = normalizeActivity(data.events || data.timeline || []).map(sanitizeActivityEvent);
   }
 
-  async function refreshChatProjection(sessionId = activeSessionId.value, query = '') {
+  async function refreshChatProjection(
+    sessionId = activeSessionId.value,
+    query = '',
+    generation = activeSessionLoadGeneration,
+  ) {
     if (!sessionId || chatDisplayMode.value !== 'panorama') return;
     const [timeline, reality, context] = await Promise.all([
       api.runtimeTimeline(sessionId),
       api.realityFlow(sessionId, 80),
       api.contextCurrent(sessionId, query, 'main_turn'),
     ]);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     currentTimeline.value = timeline;
     currentRealityFlow.value = reality;
     if (!currentContextEnvelope.value || context?.identity || context?.envelope) currentContextEnvelope.value = context.envelope || context;
   }
 
-  async function refreshSessionInputs(sessionId = activeSessionId.value) {
+  async function refreshSessionInputs(
+    sessionId = activeSessionId.value,
+    generation = activeSessionLoadGeneration,
+  ) {
     if (!sessionId) return;
     const [projection, inbox] = await Promise.all([
       api.sessionInputs(sessionId).catch(() => null),
       api.turnInbox(sessionId).catch(() => null),
     ]);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     if (projection) sessionInputProjection.value = projection;
     if (inbox) turnInbox.value = inbox;
   }
@@ -612,7 +701,10 @@ export const useAppStore = defineStore('app', () => {
 
   async function cancelSessionInput(inputId: string, reason = 'cancelled from webui') {
     if (!activeSessionId.value || !inputId) return null;
-    const receipt = await api.cancelSessionInput(activeSessionId.value, inputId, reason);
+    const sessionId = activeSessionId.value;
+    const generation = activeSessionLoadGeneration;
+    const receipt = await api.cancelSessionInput(sessionId, inputId, reason);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return receipt;
     if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
     if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
     recordActivity('runtime', t('chat.input.cancelled'), inputId, receipt?.input ? 'complete' : 'error');
@@ -621,7 +713,10 @@ export const useAppStore = defineStore('app', () => {
 
   async function reclassifySessionInput(inputId: string, decision = 'enqueue_next_step', reason = 'manual webui override') {
     if (!activeSessionId.value || !inputId) return null;
-    const receipt = await api.reclassifySessionInput(activeSessionId.value, inputId, decision, reason);
+    const sessionId = activeSessionId.value;
+    const generation = activeSessionLoadGeneration;
+    const receipt = await api.reclassifySessionInput(sessionId, inputId, decision, reason);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return receipt;
     if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
     if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
     recordActivity('runtime', t('chat.input.reclassified'), `${inputId} -> ${decision}`, receipt?.input ? 'complete' : 'error');
@@ -689,7 +784,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function loadWorkspace(dir = workspaceDir.value) {
+    const generation = authorizationGeneration;
     const data = await api.files(dir);
+    if (generation !== authorizationGeneration) return;
     const currentDir = data.dir || dir || '';
     const files = normalizeWorkspaceFiles(data.files || []);
     workspaceDir.value = currentDir;
@@ -700,10 +797,12 @@ export const useAppStore = defineStore('app', () => {
 
   async function loadWorkspaceTreeDir(dir = '', setCurrent = false) {
     const currentDir = String(dir || '');
+    const generation = authorizationGeneration;
     workspaceTreeLoading.value = { ...workspaceTreeLoading.value, [currentDir]: true };
     workspaceTreeRoot.value = markWorkspaceTreeLoading(workspaceTreeRoot.value, currentDir, true);
     try {
       const data = await api.files(currentDir);
+      if (generation !== authorizationGeneration) return [];
       const resolvedDir = data.dir || currentDir;
       const files = normalizeWorkspaceFiles(data.files || []);
       rememberExpandedDir(resolvedDir);
@@ -714,12 +813,15 @@ export const useAppStore = defineStore('app', () => {
       mergeWorkspaceTreeDir(resolvedDir, files);
       return files;
     } catch (error) {
+      if (generation !== authorizationGeneration) return [];
       fileError.value = error instanceof Error ? error.message : String(error);
       companionTab.value = 'inspector';
       throw error;
     } finally {
-      workspaceTreeLoading.value = { ...workspaceTreeLoading.value, [currentDir]: false };
-      workspaceTreeRoot.value = markWorkspaceTreeLoading(workspaceTreeRoot.value, currentDir, false);
+      if (generation === authorizationGeneration) {
+        workspaceTreeLoading.value = { ...workspaceTreeLoading.value, [currentDir]: false };
+        workspaceTreeRoot.value = markWorkspaceTreeLoading(workspaceTreeRoot.value, currentDir, false);
+      }
     }
   }
 
@@ -760,6 +862,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function openFile(path: string) {
+    const generation = authorizationGeneration;
     selectedFile.value = path;
     fileError.value = '';
     rememberRecentWorkspaceFile(path);
@@ -772,8 +875,17 @@ export const useAppStore = defineStore('app', () => {
         companionTab.value = 'workspace';
         return;
       }
-      selectedFileContent.value = await api.rawFile(path);
-      editorContent.value = selectedFileContent.value;
+      try {
+        const content = await api.rawFile(path);
+        if (generation !== authorizationGeneration || selectedFile.value !== path) return;
+        selectedFileContent.value = content;
+        editorContent.value = content;
+      } catch (error) {
+        if (generation !== authorizationGeneration || selectedFile.value !== path) return;
+        selectedFileContent.value = '';
+        editorContent.value = '';
+        fileError.value = error instanceof Error ? error.message : String(error);
+      }
     } else {
       selectedFileContent.value = '';
       editorContent.value = '';
@@ -781,23 +893,31 @@ export const useAppStore = defineStore('app', () => {
     companionTab.value = 'workspace';
   }
 
-  async function loadAttachments(sessionId = activeSessionId.value) {
+  async function loadAttachments(
+    sessionId = activeSessionId.value,
+    generation = activeSessionLoadGeneration,
+  ) {
     if (!sessionId) {
       attachments.value = [];
       return;
     }
     const data: any = await api.sessionAttachments(sessionId);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     attachments.value = data.attachments || [];
   }
 
   async function attachWorkspaceFile(path = selectedFile.value) {
     if (!path) return;
     if (!activeSessionId.value) await createSession();
+    const sessionId = activeSessionId.value;
+    const generation = activeSessionLoadGeneration;
     try {
-      const result: any = await api.addSessionAttachment(activeSessionId.value, path, path);
+      const result: any = await api.addSessionAttachment(sessionId, path, path);
+      if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
       attachments.value = [result.attachment, ...attachments.value.filter((item) => item.path !== path)];
       activity.value.unshift({ id: `attachment-${Date.now()}`, kind: 'context', title: t('script.stores.app.title.6c796f2b2a'), detail: path, status: 'complete' });
     } catch (error) {
+      if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
       fileError.value = error instanceof Error ? error.message : String(error);
     }
   }
@@ -809,25 +929,32 @@ export const useAppStore = defineStore('app', () => {
       return;
     }
     if (!activeSessionId.value) return;
-    await api.deleteSessionAttachment(activeSessionId.value, refId);
+    const sessionId = activeSessionId.value;
+    const generation = activeSessionLoadGeneration;
+    await api.deleteSessionAttachment(sessionId, refId);
+    if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     attachments.value = attachments.value.filter((item) => item.ref_id !== refId);
   }
 
   async function uploadWorkspaceFile(file: File, dir = workspaceDir.value) {
-    uploadBusy.value = true;
+    const operation = beginUploadOperation();
+    const generation = authorizationGeneration;
     fileError.value = '';
     try {
       const result: any = await api.uploadFile(file, dir);
+      if (generation !== authorizationGeneration) return result;
       await loadWorkspace(dir);
       await loadWorkspaceTreeDir(dir, workspaceDir.value === dir);
+      if (generation !== authorizationGeneration) return result;
       activity.value.unshift({ id: `upload-${Date.now()}`, kind: 'context', title: t('script.stores.app.title.71be2f4e38'), detail: `${result.path} (${result.size} bytes)`, status: 'complete' });
       return result;
     } catch (error) {
+      if (generation !== authorizationGeneration) throw error;
       fileError.value = error instanceof Error ? error.message : String(error);
       companionTab.value = 'inspector';
       throw error;
     } finally {
-      uploadBusy.value = false;
+      finishUploadOperation(operation);
     }
   }
 
@@ -878,11 +1005,23 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function uploadResource(file: File) {
-    uploadBusy.value = true;
+    const operation = beginUploadOperation();
+    const authorization = authorizationGeneration;
     fileError.value = '';
+    let sessionId = activeSessionId.value;
+    let generation = activeSessionLoadGeneration;
     try {
       if (!activeSessionId.value) await createSession();
-      const result = await api.uploadResource(file, activeSessionId.value) as RuntimeResourceUpload;
+      sessionId = activeSessionId.value;
+      generation = activeSessionLoadGeneration;
+      const result = await api.uploadResource(file, sessionId) as RuntimeResourceUpload;
+      if (
+        authorization !== authorizationGeneration
+        || activeSessionId.value !== sessionId
+        || generation !== activeSessionLoadGeneration
+      ) {
+        return result;
+      }
       const resource = result.resource;
       const attachment: SessionAttachment = {
         ref_id: resource.id,
@@ -901,11 +1040,18 @@ export const useAppStore = defineStore('app', () => {
       activity.value.unshift({ id: `resource-${Date.now()}`, kind: 'context', title: t('script.stores.app.title.5ccc1613c7'), detail: `${resource.original_name} (${resource.kind})`, status: 'complete' });
       return result;
     } catch (error) {
+      if (
+        authorization !== authorizationGeneration
+        || activeSessionId.value !== sessionId
+        || generation !== activeSessionLoadGeneration
+      ) {
+        throw error;
+      }
       fileError.value = error instanceof Error ? error.message : String(error);
       companionTab.value = 'inspector';
       throw error;
     } finally {
-      uploadBusy.value = false;
+      finishUploadOperation(operation);
     }
   }
 
@@ -1062,10 +1208,13 @@ export const useAppStore = defineStore('app', () => {
   async function chooseModel(model: string) {
     commandError.value = '';
     if (!activeSessionId.value) await createSession();
+    const sessionId = activeSessionId.value;
+    const generation = activeSessionLoadGeneration;
     try {
-      await api.updateSession(activeSessionId.value, { model });
+      await api.updateSession(sessionId, { model });
+      if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
       selectedModel.value = model;
-      sessions.value = sessions.value.map((session) => session.id === activeSessionId.value ? { ...session, model } : session);
+      sessions.value = sessions.value.map((session) => session.id === sessionId ? { ...session, model } : session);
       closeModal();
     } catch (error) {
       commandError.value = t('store.app.model.switchFailed', { error: error instanceof Error ? error.message : String(error) });
@@ -1140,14 +1289,28 @@ export const useAppStore = defineStore('app', () => {
   async function verifyAuth() {
     const result = await api.authVerify();
     authEntitlement.value = result.entitlement || null;
+    authorizationState.value = (
+      String(result.__state || '') === 'forbidden'
+      || (
+        result.auth_required === true
+        && result.valid !== true
+        && String(result.__state || '') === 'ready'
+      )
+    ) ? 'required' : 'ready';
     return result;
   }
 
   async function login(credential: string) {
+    invalidateApiReadCache();
+    failClosedAuthorization();
+    useProjectionRegistryStore().failClosedAuthorization('authorization transition started');
+    useChatSessionsStore().failClosedAllSessionAuthorization('authorization transition started');
     const result = await api.authLogin(credential);
+    invalidateApiReadCache();
     authEntitlement.value = result.entitlement || null;
     useProjectionRegistryStore().refreshAuthorization();
-    await refreshGatewayCapabilityContract();
+    useChatSessionsStore().refreshAuthorization();
+    await boot();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('cowd:auth-session-refreshed', {
         detail: { entitlement: authEntitlement.value },
@@ -1156,12 +1319,132 @@ export const useAppStore = defineStore('app', () => {
     return result;
   }
 
+  function failClosedAuthorization() {
+    authorizationGeneration += 1;
+    authorizationViewGeneration.value += 1;
+    authorizationState.value = 'invalidated';
+    activeSessionLoadGeneration += 1;
+    revokedSessionIds.clear();
+    booted.value = false;
+    bootPromise = null;
+    if (configReloadTimer) clearInterval(configReloadTimer);
+    configReloadTimer = null;
+    activeUploadOperations.clear();
+    uploadBusy.value = false;
+    busy.value = false;
+    authEntitlement.value = null;
+    health.value = null;
+    settings.value = null;
+    controlPlane.value = null;
+    providers.value = null;
+    configReloadStatus.value = {};
+    profiles.value = [];
+    commands.value = [];
+    commandHistory.value = [];
+    approvalConfig.value = null;
+    sessions.value = [];
+    activeSessionId.value = '';
+    clearActiveSessionDerivedState();
+    workspaceRoot.value = '';
+    workspaceDir.value = '';
+    workspaceFiles.value = [];
+    workspaceTreeRoot.value = createWorkspaceRoot();
+    expandedWorkspaceDirs.value = [''];
+    workspaceTreeLoading.value = {};
+    workspaceMeta.value = null;
+    recentWorkspaceFiles.value = [];
+    selectedFile.value = '';
+    selectedFileContent.value = '';
+    editorContent.value = '';
+    workspaceFilter.value = '';
+    fileError.value = '';
+    settingsSavedAt.value = '';
+    selectedModel.value = '';
+    selectedProfile.value = 'default';
+    commandError.value = '';
+    sessionQuery.value = '';
+    sessionOffset.value = 0;
+    sessionHasMore.value = true;
+    sessionLoadingMore.value = false;
+    selectedSessionIds.value = [];
+    pinnedSessionIds.value = [];
+    sessionViewedCounts.value = {};
+    sessionRenderLimit.value = 100;
+    actionResults.value = {};
+    capabilitySnapshots.value = {};
+    capabilityLoading.value = {};
+    capabilityError.value = {};
+    gatewayCapabilityContract.value = null;
+    gatewayOpenApi.value = null;
+    gatewayOpenAiTools.value = null;
+    gatewayContractError.value = '';
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(PINNED_SESSION_KEY);
+      localStorage.removeItem(VIEWED_SESSION_KEY);
+      localStorage.removeItem(WORKSPACE_RECENT_KEY);
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index);
+        if (key?.startsWith('cowd.webui.turnActivityOpen.')) localStorage.removeItem(key);
+      }
+    }
+  }
+
+  function failClosedSessionAuthorization(sessionId: string) {
+    revokedSessionIds.add(sessionId);
+    sessions.value = sessions.value.map((session) => (
+      session.id === sessionId
+        ? {
+            ...session,
+            title: t('session.restricted'),
+            snippet: '',
+            first_message: '',
+            summary: '',
+            model: '',
+            status: 'authorization_revoked',
+          }
+        : session
+    ));
+    selectedSessionIds.value = selectedSessionIds.value.filter((id) => id !== sessionId);
+    pinnedSessionIds.value = pinnedSessionIds.value.filter((id) => id !== sessionId);
+    const { [sessionId]: _discarded, ...remainingViewedCounts } = sessionViewedCounts.value;
+    sessionViewedCounts.value = remainingViewedCounts;
+    writeStored(PINNED_SESSION_KEY, pinnedSessionIds.value);
+    writeStored(VIEWED_SESSION_KEY, sessionViewedCounts.value);
+    capabilitySnapshots.value = {};
+    capabilityLoading.value = {};
+    capabilityError.value = {};
+    actionResults.value = {};
+    commandHistory.value = [];
+    if (activeSessionId.value !== sessionId) return;
+    activeSessionLoadGeneration += 1;
+    selectedModel.value = '';
+    clearActiveSessionDerivedState();
+  }
+
+  const authorizationInvalidated = () => failClosedAuthorization();
+  const sessionAuthorizationInvalidated = (event: Event) => {
+    const sessionId = String((event as CustomEvent)?.detail?.sessionId || '');
+    if (sessionId) failClosedSessionAuthorization(sessionId);
+  };
+  if (typeof window !== 'undefined') {
+    window.addEventListener('cowd:authorization-invalidated', authorizationInvalidated);
+    window.addEventListener('cowd:session-authorization-invalidated', sessionAuthorizationInvalidated);
+    onScopeDispose(() => {
+      window.removeEventListener('cowd:authorization-invalidated', authorizationInvalidated);
+      window.removeEventListener('cowd:session-authorization-invalidated', sessionAuthorizationInvalidated);
+    });
+  }
+
   async function refreshGatewayCapabilityContract() {
+    const generation = authorizationGeneration;
     const [contract, openApi, openAiTools] = await Promise.all([
       api.gatewayCapabilityContract(),
       api.gatewayOpenApi(),
       api.gatewayOpenAiTools(),
     ]);
+    if (generation !== authorizationGeneration) {
+      return { contract, openApi, openAiTools };
+    }
     gatewayCapabilityContract.value = contract;
     gatewayOpenApi.value = openApi;
     gatewayOpenAiTools.value = openAiTools;
@@ -1170,16 +1453,30 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function loadCapability(page: Exclude<NavId, 'chat' | 'settings'>) {
+    const sessionId = activeSessionId.value;
+    const sessionGeneration = activeSessionLoadGeneration;
+    const authGeneration = authorizationGeneration;
+    const isCurrent = () => (
+      authGeneration === authorizationGeneration
+      && sessionGeneration === activeSessionLoadGeneration
+      && sessionId === activeSessionId.value
+      && !revokedSessionIds.has(sessionId)
+    );
     capabilityLoading.value = { ...capabilityLoading.value, [page]: true };
     capabilityError.value = { ...capabilityError.value, [page]: '' };
     try {
       if (!gatewayCapabilityContract.value) await refreshGatewayCapabilityContract();
-      const snapshots = await api.loadCapabilityPage(page, activeSessionId.value, gatewayCapabilityContract.value);
+      if (!isCurrent()) return;
+      const snapshots = await api.loadCapabilityPage(page, sessionId, gatewayCapabilityContract.value);
+      if (!isCurrent()) return;
       capabilitySnapshots.value = { ...capabilitySnapshots.value, [page]: snapshots };
     } catch (error) {
+      if (!isCurrent()) return;
       capabilityError.value = { ...capabilityError.value, [page]: error instanceof Error ? error.message : String(error) };
     } finally {
-      capabilityLoading.value = { ...capabilityLoading.value, [page]: false };
+      if (isCurrent()) {
+        capabilityLoading.value = { ...capabilityLoading.value, [page]: false };
+      }
     }
   }
 
@@ -1190,9 +1487,20 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function executeCommand(command: string, args: Record<string, unknown> = {}) {
-    const resolution: any = await api.resolveCommand(command, 'webui', { session_id: activeSessionId.value });
+    const sessionId = activeSessionId.value;
+    const sessionGeneration = activeSessionLoadGeneration;
+    const authGeneration = authorizationGeneration;
+    const isCurrent = () => (
+      sessionId === activeSessionId.value
+      && sessionGeneration === activeSessionLoadGeneration
+      && authGeneration === authorizationGeneration
+      && !revokedSessionIds.has(sessionId)
+    );
+    const resolution: any = await api.resolveCommand(command, 'webui', { session_id: sessionId });
+    if (!isCurrent()) return null;
     const resolvedCommand = resolution?.resolution?.command?.name || command;
     const result: any = await api.executeCommand(resolvedCommand, args);
+    if (!isCurrent()) return result;
     commandHistory.value = [result, ...commandHistory.value];
     activity.value.unshift({
       id: `command-${Date.now()}`,
@@ -1206,7 +1514,16 @@ export const useAppStore = defineStore('app', () => {
 
   async function runCapabilityAction(page: string, label: string, endpoint?: string) {
     if (!endpoint) return;
-    const id = `${page}:${label}`;
+    const sessionId = activeSessionId.value;
+    const sessionGeneration = activeSessionLoadGeneration;
+    const authGeneration = authorizationGeneration;
+    const isCurrent = () => (
+      sessionId === activeSessionId.value
+      && sessionGeneration === activeSessionLoadGeneration
+      && authGeneration === authorizationGeneration
+      && !revokedSessionIds.has(sessionId)
+    );
+    const id = `${sessionId}:${page}:${label}`;
     companionTab.value = 'activity';
     activity.value.unshift({
       id: `${id}:${Date.now()}`,
@@ -1216,7 +1533,8 @@ export const useAppStore = defineStore('app', () => {
       status: 'running',
     });
     try {
-      const result = await api.executeCapabilityAction(endpoint, { label, session_id: activeSessionId.value });
+      const result = await api.executeCapabilityAction(endpoint, { label, session_id: sessionId });
+      if (!isCurrent()) return result;
       actionResults.value = { ...actionResults.value, [id]: result };
       activity.value.unshift({
         id: `${id}:done:${Date.now()}`,
@@ -1226,6 +1544,7 @@ export const useAppStore = defineStore('app', () => {
         status: 'complete',
       });
     } catch (error) {
+      if (!isCurrent()) return;
       const detail = error instanceof Error ? error.message : String(error);
       actionResults.value = { ...actionResults.value, [id]: { error: detail } };
       activity.value.unshift({ id: `${id}:error:${Date.now()}`, kind: 'error', title: `${label} failed`, detail, status: 'error' });
@@ -1234,6 +1553,8 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     booted,
+    authorizationState,
+    authorizationViewGeneration,
     health,
     settings,
     controlPlane,
@@ -1378,6 +1699,7 @@ export const useAppStore = defineStore('app', () => {
     toggleSolo,
     verifyAuth,
     login,
+    failClosedAuthorization,
     refreshGatewayCapabilityContract,
     loadCapability,
     refreshCommands,

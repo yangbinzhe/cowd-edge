@@ -1,0 +1,1 @@
+import{b as o,f as t,e as a,j as n,t as s,l as c}from"./vendor-vue-BO0-Ocwb.js";const i={class:"empty-state"},l={key:0},p=o({__name:"EmptyState",props:{title:{},detail:{}},setup(e){return(r,m)=>(t(),a("div",i,[n("strong",null,s(e.title),1),e.detail?(t(),a("p",l,s(e.detail),1)):c("",!0)]))}});export{p as _};

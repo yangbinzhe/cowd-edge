@@ -2,6 +2,12 @@ import { defineConfig } from '@playwright/test';
 
 const gatewayUrl = process.env.COWD_E2E_GATEWAY_URL?.replace(/\/$/, '');
 const gatewayToken = process.env.COWD_E2E_GATEWAY_TOKEN;
+const webUrl = process.env.COWD_E2E_WEB_URL?.replace(/\/$/, '') || 'http://127.0.0.1:9241';
+const webPort = new URL(webUrl).port || '80';
+const releaseEntry = process.env.COWD_E2E_RELEASE_ENTRY === '1';
+if (releaseEntry && (!gatewayUrl || !process.env.COWD_E2E_GATEWAY_PROVENANCE)) {
+  throw new Error('release browser entry requires an isolated Gateway URL and verified provenance');
+}
 
 export default defineConfig({
   testDir: '.',
@@ -10,7 +16,9 @@ export default defineConfig({
   use: {
     // The release gate supplies an isolated Gateway URL. Local development
     // keeps the Vite server for fast iteration, but it is not release proof.
-    baseURL: gatewayUrl || 'http://127.0.0.1:9241',
+    // Release proof always loads this checkout's freshly built assets. API
+    // calls are proxied to the isolated real Gateway by Vite preview.
+    baseURL: releaseEntry ? webUrl : (gatewayUrl || webUrl),
     extraHTTPHeaders: gatewayToken
       ? { Authorization: `Bearer ${gatewayToken}` }
       : undefined,
@@ -19,10 +27,12 @@ export default defineConfig({
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/snap/bin/chromium',
     },
   },
-  webServer: gatewayUrl ? undefined : {
-    command: 'npm run dev -- --port 9241',
-    url: 'http://127.0.0.1:9241/index.dev.html',
-    reuseExistingServer: !process.env.CI,
+  webServer: releaseEntry || !gatewayUrl ? {
+    command: releaseEntry
+      ? `npm run preview -- --port ${webPort}`
+      : `npm run dev -- --port ${webPort}`,
+    url: `${webUrl}/index.dev.html`,
+    reuseExistingServer: !releaseEntry && !process.env.CI,
     timeout: 20_000,
-  },
+  } : undefined,
 });

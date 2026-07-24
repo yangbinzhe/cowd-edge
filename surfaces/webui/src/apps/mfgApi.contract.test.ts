@@ -1,13 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mfgApi as api } from '@cowd/app-mfg-webui/api/mfgApi';
 import type { MfgMutationIntent } from '@cowd/app-mfg-webui/types/mfg';
+import { canonicalMfgMutationResponse } from '../testing/mfgReceiptMock';
 
 function intent(actionId: string, resourceRef: string): MfgMutationIntent {
+  const identity = `test:${actionId}:${resourceRef}`;
   return {
+    intent_id: `mfg-intent:${identity}`,
     action_id: actionId,
     resource_ref: resourceRef,
-    idempotency_key: `test:${actionId}:${resourceRef}`,
+    idempotency_key: identity,
+    correlation_id: `mfg-correlation:${identity}`,
+    payload_digest: 'sha256:test-semantic-payload',
+    semantic_digest: 'sha256:test-semantic-payload',
+    risk: 'medium',
     status: 'draft',
+    error: null,
     created_at: '2026-07-23T00:00:00.000Z',
     updated_at: '2026-07-23T00:00:00.000Z',
   };
@@ -20,22 +28,34 @@ describe('external MFG APP request contract', () => {
   });
 
   it('keeps every critical governed write connected to its declared APP route', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
-      receipt: { status: 'completed' },
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+    const fetchMock = vi.fn((_request, init?: RequestInit) => Promise.resolve(
+      canonicalMfgMutationResponse(init, {
+        receipt_projection: { status: 'completed' },
+      }),
+    ));
     vi.stubGlobal('fetch', fetchMock);
 
     const sourcePack = { source_pack_id: 'sp-1' };
     const run = { resource_ref: 'file:///tmp/events.json' };
     await api.mfgSourcePackUpsert(sourcePack, intent('mfg.reality.source_pack.create', 'mfg:source-pack:sp-1'));
-    await api.mfgSourcePackValidate('sp-1');
-    await api.mfgSourcePackDeltaPlan('sp-1');
+    await api.mfgSourcePackValidate(
+      'sp-1',
+      intent('mfg.reality.source_pack.validate', 'matrix:source_pack:sp-1'),
+    );
+    await api.mfgSourcePackDeltaPlan(
+      'sp-1',
+      intent('mfg.reality.source_pack.delta_plan', 'matrix:source_pack:sp-1'),
+    );
     await api.mfgSourcePackConnectorPlan('sp-1', run, intent('mfg.reality.connector_run.plan', 'mfg:source-pack:sp-1'));
     await api.mfgSourcePackConnectorRun('sp-1', run, intent('mfg.reality.connector_run.execute', 'mfg:source-pack:sp-1'));
     await api.mfgComputeJobPlan({ metric_ids: ['event_count'] }, intent('mfg.reality.compute_job.plan', 'mfg:compute:test'));
     await api.mfgComputeJobRun('job-1', intent('mfg.reality.compute_job.execute', 'mfg:compute-job:job-1'));
     await api.mfgEvidenceQualityGate('evidence-1', intent('mfg.reality.evidence.quality_gate', 'mfg:evidence:evidence-1'));
-    await api.mfgRecommendPlaybooks('incident-1', 5);
+    await api.mfgRecommendPlaybooks(
+      'incident-1',
+      5,
+      intent('mfg.incident.playbook.recommend', 'mfg:incident:incident-1'),
+    );
     await api.mfgExecuteAction('analysis-1', 'action-1', { mode: 'dry_run', operator_id: 'forged' }, intent('mfg.analysis.action.dry_run', 'mfg:analysis:analysis-1'));
     await api.mfgExecutionBridge('execution-1', { mode: 'dry_run', actor_principal: 'forged' }, intent('mfg.execution.cross_plane.dry_run', 'mfg:execution:execution-1'));
     await api.mfgExecutionFeedback('execution-1', { outcome: 'resolved', actor_ref: 'forged' }, intent('mfg.execution.feedback.create', 'mfg:execution:execution-1'));
@@ -81,11 +101,8 @@ describe('external MFG APP request contract', () => {
       .join('\n');
     expect(serializedBodies).not.toContain('forged');
     expect(serializedBodies).not.toContain('"idempotency_key"');
-    const governedCalls = fetchMock.mock.calls.filter(([request]) => ![
-      '/validate',
-      '/delta-plan',
-      '/playbooks/recommend',
-    ].some((suffix) => String(request).includes(suffix)));
-    expect(governedCalls.every(([, init]) => new Headers((init as RequestInit).headers).has('Idempotency-Key'))).toBe(true);
+    expect(fetchMock.mock.calls.every(([, init]) => (
+      new Headers((init as RequestInit).headers).has('Idempotency-Key')
+    ))).toBe(true);
   });
 });

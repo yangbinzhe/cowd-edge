@@ -12,14 +12,23 @@ import { displayStatus } from '../i18n/domain/status';
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
-const draft = ref('');
-const sending = ref(false);
+const transcript = ref<HTMLElement | null>(null);
+const unboundDraft = ref('');
+const draft = computed({
+  get: () => store.activeSessionId ? (chat.active?.draft || '') : unboundDraft.value,
+  set: (value: string) => {
+    if (store.activeSessionId) chat.setDraft(store.activeSessionId, value);
+    else unboundDraft.value = value;
+  },
+});
 const commandQuery = ref('');
 const inlineCommandIndex = ref(0);
 const activeProjection = computed(() => chat.active?.executionId ? projections.projectionFor(chat.active.executionId) : null);
 const live = computed(() => activeProjection.value?.live || chat.active?.live || null);
 const contextUsage = computed(() => {
-  const value = Number(live.value?.context_usage?.usage_percent_bp);
+  const raw = live.value?.context_usage?.usage_percent_bp;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const value = Number(raw);
   return Number.isFinite(value) ? value / 100 : null;
 });
 const contextLabel = computed(() => {
@@ -28,13 +37,28 @@ const contextLabel = computed(() => {
 });
 const executionStatus = computed(() => String(live.value?.status || (chat.active?.pending ? 'queued' : 'idle')));
 const gatewayStatus = computed(() => store.health?.health?.status || store.health?.status || 'unknown');
-const modelLabel = computed(() => store.selectedModel || 'Select model');
+const effectiveModel = computed(() => String(live.value?.context_usage?.model || '').trim());
+const modelLabel = computed(() => effectiveModel.value || '—');
+const showRequestedModel = computed(() => (
+  !!store.selectedModel && effectiveModel.value !== store.selectedModel
+));
 const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
 const turnRunning = computed(() => !!chat.active?.pending || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(executionStatus.value));
+const submissionBusy = computed(() => !!chat.active?.submitting);
+const attachmentLabel = computed(() => {
+  if (chat.active?.attachmentRole === 'writer') return t('page.chat.attachment.writer');
+  if (chat.active?.attachmentRole === 'reader') return t('page.chat.attachment.reader');
+  return t('page.chat.attachment.detached');
+});
+function metricValue(value: unknown) {
+  return value === null || value === undefined || !Number.isFinite(Number(value))
+    ? '—'
+    : Number(value);
+}
 const composerStats = computed(() => [
-  { label: t('page.chat.cleanCounters.tools'), value: Number(live.value?.metrics?.tool_calls || 0) },
-  { label: t('page.chat.cleanCounters.memoryRecall'), value: Number(live.value?.metrics?.memory_recalls || 0) },
-  { label: t('page.chat.cleanCounters.memoryEvidence'), value: Number(live.value?.metrics?.memory_evidence || 0) },
+  { label: t('page.chat.cleanCounters.tools'), value: metricValue(live.value?.metrics?.tool_calls) },
+  { label: t('page.chat.cleanCounters.memoryRecall'), value: metricValue(live.value?.metrics?.memory_recalls) },
+  { label: t('page.chat.cleanCounters.memoryEvidence'), value: metricValue(live.value?.metrics?.memory_evidence) },
 ]);
 const filteredCommands = computed(() => {
   const query = commandQuery.value.trim().toLowerCase().replace(/^\//, '');
@@ -51,7 +75,21 @@ const inlineCommandOptions = computed(() => {
 });
 
 useEscapeKey(() => store.closeModal(), () => !!store.activeModal);
-watch(() => store.activeSessionId, (sessionId) => { if (sessionId) chat.open(sessionId).catch(() => undefined); }, { immediate: true });
+watch(() => store.activeSessionId, async (sessionId, previousSessionId) => {
+  if (previousSessionId && transcript.value) {
+    chat.setScrollTop(previousSessionId, transcript.value.scrollTop);
+  }
+  await nextTick();
+  if (sessionId && transcript.value) {
+    transcript.value.scrollTop = chat.states[sessionId]?.scrollTop || 0;
+  }
+}, { immediate: true });
+
+function rememberScroll() {
+  if (store.activeSessionId && transcript.value) {
+    chat.setScrollTop(store.activeSessionId, transcript.value.scrollTop);
+  }
+}
 
 watch(() => activeSlash.value?.query, () => {
   inlineCommandIndex.value = 0;
@@ -143,7 +181,7 @@ async function handleComposerKeydown(event: KeyboardEvent) {
 
 async function submit() {
   const text = draft.value.trim();
-  if (!text || sending.value || turnRunning.value) return;
+  if (!text || submissionBusy.value || turnRunning.value) return;
   if (text === '/model') {
     store.openModal('model');
     draft.value = '';
@@ -159,28 +197,26 @@ async function submit() {
     draft.value = '';
     return;
   }
-  sending.value = true;
-  draft.value = '';
   try {
     await store.boot();
     if (!store.activeSessionId) await store.createSession();
     const sessionId = store.activeSessionId;
     if (!sessionId) return;
+    chat.setDraft(sessionId, text);
+    unboundDraft.value = '';
     const input = store.composeChatInput(text);
     const accepted = await chat.send(sessionId, text, input);
-    if (accepted) store.clearSubmittedResourceAttachments(input.resourceIds);
+    if (accepted && store.activeSessionId === sessionId) {
+      chat.setDraft(sessionId, '');
+      store.clearSubmittedResourceAttachments(input.resourceIds);
+    }
   } finally {
-    sending.value = false;
     await nextTick();
   }
 }
 
 async function stop() {
-  try {
-    if (store.activeSessionId) await chat.stop(store.activeSessionId);
-  } finally {
-    sending.value = false;
-  }
+  if (store.activeSessionId) await chat.stop(store.activeSessionId);
 }
 
 function turnActivityParts(turn: any) {
@@ -266,7 +302,36 @@ async function chooseCommand(command: any) {
       <RouterLink class="ghost-action" to="/audit">{{ t('page.chat.page.text.e0cabf393b') }}</RouterLink>
     </nav>
 
-    <div class="transcript" :aria-label="t('page.chat.page.aria-label.e683294716')">
+    <div class="history-controls">
+      <button
+        v-if="chat.active?.historyHasOlder"
+        class="ghost-action"
+        type="button"
+        :disabled="chat.active?.historyLoading"
+        @click="chat.loadOlder(store.activeSessionId)"
+      >
+        {{ chat.active?.historyLoading ? t('status.loading') : t('page.chat.history.older') }}
+      </button>
+      <span v-if="chat.active">
+        {{ chat.active.historyOldestOffset + 1 }}–{{ chat.active.historyWindowEndOffset }}
+        / {{ chat.active.historyTotal }}
+      </span>
+      <button
+        v-if="chat.active?.historyHasNewer"
+        class="ghost-action"
+        type="button"
+        :disabled="chat.active?.historyLoading"
+        @click="chat.loadLatest(store.activeSessionId)"
+      >
+        {{ t('page.chat.history.latest') }}
+      </button>
+    </div>
+    <div
+      ref="transcript"
+      class="transcript"
+      :aria-label="t('page.chat.page.aria-label.e683294716')"
+      @scroll.passive="rememberScroll"
+    >
       <article v-for="turn in chat.active?.turns || []" :key="turn.id" class="turn" :data-role="turn.role">
         <div v-if="isPanorama" class="message-meta">
           <span v-if="turn.sequence" class="meta-sequence">#{{ turn.sequence }}</span>
@@ -274,7 +339,7 @@ async function chooseCommand(command: any) {
           <span v-if="turn.tool_name"><Wrench :size="12" />{{ turn.tool_name }}</span>
         </div>
         <MarkdownBlock :content="turn.content" />
-        <p v-if="turn.id === `stream:${chat.active?.sessionId}` && turnRunning" class="turn-run-state" role="status">
+        <p v-if="turn.id === chat.active?.streamTurnId && turnRunning" class="turn-run-state" role="status">
           {{ displayStatus(executionStatus) }} · {{ live?.status_detail || t('status.loading') }}
         </p>
         <section
@@ -305,6 +370,7 @@ async function chooseCommand(command: any) {
     </div>
 
     <footer class="composer">
+      <p v-if="chat.active?.lastError" class="file-error" role="alert">{{ chat.active.lastError }}</p>
       <textarea v-model="draft" :placeholder="t('page.chat.page.placeholder.3e0e768fa8')" @keydown="handleComposerKeydown" />
       <div v-if="activeSlash && inlineCommandOptions.length" class="composer-command-popover">
         <div class="command-inline-head">
@@ -333,16 +399,25 @@ async function chooseCommand(command: any) {
           <span class="composer-stats">
             <small v-for="item in composerStats" :key="item.label"><strong>{{ item.value }}</strong>{{ item.label }}</small>
           </span>
-          <span class="run-status" :data-status="executionStatus" role="status" aria-live="polite" :title="chat.active?.degradedReason || ''">{{ displayStatus(executionStatus) }} · {{ live?.status_detail || chat.active?.degradedReason || chat.active?.streamState }}</span>
+          <span class="run-status" :data-status="executionStatus" role="status" aria-live="polite" :title="chat.active?.degradedReason || ''">{{ displayStatus(executionStatus) }} · {{ chat.active?.degradedReason || live?.status_detail || chat.active?.streamState }}</span>
+          <span class="composer-chip" :data-role="chat.active?.attachmentRole" role="status" :title="chat.active?.degradedReason || ''">{{ attachmentLabel }}</span>
           <button type="button" class="composer-chip" @click="store.openModal('workspace')"><Folder :size="14" /> {{ store.workspaceDir || t('page.chat.page.inline.59c92a9169') }}</button>
-          <button type="button" class="composer-chip" @click="store.openModal('model')"><Bot :size="14" /> {{ modelLabel }}</button>
+          <button
+            type="button"
+            class="composer-chip"
+            :title="showRequestedModel ? `requested ${store.selectedModel} · effective ${effectiveModel || 'unknown'}` : modelLabel"
+            @click="store.openModal('model')"
+          >
+            <Bot :size="14" /> {{ modelLabel }}
+            <small v-if="showRequestedModel">{{ t('page.chat.model.requested') }} {{ store.selectedModel }}</small>
+          </button>
           <button v-if="store.attachments.length" type="button" class="composer-chip" @click="store.openCompanion('workspace')"><Paperclip :size="14" /> {{ formatCount('sources', store.attachments.length) }}</button>
         </div>
         <div class="composer-actions">
           <button class="icon-action" type="button" :aria-label="t('component.companion.panel.text.727690de87')" @click="store.openCompanion('workspace')"><Paperclip :size="16" /></button>
           <button class="ghost-action" type="button" @click="store.openModal('commands')"><Zap :size="15" />{{ t('page.chat.page.text.01bed7d85c') }}</button>
           <button v-if="turnRunning" class="icon-action" type="button" :aria-label="t('page.chat.page.text.2090c0732a')" @click="stop"><Square :size="15" /></button>
-          <button class="primary-action" type="button" :disabled="!draft.trim() || sending || turnRunning" @click="submit"><Send :size="15" />{{ t('page.chat.page.text.aeee9b2149') }}</button>
+          <button class="primary-action" type="button" :disabled="!draft.trim() || submissionBusy || turnRunning" @click="submit"><Send :size="15" />{{ t('page.chat.page.text.aeee9b2149') }}</button>
         </div>
       </div>
     </footer>

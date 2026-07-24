@@ -251,7 +251,7 @@ function selectExecutionProjection(executionId: unknown) {
     return;
   }
   selectedExecutionId.value = next;
-  projections.acquire(next, 'mission', 'full');
+  projections.acquire(next, 'mission', 'full', 'bounded', activeSession.value);
 }
 const recoveryPreview = computed(() => {
   const candidates = recoveryReport.value?.candidates || recoveryReport.value?.report?.candidates || recoveryReport.value?.plan?.candidates || [];

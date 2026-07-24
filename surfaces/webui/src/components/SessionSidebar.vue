@@ -37,7 +37,6 @@ async function openSession(sessionId: string) {
 
 async function createSession() {
   await store.createSession();
-  if (store.activeSessionId) await chat.open(store.activeSessionId);
 }
 
 function sessionLiveStatus(sessionId: string) {

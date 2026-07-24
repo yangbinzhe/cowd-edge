@@ -234,7 +234,13 @@ async function refresh() {
     const executionId = nextRuns?.runs?.find((run: any) => run.graph_id)?.graph_id;
     if (executionId) {
       selectedExecutionId.value = String(executionId);
-      projections.acquire(selectedExecutionId.value, 'agents', 'full');
+      projections.acquire(
+        selectedExecutionId.value,
+        'agents',
+        'full',
+        'bounded',
+        store.activeSessionId,
+      );
     }
     if (!selectedTaskId.value) {
       selectedTaskId.value = nextTasks?.current?.id || nextTasks?.tasks?.[0]?.id || '';
@@ -257,7 +263,13 @@ async function loadGraph() {
   const executionId = graph.value?.execution_graph_id || graph.value?.graph_id || graph.value?.id;
   if (executionId) {
     selectedExecutionId.value = String(executionId);
-    projections.acquire(selectedExecutionId.value, 'agents', 'full');
+    projections.acquire(
+      selectedExecutionId.value,
+      'agents',
+      'full',
+      'bounded',
+      store.activeSessionId,
+    );
   }
 }
 

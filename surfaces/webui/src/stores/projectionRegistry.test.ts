@@ -1,15 +1,22 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
-import { useProjectionRegistryStore } from './projectionRegistry';
+import { MAX_ACTIVE_PROJECTION_STREAMS, useProjectionRegistryStore } from './projectionRegistry';
+import {
+  acquireLongLivedConnection,
+  releaseLongLivedConnection,
+  resetLongLivedConnectionBudgetForTests,
+} from '../utils/longLivedConnectionBudget';
 
 describe('projectionRegistry contract gate', () => {
   beforeEach(() => {
+    resetLongLivedConnectionBudgetForTests();
     setActivePinia(createPinia());
     vi.restoreAllMocks();
   });
 
   afterEach(() => {
+    resetLongLivedConnectionBudgetForTests();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -29,6 +36,22 @@ describe('projectionRegistry contract gate', () => {
     expect(registry.projectionFor('execution-mismatch')).toBeNull();
     expect(registry.stateFor('execution-mismatch')).toBe('error');
     expect(registry.entries['execution-mismatch']?.lastError).toContain('unsupported execution projection schema_version 2');
+  });
+
+  it('fails closed when a snapshot carries another execution identity', async () => {
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      ...readyProjection('execution-other'),
+      execution_id: 'execution-other',
+    } as any);
+    const registry = useProjectionRegistryStore();
+
+    expect(await registry.load('execution-expected', 'full')).toBeNull();
+    expect(registry.projectionFor('execution-expected')).toBeNull();
+    expect(registry.entries['execution-expected']?.reconnectBlocked).toBe(true);
+    expect(registry.entries['execution-expected']?.lastError).toContain(
+      'expected execution-expected, received execution-other',
+    );
+    expect(registry.entries['execution-other']).toBeUndefined();
   });
 
   it('stops a live consumer when a delta contract version changes', async () => {
@@ -181,7 +204,7 @@ describe('projectionRegistry contract gate', () => {
     expect(registry.activeStreamCount).toBe(0);
     expect(registry.stateFor('execution-retry')).toBe('materializing');
 
-    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(0);
     expect(streams).toHaveLength(1);
     expect(registry.projectionFor('execution-retry')?.execution_id).toBe('execution-retry');
@@ -237,6 +260,81 @@ describe('projectionRegistry contract gate', () => {
     registry.release('runtime-page');
   });
 
+  it('enforces the projection stream budget after concurrent snapshot loads', async () => {
+    const streams: FakeProjectionEventSource[] = [];
+    vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
+      constructor(url: string) {
+        super(url);
+        streams.push(this);
+      }
+    });
+    const projectionReads = vi.spyOn(api, 'executionProjection').mockImplementation(async (executionId: string) => (
+      readyProjection(executionId) as any
+    ));
+    const registry = useProjectionRegistryStore();
+
+    for (let index = 0; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) {
+      registry.acquire(`budget-${index}`, `consumer-${index}`, 'summary');
+    }
+    await vi.waitFor(() => {
+      expect(projectionReads).toHaveBeenCalledTimes(MAX_ACTIVE_PROJECTION_STREAMS + 1);
+    });
+    await vi.waitFor(() => {
+      expect(registry.activeStreamCount).toBe(MAX_ACTIVE_PROJECTION_STREAMS);
+    });
+    const deferred = Object.values(registry.entries)
+      .find((entry) => entry.executionId.startsWith('budget-')
+        && entry.connectionState === 'degraded');
+    expect(deferred?.degradedReason).toContain('projection connection budget');
+    expect(streams).toHaveLength(MAX_ACTIVE_PROJECTION_STREAMS);
+
+    const active = Object.values(registry.entries)
+      .find((entry) => entry.executionId.startsWith('budget-')
+        && entry.executionId !== deferred?.executionId);
+    const activeIndex = Number(active?.executionId.split('-')[1]);
+    registry.release(`consumer-${activeIndex}`);
+    await vi.waitFor(() => {
+      expect(registry.entries[deferred!.executionId].connectionState).toBe('connecting');
+      expect(registry.activeStreamCount).toBe(MAX_ACTIVE_PROJECTION_STREAMS);
+    });
+
+    for (let index = 0; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) {
+      if (index !== activeIndex) registry.release(`consumer-${index}`);
+    }
+  });
+
+  it('yields one projection to a mounted APP while preserving the aggregate HTTP/1.1 budget', async () => {
+    const streams: FakeProjectionEventSource[] = [];
+    vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
+      constructor(url: string) {
+        super(url);
+        streams.push(this);
+      }
+    });
+    vi.spyOn(api, 'executionProjection').mockImplementation(async (executionId: string) => (
+      readyProjection(executionId) as any
+    ));
+    const registry = useProjectionRegistryStore();
+    registry.acquire('shared-budget-a', 'consumer-a', 'full');
+    registry.acquire('shared-budget-b', 'consumer-b', 'full');
+    await vi.waitFor(() => expect(registry.activeStreamCount).toBe(2));
+
+    expect(acquireLongLivedConnection('chat:budget-a', 15, () => undefined)).toBe(true);
+    expect(acquireLongLivedConnection('chat:budget-b', 15, () => undefined)).toBe(true);
+    expect(acquireLongLivedConnection('app:mfg:live:test', 20, () => undefined)).toBe(true);
+    await vi.waitFor(() => expect(registry.activeStreamCount).toBe(1));
+    expect(Object.values(registry.entries).some((entry) => (
+      entry.degradedReason.includes('yielded the shared live-connection budget')
+    ))).toBe(true);
+
+    releaseLongLivedConnection('app:mfg:live:test');
+    await vi.waitFor(() => expect(registry.activeStreamCount).toBe(2));
+    releaseLongLivedConnection('chat:budget-a');
+    releaseLongLivedConnection('chat:budget-b');
+    registry.release('consumer-a');
+    registry.release('consumer-b');
+  });
+
   it('fails closed when Gateway revokes an already-open projection stream', async () => {
     const streams: FakeProjectionEventSource[] = [];
     vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
@@ -255,6 +353,120 @@ describe('projectionRegistry contract gate', () => {
     expect(registry.projectionFor('execution-revoked')).toBeNull();
     expect(registry.stateFor('execution-revoked')).toBe('error');
     expect(registry.activeStreamCount).toBe(0);
+    registry.release('runtime-page');
+  });
+
+  it('purges only the revoked session projection and fences its late snapshot', async () => {
+    let finishRevoked!: (value: unknown) => void;
+    let sessionAReads = 0;
+    const projection = vi.spyOn(api, 'executionProjection')
+      .mockImplementation(async (executionId: string) => {
+        if (executionId === 'execution-A') {
+          sessionAReads += 1;
+          if (sessionAReads === 1) {
+            return {
+              ...readyProjection(executionId),
+              agents: [{ id: 'installed-private-agent' }],
+            } as any;
+          }
+          return new Promise((resolve) => {
+            finishRevoked = resolve;
+          }) as any;
+        }
+        return readyProjection(executionId) as any;
+      });
+    const registry = useProjectionRegistryStore();
+
+    registry.acquire('execution-A', 'chat:session-A', 'full', 'bounded', 'session-A');
+    registry.acquire('execution-B', 'chat:session-B', 'full', 'bounded', 'session-B');
+    await vi.waitFor(() => {
+      expect(registry.projectionFor('execution-A')?.agents?.[0]?.id).toBe('installed-private-agent');
+      expect(registry.projectionFor('execution-B')?.execution_id).toBe('execution-B');
+    });
+
+    const lateRefresh = registry.load('execution-A', 'full', 'session-A');
+    await vi.waitFor(() => expect(finishRevoked).toBeTypeOf('function'));
+    registry.revokeSessionAuthorization('session-A', 'observer scope recropped');
+    expect(registry.projectionFor('execution-A')).toBeNull();
+    finishRevoked({
+      ...readyProjection('execution-A'),
+      agents: [{ id: 'late-private-agent' }],
+    });
+    await lateRefresh;
+    await vi.waitFor(() => {
+      expect(registry.entries['execution-A']?.reconnectBlocked).toBe(true);
+    });
+
+    expect(registry.projectionFor('execution-A')).toBeNull();
+    expect(JSON.stringify(registry.entries['execution-A'])).not.toContain('late-private-agent');
+    expect(registry.projectionFor('execution-B')?.execution_id).toBe('execution-B');
+    expect(registry.entries['execution-B']?.reconnectBlocked).toBe(false);
+    expect(projection).toHaveBeenCalledWith('execution-A', 'full', 'session-A');
+    expect(projection).toHaveBeenCalledWith('execution-B', 'full', 'session-B');
+    registry.release('chat:session-A');
+    registry.release('chat:session-B');
+  });
+
+  it('rejects a wrong-execution delta on the current stream without loading the foreign execution', async () => {
+    const streams: FakeProjectionEventSource[] = [];
+    vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
+      constructor(url: string) {
+        super(url);
+        streams.push(this);
+      }
+    });
+    const projection = vi.spyOn(api, 'executionProjection')
+      .mockResolvedValue(readyProjection('execution-owned') as any);
+    const registry = useProjectionRegistryStore();
+
+    registry.acquire('execution-owned', 'runtime-page', 'full');
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    streams[0].emit('projection_delta', JSON.stringify({
+      schema_version: 1,
+      execution_id: 'execution-foreign',
+      base_cursor: 1,
+      target_cursor: 2,
+      events: [],
+    }));
+
+    expect(registry.projectionFor('execution-owned')).toBeNull();
+    expect(registry.entries['execution-owned']?.reconnectBlocked).toBe(true);
+    expect(registry.entries['execution-owned']?.lastError).toContain('delta identity mismatch');
+    expect(registry.entries['execution-foreign']).toBeUndefined();
+    expect(projection).toHaveBeenCalledTimes(1);
+    registry.release('runtime-page');
+  });
+
+  it('exhausts the reconnect budget when streams open and immediately fail', async () => {
+    vi.useFakeTimers();
+    const streams: FakeProjectionEventSource[] = [];
+    vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
+      constructor(url: string) {
+        super(url);
+        streams.push(this);
+      }
+    });
+    vi.spyOn(api, 'executionProjection').mockImplementation(async (executionId: string) => (
+      readyProjection(executionId) as any
+    ));
+    const registry = useProjectionRegistryStore();
+
+    registry.acquire('execution-flap', 'runtime-page', 'full');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(streams).toHaveLength(1);
+    for (let attempt = 0; attempt < 9; attempt += 1) {
+      const current = streams.at(-1)!;
+      current.onopen?.();
+      current.onerror?.(new Event('error'));
+      await vi.advanceTimersByTimeAsync(6_000);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    expect(streams).toHaveLength(9);
+    expect(registry.stateFor('execution-flap')).toBe('degraded');
+    expect(registry.entries['execution-flap']?.degradedReason).toContain('reconnect budget exhausted');
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(streams).toHaveLength(9);
     registry.release('runtime-page');
   });
 

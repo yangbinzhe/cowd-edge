@@ -156,7 +156,13 @@ async function refresh() {
     const executionId = nextTimeline?.execution_graph_summary?.latest?.graph_id;
     if (executionId) {
       selectedExecutionId.value = String(executionId);
-      projections.acquire(selectedExecutionId.value, 'context', 'summary');
+      projections.acquire(
+        selectedExecutionId.value,
+        'context',
+        'summary',
+        'bounded',
+        sessionId.value,
+      );
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);

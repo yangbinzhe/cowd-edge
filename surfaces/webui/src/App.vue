@@ -94,6 +94,10 @@ function isMobilePrimary(item: NavItem) {
 const isSecondaryMobileRoute = computed(() => !mobilePrimaryIds.has(currentPage.value));
 const isChatRoute = computed(() => currentPage.value === 'chat');
 const isSettingsRoute = computed(() => currentPage.value === 'settings');
+const authorizationGateRequired = computed(() => (
+  !isSettingsRoute.value
+  && ['required', 'invalidated'].includes(store.authorizationState)
+));
 const currentCapabilitySpec = computed(() => {
   if (isChatRoute.value || isSettingsRoute.value) return null;
   return capabilitySpecs[currentPage.value] || null;
@@ -161,6 +165,10 @@ async function selectCapabilitySection(sectionId: string) {
   if (!currentSections.value.some((section) => section.id === sectionId)) return;
   store.selectSection(currentPage.value, sectionId);
   await router.replace({ query: { ...route.query, section: sectionId } });
+}
+
+function openGatewayAuthentication() {
+  router.push({ path: '/settings', query: { section: 'gateway' } });
 }
 
 onMounted(() => {
@@ -242,7 +250,21 @@ onBeforeUnmount(() => {
         :active-section="activeSection"
         @select="selectCapabilitySection"
       />
-      <RouterView />
+      <section
+        v-if="authorizationGateRequired"
+        class="authorization-gate"
+        role="alert"
+        aria-live="assertive"
+      >
+        <div>
+          <strong>{{ t('error.authenticationRequired') }}</strong>
+          <p>{{ t('app.authorizationGate.detail') }}</p>
+        </div>
+        <button class="btn primary" type="button" @click="openGatewayAuthentication">
+          {{ t('app.authorizationGate.action') }}
+        </button>
+      </section>
+      <RouterView v-else :key="store.authorizationViewGeneration" />
     </main>
 
     <button

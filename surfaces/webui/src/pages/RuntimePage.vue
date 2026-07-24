@@ -16,6 +16,7 @@ import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import TimelineList from '../components/workbench/TimelineList.vue';
 import StrategyDecisionSummary from '../components/runtime/StrategyDecisionSummary.vue';
 import { useAppStore } from '../stores/app';
+import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
@@ -23,6 +24,7 @@ import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 import { appPluginForId } from '../plugins/registry';
 
 const store = useAppStore();
+const chatSessions = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
 const route = useRoute();
 const router = useRouter();
@@ -43,8 +45,7 @@ const tasks = ref<any>({});
 const growthStatus = ref<any>({});
 const growthEvents = ref<any>({});
 const actionResult = ref<any>(null);
-const leaseOwner = ref('webui');
-const leaseMode = ref('shared');
+const leaseMode = ref<'collaborative' | 'exclusive'>('collaborative');
 const turnPrompt = ref(t('runtime.defaultPrompt'));
 const selectedTurnId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
@@ -243,13 +244,28 @@ async function cancelTurn() {
 
 async function acquireLease() {
   if (!store.activeSessionId) await store.createSession();
-  actionResult.value = await api.acquireRuntimeLease(store.activeSessionId, leaseOwner.value, leaseMode.value);
+  const attached = await chatSessions.attachSurface(store.activeSessionId, leaseMode.value);
+  actionResult.value = attached
+    ? { ok: true, session_id: store.activeSessionId, mode: leaseMode.value }
+    : {
+        ok: false,
+        session_id: store.activeSessionId,
+        error: chatSessions.states[store.activeSessionId]?.degradedReason || 'writer lease rejected',
+      };
   await refresh();
 }
 
 async function releaseLease() {
   if (!store.activeSessionId) return;
-  actionResult.value = await api.releaseRuntimeLease(store.activeSessionId, leaseOwner.value);
+  await chatSessions.detachSurface(store.activeSessionId);
+  const state = chatSessions.states[store.activeSessionId];
+  actionResult.value = state?.attachmentRole === 'detached'
+    ? { ok: true, session_id: store.activeSessionId, released: true }
+    : {
+        ok: false,
+        session_id: store.activeSessionId,
+        error: state?.degradedReason || 'writer lease release rejected',
+      };
   await refresh();
 }
 
@@ -273,7 +289,9 @@ async function respondApproval(approval: any, approved: boolean) {
 }
 
 watch(activeExecutionId, (executionId) => {
-  if (executionId) projections.acquire(executionId, 'runtime-page', 'full');
+  if (executionId) {
+    projections.acquire(executionId, 'runtime-page', 'full', 'bounded', sessionId.value);
+  }
   else projections.release('runtime-page');
 }, { immediate: true });
 onMounted(refresh);
@@ -391,13 +409,9 @@ onUnmounted(() => projections.release('runtime-page'));
           <span>{{ formatCount('leases', leases.leases?.length || leases.count || 0) }}</span>
         </header>
         <label class="field-line">
-          {{ t('page.runtime.field.owner') }}
-          <input v-model="leaseOwner" type="text" />
-        </label>
-        <label class="field-line">
           {{ t('page.runtime.field.mode') }}
           <select v-model="leaseMode">
-            <option value="shared">{{ t('page.runtime.leaseMode.shared') }}</option>
+            <option value="collaborative">{{ t('page.runtime.leaseMode.shared') }}</option>
             <option value="exclusive">{{ t('page.runtime.leaseMode.exclusive') }}</option>
           </select>
         </label>

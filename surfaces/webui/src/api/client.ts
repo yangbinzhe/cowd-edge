@@ -37,6 +37,36 @@ export interface ApiReceipt<T = any> {
   retryable?: boolean;
 }
 
+export interface ApiWriteResponseMetadata {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  receiptId: string;
+  requestId: string;
+  correlationId: string;
+}
+
+export interface ApiWriteWithMetadataResult<T> {
+  data: T;
+  metadata: ApiWriteResponseMetadata;
+}
+
+export interface ApiWriteMetadataValidation<T> {
+  requireReceiptIdentity?: boolean;
+  receiptIdFromBody?: (data: T) => string | undefined | null;
+}
+
+export interface SessionMessagesPage extends ApiReadState {
+  session_id: string;
+  messages: any[];
+  total: number;
+  offset?: number;
+  from_seq?: number;
+  next_seq?: number;
+  limit: number;
+  has_more: boolean;
+}
+
 export interface HarnessEvalRunOptions {
   level?: 'quick' | 'full' | 'deep' | 'deep-real';
   provider?: string;
@@ -102,7 +132,31 @@ export class ApiWriteError extends Error {
 function headers(init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   if (!headers.has('Content-Type') && init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json');
+  if (!headers.has('x-cowd-surface-id')) headers.set('x-cowd-surface-id', 'webui');
+  if (!headers.has('x-cowd-observer-id')) headers.set('x-cowd-observer-id', webuiObserverId());
   return headers;
+}
+
+let fallbackObserverId = '';
+
+export function webuiObserverId() {
+  const key = 'cowd.webui.observer_id';
+  try {
+    const existing = globalThis.sessionStorage?.getItem(key);
+    if (existing) return existing;
+    const suffix = globalThis.crypto?.randomUUID?.()
+      || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const observer = `webui:${suffix}`;
+    globalThis.sessionStorage?.setItem(key, observer);
+    return observer;
+  } catch {
+    if (!fallbackObserverId) {
+      const suffix = globalThis.crypto?.randomUUID?.()
+        || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      fallbackObserverId = `webui:${suffix}`;
+    }
+    return fallbackObserverId;
+  }
 }
 
 function withoutServerActor(value: Record<string, unknown>, fields = ['actor_principal']): Record<string, unknown> {
@@ -150,9 +204,112 @@ class ApiReadError extends Error {
 interface CachedRead {
   data: unknown;
   refreshedAt: string;
+  sessionId: string;
+  referencedSessionIds: string[];
 }
 
 const lastSuccessfulReads = new Map<string, CachedRead>();
+let authenticationEpoch = 0;
+const sessionAuthorizationEpochs = new Map<string, number>();
+
+interface RequestAuthorizationStamp {
+  globalEpoch: number;
+  sessionId: string;
+  sessionEpoch: number;
+}
+
+function sessionIdFromRequest(path: string, init: RequestInit = {}) {
+  const pathMatch = path.match(/^\/api\/(?:mission\/)?sessions\/([^/?#]+)/);
+  if (pathMatch?.[1] && pathMatch[1] !== 'search') return decodeURIComponent(pathMatch[1]);
+  try {
+    const querySessionId = new URL(path, 'http://cowd.local').searchParams.get('session_id');
+    if (querySessionId) return querySessionId;
+  } catch {
+    // A malformed path will be rejected by fetch; it has no usable scope here.
+  }
+  if (init.body instanceof FormData) {
+    const formSessionId = init.body.get('session_id');
+    if (typeof formSessionId === 'string') return formSessionId;
+  }
+  if (typeof init.body === 'string' && init.body) {
+    try {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      if (typeof body.session_id === 'string') return body.session_id;
+    } catch {
+      // Non-JSON bodies are not session scoped by contract.
+    }
+  }
+  return '';
+}
+
+function authorizationStamp(
+  path: string,
+  init: RequestInit = {},
+  explicitSessionId = '',
+): RequestAuthorizationStamp {
+  const sessionId = explicitSessionId.trim() || sessionIdFromRequest(path, init);
+  return {
+    globalEpoch: authenticationEpoch,
+    sessionId,
+    sessionEpoch: sessionAuthorizationEpochs.get(sessionId) || 0,
+  };
+}
+
+function authorizationStampIsCurrent(stamp: RequestAuthorizationStamp) {
+  return stamp.globalEpoch === authenticationEpoch
+    && (!stamp.sessionId
+      || stamp.sessionEpoch === (sessionAuthorizationEpochs.get(stamp.sessionId) || 0));
+}
+
+function invalidateRejectedAuthorization(
+  stamp: RequestAuthorizationStamp,
+  status: number,
+  reason: string,
+) {
+  if (status === 403 && stamp.sessionId) {
+    invalidateSessionAuthorization(stamp.sessionId, reason);
+    return;
+  }
+  invalidateAuthentication(reason);
+}
+
+export function invalidateApiReadCache() {
+  authenticationEpoch += 1;
+  lastSuccessfulReads.clear();
+}
+
+export function invalidateAuthentication(reason = 'Gateway authorization changed') {
+  invalidateApiReadCache();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cowd:authorization-invalidated', {
+      detail: { reason, authenticationEpoch },
+    }));
+  }
+}
+
+export function invalidateSessionAuthorization(
+  sessionId: string,
+  reason = 'Gateway revoked session authorization',
+) {
+  const normalized = sessionId.trim();
+  if (!normalized) {
+    invalidateAuthentication(reason);
+    return;
+  }
+  const sessionEpoch = (sessionAuthorizationEpochs.get(normalized) || 0) + 1;
+  sessionAuthorizationEpochs.set(normalized, sessionEpoch);
+  for (const [key, cached] of lastSuccessfulReads.entries()) {
+    if (
+      cached.sessionId === normalized
+      || cached.referencedSessionIds.includes(normalized)
+    ) lastSuccessfulReads.delete(key);
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cowd:session-authorization-invalidated', {
+      detail: { reason, sessionId: normalized, sessionEpoch, authenticationEpoch },
+    }));
+  }
+}
 
 export const WEBUI_REQUESTED_CAPABILITIES = [
   'approval.respond',
@@ -200,7 +357,50 @@ function withReadState<T>(data: T, state: ApiReadState): T & ApiReadState {
   return { value: data, ...state } as T & ApiReadState;
 }
 
-export async function read<T>(path: string, fallback: T, init: RequestInit = {}): Promise<T & ApiReadState> {
+function referencedSessionIds(value: unknown): string[] {
+  const found = new Set<string>();
+  const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  let visited = 0;
+  while (pending.length && visited < 10_000) {
+    const item = pending.pop()!;
+    visited += 1;
+    if (!item.value || typeof item.value !== 'object' || item.depth > 8) continue;
+    if (Array.isArray(item.value)) {
+      for (const nested of item.value) pending.push({ value: nested, depth: item.depth + 1 });
+      continue;
+    }
+    const record = item.value as Record<string, unknown>;
+    if (typeof record.session_id === 'string' && record.session_id.trim()) {
+      found.add(record.session_id.trim());
+    }
+    if (Array.isArray(record.sessions)) {
+      for (const session of record.sessions) {
+        if (session && typeof session === 'object') {
+          const id = (session as Record<string, unknown>).id;
+          if (typeof id === 'string' && id.trim()) found.add(id.trim());
+        }
+      }
+    }
+    for (const nested of Object.values(record)) {
+      pending.push({ value: nested, depth: item.depth + 1 });
+    }
+  }
+  return [...found];
+}
+
+export async function read<T>(
+  path: string,
+  fallback: T,
+  init: RequestInit = {},
+  authorizationSessionId = '',
+): Promise<T & ApiReadState> {
+  const requestAuthorization = authorizationStamp(path, init, authorizationSessionId);
+  const cacheKey = [
+    requestAuthorization.globalEpoch,
+    requestAuthorization.sessionId,
+    requestAuthorization.sessionEpoch,
+    path,
+  ].join(':');
   try {
     const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
     if (!response.ok) {
@@ -208,22 +408,47 @@ export async function read<T>(path: string, fallback: T, init: RequestInit = {})
     }
     try {
       const parsed = await parseResponse(response, path) as T;
+      if (!authorizationStampIsCurrent(requestAuthorization)) {
+        throw new ApiReadError(
+          'authorization changed while this response was in flight',
+          'forbidden',
+          403,
+        );
+      }
       const refreshedAt = new Date().toISOString();
-      lastSuccessfulReads.set(path, { data: parsed, refreshedAt });
+      lastSuccessfulReads.set(cacheKey, {
+        data: parsed,
+        refreshedAt,
+        sessionId: requestAuthorization.sessionId,
+        referencedSessionIds: referencedSessionIds(parsed),
+      });
       return withReadState(parsed, {
         __state: 'ready',
         __refreshed_at: refreshedAt,
         __last_success_at: refreshedAt,
       });
     } catch (error) {
+      if (error instanceof ApiReadError) throw error;
       throw new ApiReadError(error instanceof Error ? error.message : String(error), 'invalid_response', response.status);
     }
   } catch (error) {
     const readError = error instanceof ApiReadError
       ? error
       : new ApiReadError(error instanceof Error ? error.message : String(error), 'offline');
-    const cached = lastSuccessfulReads.get(path);
-    const mayRetainCachedProjection = cached && (readError.state === 'offline' || readError.state === 'server_error');
+    if (readError.state === 'forbidden') {
+      if (authorizationStampIsCurrent(requestAuthorization)) {
+        invalidateRejectedAuthorization(
+          requestAuthorization,
+          readError.status || 403,
+          readError.message || 'Gateway rejected the current authorization',
+        );
+      }
+      lastSuccessfulReads.delete(cacheKey);
+    }
+    const cached = lastSuccessfulReads.get(cacheKey);
+    const mayRetainCachedProjection = authorizationStampIsCurrent(requestAuthorization)
+      && cached
+      && (readError.state === 'offline' || readError.state === 'server_error');
     return withReadState((mayRetainCachedProjection ? cached.data : fallback) as T, {
       __state: mayRetainCachedProjection ? 'stale' : readError.state,
       __error: readError.message,
@@ -243,10 +468,24 @@ function payloadSummary(body: BodyInit | null | undefined): string {
   return text.length > 280 ? `${text.slice(0, 280)}...` : text;
 }
 
-export async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function writeWithMetadata<T>(
+  path: string,
+  init: RequestInit = {},
+  validation: ApiWriteMetadataValidation<T> = {},
+): Promise<ApiWriteWithMetadataResult<T>> {
+  const requestAuthorization = authorizationStamp(path, init);
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
   if (!response.ok) {
     const body = await response.text();
+    if (response.status === 401 || response.status === 403) {
+      if (authorizationStampIsCurrent(requestAuthorization)) {
+        invalidateRejectedAuthorization(
+          requestAuthorization,
+          response.status,
+          body || `${response.status} ${response.statusText}`,
+        );
+      }
+    }
     let apiError: CowdApiError | null = null;
     try {
       const parsed = JSON.parse(body) as Record<string, unknown>;
@@ -274,7 +513,67 @@ export async function write<T>(path: string, init: RequestInit = {}): Promise<T>
       api_error: apiError,
     });
   }
-  return await parseResponse(response, path) as T;
+  const parsed = await parseResponse(response, path) as T;
+  if (!authorizationStampIsCurrent(requestAuthorization)) {
+    throw new ApiWriteError('authorization changed while this response was in flight', {
+      endpoint: path,
+      method: init.method || 'POST',
+      payload_summary: payloadSummary(init.body),
+      status: 403,
+      status_text: 'Authorization Changed',
+      body: '',
+    });
+  }
+  const responseHeaders = Object.fromEntries(response.headers.entries());
+  const metadata: ApiWriteResponseMetadata = {
+    status: response.status,
+    statusText: response.statusText,
+    headers: responseHeaders,
+    receiptId: response.headers.get('x-cowd-receipt-id')?.trim() || '',
+    requestId: response.headers.get('x-request-id')?.trim()
+      || response.headers.get('x-cowd-request-id')?.trim()
+      || '',
+    correlationId: response.headers.get('x-cowd-correlation-id')?.trim() || '',
+  };
+  if (validation.requireReceiptIdentity || validation.receiptIdFromBody) {
+    const bodyReceiptId = validation.receiptIdFromBody?.(parsed)?.trim() || '';
+    if (
+      !metadata.receiptId
+      || !bodyReceiptId
+      || metadata.receiptId !== bodyReceiptId
+    ) {
+      const message = !metadata.receiptId
+        ? 'write response omitted X-Cowd-Receipt-Id'
+        : !bodyReceiptId
+          ? 'write response omitted its canonical body receipt identity'
+          : `write response receipt identity mismatch: header ${metadata.receiptId}, body ${bodyReceiptId}`;
+      throw new ApiWriteError(message, {
+        endpoint: path,
+        method: init.method || 'POST',
+        payload_summary: payloadSummary(init.body),
+        status: 422,
+        status_text: 'Receipt Identity Mismatch',
+        body: message,
+        api_error: {
+          code: 'receipt_identity_mismatch',
+          message,
+          http_status: 422,
+          retryable: false,
+          details: {
+            header_receipt_id: metadata.receiptId || null,
+            body_receipt_id: bodyReceiptId || null,
+          },
+          recovery_actions: [],
+          request_id: metadata.requestId || null,
+        },
+      });
+    }
+  }
+  return { data: parsed, metadata };
+}
+
+export async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return (await writeWithMetadata<T>(path, init)).data;
 }
 
 async function writeWithReceipt<T>(path: string, init: RequestInit = {}): Promise<ApiReceipt<T>> {
@@ -526,12 +825,21 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
 };
 
 export const api = {
-  executionProjection: (executionId: string, detailScope: 'summary' | 'full' = 'summary') => read<ExecutionProjection>(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=${detailScope}`, {
+  executionProjection: (
+    executionId: string,
+    detailScope: 'summary' | 'full' = 'summary',
+    authorizationSessionId = '',
+  ) => read<ExecutionProjection>(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=${detailScope}`, {
     schema_version: 1, execution_id: executionId, revision: 0, cursor: 0, graph: {}, goals: [], agents: [], teams: [], relations: [], approvals: [], interventions: [], usage: [], context: [], evidence: [], health: [], recovery: [], available_commands: [],
-  }),
-  executionProjectionDelta: (executionId: string, cursor: number, detailScope: 'summary' | 'full' = 'summary') => read<ExecutionProjectionDelta>(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${cursor}&detail_scope=${detailScope}`, {
+  }, {}, authorizationSessionId),
+  executionProjectionDelta: (
+    executionId: string,
+    cursor: number,
+    detailScope: 'summary' | 'full' = 'summary',
+    authorizationSessionId = '',
+  ) => read<ExecutionProjectionDelta>(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${cursor}&detail_scope=${detailScope}`, {
     schema_version: 1, execution_id: executionId, base_cursor: cursor, target_cursor: cursor, events: [],
-  }),
+  }, {}, authorizationSessionId),
   executeProjectionCommand: (executionId: string, request: Record<string, unknown>) => write(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
     method: 'POST', body: JSON.stringify(request),
   }),
@@ -595,7 +903,10 @@ export const api = {
   deleteSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   branchSession: (sessionId: string) => writeWithReceipt<SessionSummary>(`/api/sessions/${encodeURIComponent(sessionId)}/branch`, { method: 'POST' }),
   compactSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/compact`, { method: 'POST' }),
-  cancelSessionTurn: (sessionId: string) => writeWithReceipt(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }),
+  cancelSessionTurn: (sessionId: string) => writeWithReceipt(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: 'cancel requested from WebUI' }),
+  }),
   sessionStats: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/stats`, {}),
   sessionExecution: (sessionId: string) => read<SessionExecutionIndexProjection>(`/api/sessions/${encodeURIComponent(sessionId)}/execution`, {
     session_id: sessionId,
@@ -624,7 +935,27 @@ export const api = {
     method: 'PATCH',
     body: JSON.stringify(patch),
   }),
-  messages: (sessionId: string) => read<{ messages: any[] }>(`/api/sessions/${encodeURIComponent(sessionId)}/messages?limit=50`, { messages: [] }),
+  messages: (
+    sessionId: string,
+    options: { offset?: number; fromSeq?: number; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams();
+    params.set('limit', String(Math.max(1, Math.min(500, options.limit || 100))));
+    if (options.fromSeq !== undefined) params.set('from_seq', String(Math.max(0, options.fromSeq)));
+    else params.set('offset', String(Math.max(0, options.offset || 0)));
+    return read<SessionMessagesPage>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/messages?${params.toString()}`,
+      {
+        session_id: sessionId,
+        messages: [],
+        total: 0,
+        offset: options.offset || 0,
+        from_seq: options.fromSeq,
+        limit: options.limit || 100,
+        has_more: false,
+      },
+    );
+  },
   sendMessage: (sessionId: string, content: string, resourceIds: string[] = [], idempotencyKey?: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: 'POST',
     body: JSON.stringify({ content, resource_ids: resourceIds, idempotency_key: idempotencyKey }),
@@ -693,6 +1024,14 @@ export const api = {
   }),
   workspaceMeta: (path: string) => read(`/api/workspace/meta?path=${encodeURIComponent(path)}`, {}),
   sessionAttachments: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/attachments`, { attachments: [] }),
+  attachSession: (sessionId: string, role: 'reader' | 'writer' = 'reader') => write(`/api/sessions/${encodeURIComponent(sessionId)}/attach`, {
+    method: 'POST',
+    body: JSON.stringify({ surface: 'webui', role }),
+  }),
+  detachSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/detach`, {
+    method: 'POST',
+    body: JSON.stringify({ surface: 'webui' }),
+  }),
   addSessionAttachment: (sessionId: string, path: string, label = '') => write(`/api/sessions/${encodeURIComponent(sessionId)}/attachments`, {
     method: 'POST',
     body: JSON.stringify({ path, label: label || path, kind: 'workspace_file' }),
@@ -786,13 +1125,13 @@ export const api = {
   }),
   approvalHistory: () => read('/api/approval/history?limit=20', []),
   runtimeSessionLeases: () => read('/api/runtime/session-leases', {}),
-  acquireRuntimeLease: (sessionId: string, owner: string, mode = 'shared') => write('/api/runtime/session-leases/acquire', {
+  acquireRuntimeLease: (sessionId: string, mode = 'collaborative') => write('/api/runtime/session-leases/acquire', {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, owner, mode }),
+    body: JSON.stringify({ session_id: sessionId, mode }),
   }),
-  releaseRuntimeLease: (sessionId: string, owner: string) => write('/api/runtime/session-leases/release', {
+  releaseRuntimeLease: (sessionId: string) => write('/api/runtime/session-leases/release', {
     method: 'POST',
-    body: JSON.stringify({ session_id: sessionId, owner }),
+    body: JSON.stringify({ session_id: sessionId }),
   }),
   contextCurrent: (sessionId: string, q = '', profile = 'main_turn') => read(`/api/context/current?session_id=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(q)}&profile=${encodeURIComponent(profile)}`, {}),
   contextHistory: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/context?limit=20&include_envelopes=true`, {}),
@@ -1284,10 +1623,28 @@ export const api = {
 };
 
 async function readText(path: string, fallback = ''): Promise<string> {
+  const requestAuthorization = authorizationStamp(path);
   try {
-    const response = await fetch(path, { headers: headers() });
-    if (!response.ok) throw new Error(await response.text());
-    return await response.text();
+    const response = await fetch(path, { credentials: 'same-origin', headers: headers() });
+    if (!response.ok) {
+      const body = await response.text();
+      if (
+        (response.status === 401 || response.status === 403)
+        && authorizationStampIsCurrent(requestAuthorization)
+      ) {
+        invalidateRejectedAuthorization(
+          requestAuthorization,
+          response.status,
+          body || `${response.status} ${response.statusText}`,
+        );
+      }
+      throw new Error(body || `${response.status} ${response.statusText}`);
+    }
+    const body = await response.text();
+    if (!authorizationStampIsCurrent(requestAuthorization)) {
+      throw new Error('authorization changed while this response was in flight');
+    }
+    return body;
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : String(error));
   }
