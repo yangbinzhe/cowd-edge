@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -24,6 +24,7 @@ const evidencePath = resolve(
 );
 const reportPath = resolve(dirname(evidencePath), 'release-browser-playwright.json');
 const gatewayLogPath = resolve(dirname(evidencePath), 'release-browser-gateway.log');
+const gatewayToken = randomBytes(32).toString('hex');
 const required = (name) => {
   const value = String(process.env[name] || '').trim();
   if (!value) throw new Error(`${name} is required by the release browser gate`);
@@ -187,10 +188,13 @@ gateway:
   enabled: true
   webui_dir: "${join(root, 'dist').replaceAll('\\', '\\\\')}"
   platforms:
-    - platform_type: "api_server"
+    - platformType: "api_server"
       enabled: true
       host: "127.0.0.1"
       port: 0
+      auth:
+        enabled: true
+        token: "${gatewayToken}"
 apps:
   mfg:
     enabled: true
@@ -245,6 +249,10 @@ apps:
       url: gatewayUrl,
       openapi_version: openApi.info.version,
       isolated_state: true,
+      auth: {
+        mode: 'isolated-bearer',
+        token_recorded: false,
+      },
     },
     web_url: webUrl,
   };
@@ -266,6 +274,7 @@ apps:
       ...process.env,
       COWD_E2E_RELEASE_ENTRY: '1',
       COWD_E2E_GATEWAY_URL: gatewayUrl,
+      COWD_E2E_GATEWAY_TOKEN: gatewayToken,
       COWD_VITE_GATEWAY_URL: gatewayUrl,
       COWD_E2E_WEB_URL: webUrl,
       COWD_E2E_GATEWAY_PROVENANCE: evidencePath,
