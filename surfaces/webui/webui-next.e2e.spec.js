@@ -529,6 +529,7 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
 });
 
 test('explicit Team negative-benefit cost warning renders through real Gateway on all strategy surfaces', async ({ page }) => {
+  test.setTimeout(90_000);
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const create = await page.request.post('/api/sessions', { data: {} });
@@ -572,34 +573,58 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   expect(executionId).toBeTruthy();
 
   let projection = null;
-  await expect.poll(async () => {
+  let projectionStatus = 0;
+  let projectionError = '';
+  let topologyReady = false;
+  const projectionDeadline = Date.now() + 30_000;
+  while (Date.now() < projectionDeadline && !topologyReady) {
     const response = await page.request.get(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=full`);
-    if (!response.ok()) return null;
-    projection = await response.json();
-    const strategy = projection?.strategy;
-    const teamId = String(strategy?.team_id || '');
-    const teamExecutionId = String(strategy?.team_execution_id || '');
-    const materializedTopology = [
-      ...(Array.isArray(projection?.teams) ? projection.teams : []),
-      ...(Array.isArray(projection?.child_executions) ? projection.child_executions : []),
-      ...(Array.isArray(projection?.agents) ? projection.agents : []),
-    ].some((entity) => {
-      const id = String(entity?.id || entity?.execution_id || '');
-      const graphId = String(entity?.detail?.graph_id || '');
-      return id === teamId || id === teamExecutionId || graphId === teamExecutionId;
-    });
-    return Boolean(
-      projection?.schema_version === 1
-      && projection?.execution_id === executionId
-      && strategy?.schema_version === 1
-      && strategy?.selected_candidate === 'team'
-      && Array.isArray(strategy?.cost_reason)
-      && strategy.cost_reason.some((reason) => /negative estimated lift/i.test(String(reason)))
-      && teamId
-      && teamExecutionId
-      && materializedTopology,
-    );
-  }, { timeout: 30_000, intervals: [250, 500, 1_000] }).toBe(true);
+    projectionStatus = response.status();
+    if (response.ok()) {
+      projection = await response.json();
+      const strategy = projection?.strategy;
+      const teamId = String(strategy?.team_id || '');
+      const teamExecutionId = String(strategy?.team_execution_id || '');
+      const materializedTopology = [
+        ...(Array.isArray(projection?.teams) ? projection.teams : []),
+        ...(Array.isArray(projection?.child_executions) ? projection.child_executions : []),
+        ...(Array.isArray(projection?.agents) ? projection.agents : []),
+      ].some((entity) => {
+        const id = String(entity?.id || entity?.execution_id || '');
+        const graphId = String(entity?.detail?.graph_id || '');
+        return id === teamId || id === teamExecutionId || graphId === teamExecutionId;
+      });
+      topologyReady = Boolean(
+        projection?.schema_version === 1
+        && projection?.execution_id === executionId
+        && strategy?.schema_version === 1
+        && strategy?.selected_candidate === 'team'
+        && Array.isArray(strategy?.cost_reason)
+        && strategy.cost_reason.some((reason) => /negative estimated lift/i.test(String(reason)))
+        && teamId
+        && teamExecutionId
+        && materializedTopology,
+      );
+    } else {
+      projectionError = await response.text();
+    }
+    if (!topologyReady) await page.waitForTimeout(250);
+  }
+  if (!topologyReady) {
+    throw new Error(`real Team topology did not materialize: ${JSON.stringify({
+      http_status: projectionStatus,
+      http_error: projectionError,
+      projection: projection ? {
+        schema_version: projection.schema_version,
+        execution_id: projection.execution_id,
+        live: projection.live,
+        strategy: projection.strategy,
+        teams: projection.teams,
+        child_executions: projection.child_executions,
+        agents: projection.agents,
+      } : null,
+    })}`);
+  }
   const teamEstimate = projection?.strategy?.candidate_estimates
     ?.find((estimate) => estimate?.candidate === 'team');
   expect(teamEstimate?.net_benefit_score).toBeLessThan(0);
