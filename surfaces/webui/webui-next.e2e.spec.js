@@ -637,17 +637,28 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   await page.goto(`/index.html#/apps/mfg?section=operations&execution_id=${encodeURIComponent(executionId)}`);
   await expect(page.locator('.strategy-summary[data-surface="mfg"]')).toContainText(/negative estimated lift/i);
 
-  // This endpoint requires a JSON body.  A bare POST is rejected before the
-  // cancellation handler and leaves the real Team execution running, which
-  // contaminates later surface checks with a live background workload.
-  const cancelled = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/cancel`, {
-    data: { reason: 'e2e Team strategy cleanup' },
-  });
-  expect(cancelled.ok()).toBeTruthy();
-  expect(await cancelled.json()).toMatchObject({
-    status: 'cancel_requested',
-    execution_ids: expect.arrayContaining([executionId]),
-  });
+  // Preserve both valid races: a fast deterministic Team can finish while the
+  // three surfaces render, while a slower execution still requires explicit
+  // cancellation before releasing its writer lease.
+  const terminalStatuses = new Set(['complete', 'cancelled', 'error']);
+  const latestProjectionResponse = await page.request.get(
+    `/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=full`,
+  );
+  await expectOk(latestProjectionResponse, 'explicit Team cleanup projection');
+  const latestProjection = await latestProjectionResponse.json();
+  if (!terminalStatuses.has(String(latestProjection?.live?.status || '').toLowerCase())) {
+    // This endpoint requires a JSON body. A bare POST is rejected before the
+    // cancellation handler and leaves the real Team execution running.
+    const cancelled = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/cancel`, {
+      data: { reason: 'e2e Team strategy cleanup' },
+    });
+    await expectOk(cancelled, 'explicit Team cancellation');
+    const cancellation = await cancelled.json();
+    expect(cancellation).toMatchObject({ status: 'cancel_requested' });
+    if (cancellation.execution_ids?.length > 0) {
+      expect(cancellation.execution_ids).toEqual(expect.arrayContaining([executionId]));
+    }
+  }
   await expect.poll(async () => {
     const response = await page.request.get(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=full`);
     if (!response.ok()) return false;
