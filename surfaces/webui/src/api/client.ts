@@ -1007,10 +1007,10 @@ export const api = {
   },
   uploadResource: (file: File, sessionId = '') => {
     const body = new FormData();
-    body.set('file', file);
     body.set('source', 'webui');
     if (sessionId) body.set('session_id', sessionId);
     if (file.type) body.set('declared_mime', file.type);
+    body.set('file', file);
     return write('/api/resources', { method: 'POST', body });
   },
   createDir: (path: string) => write('/api/workspace/dirs', {

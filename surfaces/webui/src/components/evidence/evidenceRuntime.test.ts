@@ -18,7 +18,7 @@ describe('evidence runtime presentation contracts', () => {
         available: true,
         session_id: 'session-7',
         event: { sequence: 12, metadata: { tool_call_id: 'tool-7' } },
-        projection: { access: { visibility_scope: 'session:session-7', retrieval_selector: 'session-event://session-7/12' } },
+        projection: { access: { visibility_scope: 'session:session-7', retrieval_selector: 'artifact://art-7' } },
       },
     };
     expect(evidenceSourceRoute(item)).toContain('/runtime?');

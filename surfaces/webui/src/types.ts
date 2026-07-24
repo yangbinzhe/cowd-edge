@@ -315,8 +315,16 @@ export interface RuntimeResourceEnvelope {
   kind: string;
   size_bytes: number;
   sha256: string;
-  storage_path: string;
+  artifact: {
+    selector: string;
+    sha256: string;
+    bytes: number;
+    media_type: string;
+    durability: 'pending' | 'durable' | 'unavailable';
+    visibility_scope: string;
+  };
   created_at: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface RuntimeResourceUpload {

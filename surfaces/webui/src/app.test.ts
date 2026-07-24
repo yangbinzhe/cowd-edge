@@ -881,13 +881,36 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('uploads chat resources through the resource endpoint', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
-      resource: { id: 'res-1', uri: 'resource://res-1', original_name: 'voice.mp3', kind: 'audio', size_bytes: 3, sha256: 'sha256:test', storage_path: '/tmp/voice.mp3', source: 'webui', created_at: 'now' },
+      resource: {
+        id: 'res-1',
+        uri: 'resource://res-1',
+        original_name: 'voice.mp3',
+        kind: 'audio',
+        size_bytes: 3,
+        sha256: 'sha256:test',
+        artifact: {
+          selector: 'artifact://art-test',
+          sha256: 'sha256:test',
+          bytes: 3,
+          media_type: 'audio/mpeg',
+          durability: 'durable',
+          visibility_scope: 'session:session-1',
+        },
+        source: 'webui',
+        created_at: 'now',
+      },
     }), { status: 201 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.uploadResource(new File(['mp3'], 'voice.mp3', { type: 'audio/mpeg' }), 'session-1');
     expect(fetchMock).toHaveBeenCalledWith('/api/resources', expect.objectContaining({ method: 'POST' }));
     const init = fetchMock.mock.calls[0][1] as RequestInit;
     expect(init.body).toBeInstanceOf(FormData);
+    expect(Array.from((init.body as FormData).keys())).toEqual([
+      'source',
+      'session_id',
+      'declared_mime',
+      'file',
+    ]);
   });
 
   it('recrops only the revoked session shell and preserves another session summary', () => {
