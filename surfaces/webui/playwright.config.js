@@ -2,6 +2,30 @@ import { defineConfig } from '@playwright/test';
 
 const gatewayUrl = process.env.COWD_E2E_GATEWAY_URL?.replace(/\/$/, '');
 const gatewayToken = process.env.COWD_E2E_GATEWAY_TOKEN;
+const gatewayRequestedCapabilities = [
+  'approval.respond',
+  'definition.manage',
+  'definition.default.set',
+  'definition.rollback',
+  'evolution.release.manage',
+  'runtime.maintenance.manage',
+  'runtime.outbox.retry',
+  'mfg.read',
+  'mfg.incident.operate',
+  'mfg.playbook.manage',
+  'mfg.alert.respond',
+  'mfg.alert.manage',
+  'mfg.assignment.manage',
+  'mfg.assignment.lifecycle',
+  'mfg.execution.operate',
+  'mfg.execution.feedback',
+  'mfg.report.generate',
+  'mfg.report.deliver',
+  'mfg.report.review',
+  'mfg.skill.run',
+  'mfg.cockpit.manage',
+  'mfg.data.manage',
+].join(',');
 const webUrl = process.env.COWD_E2E_WEB_URL?.replace(/\/$/, '') || 'http://127.0.0.1:9241';
 const webPort = new URL(webUrl).port || '80';
 const releaseEntry = process.env.COWD_E2E_RELEASE_ENTRY === '1';
@@ -19,8 +43,13 @@ export default defineConfig({
     // Release proof always loads this checkout's freshly built assets. API
     // calls are proxied to the isolated real Gateway by Vite preview.
     baseURL: releaseEntry ? webUrl : (gatewayUrl || webUrl),
-    extraHTTPHeaders: gatewayToken
-      ? { Authorization: `Bearer ${gatewayToken}` }
+    extraHTTPHeaders: gatewayUrl
+      ? {
+        ...(gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {}),
+        'x-cowd-surface-id': 'webui',
+        'x-cowd-observer-id': 'webui:playwright-release',
+        'x-cowd-requested-capabilities': gatewayRequestedCapabilities,
+      }
       : undefined,
     serviceWorkers: 'block',
     launchOptions: {

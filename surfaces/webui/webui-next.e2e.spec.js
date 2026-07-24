@@ -5,6 +5,11 @@ const realGateway = Boolean(process.env.COWD_E2E_GATEWAY_URL);
 const useReleaseEntry = process.env.COWD_E2E_RELEASE_ENTRY === '1';
 const sourceEntry = fileURLToPath(new URL('./index.dev.html', import.meta.url));
 
+async function expectOk(response, label) {
+  if (response.ok()) return;
+  throw new Error(`${label} failed with HTTP ${response.status()}: ${await response.text()}`);
+}
+
 test.beforeEach(async ({ page }) => {
   // Vite serves the checked-in release entry as a static file.  Browser tests
   // must exercise current source; the release entry is covered explicitly
@@ -194,7 +199,9 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
     element.dispatchEvent(new Event('scroll'));
   });
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
-  await expect(page.locator('[role="alert"]')).toContainText(/401|unauthorized/i);
+  await expect(page.locator('[role="alert"]')).toContainText(
+    /401|unauthorized|credential is invalid|credential.*expired|sign in again/i,
+  );
   await page.locator('.composer textarea').fill('draft belongs only to B');
   await expect(page.locator('.composer-stats')).toContainText('—');
 
@@ -525,7 +532,7 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const create = await page.request.post('/api/sessions', { data: {} });
-  expect(create.ok()).toBeTruthy();
+  await expectOk(create, 'real Gateway session creation');
   const session = await create.json();
   expect(session.id).toBeTruthy();
 
@@ -639,7 +646,7 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
       },
     },
   });
-  expect(profileResponse.ok()).toBeTruthy();
+  await expectOk(profileResponse, 'MFG cockpit profile upsert');
   const savedProfile = (await profileResponse.json()).profile;
   expect(savedProfile.owner_ref).not.toBe('client-value-is-ignored');
   expect(savedProfile.widget_instances).toHaveLength(4);
@@ -813,7 +820,7 @@ test('real gateway cockpit editing and concurrent observers close without silent
       },
     },
   });
-  expect(createResponse.ok()).toBeTruthy();
+  await expectOk(createResponse, 'MFG concurrent cockpit profile creation');
 
   await page.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`);
   await expect(page.locator('.mfg-widget')).toHaveCount(4);
