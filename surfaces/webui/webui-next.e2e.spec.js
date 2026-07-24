@@ -95,7 +95,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
       return;
     }
     if (path === '/api/auth/verify') return json(route, { valid: true, auth_required: false });
-    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.584' });
+    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.585' });
     if (path === '/api/sessions' && request.method() === 'GET') {
       return json(route, {
         sessions: [
@@ -167,7 +167,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
         },
       });
     }
-    if (path === '/api/config') return json(route, { model: 'requested-A', version: '0.9.584' });
+    if (path === '/api/config') return json(route, { model: 'requested-A', version: '0.9.585' });
     if (path === '/api/runtime/control-plane') return json(route, { configured_model: 'requested-A' });
     if (path === '/api/config/providers') return json(route, { providers: [], models: [{ id: 'requested-A' }, { id: 'requested-B' }] });
     if (path === '/api/profiles') return json(route, { profiles: [], active_profile: 'default' });
@@ -175,7 +175,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
     if (path === '/api/workspace') return json(route, { workspace_root: '/workspace', workspace_canonical: '/workspace' });
     if (path === '/api/workspace/files') return json(route, { dir: '', files: [] });
     if (path === '/api/gateway/capability-contract') return json(route, { schema_version: 1, capabilities: [] });
-    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.584' }, paths: {} });
+    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.585' }, paths: {} });
     if (path === '/api/gateway/openai-tools') return json(route, { schema_version: 1, source: 'browser-acceptance', tool_count: 0, tools: [] });
     return json(route, {});
   });
@@ -232,7 +232,7 @@ test('session authorization revocation clears that view, fences reconnects, and 
     const url = new URL(request.url());
     const path = url.pathname;
     if (path === '/api/auth/verify') return json(route, { valid: true, auth_required: false });
-    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.584' });
+    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.585' });
     if (path === '/api/sessions' && request.method() === 'GET') {
       return json(route, {
         sessions: [
@@ -334,7 +334,7 @@ test('session authorization revocation clears that view, fences reconnects, and 
         },
       });
     }
-    if (path === '/api/config') return json(route, { model: 'private-model-A', version: '0.9.584' });
+    if (path === '/api/config') return json(route, { model: 'private-model-A', version: '0.9.585' });
     if (path === '/api/runtime/control-plane') return json(route, { configured_model: 'private-model-A' });
     if (path === '/api/config/providers') return json(route, { providers: [], models: [] });
     if (path === '/api/profiles') return json(route, { profiles: [], active_profile: 'default' });
@@ -342,7 +342,7 @@ test('session authorization revocation clears that view, fences reconnects, and 
     if (path === '/api/workspace') return json(route, { workspace_root: '/workspace', workspace_canonical: '/workspace' });
     if (path === '/api/workspace/files') return json(route, { dir: '', files: [] });
     if (path === '/api/gateway/capability-contract') return json(route, { schema_version: 1, capabilities: [] });
-    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.584' }, paths: {} });
+    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.585' }, paths: {} });
     if (path === '/api/gateway/openai-tools') return json(route, { schema_version: 1, source: 'revocation-e2e', tool_count: 0, tools: [] });
     return json(route, {});
   });
