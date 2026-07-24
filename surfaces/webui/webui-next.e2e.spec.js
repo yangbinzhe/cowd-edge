@@ -108,7 +108,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
     if (historyMatch && request.method() === 'GET') {
       const sessionId = historyMatch[1];
       if (sessionId === 'session-B') {
-        return json(route, { error: 'browser acceptance history denied' }, 401);
+        return json(route, { error: 'browser acceptance history unavailable' }, 500);
       }
       const offset = Number(url.searchParams.get('offset') || 0);
       const limit = Number(url.searchParams.get('limit') || 100);
@@ -200,7 +200,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
   });
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
   await expect(page.locator('[role="alert"]')).toContainText(
-    /401|unauthorized|credential is invalid|credential.*expired|sign in again/i,
+    /500|server|history unavailable/i,
   );
   await page.locator('.composer textarea').fill('draft belongs only to B');
   await expect(page.locator('.composer-stats')).toContainText('—');
@@ -214,7 +214,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
 
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
   await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to B');
-  await expect(page.locator('[role="alert"]')).toContainText(/401|unauthorized/i);
+  await expect(page.locator('[role="alert"]')).toContainText(/500|server|history unavailable/i);
 });
 
 test('session authorization revocation clears that view, fences reconnects, and leaves another session interactive', async ({ page }) => {
@@ -977,7 +977,7 @@ test('all shell controls remain interactive while a conversation is running', as
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ ok: true, session_id: sessionId }),
+      body: JSON.stringify({ ok: true, session_id: sessionId, role: 'writer' }),
     });
   });
   await page.route(`**/api/sessions/${sessionId}/detach`, async (route) => {
@@ -993,11 +993,25 @@ test('all shell controls remain interactive while a conversation is running', as
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ sessions: [{ id: sessionId, title: 'Running interaction audit', status: 'active', model: 'test/model' }] }),
+      body: JSON.stringify({ sessions: [{ id: sessionId, title: 'Running interaction audit', status: 'idle', model: 'test/model' }] }),
     });
   });
   await page.route(`**/api/sessions/${sessionId}/messages?*`, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ messages: [] }) });
+    const url = new URL(route.request().url());
+    const offset = Number(url.searchParams.get('offset') || 0);
+    const limit = Number(url.searchParams.get('limit') || 100);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        session_id: sessionId,
+        messages: [],
+        total: 0,
+        offset,
+        limit,
+        has_more: false,
+      }),
+    });
   });
   await page.route(`**/api/sessions/${sessionId}/evidence`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session_id: sessionId, evidence_refs: [], turns: [], freshness: 'live' }) });

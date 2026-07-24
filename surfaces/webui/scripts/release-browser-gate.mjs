@@ -24,6 +24,9 @@ const evidencePath = resolve(
 );
 const reportPath = resolve(dirname(evidencePath), 'release-browser-playwright.json');
 const gatewayLogPath = resolve(dirname(evidencePath), 'release-browser-gateway.log');
+const providerLogPath = resolve(dirname(evidencePath), 'release-browser-provider.jsonl');
+const providerStdoutPath = resolve(dirname(evidencePath), 'release-browser-provider.log');
+const profileEvidencePath = resolve(dirname(evidencePath), 'release-browser-profile-manager.json');
 const gatewayToken = randomBytes(32).toString('hex');
 const required = (name) => {
   const value = String(process.env[name] || '').trim();
@@ -80,6 +83,25 @@ async function waitForGateway(url, child) {
   throw new Error(`specified Gateway did not become ready: ${lastError}`);
 }
 
+async function waitForProvider(url, child) {
+  const deadline = Date.now() + 15_000;
+  let lastError = '';
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(`deterministic provider exited before readiness (${child.exitCode})`);
+    }
+    try {
+      const response = await fetch(`${url}/health`);
+      if (response.ok) return;
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  throw new Error(`deterministic provider did not become ready: ${lastError}`);
+}
+
 function assetDigests(dir, current = dir, result = {}) {
   const entries = command('find', [current, '-type', 'f', '-print0'], { encoding: 'buffer' })
     .split('\0')
@@ -120,8 +142,10 @@ async function terminate(child) {
 }
 
 let gateway;
+let provider;
 let temporaryRoot = '';
 let gatewayLogFd;
+let providerLogFd;
 let provenance = {
   schema_version: 1,
   gate: 'cowd-edge-release-browser',
@@ -179,7 +203,23 @@ try {
   for (const path of [configHome, runtimeDir, homeDir, workspaceDir]) {
     mkdirSync(path, { recursive: true });
   }
+  const providerFixture = realpathSync(join(sourceDir, 'scripts/fixtures/v584-tui-provider.mjs'));
+  if (!statSync(providerFixture).isFile()) {
+    throw new Error('deterministic provider fixture is not a file');
+  }
+  const providerPort = await availablePort();
+  const providerUrl = `http://127.0.0.1:${providerPort}`;
   writeFileSync(join(configHome, 'config.yaml'), `
+model: "cowd-v584-acceptance"
+model_context_windows:
+  cowd-v584-acceptance: 16384
+providers:
+  v584_acceptance:
+    base_url: "${providerUrl}/v1"
+    api_key: "local-fixture-key"
+    protocol: "completions"
+    models:
+      - "cowd-v584-acceptance"
 permissions:
   default_mode: "acceptEdits"
 sandbox:
@@ -209,21 +249,85 @@ apps:
   );
   const gatewayUrl = `http://127.0.0.1:${gatewayPort}`;
   const webUrl = `http://127.0.0.1:${webPort}`;
+  rmSync(providerLogPath, { force: true });
+  providerLogFd = openSync(providerStdoutPath, 'w', 0o600);
+  provider = spawn(process.execPath, [providerFixture], {
+    cwd: sourceDir,
+    env: {
+      ...process.env,
+      COWD_V584_PROVIDER_PORT: String(providerPort),
+      COWD_V584_PROVIDER_LOG: providerLogPath,
+    },
+    stdio: ['ignore', providerLogFd, providerLogFd],
+  });
+  await waitForProvider(providerUrl, provider);
+
+  const isolatedEnv = {
+    ...process.env,
+    HOME: homeDir,
+    COWD_CONFIG_HOME: configHome,
+    XDG_RUNTIME_DIR: runtimeDir,
+    XDG_DATA_HOME: join(temporaryRoot, 'data'),
+    XDG_STATE_HOME: join(temporaryRoot, 'state'),
+    XDG_CACHE_HOME: join(temporaryRoot, 'cache'),
+  };
   gatewayLogFd = openSync(gatewayLogPath, 'w', 0o600);
   gateway = spawn(binary, ['gateway', 'run'], {
     cwd: workspaceDir,
-    env: {
-      ...process.env,
-      HOME: homeDir,
-      COWD_CONFIG_HOME: configHome,
-      XDG_RUNTIME_DIR: runtimeDir,
-      XDG_DATA_HOME: join(temporaryRoot, 'data'),
-      XDG_STATE_HOME: join(temporaryRoot, 'state'),
-      XDG_CACHE_HOME: join(temporaryRoot, 'cache'),
-    },
+    env: isolatedEnv,
     stdio: ['ignore', gatewayLogFd, gatewayLogFd],
   });
   await waitForGateway(gatewayUrl, gateway);
+
+  const currentEntitlement = JSON.parse(command(binary, ['auth', 'profile', 'show'], {
+    env: isolatedEnv,
+    input: `${gatewayToken}\n`,
+  }));
+  const profileArgs = [
+    'auth',
+    'profile',
+    'set',
+    '--core-profile',
+    'core_manager',
+    '--apps',
+    'mfg=mfg_manager',
+    '--expected-epoch',
+    String(currentEntitlement.credential_epoch),
+    '--expected-revision',
+    String(currentEntitlement.profile_revision),
+  ];
+  const preview = spawnSync(binary, [...profileArgs, '--confirm', 'invalid'], {
+    encoding: 'utf8',
+    env: isolatedEnv,
+    input: `${gatewayToken}\n`,
+  });
+  if (preview.status === 0) {
+    throw new Error('invalid Auth Broker profile confirmation unexpectedly succeeded');
+  }
+  const confirmation = String(preview.stderr || '').match(/confirmation=(\S+)/)?.[1];
+  if (!confirmation) {
+    throw new Error(`Auth Broker profile preview did not emit a confirmation digest: ${preview.stderr}`);
+  }
+  const managerEntitlement = JSON.parse(command(
+    binary,
+    [...profileArgs, '--confirm', confirmation],
+    {
+      env: isolatedEnv,
+      input: `${gatewayToken}\n`,
+    },
+  ));
+  if (
+    managerEntitlement.core_profile_id !== 'core_manager'
+    || managerEntitlement.app_profiles?.mfg !== 'mfg_manager'
+    || !managerEntitlement.ceiling?.includes('mfg.cockpit.manage')
+  ) {
+    throw new Error('Auth Broker did not project the required MFG manager entitlement');
+  }
+  writeFileSync(
+    profileEvidencePath,
+    `${JSON.stringify(managerEntitlement, null, 2)}\n`,
+    { mode: 0o600 },
+  );
 
   const openApiResponse = await fetch(`${gatewayUrl}/api/gateway/openapi.json`);
   if (!openApiResponse.ok) throw new Error(`Gateway OpenAPI provenance failed (${openApiResponse.status})`);
@@ -253,6 +357,23 @@ apps:
         mode: 'isolated-bearer',
         token_recorded: false,
       },
+    },
+    provider: {
+      fixture: providerFixture,
+      fixture_sha256: sha256(providerFixture),
+      pid: provider.pid,
+      url: providerUrl,
+      model: 'cowd-v584-acceptance',
+      deterministic: true,
+      request_log: providerLogPath,
+      stdout_log: providerStdoutPath,
+    },
+    authorization_profile: {
+      core_profile_id: managerEntitlement.core_profile_id,
+      app_profiles: managerEntitlement.app_profiles,
+      profile_revision: managerEntitlement.profile_revision,
+      evidence: profileEvidencePath,
+      confirmation_flow: 'preview-confirm-cas',
     },
     web_url: webUrl,
   };
@@ -298,7 +419,9 @@ apps:
   process.exitCode = 1;
 } finally {
   await terminate(gateway);
+  await terminate(provider);
   if (gatewayLogFd !== undefined) closeSync(gatewayLogFd);
+  if (providerLogFd !== undefined) closeSync(providerLogFd);
   provenance.finished_at = new Date().toISOString();
   mkdirSync(dirname(evidencePath), { recursive: true });
   writeFileSync(evidencePath, `${JSON.stringify(provenance, null, 2)}\n`, { mode: 0o600 });
