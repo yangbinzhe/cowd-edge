@@ -28,6 +28,7 @@ const providerLogPath = resolve(dirname(evidencePath), 'release-browser-provider
 const providerStdoutPath = resolve(dirname(evidencePath), 'release-browser-provider.log');
 const profileEvidencePath = resolve(dirname(evidencePath), 'release-browser-profile-manager.json');
 const gatewayToken = randomBytes(32).toString('hex');
+const gatewayObserverId = `webui:playwright-release:${randomBytes(8).toString('hex')}`;
 const required = (name) => {
   const value = String(process.env[name] || '').trim();
   if (!value) throw new Error(`${name} is required by the release browser gate`);
@@ -358,6 +359,7 @@ apps:
       auth: {
         mode: 'isolated-bearer',
         token_recorded: false,
+        observer_id: gatewayObserverId,
       },
     },
     provider: {
@@ -403,6 +405,7 @@ apps:
       COWD_E2E_RELEASE_ENTRY: '1',
       COWD_E2E_GATEWAY_URL: gatewayUrl,
       COWD_E2E_GATEWAY_TOKEN: gatewayToken,
+      COWD_E2E_OBSERVER_ID: gatewayObserverId,
       COWD_VITE_GATEWAY_URL: gatewayUrl,
       COWD_E2E_WEB_URL: webUrl,
       COWD_E2E_GATEWAY_PROVENANCE: evidencePath,

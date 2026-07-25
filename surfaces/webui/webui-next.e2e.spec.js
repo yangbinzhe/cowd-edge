@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
 const realGateway = Boolean(process.env.COWD_E2E_GATEWAY_URL);
+const gatewayObserverId = process.env.COWD_E2E_OBSERVER_ID || 'webui:playwright-release';
 const useReleaseEntry = process.env.COWD_E2E_RELEASE_ENTRY === '1';
 const sourceEntry = fileURLToPath(new URL('./index.dev.html', import.meta.url));
 
@@ -17,9 +18,10 @@ test.beforeEach(async ({ page }) => {
   if (!useReleaseEntry) {
     await page.context().route('**/index.html', (route) => route.fulfill({ path: sourceEntry }));
   }
-  await page.addInitScript(() => {
+  await page.addInitScript((observerId) => {
     localStorage.setItem('cowd.webui.locale', 'en-US');
-  });
+    sessionStorage.setItem('cowd.webui.observer_id', observerId);
+  }, gatewayObserverId);
   if (realGateway) {
     const health = await page.request.get('/healthz');
     expect(health.status()).toBe(200);
@@ -600,7 +602,9 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   // Keep the writer on the observer identity authenticated by the release
   // harness. Rebinding one bearer credential to a second observer is a real
   // authorization transition and must remain fail-closed.
-  const writerHeaders = {};
+  const writerHeaders = {
+    'x-cowd-observer-id': gatewayObserverId,
+  };
   const create = await page.request.post('/api/sessions', { data: {} });
   await expectOk(create, 'real Gateway session creation');
   const session = await create.json();

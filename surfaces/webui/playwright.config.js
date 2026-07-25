@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 const gatewayUrl = process.env.COWD_E2E_GATEWAY_URL?.replace(/\/$/, '');
 const gatewayToken = process.env.COWD_E2E_GATEWAY_TOKEN;
+const gatewayObserverId = process.env.COWD_E2E_OBSERVER_ID || 'webui:playwright-release';
 const gatewayRequestedCapabilities = [
   'approval.respond',
   'definition.manage',
@@ -47,7 +48,7 @@ export default defineConfig({
       ? {
         ...(gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {}),
         'x-cowd-surface-id': 'webui',
-        'x-cowd-observer-id': 'webui:playwright-release',
+        'x-cowd-observer-id': gatewayObserverId,
         'x-cowd-requested-capabilities': gatewayRequestedCapabilities,
       }
       : undefined,
