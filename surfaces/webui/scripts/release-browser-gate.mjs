@@ -182,6 +182,12 @@ try {
   if (!binaryVersion.includes(edgeVersion)) {
     throw new Error(`Gateway binary version ${binaryVersion} does not match Edge ${edgeVersion}`);
   }
+  const binaryCommit = binaryVersion.match(/Git SHA\s+([0-9a-f]+)/i)?.[1]?.toLowerCase();
+  if (!binaryCommit || !expectedCommit.toLowerCase().startsWith(binaryCommit)) {
+    throw new Error(
+      `Gateway binary Git SHA ${binaryCommit || '<missing>'} does not match source ${expectedCommit}`,
+    );
+  }
   const edgeBranch = command('git', ['branch', '--show-current'], { cwd: repoRoot });
   if (edgeBranch !== 'develop') throw new Error(`Edge release source must be on develop, received ${edgeBranch || 'detached'}`);
   if (command('git', ['status', '--porcelain'], { cwd: repoRoot })) {
