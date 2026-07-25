@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { gatewayRequestedCapabilities } from './e2e-release-contract.js';
 
 const realGateway = Boolean(process.env.COWD_E2E_GATEWAY_URL);
 const gatewayObserverId = process.env.COWD_E2E_OBSERVER_ID || 'webui:playwright-release';
@@ -599,11 +600,12 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   test.setTimeout(90_000);
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  // Keep the writer on the observer identity authenticated by the release
-  // harness. Rebinding one bearer credential to a second observer is a real
-  // authorization transition and must remain fail-closed.
+  // The direct API writer is a separate Surface instance from the browser
+  // page that later observes the execution. Reusing the page observer would
+  // let the page's reader attachment legitimately replace this writer role.
+  const writerObserverId = `webui:e2e-team-writer:${suffix}`;
   const writerHeaders = {
-    'x-cowd-observer-id': gatewayObserverId,
+    'x-cowd-observer-id': writerObserverId,
   };
   const create = await page.request.post('/api/sessions', { data: {} });
   await expectOk(create, 'real Gateway session creation');
@@ -927,7 +929,7 @@ test('report delivery exposes exhausted retry state and disables automatic retry
   await expect(page.getByRole('button', { name: 'Retry delivery' })).toBeDisabled();
 });
 
-test('real gateway cockpit editing and concurrent observers close without silent overwrite', async ({ page }) => {
+test('real gateway cockpit editing and concurrent observers close without silent overwrite', async ({ page, browser }) => {
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const profileId = `e2e-cockpit-conflict-${suffix}`;
@@ -998,40 +1000,57 @@ test('real gateway cockpit editing and concurrent observers close without silent
   await expect(profileOptions).toHaveCount(profileCountBeforeClone + 1);
   await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
 
-  const observer = await page.context().newPage();
-  await observer.addInitScript(() => localStorage.setItem('cowd.webui.locale', 'en-US'));
-  await Promise.all([
-    page.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
-    observer.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
-  ]);
-  const primaryEdit = page.getByRole('button', { name: 'Edit layout' });
-  const observerEdit = observer.getByRole('button', { name: 'Edit layout' });
-  await Promise.all([
-    expect(primaryEdit).toBeEnabled(),
-    expect(observerEdit).toBeEnabled(),
-  ]);
-  await Promise.all([
-    primaryEdit.click(),
-    observerEdit.click(),
-  ]);
-  await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
-  await expect(observer.locator('.mfg-revision')).toHaveText('Revision 2');
-  const firstName = page.locator('.mfg-cockpit__editor > label input').first();
-  const secondName = observer.locator('.mfg-cockpit__editor > label input').first();
-  await firstName.fill('Observer one committed');
-  await secondName.fill('Observer two stale draft');
-  const firstSave = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Save cockpit' }).click();
-  expect((await firstSave).ok()).toBeTruthy();
-  const staleSave = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
-  await observer.getByRole('button', { name: 'Save cockpit' }).click();
-  expect((await staleSave).status()).toBe(409);
-  await expect(observer.locator('.mfg-cockpit__conflict')).toBeVisible();
-  await expect(observer.locator('.mfg-cockpit__conflict-compare')).toContainText('display_name');
-  const saveAsResponse = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
-  await observer.getByRole('button', { name: 'Save as new cockpit' }).click();
-  expect((await saveAsResponse).ok()).toBeTruthy();
-  await observer.close();
+  const observerId = `webui:e2e-cockpit-observer:${suffix}`;
+  const observerContext = await browser.newContext({
+    baseURL: process.env.COWD_E2E_WEB_URL || process.env.COWD_E2E_GATEWAY_URL,
+    extraHTTPHeaders: {
+      Authorization: `Bearer ${process.env.COWD_E2E_GATEWAY_TOKEN}`,
+      'x-cowd-surface-id': 'webui',
+      'x-cowd-observer-id': observerId,
+      'x-cowd-requested-capabilities': gatewayRequestedCapabilities,
+    },
+    serviceWorkers: 'block',
+  });
+  const observer = await observerContext.newPage();
+  await observer.addInitScript((id) => {
+    localStorage.setItem('cowd.webui.locale', 'en-US');
+    sessionStorage.setItem('cowd.webui.observer_id', id);
+  }, observerId);
+  try {
+    await Promise.all([
+      page.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
+      observer.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
+    ]);
+    const primaryEdit = page.getByRole('button', { name: 'Edit layout' });
+    const observerEdit = observer.getByRole('button', { name: 'Edit layout' });
+    await Promise.all([
+      expect(primaryEdit).toBeEnabled(),
+      expect(observerEdit).toBeEnabled(),
+    ]);
+    await Promise.all([
+      primaryEdit.click(),
+      observerEdit.click(),
+    ]);
+    await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
+    await expect(observer.locator('.mfg-revision')).toHaveText('Revision 2');
+    const firstName = page.locator('.mfg-cockpit__editor > label input').first();
+    const secondName = observer.locator('.mfg-cockpit__editor > label input').first();
+    await firstName.fill('Observer one committed');
+    await secondName.fill('Observer two stale draft');
+    const firstSave = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Save cockpit' }).click();
+    expect((await firstSave).ok()).toBeTruthy();
+    const staleSave = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+    await observer.getByRole('button', { name: 'Save cockpit' }).click();
+    expect((await staleSave).status()).toBe(409);
+    await expect(observer.locator('.mfg-cockpit__conflict')).toBeVisible();
+    await expect(observer.locator('.mfg-cockpit__conflict-compare')).toContainText('display_name');
+    const saveAsResponse = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+    await observer.getByRole('button', { name: 'Save as new cockpit' }).click();
+    expect((await saveAsResponse).ok()).toBeTruthy();
+  } finally {
+    await observerContext.close();
+  }
 });
 
 test('audit page exposes usage and release gate governance controls', async ({ page }) => {
