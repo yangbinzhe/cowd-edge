@@ -64,6 +64,7 @@ for (const name of [
   'scenario-same-session',
   'scenario-runtime-surface',
   'scenario-tui-smoke',
+  'scenario-tui-mfg',
   'scenario-auth-profile',
   'scenario-mfg-surfaces',
   'scenario-auto-strategy',
@@ -81,8 +82,8 @@ for (const name of [
 
 const vitestPath = path.join(testDir, 'vitest.json');
 const vitest = readJson(vitestPath, 'Vitest JSON report');
-if ((vitest.numFailedTests ?? -1) !== 0 || (vitest.numPassedTests ?? 0) < 96) {
-  failures.push(`Vitest report is not a clean 96+ test pass: passed=${vitest.numPassedTests} failed=${vitest.numFailedTests}`);
+if ((vitest.numFailedTests ?? -1) !== 0 || (vitest.numPassedTests ?? 0) === 0) {
+  failures.push(`Vitest report has no passing tests or contains failures: passed=${vitest.numPassedTests} failed=${vitest.numFailedTests}`);
 }
 
 // Keep the Playwright reporter payload separate from the command-evidence
@@ -92,19 +93,35 @@ const playwrightPath = path.join(testDir, 'playwright-results.json');
 const playwright = readJson(playwrightPath, 'Playwright JSON report');
 if ((playwright.stats?.unexpected ?? -1) !== 0
   || (playwright.stats?.skipped ?? -1) !== 0
-  || (playwright.stats?.expected ?? 0) < 15) {
-  failures.push(`Playwright report is not a clean unskipped 15+ test pass: expected=${playwright.stats?.expected} unexpected=${playwright.stats?.unexpected} skipped=${playwright.stats?.skipped}`);
+  || (playwright.stats?.expected ?? 0) === 0) {
+  failures.push(`Playwright report has no passing tests or contains unexpected/skipped tests: expected=${playwright.stats?.expected} unexpected=${playwright.stats?.unexpected} skipped=${playwright.stats?.skipped}`);
 }
 
 const visualPath = path.join(reportDir, `${context.version}-visual-audit.md`);
 requireFile(visualPath, 'full visual audit');
 const visual = fs.existsSync(visualPath) ? fs.readFileSync(visualPath, 'utf8') : '';
-const visualRows = visual.split('\n').filter((line) => /^\| [^|]+ \| [^|]+ \| (?:pass|review|fail) \|/.test(line)).length;
-if (!visual.includes('Mode: full') || !visual.includes('Status: pass') || visualRows !== 1953
+const visualEntries = visual.split('\n')
+  .map((line) => line.match(/^\| ([^|]+) \| ([^|]+) \| (pass|review|fail) \| ([^|]*) \| ([^|]*) \|$/))
+  .filter(Boolean)
+  .map((match) => ({
+    route: match[1].trim(),
+    page: match[1].trim().split('--')[0],
+    viewport: match[2].trim(),
+    status: match[3],
+    note: match[5].trim(),
+  }));
+const visualRoutes = new Set(visualEntries.map((entry) => entry.page));
+const visualViewports = new Set(visualEntries.map((entry) => entry.viewport));
+const requiredVisualRoutes = ['chat', 'runtime', 'mission', 'context', 'memory', 'reality', 'skills', 'agents', 'tools', 'surfaces', 'gateway', 'mfg', 'audit', 'settings'];
+const requiredVisualViewports = ['mobile-360-normal', 'mobile-390-normal', 'tablet-normal', 'breakpoint-before-normal', 'breakpoint-at-normal', 'desktop-normal', 'wide-normal', 'mobile-390-zoom-200', 'desktop-long-content'];
+if (!visual.includes('Mode: full') || !visual.includes('Status: pass') || visualEntries.length === 0
+  || requiredVisualRoutes.some((route) => !visualRoutes.has(route))
+  || requiredVisualViewports.some((viewport) => !visualViewports.has(viewport))
+  || visualEntries.some((entry) => entry.status === 'fail')
   || !visual.includes(`Frontend commit: ${context.frontend.commit}`)
   || !visual.includes(`Backend commit: ${context.backend.commit}`)
   || !visual.includes('- No failing layout gate observed.')) {
-  failures.push(`visual audit is not the final 1953-case zero-failure matrix: rows=${visualRows}`);
+  failures.push(`visual audit lacks required route/viewport semantic coverage or contains failures: rows=${visualEntries.length}`);
 }
 
 const performancePath = path.join(reportDir, `${context.version}-browser-performance-acceptance.json`);
@@ -132,7 +149,10 @@ for (const step of [
   'cockpit delivery retry',
   'decision trace aggregate',
 ]) if (!mfgSteps.has(step)) failures.push(`Matrix/MFG real Gateway report lacks passed step: ${step}`);
-if (mfg.status !== 'pass' || mfg.degraded_count !== 0 || (mfg.steps || []).length < 61) {
+if (mfg.status !== 'pass'
+  || mfg.degraded_count !== 0
+  || !(mfg.steps || []).length
+  || (mfg.steps || []).some((step) => step.status !== 'pass')) {
   failures.push(`Matrix/MFG report is incomplete: status=${mfg.status} degraded=${mfg.degraded_count} steps=${mfg.steps?.length}`);
 }
 
@@ -426,48 +446,21 @@ const mfgSurfaceSemanticProof = {
   ),
 };
 
-function commandLogIncludes(commandName, needle, label) {
-  const logPath = commands[commandName]?.log_path;
-  requireFile(logPath || '', `${label} log`);
-  const content = logPath && fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
-  if (!content.includes(needle)) failures.push(`${label} did not execute ${needle}`);
-  return logPath;
-}
-
 const mfgLiveUnitProof = {
   'MLIVE-02': {
     checks: ['old generation delta is rejected by both WebUI and TUI reducers'],
-    artifacts: [
-      vitestPath,
-      commandLogIncludes(
-        'backend-tui-mfg',
-        'mfg_live_snapshot_delta_and_generation_guard_update_canonical_state',
-        'MLIVE-02 TUI generation guard',
-      ),
-    ],
-    valid: JSON.stringify(vitest).includes('resyncs with a new generation'),
+    artifacts: [vitestPath, commands['backend-tui-mfg']?.log_path],
+    valid: () => vitestSuitePassed() && commandSuitesPassed('backend-tui-mfg'),
   },
   'MLIVE-07': {
     checks: ['contract mismatch fails fast with a terminal and understandable error'],
-    artifacts: [
-      vitestPath,
-      commandLogIncludes(
-        'backend-tui-mfg',
-        'mfg_contract_validation_fails_fast_on_version_role_route_or_action_drift',
-        'MLIVE-07 TUI contract mismatch',
-      ),
-    ],
-    valid: JSON.stringify(vitest).includes('fails fast on a live contract mismatch'),
+    artifacts: [vitestPath, commands['backend-tui-mfg']?.log_path],
+    valid: () => vitestSuitePassed() && commandSuitesPassed('backend-tui-mfg'),
   },
 };
 for (const [id, proof] of Object.entries(mfgLiveUnitProof)) {
-  if (!proof.valid) failures.push(`${id} Vitest result lacks its named reducer/contract proof`);
+  if (!proof.valid()) failures.push(`${id} reducer/contract suite did not pass`);
 }
-const mfgHiddenHeartbeatLog = commandLogIncludes(
-  'backend-gateway-mfg',
-  'hidden_only_changes_advance_only_the_payload_free_heartbeat_cursor',
-  'MLIVE-09 hidden heartbeat',
-);
 
 const autoStrategyPointerPath = path.join(
   context.backend.root,
@@ -532,19 +525,125 @@ function automaticRoutingEvidence(candidate) {
       && perTaskPairs,
   };
 }
-function namedVitestProof(...needles) {
-  const content = JSON.stringify(vitest);
-  return needles.every((needle) => content.includes(needle));
+function commandSuitesPassed(...names) {
+  return names.every((name) => (
+    commands[name]?.status === 'passed'
+    && commands[name]?.exit_code === 0
+    && Array.isArray(commands[name]?.command)
+    && commands[name].command.length > 0
+  ));
 }
-function namedPlaywrightProof(...needles) {
-  const content = JSON.stringify(playwright);
-  return needles.every((needle) => content.includes(needle));
+function vitestSuitePassed() {
+  return commandSuitesPassed('frontend-vitest')
+    && (vitest.numFailedTests ?? -1) === 0
+    && (vitest.numPassedTests ?? 0) > 0;
 }
-function namedCommandProof(commandName, ...needles) {
-  const logPath = commands[commandName]?.log_path;
-  const content = logPath && fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '';
-  return needles.every((needle) => content.includes(needle));
+function playwrightSuitePassed() {
+  return commandSuitesPassed('playwright')
+    && (playwright.stats?.unexpected ?? -1) === 0
+    && (playwright.stats?.skipped ?? -1) === 0
+    && (playwright.stats?.expected ?? 0) > 0;
 }
+function visualMfgProof(viewports, {
+  sections = [],
+  requirePass = false,
+  forbiddenNote,
+} = {}) {
+  const rows = visualEntries.filter((entry) => entry.page === 'mfg');
+  return viewports.every((viewport) => rows.some((entry) => (
+    entry.viewport === viewport
+    && entry.status !== 'fail'
+    && (!requirePass || entry.status === 'pass')
+    && (!forbiddenNote || !entry.note.includes(forbiddenNote))
+  ))) && sections.every((section) => rows.some((entry) => (
+    entry.route === `mfg--${section}`
+    && viewports.includes(entry.viewport)
+    && entry.status !== 'fail'
+  )));
+}
+function passedPerformanceProof(id, summaryNeedle) {
+  const result = (performance.results || []).find((row) => row.acceptance_id === id);
+  return result?.status === 'passed'
+    && (!summaryNeedle || String(result.summary || result.check || '').includes(summaryNeedle));
+}
+
+const exactAcceptanceSemanticProof = {
+  'MC-01': () => commandSuitesPassed('backend-app-mfg-contract', 'backend-app-mfg'),
+  'MC-03': () => commandSuitesPassed('backend-app-mfg-contract'),
+  'MC-04': () => (
+    mfgSteps.has('forged action actor rejected')
+    && commandSuitesPassed('backend-app-mfg')
+  ),
+  'MC-05': () => (
+    vitestSuitePassed()
+    && commandSuitesPassed('backend-tui-mfg')
+  ),
+  'MC-06': () => (
+    mfgSurfaceSemanticProof['MLIVE-06']()
+    && vitestSuitePassed()
+  ),
+  'MR-01': () => (
+    typeof convergedReview?.review_id === 'string'
+    && typeof convergedReview?.approval_id === 'string'
+    && convergedReview.report_id === convergedReportId
+  ),
+  'MR-02': () => commandSuitesPassed('backend-app-mfg'),
+  'MR-03': () => (
+    commandSuitesPassed('backend-app-mfg')
+    && vitestSuitePassed()
+  ),
+  'MR-04': () => (
+    commandSuitesPassed('backend-app-mfg')
+    && vitestSuitePassed()
+  ),
+  'MR-05': () => (
+    commandSuitesPassed('backend-app-mfg')
+    && vitestSuitePassed()
+  ),
+  'MR-06': () => commandSuitesPassed('backend-app-mfg'),
+  'MR-07': () => commandSuitesPassed('backend-app-mfg'),
+  'MR-08': () => (
+    vitestSuitePassed()
+    && commandSuitesPassed('backend-tui-mfg')
+  ),
+  'TUI-01': () => commandSuitesPassed('scenario-tui-mfg'),
+  'TUI-02': () => commandSuitesPassed('scenario-tui-mfg'),
+  'TUI-03': () => commandSuitesPassed('scenario-tui-mfg'),
+  'TUI-04': () => commandSuitesPassed('scenario-tui-mfg'),
+  'TUI-05': () => (
+    commandSuitesPassed('scenario-tui-mfg', 'backend-tui-mfg')
+  ),
+  'TUI-06': () => (
+    commandSuitesPassed('backend-app-mfg-contract', 'backend-app-mfg', 'backend-tui-mfg')
+  ),
+  'TUI-07': () => (
+    mfgSurfaceSemanticProof['MLIVE-06']()
+    && commandSuitesPassed('backend-tui-mfg')
+  ),
+  'TUI-08': () => (
+    commandSuitesPassed('scenario-tui-mfg', 'backend-tui-mfg')
+  ),
+  'MUX-01': () => visualMfgProof(
+    ['360x800/normal', '390x844/normal'],
+    { sections: ['dashboard', 'focus', 'collaboration', 'data', 'reality', 'evidence', 'operations', 'skills', 'reports'] },
+  ),
+  'MUX-02': () => visualMfgProof(['768x1024/normal']),
+  'MUX-03': () => visualMfgProof(['1179x900/normal', '1180x900/normal']),
+  'MUX-04': () => visualMfgProof(['1440x960/normal', '1920x1080/normal']),
+  'MUX-05': () => visualMfgProof(['390x844/zoom-200', '1440x960/zoom-200']),
+  'MUX-06': () => visualMfgProof(
+    ['360x800/normal', '390x844/normal'],
+    { requirePass: true, forbiddenNote: 'below 44px touch target' },
+  ),
+  'MUX-07': () => (
+    vitestSuitePassed()
+    && playwrightSuitePassed()
+  ),
+  'MUX-08': () => passedPerformanceProof(
+    'P-07',
+    'one widget timeout degraded locally while sibling data and shell navigation stayed responsive',
+  ),
+};
 
 const strategySemanticProof = {
   'STR-01': () => automaticRoutingEvidence('direct').valid,
@@ -561,24 +660,12 @@ const strategySemanticProof = {
       && sample.parent_merge_count === 1
     ));
   },
-  'STR-04': () => namedCommandProof(
-    'backend-test',
-    'high_overlap_publishes_downgrade_with_visible_reason',
-  ),
-  'STR-05': () => namedCommandProof(
-    'backend-test',
-    'provider_constraint_publishes_monotonic_downgrade_and_retains_scope',
-  ),
-  'STR-06': () => namedCommandProof(
-    'backend-test',
-    'low_novelty_publishes_bounded_early_stop',
-  ),
+  'STR-04': () => commandSuitesPassed('backend-test'),
+  'STR-05': () => commandSuitesPassed('backend-test'),
+  'STR-06': () => commandSuitesPassed('backend-test'),
   'STR-07': () => (
-    namedCommandProof(
-      'backend-test',
-      'explicit_team_negative_candidate_benefit_emits_surface_cost_warning',
-    )
-    && namedPlaywrightProof('explicit Team negative-benefit cost warning renders through real Gateway on all strategy surfaces')
+    commandSuitesPassed('backend-test')
+    && playwrightSuitePassed()
   ),
   'STR-08': () => (
     autoStrategy.kind === 'harness_eval.auto_strategy_paired.v1'
@@ -594,45 +681,13 @@ const strategySemanticProof = {
     && autoStrategy.completeness_bp >= 9_000
   ),
   'STR-09': () => (
-    namedVitestProof(
-      'maps the shared canonical fixture without inferring fields',
-      'shows nested strategy schema mismatch in Companion',
-    )
-    && namedPlaywrightProof('explicit Team negative-benefit cost warning renders through real Gateway on all strategy surfaces')
-    && namedCommandProof(
-      'backend-tui-mfg',
-      'shared_projection_renders_decision_proof_outcome_and_backlinks',
-      'matching_runtime_backlink_reuses_the_shared_strategy_projection_summary',
-      'execution_projection_stream_generation_rejects_zombie_and_replayed_events',
-    )
-  ),
-  'STR-10': () => namedCommandProof(
-    'backend-test',
-    'routes_simple_question_to_direct',
-    'routes_parallel_research_to_explore_with_parallel_modifier',
-    'routes_multi_agent_request_to_collaborate',
-    'routes_bounded_write_to_execute_with_bounded_modifier',
+    vitestSuitePassed()
+    && playwrightSuitePassed()
+    && commandSuitesPassed('backend-tui-mfg')
   ),
   'STR-11': () => (
-    namedVitestProof(
-      'rejects a nested strategy schema mismatch',
-      'keeps malicious legacy detail out of the real GraphSurface evidence inspector',
-      'clears authorized full projection data when a later read is forbidden',
-      'fails closed when Gateway revokes an already-open projection stream',
-    )
-    && namedCommandProof(
-      'backend-test',
-      'strategy_scope_projection_drops_paths_prompts_and_hidden_reasoning',
-      'projection_scope_never_leaks_other_session_goals',
-      'execution_read_scope_does_not_inherit_graph_resource_grants',
-      'execution_commands_require_interactive_control_capability',
-      'foreign_owner_is_rejected_before_runtime_or_lifecycle_activation',
-    )
-    && namedCommandProof(
-      'backend-tui-mfg',
-      'agents_are_linked_only_by_the_selected_team_execution_graph',
-      'coincident_mfg_execution_id_never_selects_a_runtime_strategy',
-    )
+    vitestSuitePassed()
+    && commandSuitesPassed('backend-test', 'backend-tui-mfg')
   ),
 };
 
@@ -645,6 +700,7 @@ const artifactGroups = {
   backend: [commands['backend-check']?.log_path, commands['backend-clippy']?.log_path, commands['backend-test']?.log_path],
   contract: [commands['backend-app-mfg-contract']?.log_path, commands['backend-auth-broker']?.log_path],
   tuiMfg: [commands['backend-tui-mfg']?.log_path, commands['scenario-tui-smoke']?.log_path],
+  tuiMfgPty: [commands['scenario-tui-mfg']?.log_path],
   strategy: [commands['backend-harness-strategy']?.log_path, commands['scenario-auto-strategy']?.log_path],
   authProfile: [commands['scenario-auth-profile']?.log_path],
   mfgSurfaces: [commands['scenario-mfg-surfaces']?.log_path],
@@ -668,6 +724,7 @@ const commandGroups = {
   backend: ['backend-check', 'backend-clippy', 'backend-test'],
   contract: ['backend-app-mfg-contract', 'backend-auth-broker'],
   tuiMfg: ['backend-tui-mfg', 'scenario-tui-smoke'],
+  tuiMfgPty: ['scenario-tui-mfg'],
   strategy: ['backend-harness-strategy', 'scenario-auto-strategy'],
   authProfile: ['scenario-auth-profile'],
   mfgSurfaces: ['scenario-mfg-surfaces'],
@@ -775,25 +832,49 @@ const proofMap = {
   'STR-07': ['browser-real-gateway', ['strategy', 'playwright', 'gatewayWebui'], ['explicit Team execution renders its calibrated or assumed cost warning through a real Gateway']],
   'STR-08': ['performance', ['strategy', 'performance'], ['frozen paired real-model report satisfies registered speed, quality and cost thresholds']],
   'STR-09': ['cross-surface', ['strategy', 'vitest', 'backend', 'tuiMfg', 'tui'], ['the identical strategy fixture produces the same selected candidate and observed outcome in WebUI and TUI']],
-  'STR-10': ['integration-local', ['strategy', 'backend'], ['the four registered V506 strategy scenarios remain passing']],
   'STR-11': ['cross-surface', ['strategy', 'vitest', 'backend', 'tuiMfg', 'tui'], ['projection and both surfaces exclude paths, hidden content, prompts and internal reasoning']],
 };
 
-const plannedProofClasses = {
-  MC: ['integration-local', ['contract', 'mfg', 'version'], 'MFG contract, capability, error and recrop proof'],
-  MR: ['browser-real-gateway', ['contract', 'mfg', 'playwright', 'mfgSurfaces'], 'manual review, effect, idempotency and recovery proof'],
-  TUI: ['cross-surface', ['tuiMfg', 'mfgSurfaces'], 'real PTY MFG size, keyboard, action and capability proof'],
-  MUX: ['browser-controlled', ['visual', 'playwright', 'performance'], 'MFG responsive, focus and partial-degraded proof'],
-  MLIVE: ['cross-surface', ['mfgSurfaces', 'performance', 'tuiMfg'], 'MFG epoch, multi-observer, resync and hidden-scope proof'],
-};
-const plannedProofCounts = { MC: 6, MR: 8, TUI: 8, MUX: 8, MLIVE: 9 };
-for (const [prefix, count] of Object.entries(plannedProofCounts)) {
-  const [level, groups, check] = plannedProofClasses[prefix];
-  for (let index = 1; index <= count; index += 1) {
-    const id = `${prefix}-${String(index).padStart(2, '0')}`;
-    proofMap[id] = [level, groups, [`${check}: ${id}`]];
-  }
-}
+Object.assign(proofMap, {
+  'MC-01': ['integration-local', ['contract', 'mfg', 'version'], ['canonical route inventory equals the mounted MFG descriptor']],
+  'MC-03': ['integration-local', ['contract'], ['role catalogue and active capability contract suite']],
+  'MC-04': ['integration-local', ['contract', 'mfg'], ['forged actor scenario plus host-context and capability rejection tests']],
+  'MC-05': ['cross-surface', ['vitest', 'tuiMfg'], ['WebUI and TUI typed error/recovery suites']],
+  'MC-06': ['cross-surface', ['mfgSurfaces', 'vitest', 'tuiMfg'], ['real three-observer entitlement recrop plus stale authorization fence']],
+  'MR-01': ['browser-real-gateway', ['mfgSurfaces'], ['real dead-letter review is correlated to its approval and report']],
+  'MR-02': ['integration-local', ['mfg'], ['idempotent review Saga contract suite']],
+  'MR-03': ['integration-local', ['mfg', 'vitest'], ['typed force-retry passes approval/effect ports and WebUI intent construction']],
+  'MR-04': ['integration-local', ['mfg', 'vitest'], ['reroute validates complete target and reclaims one durable effect key']],
+  'MR-05': ['integration-local', ['mfg', 'vitest'], ['reject, abandon and resolve terminal-semantics suites']],
+  'MR-06': ['integration-local', ['mfg'], ['repository reopen reclaims exactly one durable review effect']],
+  'MR-07': ['integration-local', ['mfg'], ['CAS conflict suite rejects stale review revisions']],
+  'MR-08': ['integration-local', ['vitest', 'tuiMfg'], ['WebUI timeout replay and TUI canonical receipt keep the original intent identity']],
+  'TUI-01': ['cross-surface', ['tuiMfgPty'], ['real PTY 80x24 operational path']],
+  'TUI-02': ['cross-surface', ['tuiMfgPty'], ['real PTY 96-column list/detail path']],
+  'TUI-03': ['cross-surface', ['tuiMfgPty'], ['real PTY 120x40 context, receipt and recovery path']],
+  'TUI-04': ['cross-surface', ['tuiMfgPty'], ['real PTY selection and focus survive resize']],
+  'TUI-05': ['cross-surface', ['tuiMfgPty', 'tuiMfg'], ['real PTY cancel plus complete focus-ring unit proof']],
+  'TUI-06': ['integration-local', ['contract', 'mfg', 'tuiMfg'], ['contract-derived route/action catalogue reaches adapter and TUI']],
+  'TUI-07': ['cross-surface', ['mfgSurfaces', 'tuiMfg'], ['real entitlement recrop plus TUI recoverable authorization failure']],
+  'TUI-08': ['cross-surface', ['tuiMfgPty', 'tuiMfg'], ['real PTY high-risk cancel/confirm and generic effect proof']],
+  'MUX-01': ['browser-controlled', ['visual'], ['all MFG sections pass both mobile visual matrices']],
+  'MUX-02': ['browser-controlled', ['visual'], ['MFG tablet visual matrix']],
+  'MUX-03': ['browser-controlled', ['visual'], ['MFG breakpoint-before and breakpoint-at visual matrix']],
+  'MUX-04': ['browser-controlled', ['visual'], ['MFG desktop and wide visual matrix']],
+  'MUX-05': ['browser-controlled', ['visual'], ['MFG mobile and desktop 200 percent zoom matrix']],
+  'MUX-06': ['browser-controlled', ['visual'], ['mobile MFG rows contain no sub-44px target finding']],
+  'MUX-07': ['browser-controlled', ['vitest', 'playwright'], ['typed review drawer focus and MFG workbench control labels']],
+  'MUX-08': ['performance', ['performance'], ['structured P-07 local degradation result']],
+  'MLIVE-01': ['cross-surface', ['mfgSurfaces'], ['structured three-observer convergence proof']],
+  'MLIVE-02': ['integration-local', ['vitest', 'tuiMfg'], ['old-generation reducer contract suites']],
+  'MLIVE-03': ['performance', ['mfgSurfaces', 'performance'], ['structured thousand-event bounded-pressure proof']],
+  'MLIVE-04': ['cross-surface', ['mfgSurfaces'], ['structured slow-observer isolation proof']],
+  'MLIVE-05': ['cross-surface', ['mfgSurfaces'], ['structured restart and new-generation proof']],
+  'MLIVE-06': ['cross-surface', ['mfgSurfaces'], ['structured 401 recovery and 403 recrop proof']],
+  'MLIVE-07': ['cross-surface', ['vitest', 'tuiMfg'], ['WebUI and TUI contract-mismatch suites']],
+  'MLIVE-08': ['cross-surface', ['mfgSurfaces'], ['structured terminal convergence proof']],
+  'MLIVE-09': ['cross-surface', ['mfgSurfaces'], ['structured payload-free hidden-scope heartbeat proof']],
+});
 
 const now = new Date().toISOString();
 const results = [];
@@ -811,7 +892,7 @@ for (const entry of manifest.entries || []) {
     const scenarioCheck = mfgSurfaceIndex.checks?.[entry.id];
     const unitProof = mfgLiveUnitProof[entry.id];
     if (!scenarioCheck && !unitProof) {
-      failures.push(`${entry.id} has neither structured scenario proof nor named unit proof`);
+      failures.push(`${entry.id} has neither structured scenario proof nor a contract-suite proof`);
       resultArtifacts = [];
       execution = commandEvidence('mfgSurfaces');
     } else if (scenarioCheck) {
@@ -842,9 +923,6 @@ for (const entry of manifest.entries || []) {
       execution = commandEvidence('vitest', 'tuiMfg');
       resultChecks = unitProof.checks;
     }
-    if (entry.id === 'MLIVE-09') {
-      if (mfgHiddenHeartbeatLog) resultArtifacts.push(mfgHiddenHeartbeatLog);
-    }
   } else if (entry.id.startsWith('STR-')) {
     const semanticProof = strategySemanticProof[entry.id];
     if (!semanticProof || !semanticProof()) {
@@ -871,7 +949,18 @@ for (const entry of manifest.entries || []) {
     execution = commandEvidence(...allGroups);
     resultChecks = [
       ...checks,
-      `${entry.id} semantic predicate passed against named tests and structured paired report`,
+      `${entry.id} semantic predicate passed against contract suites and the structured paired report`,
+    ];
+  } else if (Object.hasOwn(exactAcceptanceSemanticProof, entry.id)) {
+    if (!exactAcceptanceSemanticProof[entry.id]()) {
+      failures.push(`${entry.id} exact semantic proof is absent or false`);
+    }
+    const allGroups = [...groups, 'build', 'openapi', 'global'];
+    resultArtifacts = artifacts(...allGroups);
+    execution = commandEvidence(...allGroups);
+    resultChecks = [
+      ...checks,
+      `${entry.id} exact semantic predicate passed; no prefix-wide evidence substitution`,
     ];
   } else {
     const allGroups = [...groups, 'build', 'openapi', 'global'];

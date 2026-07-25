@@ -11,14 +11,17 @@ import type { StrategyDecisionProjection } from '../../types';
 import GraphSurface from '../graph/GraphSurface.vue';
 import StrategyDecisionSummary from './StrategyDecisionSummary.vue';
 
+const strategyRoutes = [
+  { path: '/', component: { template: '<div />' } },
+  { path: '/runtime', component: { template: '<div />' } },
+  { path: '/mission', component: { template: '<div />' } },
+  { path: '/reality', component: { template: '<div />' } },
+];
+
 async function mountSummary(surface: 'runtime' | 'mission' | 'mfg') {
   const router = createRouter({
     history: createWebHistory(),
-    routes: [
-      { path: '/runtime', component: { template: '<div />' } },
-      { path: '/mission', component: { template: '<div />' } },
-      { path: '/reality', component: { template: '<div />' } },
-    ],
+    routes: strategyRoutes,
   });
   await router.push(`/${surface === 'mfg' ? 'runtime' : surface}`);
   await router.isReady();
@@ -100,7 +103,7 @@ describe('StrategyDecisionSummary surface wiring', () => {
     setActivePinia(pinia);
     const router = createRouter({
       history: createWebHistory(),
-      routes: [{ path: '/', component: { template: '<div />' } }],
+      routes: strategyRoutes,
     });
     await router.push('/');
     await router.isReady();
@@ -152,7 +155,7 @@ describe('StrategyDecisionSummary surface wiring', () => {
     vi.spyOn(api, 'resolveEvidenceBatch').mockResolvedValue({ items: [] } as any);
     const router = createRouter({
       history: createWebHistory(),
-      routes: [{ path: '/', component: { template: '<div />' } }],
+      routes: strategyRoutes,
     });
     await router.push('/');
     await router.isReady();

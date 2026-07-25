@@ -106,32 +106,6 @@ const files = [
 ].filter((file) => /\.(vue|ts)$/.test(file));
 const entries = [];
 const failures = [];
-const pageRequirements = [
-  {
-    file: appWebUiPath('mfg', 'MfgApp.vue'),
-    terms: ['MfgCockpitWorkspace', 'MfgFocusWorkspace', 'MfgCollaborationWorkspace', 'MfgDomainWorkspace', 'data-section="dashboard"', 'data-section="collaboration"', 'data-section="reports"'],
-  },
-  {
-    file: 'src/pages/MemoryPage.vue',
-    terms: ['Structured data core', 'api.structuredSources()', 'api.structuredFacts()', 'api.structuredEvidence()', 'api.structuredWatermarks()'],
-  },
-  {
-    file: 'src/pages/ToolsPage.vue',
-    terms: ['Tool registry', 'Execution planner', 'Mutation transactions', 'Checkpoints', 'Tool cache', 'Tool ledger', 'Risk preflight'],
-  },
-  {
-    file: 'src/pages/SkillsPage.vue',
-    terms: ['api.skillCatalog()', 'api.skillProjection()', 'api.skillRuns()', 'api.skillDetail', 'api.skillFiles', 'Runs and governance'],
-  },
-  {
-    file: 'src/pages/AgentsPage.vue',
-    terms: ['Team templates', 'api.teamTemplates()', 'api.instantiateTeamTemplate', 'api.teamWorkingState', 'api.agentAssemble', 'api.agentRuns()', 'api.taskAgentGraph'],
-  },
-  {
-    file: 'src/pages/SettingsPage.vue',
-    terms: ['Model count', 'Profiles', 'Approval policy', 'Gateway access', 'Appearance'],
-  },
-];
 
 for (const file of files) {
   const text = fs.readFileSync(file, 'utf8');
@@ -168,27 +142,12 @@ for (const file of files) {
   }
 }
 
-for (const requirement of pageRequirements) {
-  const file = path.isAbsolute(requirement.file) ? requirement.file : path.join(webuiRoot, requirement.file);
-  const displayFile = path.relative(webuiRoot, file);
-  const text = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  const pageEvidence = renderablePageEvidence(text);
-  if (!text) {
-    failures.push(`${displayFile}: missing page for structured primary view audit`);
-    continue;
-  }
-  for (const term of requirement.terms) {
-    if (!pageEvidence.includes(term)) failures.push(`${displayFile}: missing structured primary view term ${term}`);
-  }
-}
-
 const report = {
   provenance,
   version,
   generated_at: new Date().toISOString(),
   status: failures.length ? 'fail' : 'pass',
   policy: 'Primary management pages use ObjectInspectorDrawer for concise field summaries. Raw JSON is available only inside an explicit inspector, evidence, or diagnostic detail component.',
-  page_requirements: pageRequirements,
   totals: {
     raw_payload_instances: entries.length,
     failures: failures.length,

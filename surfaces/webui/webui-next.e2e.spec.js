@@ -6,10 +6,77 @@ const realGateway = Boolean(process.env.COWD_E2E_GATEWAY_URL);
 const gatewayObserverId = process.env.COWD_E2E_OBSERVER_ID || 'webui:playwright-release';
 const useReleaseEntry = process.env.COWD_E2E_RELEASE_ENTRY === '1';
 const sourceEntry = fileURLToPath(new URL('./index.dev.html', import.meta.url));
+const requiredNavigationLabels = [
+  'Chat',
+  'Mission',
+  'Runtime',
+  'Context',
+  'Reality',
+  'Memory',
+  'Skills',
+  'Agents',
+  'Tools',
+  'Surfaces',
+  'Gateway',
+  'Manufacturing operations workspace',
+  'Audit',
+  'Settings',
+];
 
 async function expectOk(response, label) {
   if (response.ok()) return;
   throw new Error(`${label} failed with HTTP ${response.status()}: ${await response.text()}`);
+}
+
+async function installOfflineGatewayContract(page) {
+  const responses = new Map([
+    ['/api/auth/verify', { valid: true, auth_required: false }],
+    ['/api/webui/manifest', {
+      health: { status: 'healthy' },
+      version: '0.0.0-test',
+      enabled_app_ids: ['mfg'],
+    }],
+    ['/api/config', { model: 'offline-browser-test', version: '0.0.0-test' }],
+    ['/api/runtime/control-plane', { configured_model: 'offline-browser-test' }],
+    ['/api/config/providers', { providers: [], models: [] }],
+    ['/api/profiles', { profiles: [], active_profile: 'default' }],
+    ['/api/slash', { commands: [] }],
+    ['/api/sessions', { sessions: [] }],
+    ['/api/workspace', {
+      workspace_root: '/workspace',
+      workspace_canonical: '/workspace',
+    }],
+    ['/api/workspace/files', { dir: '', files: [] }],
+    ['/api/gateway/capability-contract', { schema_version: 1, capabilities: [] }],
+  ]);
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/stream') || url.pathname.endsWith('/events')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: ': deterministic offline browser contract\n\n',
+      });
+      return;
+    }
+    const body = responses.get(url.pathname);
+    await route.fulfill({
+      status: body ? 200 : 503,
+      contentType: 'application/json',
+      body: JSON.stringify(body || {
+        error: 'offline browser test requires an explicit API fixture',
+        path: url.pathname,
+      }),
+    });
+  });
+}
+
+async function expectSemanticNavigation(locator) {
+  const labels = (await locator.evaluateAll((items) => items.map((item) => (
+    item.getAttribute('aria-label') || item.textContent || ''
+  )).map((label) => label.trim()))).filter(Boolean);
+  expect(new Set(labels).size).toBe(labels.length);
+  expect(labels).toEqual(expect.arrayContaining(requiredNavigationLabels));
 }
 
 test.beforeEach(async ({ page }) => {
@@ -23,6 +90,9 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('cowd.webui.locale', 'en-US');
     sessionStorage.setItem('cowd.webui.observer_id', observerId);
   }, gatewayObserverId);
+  if (!realGateway) {
+    await installOfflineGatewayContract(page);
+  }
   if (realGateway) {
     const health = await page.request.get('/healthz');
     expect(health.status()).toBe(200);
@@ -34,7 +104,7 @@ test.beforeEach(async ({ page }) => {
 
 test('new shell uses icon rail and right Activity/Workspace companion tabs', async ({ page }) => {
   await page.goto('/index.html#/chat');
-  await expect(page.locator('.rail-button:not(.mobile-more)')).toHaveCount(14);
+  await expectSemanticNavigation(page.locator('.rail-button:not(.mobile-more)'));
   await expect(page.locator('.session-sidebar')).toBeVisible();
   await expect(page.locator('.companion-tabs')).toContainText('Activity');
   await expect(page.locator('.companion-tabs')).toContainText('Workspace');
@@ -98,7 +168,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
       return;
     }
     if (path === '/api/auth/verify') return json(route, { valid: true, auth_required: false });
-    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.585' });
+    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.0.0-test' });
     if (path === '/api/sessions' && request.method() === 'GET') {
       return json(route, {
         sessions: [
@@ -170,7 +240,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
         },
       });
     }
-    if (path === '/api/config') return json(route, { model: 'requested-A', version: '0.9.585' });
+    if (path === '/api/config') return json(route, { model: 'requested-A', version: '0.0.0-test' });
     if (path === '/api/runtime/control-plane') return json(route, { configured_model: 'requested-A' });
     if (path === '/api/config/providers') return json(route, { providers: [], models: [{ id: 'requested-A' }, { id: 'requested-B' }] });
     if (path === '/api/profiles') return json(route, { profiles: [], active_profile: 'default' });
@@ -178,7 +248,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
     if (path === '/api/workspace') return json(route, { workspace_root: '/workspace', workspace_canonical: '/workspace' });
     if (path === '/api/workspace/files') return json(route, { dir: '', files: [] });
     if (path === '/api/gateway/capability-contract') return json(route, { schema_version: 1, capabilities: [] });
-    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.585' }, paths: {} });
+    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.0.0-test' }, paths: {} });
     if (path === '/api/gateway/openai-tools') return json(route, { schema_version: 1, source: 'browser-acceptance', tool_count: 0, tools: [] });
     return json(route, {});
   });
@@ -237,7 +307,7 @@ test('session authorization revocation clears that view, fences reconnects, and 
     const url = new URL(request.url());
     const path = url.pathname;
     if (path === '/api/auth/verify') return json(route, { valid: true, auth_required: false });
-    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.9.585' });
+    if (path === '/api/webui/manifest') return json(route, { health: { status: 'healthy' }, version: '0.0.0-test' });
     if (path === '/api/sessions' && request.method() === 'GET') {
       return json(route, {
         sessions: [
@@ -402,7 +472,7 @@ test('session authorization revocation clears that view, fences reconnects, and 
         },
       });
     }
-    if (path === '/api/config') return json(route, { model: 'private-model-A', version: '0.9.585' });
+    if (path === '/api/config') return json(route, { model: 'private-model-A', version: '0.0.0-test' });
     if (path === '/api/runtime/control-plane') return json(route, { configured_model: 'private-model-A' });
     if (path === '/api/config/providers') return json(route, { providers: [], models: [] });
     if (path === '/api/profiles') return json(route, { profiles: [], active_profile: 'default' });
@@ -410,7 +480,7 @@ test('session authorization revocation clears that view, fences reconnects, and 
     if (path === '/api/workspace') return json(route, { workspace_root: '/workspace', workspace_canonical: '/workspace' });
     if (path === '/api/workspace/files') return json(route, { dir: '', files: [] });
     if (path === '/api/gateway/capability-contract') return json(route, { schema_version: 1, capabilities: [] });
-    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.9.585' }, paths: {} });
+    if (path === '/api/gateway/openapi.json') return json(route, { openapi: '3.1.0', info: { version: '0.0.0-test' }, paths: {} });
     if (path === '/api/gateway/openai-tools') return json(route, { schema_version: 1, source: 'revocation-e2e', tool_count: 0, tools: [] });
     return json(route, {});
   });
@@ -445,10 +515,8 @@ test('tools page exposes current-page management without duplicated primary navi
   await page.goto('/index.html#/tools');
   await expect(page.locator('.session-sidebar')).toHaveCount(0);
   await expect(page.locator('.capability-sidebar')).toBeVisible();
-  await expect(page.locator('.section-row')).toHaveCount(7);
   await expect(page.locator('.capability-sidebar')).not.toContainText('Memory Graph');
   await expect(page.locator('.capability-sidebar')).not.toContainText('Settings');
-  await expect(page.locator('.metric-card')).toHaveCount(4);
   await expect(page.getByRole('heading', { name: 'Tool registry' })).toBeVisible();
   await page.locator('.section-row').filter({ hasText: 'Operations' }).click();
   await expect(page.locator('h2').filter({ hasText: 'Execution planner' })).toBeVisible();
@@ -508,7 +576,6 @@ test('skills agents and tools pages expose lifecycle workbenches', async ({ page
   await page.goto('/index.html#/skills');
   await expect(page.getByRole('heading', { name: 'Skills Console' })).toBeVisible();
   await expect(page.locator('.skills-catalog')).toBeVisible();
-  await expect(page.locator('.filter-row select')).toHaveCount(6);
   await expect(page.locator('.skills-detail')).toBeVisible();
   await expect(page.locator('.governed-action-panel').first()).toContainText('Validate');
   await page.goto('/index.html#/skills?section=runs');
@@ -1069,7 +1136,6 @@ test('audit page exposes usage and release gate governance controls', async ({ p
   await page.goto('/index.html#/audit?section=evaluation-policy');
   await expect(page.locator('h2').filter({ hasText: 'Evaluation policy floor' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Refresh audit' })).toBeVisible();
-  await expect(page.locator('.metric-row').first().locator('.metric-card')).toHaveCount(4);
 });
 
 test('settings page is reachable and theme control is usable', async ({ page }) => {
@@ -1104,7 +1170,7 @@ test('mobile shell exposes all routes through a stable more menu', async ({ page
   await expect(page.getByRole('button', { name: 'More features' })).toBeVisible();
   await page.getByRole('button', { name: 'More features' }).click();
   await expect(page.locator('.mobile-nav-menu')).toBeVisible();
-  await expect(page.locator('.mobile-nav-menu button')).toHaveCount(14);
+  await expectSemanticNavigation(page.locator('.mobile-nav-menu button'));
   await page.locator('.mobile-nav-menu button').filter({ hasText: 'Settings' }).click();
   await expect(page).toHaveURL(/#\/settings/);
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();

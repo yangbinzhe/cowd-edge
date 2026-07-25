@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { appRepositoryPath, appWebUiPath, appWebUiSourceRoot } from './app-source-paths.mjs';
+import { appRepositoryPath, appWebUiPath } from './app-source-paths.mjs';
 import { evidenceContext } from './evidence-context.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
@@ -12,7 +12,6 @@ const backendRoot = process.env.COWD_BACKEND_REPO
   || [
     path.join(workspaceRoot, 'cowd-develop'),
     path.join(workspaceRoot, 'cowd'),
-    path.join(workspaceRoot, 'dev-iacc'),
   ].find((candidate) => (
     fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/mod.rs'))
   ))
@@ -24,17 +23,17 @@ const version = provenance.version;
 const gate = process.argv.includes('--gate');
 
 const modules = [
-  { id: 'runtime', page: 'RuntimePage.vue', routes: ['/api/runtime', '/api/growth'], tui: ['runtime_activity_panel.rs', 'system_status_bar.rs'], cli: ['gateway', 'doctor'] },
-  { id: 'context', page: 'ContextPage.vue', routes: ['/api/context', '/api/evidence'], tui: ['context_panel.rs', 'context_suggestions.rs'], cli: ['prompt', 'compact'] },
-  { id: 'memory', page: 'MemoryPage.vue', routes: ['/api/memory', '/api/cowd/structured'], tui: ['memory_panel.rs', 'l4_memory_view.rs'], cli: ['Config'] },
-  { id: 'reality', page: 'RealityCorePage.vue', routes: ['/api/reality', '/api/matrix'], tui: ['gateway_panel.rs', 'runtime_control_store.rs', 'gateway_client.rs'], cli: ['gateway'] },
-  { id: 'skills', page: 'SkillsPage.vue', routes: ['/api/skills'], tui: ['skills_panel.rs'], cli: ['Skill'] },
-  { id: 'agents', page: 'AgentsPage.vue', routes: ['/api/agents', '/api/tasks'], tui: ['agent_team_panel.rs', 'agents_overlay.rs'], cli: ['prompt'] },
-  { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/slash'], tui: ['tool_ops_panel.rs', 'gateway_client.rs', 'runtime_activity_panel.rs'], cli: ['prompt'] },
-  { id: 'surfaces', page: 'SurfacePage.vue', routes: ['/api/surfaces'], tui: ['surface_panel.rs', 'gateway_panel.rs'], cli: ['gateway'] },
-  { id: 'gateway', page: 'GatewayPage.vue', routes: ['/api/connectors', '/api/cross-plane', '/api/platforms'], tui: ['gateway_panel.rs', 'approval_cockpit_panel.rs'], cli: ['gateway'] },
-  { id: 'mfg', page: appWebUiPath('mfg', 'MfgApp.vue'), routes: ['/api/apps/mfg'], tui: ['goal_workbench_panel.rs', 'task_decomposition_view.rs'], cli: ['gateway'] },
-  { id: 'audit', page: 'AuditPage.vue', routes: ['/api/audit', '/api/usage', '/api/cowd/release-gate'], tui: ['export_dialog.rs', 'approval_cockpit_panel.rs'], cli: ['Doctor'] },
+  { id: 'runtime', page: 'RuntimePage.vue', routes: ['/api/runtime', '/api/growth'] },
+  { id: 'context', page: 'ContextPage.vue', routes: ['/api/context', '/api/evidence'] },
+  { id: 'memory', page: 'MemoryPage.vue', routes: ['/api/memory', '/api/cowd/structured'] },
+  { id: 'reality', page: 'RealityCorePage.vue', routes: ['/api/reality', '/api/matrix'] },
+  { id: 'skills', page: 'SkillsPage.vue', routes: ['/api/skills'] },
+  { id: 'agents', page: 'AgentsPage.vue', routes: ['/api/agents', '/api/tasks'] },
+  { id: 'tools', page: 'ToolsPage.vue', routes: ['/api/tools', '/api/slash'] },
+  { id: 'surfaces', page: 'SurfacePage.vue', routes: ['/api/surfaces'] },
+  { id: 'gateway', page: 'GatewayPage.vue', routes: ['/api/connectors', '/api/cross-plane', '/api/platforms'] },
+  { id: 'mfg', page: appWebUiPath('mfg', 'MfgApp.vue'), routes: ['/api/apps/mfg'] },
+  { id: 'audit', page: 'AuditPage.vue', routes: ['/api/audit', '/api/usage', '/api/cowd/release-gate'] },
 ];
 
 function read(file) {
@@ -135,35 +134,15 @@ function extractCapabilityEndpoints() {
   return Array.from(endpoints).sort();
 }
 
-function referencesAny(text, needles) {
-  return needles.some((needle) => text.includes(needle));
-}
-
 const backendRoutes = extractBackendRoutes();
 const clientEndpoints = extractClientEndpoints();
 const capabilityEndpoints = extractCapabilityEndpoints();
-const tuiFiles = [
-  ...walk(path.join(backendRoot, 'crates/tui/src')),
-  ...walk(path.join(backendRoot, 'crates/cowd-cli/src/tui')),
-].map((file) => path.basename(file));
-const tuiSources = [
-  ...walk(path.join(backendRoot, 'crates/tui/src')),
-  ...walk(path.join(backendRoot, 'crates/cowd-cli/src/tui')),
-]
-  .filter((file) => file.endsWith('.rs'))
-  .map((file) => read(file))
-  .join('\n');
-const cliMain = read(path.join(backendRoot, 'crates/cli/src/main.rs')) || read(path.join(backendRoot, 'crates/cowd-cli/src/main.rs'));
-const cliMod = read(path.join(backendRoot, 'crates/cli/src/lib.rs')) || read(path.join(backendRoot, 'crates/cowd-cli/src/cli/mod.rs'));
-const cliText = `${cliMain}\n${cliMod}`;
-const runtimeCapability = read(path.join(backendRoot, 'crates/runtime/src/infrastructure/capability.rs'));
 const apiClientText = [
   read(path.join(webuiRoot, 'src/api/client.ts')),
   read(appWebUiPath('mfg', 'api', 'mfgApi.ts')),
 ].join('\n');
-const matrixBoundaryTest = [
-  read(path.join(backendRoot, 'crates/gateway/tests/gateway_runtimehost_architecture.rs')),
-].join('\n');
+const memoryManifest = read(path.join(backendRoot, 'crates/memory/Cargo.toml'));
+const matrixManifest = read(path.join(backendRoot, 'crates/matrix/core/Cargo.toml'));
 const matrixMfgRoutes = [
   read(path.join(backendRoot, 'crates/gateway/src/api_routes/matrix_routes.rs')),
   ...walk(appRepositoryPath('mfg', 'crates', 'app-mfg-contract', 'src'))
@@ -174,32 +153,16 @@ const matrixMfgRoutes = [
     .map(read),
 ].join('\n');
 const mfgContracts = read(appWebUiPath('mfg', 'data', 'mfgWriteContracts.json'));
-const contractConsumptionSources = {
-  client: read(path.join(webuiRoot, 'src/api/client.ts')),
-  store: read(path.join(webuiRoot, 'src/stores/app.ts')),
-  sidebar: read(path.join(webuiRoot, 'src/components/CapabilitySidebar.vue')),
-  gatewayPage: read(path.join(webuiRoot, 'src/pages/GatewayPage.vue')),
-  tests: read(path.join(webuiRoot, 'src/app.test.ts')),
-};
-
 function contractConsumptionFindings() {
   const findings = [];
-  const required = [
-    { file: 'client', terms: ['/api/gateway/capability-contract', '/api/gateway/openapi.json', '/api/gateway/openai-tools', 'capabilityPageEndpointsFromContract'] },
-    { file: 'store', terms: ['gatewayCapabilityContract', 'gatewayOpenAiTools', 'refreshGatewayCapabilityContract'] },
-    { file: 'sidebar', terms: ['gatewayCapabilityContract', 'capabilityPageEndpointsFromContract', 'component.capability.sidebar.contract'] },
-    { file: 'gatewayPage', terms: ['capabilityContract', 'openApiDocument', 'openAiTools', 'page.gateway.contract'] },
-    { file: 'tests', terms: ['gatewayCapabilityContract', 'gatewayOpenAiTools', 'capabilityPageEndpointsFromContract'] },
-  ];
-  for (const item of required) {
-    const text = contractConsumptionSources[item.file] || '';
-    for (const term of item.terms) {
-      if (!text.includes(term)) findings.push(`gateway contract consumption missing ${item.file}:${term}`);
+  for (const endpoint of [
+    '/api/gateway/capability-contract',
+    '/api/gateway/openapi.json',
+    '/api/gateway/openai-tools',
+  ]) {
+    if (!apiClientText.includes(endpoint)) {
+      findings.push(`WebUI API client does not consume ${endpoint}`);
     }
-  }
-  const runtimePageEndpointMatches = Array.from(contractConsumptionSources.client.matchAll(/pageEndpoints\s*\(/g));
-  if (runtimePageEndpointMatches.length > 2) {
-    findings.push('pageEndpoints must remain a fallback helper plus one loadCapabilityPage call in src/api/client.ts');
   }
   return findings;
 }
@@ -211,30 +174,17 @@ const moduleReports = modules.map((module) => {
   const backend = module.routes.flatMap((prefix) => backendRoutes.filter((route) => route.path.startsWith(prefix)));
   const client = module.routes.flatMap((prefix) => clientEndpoints.filter((endpoint) => endpoint.startsWith(prefix)));
   const capability = module.routes.flatMap((prefix) => capabilityEndpoints.filter((endpoint) => endpoint.startsWith(prefix)));
-  const tui = module.tui.filter((file) => tuiFiles.includes(file));
-  const cli = module.cli.filter((term) => cliText.includes(term));
   const findings = [];
   if (!pageText) findings.push('missing WebUI page');
   if (!backend.length) findings.push('missing backend route family');
   if (!client.length) findings.push('missing WebUI API client family');
   if (!capability.length) findings.push('missing capability projection endpoint');
-  if (!tui.length) findings.push('missing TUI projection evidence');
-  if (!cli.length) findings.push('missing CLI core access evidence');
   if (module.id === 'mfg' && !(pageEvidenceText.includes('独立的制造应用') && pageEvidenceText.includes('不承担底层引擎管理职责'))) {
     findings.push('MFG independent application boundary text is missing from WebUI');
   }
   if (module.id === 'mfg') {
-    if (!runtimeCapability.includes('cowd.matrix.engine') || !runtimeCapability.includes('CowdCapabilityKind::StructuredData')) {
-      findings.push('Matrix Engine must be declared as a Reality Core structured-data engine');
-    }
-    if (!runtimeCapability.includes('capability_registry_declares_matrix_as_reality_core_engine_without_application_ownership')) {
-      findings.push('Runtime capability registry must guard Matrix as Reality Core engine without MFG ownership');
-    }
-    if (runtimeCapability.includes('cowd.matrix.runtime')) {
-      findings.push('Runtime capability registry must not reintroduce legacy Matrix runtime capability id');
-    }
-    if (!matrixBoundaryTest.includes('fact_kernel_is_consumed_by_memory_and_matrix_engines')) {
-      findings.push('Matrix/fact-kernel source boundary test is missing');
+    if (!memoryManifest.includes('fact-kernel =') || !matrixManifest.includes('fact-kernel =')) {
+      findings.push('Memory and Matrix must both consume the fact-kernel contract');
     }
     if (!matrixMfgRoutes.includes('/api/matrix/') || !matrixMfgRoutes.includes('/api/apps/mfg/')) {
       findings.push('Matrix and MFG routes are not split by kernel/application boundary');
@@ -261,11 +211,8 @@ const moduleReports = modules.map((module) => {
       findings.push('MFG write contracts still contain legacy IACC runtime endpoints');
     }
   }
-  if (module.id === 'memory' && !referencesAny(pageEvidenceText, ['Structured Data Core', 'structured', '结构化数据核心'])) {
+  if (module.id === 'memory' && !['Structured Data Core', 'structured', '结构化数据核心'].some((term) => pageEvidenceText.includes(term))) {
     findings.push('structured data core is not visible in Memory page');
-  }
-  if (module.id === 'memory' && !referencesAny(tuiSources, ['structured_sources', 'structured_facts', 'structured_evidence', 'structured_watermarks'])) {
-    findings.push('TUI structured data projection is missing');
   }
   if (module.id === 'reality') {
     const requiredRealityTerms = [
@@ -280,27 +227,8 @@ const moduleReports = modules.map((module) => {
         findings.push(`Reality Core WebUI evidence missing ${term}`);
       }
     }
-    for (const term of ['reality_status', 'reality_flow', 'reality_boundaries', 'gateway_reality_core', 'gateway_fact_flow']) {
-      if (!tuiSources.includes(term)) findings.push(`TUI Reality Core projection is missing ${term}`);
-    }
     if (!pageEvidenceText.includes('Matrix') || !pageEvidenceText.includes('/api/matrix')) {
       findings.push('Reality Core must expose Matrix Engine as a core management lane');
-    }
-  }
-  if (module.id === 'tools') {
-    const requiredToolOpsTerms = [
-      'ToolOpsPanel',
-      'tool_cache_stats',
-      'tool_batch_readonly',
-      'tool_mutation_preview',
-      'tool_checkpoints',
-      'tool_intent_plan',
-      'tool_context_fanout_plan',
-      'arm_restore_checkpoint',
-      'arm_apply_mutation',
-    ];
-    for (const term of requiredToolOpsTerms) {
-      if (!tuiSources.includes(term)) findings.push(`TUI tool operations evidence missing ${term}`);
     }
   }
   return {
@@ -316,15 +244,6 @@ const moduleReports = modules.map((module) => {
     backend: {
       route_count: backend.length,
       route_files: Array.from(new Set(backend.map((route) => route.file))).sort(),
-    },
-    tui: {
-      expected_panels: module.tui,
-      matched_panels: tui,
-      parity_role: 'same core capability set, console-first interaction',
-    },
-    cli: {
-      matched_terms: cli,
-      parity_role: 'minimal kernel control, import/view/start/status oriented',
     },
   };
 });

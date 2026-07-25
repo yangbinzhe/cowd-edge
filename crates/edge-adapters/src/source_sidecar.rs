@@ -1783,7 +1783,7 @@ mod tests {
         let pool = sqlx::PgPool::connect(&database_url)
             .await
             .expect("connect live PostgreSQL");
-        let table = format!("cowd_v560_{}", uuid::Uuid::new_v4().simple());
+        let table = format!("cowd_connector_test_{}", uuid::Uuid::new_v4().simple());
         sqlx::query(&format!(
             "CREATE TABLE {table} (id BIGINT PRIMARY KEY, name TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL)"
         ))
@@ -1835,7 +1835,9 @@ mod tests {
         .await
         .expect("read live PostgreSQL snapshot");
         assert_eq!(snapshot.row_count, 3);
-        assert!(!snapshot.resource_ref.contains("cowd_v560:cowd_v560"));
+        assert!(!snapshot
+            .resource_ref
+            .contains("cowd_connector_test:cowd_connector_test"));
 
         let request = |watermark: Option<SourceWatermark>| {
             serde_json::json!({

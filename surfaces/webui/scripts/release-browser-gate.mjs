@@ -204,23 +204,23 @@ try {
   for (const path of [configHome, runtimeDir, homeDir, workspaceDir]) {
     mkdirSync(path, { recursive: true });
   }
-  const providerFixture = realpathSync(join(sourceDir, 'scripts/fixtures/v584-tui-provider.mjs'));
+  const providerFixture = realpathSync(join(sourceDir, 'scripts/fixtures/tui-acceptance-provider.mjs'));
   if (!statSync(providerFixture).isFile()) {
     throw new Error('deterministic provider fixture is not a file');
   }
   const providerPort = await availablePort();
   const providerUrl = `http://127.0.0.1:${providerPort}`;
   writeFileSync(join(configHome, 'config.yaml'), `
-model: "cowd-v584-acceptance"
+model: "cowd-tui-acceptance-model"
 model_context_windows:
-  cowd-v584-acceptance: 16384
+  cowd-tui-acceptance-model: 16384
 providers:
-  v584_acceptance:
+  tui_acceptance:
     base_url: "${providerUrl}/v1"
     api_key: "local-fixture-key"
     protocol: "completions"
     models:
-      - "cowd-v584-acceptance"
+      - "cowd-tui-acceptance-model"
 permissions:
   default_mode: "acceptEdits"
 sandbox:
@@ -256,8 +256,8 @@ apps:
     cwd: sourceDir,
     env: {
       ...process.env,
-      COWD_V584_PROVIDER_PORT: String(providerPort),
-      COWD_V584_PROVIDER_LOG: providerLogPath,
+      COWD_TUI_ACCEPTANCE_PROVIDER_PORT: String(providerPort),
+      COWD_TUI_ACCEPTANCE_PROVIDER_LOG: providerLogPath,
     },
     stdio: ['ignore', providerLogFd, providerLogFd],
   });
@@ -367,7 +367,7 @@ apps:
       fixture_sha256: sha256(providerFixture),
       pid: provider.pid,
       url: providerUrl,
-      model: 'cowd-v584-acceptance',
+      model: 'cowd-tui-acceptance-model',
       deterministic: true,
       request_log: providerLogPath,
       stdout_log: providerStdoutPath,

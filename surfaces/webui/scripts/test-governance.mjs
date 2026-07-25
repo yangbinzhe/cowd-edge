@@ -1,0 +1,65 @@
+#!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = path.resolve(new URL('../', import.meta.url).pathname);
+const files = [
+  'scripts/acceptance-gate.mjs',
+  'scripts/assemble-acceptance-results.mjs',
+  'scripts/capability-parity.mjs',
+  'scripts/raw-payload-audit.mjs',
+  'evaluation/acceptance-manifest.json',
+  'webui-next.e2e.spec.js',
+  'package.json',
+];
+const source = files.map((file) => `${file}\n${fs.readFileSync(path.join(root, file), 'utf8')}`).join('\n');
+const failures = [];
+
+for (const [pattern, label] of [
+  [/\b0\.9\.529\b/, 'historical release fixture'],
+  [/\bV506\b/, 'historical strategy release'],
+  [/fact_kernel_is_consumed_by_memory_and_matrix_engines/, 'backend test-name coupling'],
+  [/gateway_route_source_architecture/, 'retired backend source-shape test'],
+  [/\brequiredSource\b/, 'private source symbol allow-list'],
+  [/visualRows\s*!==\s*\d+/, 'fixed visual row count'],
+  [/\(mfg\.steps\s*\|\|\s*\[\]\)\.length\s*[<>]=?\s*\d+/, 'fixed MFG step count'],
+  [/path\.join\(workspaceRoot,\s*'dev-iacc'\)/, 'retired backend checkout fallback'],
+  [/crates\/cowd-cli/, 'retired CLI source fallback'],
+  [/\bpageRequirements\b/, 'private page implementation inventory'],
+  [/tool-operations-gate|command-actions-gate/, 'duplicated source-shape gate'],
+  [/\bplannedProofClasses\b/, 'prefix-wide acceptance proof substitution'],
+  [/\bnamed(?:Command|Vitest|Playwright)Proof\b/, 'test-title or function-name evidence coupling'],
+  [/\.rail-button[^;\n]*toHaveCount\(\d+\)/, 'fixed desktop navigation count'],
+  [/\.mobile-nav-menu[^;\n]*toHaveCount\(\d+\)/, 'fixed mobile navigation count'],
+  [/\.section-row[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed capability section count'],
+  [/\.filter-row select[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed filter control count'],
+  [/\.metric-card[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed metric card count'],
+]) {
+  if (pattern.test(source)) failures.push(label);
+}
+
+for (const retired of [
+  'scripts/tool-operations-gate.mjs',
+  'scripts/command-actions-gate.mjs',
+]) {
+  if (fs.existsSync(path.join(root, retired))) failures.push(`retired gate returned: ${retired}`);
+}
+
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'evaluation/acceptance-manifest.json'), 'utf8'));
+const ids = (manifest.entries || []).map((entry) => entry.id);
+if (new Set(ids).size !== ids.length) failures.push('duplicate acceptance ids');
+if (!ids.length || ids.some((id) => !/^[A-Z]+-\d{2}$/.test(id))) {
+  failures.push('invalid or empty acceptance manifest');
+}
+for (const id of ids.filter((id) => /^(MC|MR|TUI|MUX)-/.test(id))) {
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (!new RegExp(`['"]${escaped}['"]\\s*:\\s*\\(\\)\\s*=>`).test(source)) {
+    failures.push(`acceptance requirement lacks an exact semantic predicate: ${id}`);
+  }
+}
+
+if (failures.length) {
+  console.error(`WebUI test governance failed:\n${failures.map((failure) => `- ${failure}`).join('\n')}`);
+  process.exit(1);
+}
+console.log(`WebUI test governance passed: ${ids.length} self-described acceptance requirements`);

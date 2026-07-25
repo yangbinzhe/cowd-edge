@@ -1093,9 +1093,7 @@ impl PlatformAdapter for WeChatLinkAdapter {
         self.send_typing_indicator(chat_id).await
     }
 
-    // ------------------------------------------------------------------
-    // Unimplemented methods (same pattern as FeishuAdapter)
-    // ------------------------------------------------------------------
+    // Optional actions that iLink does not advertise remain fail-closed.
 
     async fn send_image(
         &self,
@@ -1619,65 +1617,67 @@ mod tests {
         assert_eq!(DEFAULT_LONG_POLLING_TIMEOUT, 30);
     }
 
-    #[test]
-    fn test_get_chat_info_stub() {
+    #[tokio::test]
+    async fn chat_info_returns_the_stable_ilink_identity_contract() {
         let config = WeChatLinkConfig::new("bot", "secret");
         let adapter = WeChatLinkAdapter::new(config);
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .unwrap();
-
-        rt.block_on(async {
-            let info = adapter.get_chat_info("chat_123").await.unwrap();
-            assert_eq!(info.chat_id, "chat_123");
-            assert_eq!(info.name, "WeChat iLink Chat");
-            assert_eq!(info.chat_type, "wechat_ilink");
-        });
+        let info = adapter.get_chat_info("chat_123").await.unwrap();
+        assert_eq!(info.chat_id, "chat_123");
+        assert_eq!(info.name, "WeChat iLink Chat");
+        assert_eq!(info.chat_type, "wechat_ilink");
     }
 
-    #[test]
-    fn test_not_implemented_stubs() {
+    #[tokio::test]
+    async fn unadvertised_optional_actions_fail_closed_with_typed_capabilities() {
         let config = WeChatLinkConfig::new("bot", "secret");
         let adapter = WeChatLinkAdapter::new(config);
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .unwrap();
-
-        rt.block_on(async {
-            assert!(adapter.send_image_file("c", "p", None).await.is_err());
-            assert!(adapter.send_voice("c", "p", None).await.is_err());
-            assert!(adapter.send_document("c", "f", None, None).await.is_err());
-            assert!(adapter.send_video("c", "p", None).await.is_err());
-            assert!(adapter.send_animation("c", "u", None).await.is_err());
-            assert!(adapter.edit_message("c", "m", "x").await.is_err());
-            assert!(adapter.delete_message("c", "m").await.is_err());
-            assert!(adapter.send_card("c", "{}").await.is_err());
-        });
+        let failures = [
+            adapter.send_image_file("c", "p", None).await,
+            adapter.send_voice("c", "p", None).await,
+            adapter.send_document("c", "f", None, None).await,
+            adapter.send_video("c", "p", None).await,
+            adapter.send_animation("c", "u", None).await,
+            adapter.edit_message("c", "m", "x").await,
+            adapter.delete_message("c", "m").await,
+        ];
+        let expected = [
+            "send_image_file",
+            "send_voice",
+            "send_document",
+            "send_video",
+            "send_animation",
+            "edit_message",
+            "delete_message",
+        ];
+        for (failure, capability) in failures.into_iter().zip(expected) {
+            assert!(
+                matches!(failure, Err(PlatformError::NotImplemented(ref actual)) if actual == capability),
+                "{capability} must fail with its typed unsupported capability"
+            );
+        }
+        assert!(
+            matches!(
+                adapter.send_card("c", "{}").await,
+                Err(PlatformError::NotImplemented(ref capability)) if capability == "send_card"
+            ),
+            "send_card must fail with its typed unsupported capability"
+        );
     }
 
-    #[test]
-    fn test_on_event_returns_none() {
+    #[tokio::test]
+    async fn generic_platform_events_do_not_fabricate_inbound_messages() {
         let config = WeChatLinkConfig::new("bot", "secret");
         let adapter = WeChatLinkAdapter::new(config);
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .unwrap();
-
-        rt.block_on(async {
-            let event = PlatformEvent {
-                event_type: "test".into(),
-                platform: Platform::WeChat,
-                data: serde_json::json!({}),
-                timestamp: Utc::now(),
-            };
-            let result = adapter.on_event(&event).await.unwrap();
-            assert!(result.is_none());
-        });
+        let event = PlatformEvent {
+            event_type: "test".into(),
+            platform: Platform::WeChat,
+            data: serde_json::json!({}),
+            timestamp: Utc::now(),
+        };
+        let result = adapter.on_event(&event).await.unwrap();
+        assert!(result.is_none());
     }
 }
