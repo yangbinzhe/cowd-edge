@@ -7,7 +7,6 @@ import type {
   GatewayOpenAiTools,
   NavId,
   ExecutionProjection,
-  ExecutionProjectionDelta,
   SessionEvidenceProjection,
   SessionExecutionIndexProjection,
   SessionSummary,
@@ -317,6 +316,7 @@ export const WEBUI_REQUESTED_CAPABILITIES = [
   'definition.default.set',
   'definition.rollback',
   'evolution.release.manage',
+  'mission.observe',
   'runtime.maintenance.manage',
   'runtime.outbox.retry',
 ] as const;
@@ -825,20 +825,27 @@ const pageEndpoints = (page: Exclude<NavId, 'chat' | 'settings'>, sessionId: str
 };
 
 export const api = {
+  createLiveSubscription: (request: any) => write('/api/runtime/live-subscriptions', {
+    method: 'POST',
+    body: JSON.stringify(request),
+  }),
+  patchLiveSubscription: (subscriptionId: string, request: any) => write(
+    `/api/runtime/live-subscriptions/${encodeURIComponent(subscriptionId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(request),
+    },
+  ),
+  deleteLiveSubscription: (subscriptionId: string) => write(
+    `/api/runtime/live-subscriptions/${encodeURIComponent(subscriptionId)}`,
+    { method: 'DELETE' },
+  ),
   executionProjection: (
     executionId: string,
     detailScope: 'summary' | 'full' = 'summary',
     authorizationSessionId = '',
   ) => read<ExecutionProjection>(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=${detailScope}`, {
     schema_version: 1, execution_id: executionId, revision: 0, cursor: 0, graph: {}, goals: [], agents: [], teams: [], relations: [], approvals: [], interventions: [], usage: [], context: [], evidence: [], health: [], recovery: [], available_commands: [],
-  }, {}, authorizationSessionId),
-  executionProjectionDelta: (
-    executionId: string,
-    cursor: number,
-    detailScope: 'summary' | 'full' = 'summary',
-    authorizationSessionId = '',
-  ) => read<ExecutionProjectionDelta>(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${cursor}&detail_scope=${detailScope}`, {
-    schema_version: 1, execution_id: executionId, base_cursor: cursor, target_cursor: cursor, events: [],
   }, {}, authorizationSessionId),
   executeProjectionCommand: (executionId: string, request: Record<string, unknown>) => write(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
     method: 'POST', body: JSON.stringify(request),

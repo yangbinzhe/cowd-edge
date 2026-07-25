@@ -1,12 +1,53 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
-import { MAX_ACTIVE_PROJECTION_STREAMS, useProjectionRegistryStore } from './projectionRegistry';
+import { useProjectionRegistryStore } from './projectionRegistry';
 import {
   acquireLongLivedConnection,
   releaseLongLivedConnection,
   resetLongLivedConnectionBudgetForTests,
 } from '../utils/longLivedConnectionBudget';
+
+vi.mock('./liveTransport', () => ({
+  openLiveSource: (selector: any, callbacks: any) => {
+    const stream: any = typeof EventSource === 'undefined'
+      ? {
+        addEventListener: () => undefined,
+        close: () => undefined,
+      }
+      : new EventSource(`/test/live/${selector.kind}/${selector.id}`);
+    stream.onopen = () => callbacks.open?.();
+    stream.onerror = () => callbacks.error?.('test transport interrupted');
+    const forward = (eventName: string, sourceHealth = 'live') => {
+      stream.addEventListener(eventName, (event: MessageEvent) => {
+        let payload: any = {};
+        try { payload = JSON.parse(event.data); } catch { payload = {}; }
+        callbacks.envelope({
+          schema_version: 1,
+          subscription_id: 'test-live',
+          subscription_revision: 1,
+          source_kind: selector.kind,
+          source_id: selector.id,
+          detail_scope: selector.detail_scope || 'summary',
+          delivery_class: 'snapshot_reconstructable',
+          source_health: sourceHealth,
+          event: eventName === 'projection_authorization_revoked'
+            ? 'source.authorization_revoked'
+            : eventName,
+          payload,
+        });
+      });
+    };
+    forward('projection_delta');
+    forward('projection_live');
+    forward('projection_snapshot');
+    forward('projection_authorization_revoked', 'revoked');
+    return {
+      close: () => stream.close(),
+      update: () => undefined,
+    };
+  },
+}));
 
 describe('projectionRegistry contract gate', () => {
   beforeEach(() => {
@@ -201,7 +242,7 @@ describe('projectionRegistry contract gate', () => {
     registry.acquire('execution-retry', 'runtime-page', 'full');
     await vi.advanceTimersByTimeAsync(0);
     expect(streams).toHaveLength(0);
-    expect(registry.activeStreamCount).toBe(0);
+    expect(registry.activeSourceCount).toBe(0);
     expect(registry.stateFor('execution-retry')).toBe('materializing');
 
     await vi.advanceTimersByTimeAsync(100);
@@ -254,13 +295,13 @@ describe('projectionRegistry contract gate', () => {
     registry.acquire('execution-terminal', 'runtime-page', 'full');
     await vi.waitFor(() => {
       expect(registry.stateFor('execution-terminal')).toBe('terminal');
-      expect(registry.activeStreamCount).toBe(0);
+      expect(registry.activeSourceCount).toBe(0);
     });
     expect(streams).toHaveLength(0);
     registry.release('runtime-page');
   });
 
-  it('enforces the projection stream budget after concurrent snapshot loads', async () => {
+  it('keeps eight logical projection sources active without the former per-topic cap', async () => {
     const streams: FakeProjectionEventSource[] = [];
     vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
       constructor(url: string) {
@@ -273,37 +314,21 @@ describe('projectionRegistry contract gate', () => {
     ));
     const registry = useProjectionRegistryStore();
 
-    for (let index = 0; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) {
+    for (let index = 0; index < 8; index += 1) {
       registry.acquire(`budget-${index}`, `consumer-${index}`, 'summary');
     }
     await vi.waitFor(() => {
-      expect(projectionReads).toHaveBeenCalledTimes(MAX_ACTIVE_PROJECTION_STREAMS + 1);
+      expect(projectionReads).toHaveBeenCalledTimes(8);
     });
     await vi.waitFor(() => {
-      expect(registry.activeStreamCount).toBe(MAX_ACTIVE_PROJECTION_STREAMS);
+      expect(registry.activeSourceCount).toBe(8);
     });
-    const deferred = Object.values(registry.entries)
-      .find((entry) => entry.executionId.startsWith('budget-')
-        && entry.connectionState === 'degraded');
-    expect(deferred?.degradedReason).toContain('projection connection budget');
-    expect(streams).toHaveLength(MAX_ACTIVE_PROJECTION_STREAMS);
-
-    const active = Object.values(registry.entries)
-      .find((entry) => entry.executionId.startsWith('budget-')
-        && entry.executionId !== deferred?.executionId);
-    const activeIndex = Number(active?.executionId.split('-')[1]);
-    registry.release(`consumer-${activeIndex}`);
-    await vi.waitFor(() => {
-      expect(registry.entries[deferred!.executionId].connectionState).toBe('connecting');
-      expect(registry.activeStreamCount).toBe(MAX_ACTIVE_PROJECTION_STREAMS);
-    });
-
-    for (let index = 0; index <= MAX_ACTIVE_PROJECTION_STREAMS; index += 1) {
-      if (index !== activeIndex) registry.release(`consumer-${index}`);
-    }
+    expect(streams).toHaveLength(8);
+    expect(Object.values(registry.entries).every((entry) => !entry.degradedReason)).toBe(true);
+    for (let index = 0; index < 8; index += 1) registry.release(`consumer-${index}`);
   });
 
-  it('yields one projection to a mounted APP while preserving the aggregate HTTP/1.1 budget', async () => {
+  it('does not let the retired HTTP connection budget evict logical projection sources', async () => {
     const streams: FakeProjectionEventSource[] = [];
     vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
       constructor(url: string) {
@@ -317,18 +342,15 @@ describe('projectionRegistry contract gate', () => {
     const registry = useProjectionRegistryStore();
     registry.acquire('shared-budget-a', 'consumer-a', 'full');
     registry.acquire('shared-budget-b', 'consumer-b', 'full');
-    await vi.waitFor(() => expect(registry.activeStreamCount).toBe(2));
+    await vi.waitFor(() => expect(registry.activeSourceCount).toBe(2));
 
     expect(acquireLongLivedConnection('chat:budget-a', 15, () => undefined)).toBe(true);
     expect(acquireLongLivedConnection('chat:budget-b', 15, () => undefined)).toBe(true);
     expect(acquireLongLivedConnection('app:mfg:live:test', 20, () => undefined)).toBe(true);
-    await vi.waitFor(() => expect(registry.activeStreamCount).toBe(1));
-    expect(Object.values(registry.entries).some((entry) => (
-      entry.degradedReason.includes('yielded the shared live-connection budget')
-    ))).toBe(true);
+    expect(registry.activeSourceCount).toBe(2);
+    expect(Object.values(registry.entries).every((entry) => !entry.degradedReason)).toBe(true);
 
     releaseLongLivedConnection('app:mfg:live:test');
-    await vi.waitFor(() => expect(registry.activeStreamCount).toBe(2));
     releaseLongLivedConnection('chat:budget-a');
     releaseLongLivedConnection('chat:budget-b');
     registry.release('consumer-a');
@@ -352,7 +374,7 @@ describe('projectionRegistry contract gate', () => {
 
     expect(registry.projectionFor('execution-revoked')).toBeNull();
     expect(registry.stateFor('execution-revoked')).toBe('error');
-    expect(registry.activeStreamCount).toBe(0);
+    expect(registry.activeSourceCount).toBe(0);
     registry.release('runtime-page');
   });
 
@@ -437,7 +459,7 @@ describe('projectionRegistry contract gate', () => {
     registry.release('runtime-page');
   });
 
-  it('exhausts the reconnect budget when streams open and immediately fail', async () => {
+  it('leaves physical reconnect ownership outside the projection reducer', async () => {
     vi.useFakeTimers();
     const streams: FakeProjectionEventSource[] = [];
     vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
@@ -454,19 +476,14 @@ describe('projectionRegistry contract gate', () => {
     registry.acquire('execution-flap', 'runtime-page', 'full');
     await vi.advanceTimersByTimeAsync(0);
     expect(streams).toHaveLength(1);
-    for (let attempt = 0; attempt < 9; attempt += 1) {
-      const current = streams.at(-1)!;
-      current.onopen?.();
-      current.onerror?.(new Event('error'));
-      await vi.advanceTimersByTimeAsync(6_000);
-      await vi.advanceTimersByTimeAsync(0);
-    }
-
-    expect(streams).toHaveLength(9);
-    expect(registry.stateFor('execution-flap')).toBe('degraded');
-    expect(registry.entries['execution-flap']?.degradedReason).toContain('reconnect budget exhausted');
+    streams[0].onopen?.();
+    streams[0].onerror?.(new Event('error'));
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(streams).toHaveLength(9);
+
+    expect(streams).toHaveLength(1);
+    expect(registry.activeSourceCount).toBe(1);
+    expect(registry.stateFor('execution-flap')).toBe('reconnecting');
+    expect(registry.entries['execution-flap']?.degradedReason).toContain('transport interrupted');
     registry.release('runtime-page');
   });
 

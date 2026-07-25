@@ -14,8 +14,10 @@ const props = withDefaults(defineProps<{
 
 const expanded = ref(false);
 const copied = ref(false);
+const opened = ref(false);
 
 const json = computed(() => {
+  if (!opened.value) return '';
   try {
     return JSON.stringify(props.data ?? {}, null, 2);
   } catch {
@@ -25,7 +27,10 @@ const json = computed(() => {
 
 const clipped = computed(() => json.value.length > props.maxChars);
 const visibleJson = computed(() => expanded.value ? json.value : json.value.slice(0, props.maxChars));
-const summary = computed(() => clipped.value ? formatCount('chars', json.value.length) : t('rawPayload.debugView'));
+const summary = computed(() => {
+  if (!opened.value) return t('rawPayload.debugView');
+  return clipped.value ? formatCount('chars', json.value.length) : t('rawPayload.debugView');
+});
 
 async function copyPayload() {
   await navigator.clipboard?.writeText(json.value);
@@ -42,10 +47,15 @@ function downloadPayload() {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+function handleToggle(event: Event) {
+  opened.value = Boolean((event.currentTarget as HTMLDetailsElement | null)?.open);
+  if (!opened.value) expanded.value = false;
+}
 </script>
 
 <template>
-  <details class="raw-payload">
+  <details class="raw-payload" @toggle="handleToggle">
     <summary>
       <span>{{ title || t('rawPayload.title') }}</span>
       <small>{{ summary }}</small>

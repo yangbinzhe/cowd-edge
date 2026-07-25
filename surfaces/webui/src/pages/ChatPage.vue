@@ -338,7 +338,10 @@ async function chooseCommand(command: any) {
           <span><CircleDot :size="12" />{{ displayStatus(turn.status || 'unknown') }}</span>
           <span v-if="turn.tool_name"><Wrench :size="12" />{{ turn.tool_name }}</span>
         </div>
-        <MarkdownBlock :content="turn.content" />
+        <MarkdownBlock
+          :content="turn.content"
+          :streaming="turn.id === chat.active?.streamTurnId && turnRunning"
+        />
         <p v-if="turn.id === chat.active?.streamTurnId && turnRunning" class="turn-run-state" role="status">
           {{ displayStatus(executionStatus) }} · {{ live?.status_detail || t('status.loading') }}
         </p>

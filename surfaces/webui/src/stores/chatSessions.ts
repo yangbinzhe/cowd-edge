@@ -2,7 +2,6 @@ import { defineStore } from 'pinia';
 import { computed, onScopeDispose, reactive, ref } from 'vue';
 import {
   api,
-  invalidateAuthentication,
   invalidateSessionAuthorization,
 } from '../api/client';
 import type {
@@ -11,11 +10,8 @@ import type {
   SessionEvidenceProjection,
 } from '../types';
 import { useProjectionRegistryStore } from './projectionRegistry';
-import {
-  acquireLongLivedConnection,
-  releaseLongLivedConnection,
-  updateLongLivedConnectionPriority,
-} from '../utils/longLivedConnectionBudget';
+import { openSessionLiveSource } from './liveTransport';
+import type { SessionLiveSource } from './liveTransport';
 
 type SurfaceExecutionStatus = ExecutionLiveState['status'] | 'accepted_pending_materialization' | 'running' | 'terminal';
 type LiveExecutionState = Omit<ExecutionLiveState, 'status'>
@@ -61,26 +57,15 @@ export type SessionChatState = {
 };
 
 const states = reactive<Record<string, SessionChatState>>({});
-const streams = new Map<string, EventSource>();
+const sourceLeases = new Map<string, SessionLiveSource>();
 const deltaBuffers = new Map<string, string>();
 const flushFrames = new Map<string, number>();
 const streamByteEnds = new Map<string, number>();
 const openFlights = new Map<string, Promise<void>>();
 const attachmentFlights = new Map<string, Promise<unknown>>();
-const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const reconnectAttempts = new Map<string, number>();
-const streamOpenedAt = new Map<string, number>();
 const canonicalResyncFlights = new Map<string, Promise<void>>();
-// Keep the browser below the HTTP/1.1 per-origin socket ceiling. Each live
-// chat can also own one execution projection stream, leaving capacity for
-// ordinary fetches, cancellation and navigation.
-export const MAX_ACTIVE_SESSION_STREAMS = 2;
 const HISTORY_PAGE_SIZE = 100;
 const HISTORY_WINDOW_CAP = 1_000;
-const SESSION_RECONNECT_BASE_MS = 250;
-const SESSION_RECONNECT_MAX_MS = 5_000;
-const MAX_SESSION_RECONNECT_ATTEMPTS = 8;
-const SESSION_STREAM_HEALTHY_MS = 10_000;
 const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'Connected',
   'SessionAuthorizationRevoked',
@@ -331,25 +316,20 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   // The transport registry belongs to this Pinia store instance. A recreated
   // application shell (tests, HMR, sign-out bootstrap) must not inherit live
   // observers or per-session state from the disposed shell.
-  for (const stream of streams.values()) stream.close();
-  streams.clear();
+  for (const stream of sourceLeases.values()) stream.close();
+  sourceLeases.clear();
   deltaBuffers.clear();
   flushFrames.clear();
   streamByteEnds.clear();
   openFlights.clear();
   attachmentFlights.clear();
-  for (const timer of reconnectTimers.values()) clearTimeout(timer);
-  reconnectTimers.clear();
-  reconnectAttempts.clear();
-  streamOpenedAt.clear();
   canonicalResyncFlights.clear();
   for (const sessionId of Object.keys(states)) delete states[sessionId];
 
   const projections = useProjectionRegistryStore();
   const activeSessionId = ref('');
   const active = computed(() => activeSessionId.value ? stateFor(activeSessionId.value) : null);
-  const activeStreams = ref(streams.size);
-  const activeStreamCount = computed(() => activeStreams.value);
+  const activeSourceCount = ref(0);
 
   function recordProgress(sessionId: string) {
     const state = stateFor(sessionId);
@@ -402,115 +382,28 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     canonicalResyncFlights.set(sessionId, flight);
   }
 
-  function isCurrentStream(sessionId: string, stream: EventSource, generation: number) {
+  function isCurrentStream(sessionId: string, stream: SessionLiveSource, generation: number) {
     const state = states[sessionId];
     return !!state
       && !state.reconnectBlocked
       && state.streamGeneration === generation
-      && streams.get(sessionId) === stream;
+      && sourceLeases.get(sessionId) === stream;
   }
 
-  function cancelSessionReconnect(sessionId: string, resetAttempts = true) {
-    const timer = reconnectTimers.get(sessionId);
-    if (timer) clearTimeout(timer);
-    reconnectTimers.delete(sessionId);
-    if (resetAttempts) reconnectAttempts.delete(sessionId);
-  }
-
-  function closeSessionStream(sessionId: string, expected?: EventSource) {
-    const current = streams.get(sessionId);
+  function closeSessionStream(sessionId: string, expected?: SessionLiveSource) {
+    const current = sourceLeases.get(sessionId);
     if (expected && current !== expected) return;
     current?.close();
-    streams.delete(sessionId);
-    releaseLongLivedConnection(`chat:${sessionId}`);
-    streamOpenedAt.delete(sessionId);
-    activeStreams.value = streams.size;
-  }
-
-  function scheduleSessionReconnect(sessionId: string) {
-    const state = stateFor(sessionId);
-    if (
-      state.reconnectBlocked
-      || streams.has(sessionId)
-      || reconnectTimers.has(sessionId)
-    ) return;
-    const attempt = reconnectAttempts.get(sessionId) || 0;
-    if (attempt >= MAX_SESSION_RECONNECT_ATTEMPTS) {
-      state.streamState = 'degraded';
-      state.degradedReason = 'session observer reconnect budget exhausted';
-      promoteDeferredStreams();
-      return;
-    }
-    const delay = Math.min(
-      SESSION_RECONNECT_BASE_MS * (2 ** Math.min(attempt, 5)),
-      SESSION_RECONNECT_MAX_MS,
-    );
-    reconnectAttempts.set(sessionId, attempt + 1);
-    state.streamState = 'reconnecting';
-    const timer = setTimeout(() => {
-      reconnectTimers.delete(sessionId);
-      if (!state.reconnectBlocked) connect(sessionId);
-    }, delay);
-    reconnectTimers.set(sessionId, timer);
-  }
-
-  async function revalidateAndScheduleReconnect(
-    sessionId: string,
-    generation: number,
-  ) {
-    const state = stateFor(sessionId);
-    const [authorization, execution] = await Promise.all([
-      api.authVerify(),
-      api.sessionExecution(sessionId),
-    ]);
-    if (
-      state.streamGeneration !== generation
-      || state.reconnectBlocked
-      || streams.has(sessionId)
-    ) return;
-    if (
-      String((authorization as any)?.__state || '') === 'forbidden'
-      || (
-        (authorization as any)?.auth_required === true
-        && (authorization as any)?.valid !== true
-        && String((authorization as any)?.__state || '') === 'ready'
-      )
-    ) {
-      invalidateAuthentication('Gateway rejected the session observer credential');
-      if (!state.reconnectBlocked) {
-        failClosedAllSessionAuthorization('Gateway rejected the session observer credential');
-      }
-      return;
-    }
-    if (String((execution as any)?.__state || '') === 'forbidden') {
-      if (!state.reconnectBlocked) {
-        failClosedSessionAuthorization(
-          sessionId,
-          undefined,
-          String((execution as any)?.__error || 'Gateway rejected this session observer'),
-        );
-      }
-      return;
-    }
-    const executionIssue = sessionEnvelopeIdentityIssue(
-      execution,
-      sessionId,
-      'execution reconnect probe',
-    );
-    if (executionIssue) {
-      failClosedSessionAuthorization(sessionId, undefined, executionIssue);
-      return;
-    }
-    scheduleSessionReconnect(sessionId);
+    sourceLeases.delete(sessionId);
+    activeSourceCount.value = sourceLeases.size;
   }
 
   function clearSessionAuthorizationState(
     sessionId: string,
-    stream: EventSource | undefined,
+    stream: SessionLiveSource | undefined,
     reason: string,
   ) {
     const state = stateFor(sessionId);
-    cancelSessionReconnect(sessionId);
     closeSessionStream(sessionId, stream);
     state.streamGeneration += 1;
     state.loadEpoch += 1;
@@ -547,10 +440,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
     clearStreamByteEnds(sessionId);
-    promoteDeferredStreams();
   }
 
-  function failClosedSessionAuthorization(sessionId: string, stream: EventSource | undefined, reason: string) {
+  function failClosedSessionAuthorization(sessionId: string, stream: SessionLiveSource | undefined, reason: string) {
     invalidateSessionAuthorization(sessionId, reason);
     // CustomEvent delivery is synchronous in browsers. SSR and isolated store
     // tests have no window listener, so retain an explicit fail-closed path.
@@ -561,7 +453,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   function failClosedAllSessionAuthorization(reason: string) {
     for (const state of Object.values(states)) {
-      clearSessionAuthorizationState(state.sessionId, streams.get(state.sessionId), reason);
+      clearSessionAuthorizationState(state.sessionId, sourceLeases.get(state.sessionId), reason);
     }
   }
 
@@ -816,7 +708,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       if (['complete', 'error', 'cancelled'].includes(status)) {
         const wasPending = state.pending;
         state.pending = false;
-        refreshStreamPriorities();
         if (wasPending) await load(sessionId);
         await releaseWriter(sessionId);
       }
@@ -833,93 +724,26 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
   }
 
-  function streamPriority(sessionId: string) {
+  function connect(sessionId: string) {
+    if (sourceLeases.has(sessionId)) return;
     const state = stateFor(sessionId);
-    if (state.submitting && activeSessionId.value === sessionId) return 60;
-    if (state.pending && activeSessionId.value === sessionId) return 55;
-    if (state.pending || state.submitting) return 45;
-    if (activeSessionId.value === sessionId) return 40;
-    return 15;
-  }
-
-  function refreshStreamPriorities() {
-    for (const sessionId of streams.keys()) {
-      updateLongLivedConnectionPriority(`chat:${sessionId}`, streamPriority(sessionId));
-    }
-  }
-
-  function connect(sessionId: string, leaseGranted = false) {
-    if (streams.has(sessionId)) {
-      updateLongLivedConnectionPriority(`chat:${sessionId}`, streamPriority(sessionId));
-      return;
-    }
-    const state = stateFor(sessionId);
-    cancelSessionReconnect(sessionId, false);
-    if (state.reconnectBlocked) {
-      if (leaseGranted) releaseLongLivedConnection(`chat:${sessionId}`);
-      return;
-    }
-    if (streams.size >= MAX_ACTIVE_SESSION_STREAMS) {
-      const requesterPriority = streamPriority(sessionId);
-      const victim = [...streams.keys()]
-        .map((candidate) => ({ sessionId: candidate, priority: streamPriority(candidate) }))
-        .filter((candidate) => candidate.priority < requesterPriority)
-        .sort((left, right) => left.priority - right.priority)[0];
-      if (victim) {
-        closeSessionStream(victim.sessionId);
-        const victimState = stateFor(victim.sessionId);
-        victimState.streamState = 'degraded';
-        victimState.degradedReason = 'session observer yielded to the selected or submitting conversation';
-      } else {
-        if (leaseGranted) releaseLongLivedConnection(`chat:${sessionId}`);
-        state.streamState = 'degraded';
-        state.degradedReason = `session connection budget reached (${MAX_ACTIVE_SESSION_STREAMS})`;
-        return;
-      }
-    }
+    if (state.reconnectBlocked) return;
     state.streamState = 'connecting';
     state.degradedReason = '';
-    if (typeof EventSource === 'undefined') {
-      if (leaseGranted) releaseLongLivedConnection(`chat:${sessionId}`);
-      state.streamState = 'offline';
-      return;
-    }
-    if (!leaseGranted && !acquireLongLivedConnection(
-      `chat:${sessionId}`,
-      streamPriority(sessionId),
-      () => {
-        closeSessionStream(sessionId);
-        state.streamState = 'degraded';
-        state.degradedReason = 'session observer yielded the shared live-connection budget';
-      },
-      () => connect(sessionId, true),
-    )) {
-      state.streamState = 'degraded';
-      state.degradedReason = 'shared live-connection budget reached';
-      return;
-    }
-    const cursor = state.runtimeCommitCursor > 0
-      ? `?from_cursor=${encodeURIComponent(state.runtimeCommitCursor)}`
-      : '';
-    const stream = new EventSource(`/api/sessions/${encodeURIComponent(sessionId)}/stream${cursor}`);
+    const stream = openSessionLiveSource(sessionId, state.runtimeCommitCursor);
     const generation = ++state.streamGeneration;
-    streams.set(sessionId, stream);
-    activeStreams.value = streams.size;
+    sourceLeases.set(sessionId, stream);
+    activeSourceCount.value = sourceLeases.size;
     stream.onopen = () => {
       if (!isCurrentStream(sessionId, stream, generation)) return;
-      streamOpenedAt.set(sessionId, Date.now());
       state.streamState = 'connected';
+      state.degradedReason = '';
       state.lastEventAtMs = Date.now();
     };
     stream.onerror = () => {
       if (!isCurrentStream(sessionId, stream, generation)) return;
-      const openedAt = streamOpenedAt.get(sessionId) || 0;
-      const wasHealthy = openedAt > 0 && Date.now() - openedAt >= SESSION_STREAM_HEALTHY_MS;
-      closeSessionStream(sessionId, stream);
-      if (wasHealthy) reconnectAttempts.delete(sessionId);
       state.streamState = 'reconnecting';
-      promoteDeferredStreams();
-      void revalidateAndScheduleReconnect(sessionId, generation);
+      state.degradedReason = 'physical live transport is reconnecting';
     };
     stream.onmessage = (event) => {
       if (!isCurrentStream(sessionId, stream, generation)) return;
@@ -938,14 +762,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         (SESSION_SCOPED_STREAM_EVENTS.has(eventType) && receivedSessionId !== sessionId)
         || (receivedSessionId && receivedSessionId !== sessionId)
       ) {
-        closeSessionStream(sessionId, stream);
         state.streamState = 'degraded';
-        promoteDeferredStreams();
         requestCanonicalResync(
           sessionId,
           `${eventType || 'session event'} session identity mismatch: expected ${sessionId}, received ${receivedSessionId || 'missing'}`,
         );
-        void revalidateAndScheduleReconnect(sessionId, generation);
         return;
       }
       state.lastEventAtMs = Date.now();
@@ -1062,7 +883,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       if (payload.type === 'TurnError' && matchesActiveExecution(state, payload)) {
         recordProgress(sessionId);
         state.pending = false;
-        refreshStreamPriorities();
         state.lastError = String(payload.error || 'execution failed');
         state.live = {
           ...(state.live || {}),
@@ -1083,7 +903,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         if (settlesCurrentTurn) {
           recordProgress(sessionId);
           state.pending = false;
-          refreshStreamPriorities();
           // TerminalCommitted proves durable transcript materialization, not
           // lifecycle outcome. Only canonical ExecutionLive/TurnError may
           // classify the execution as complete, error, or cancelled.
@@ -1097,24 +916,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         if (settlesCurrentTurn) void releaseWriter(sessionId);
       }
     };
-  }
-
-  function promoteDeferredStreams() {
-    if (streams.size >= MAX_ACTIVE_SESSION_STREAMS) return;
-    Object.values(states)
-      .filter((state) => (
-        state.streamState === 'degraded'
-        && !state.reconnectBlocked
-        && (
-          state.degradedReason.startsWith('session connection budget')
-          || state.degradedReason.startsWith('shared live-connection budget')
-          || state.degradedReason.includes('yielded the shared live-connection budget')
-          || state.degradedReason.includes('yielded to the selected')
-        )
-      ))
-      .sort((left, right) => left.lastEventAtMs - right.lastEventAtMs)
-      .slice(0, MAX_ACTIVE_SESSION_STREAMS - streams.size)
-      .forEach((state) => connect(state.sessionId));
   }
 
   async function attachReader(sessionId: string) {
@@ -1265,7 +1066,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   async function open(sessionId: string) {
     if (!sessionId) return;
     activeSessionId.value = sessionId;
-    refreshStreamPriorities();
     const state = stateFor(sessionId);
     state.unread = 0;
     if (state.reconnectBlocked) return;
@@ -1294,7 +1094,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
     state.submitting = true;
     activeSessionId.value = sessionId;
-    refreshStreamPriorities();
     connect(sessionId);
     const epoch = ++state.submissionEpoch;
     const idempotencyKey = uniqueSubmissionKey(sessionId);
@@ -1363,7 +1162,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     } finally {
       if (state.submissionEpoch === epoch) {
         state.submitting = false;
-        refreshStreamPriorities();
       }
     }
   }
@@ -1445,7 +1243,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   async function close(sessionId: string) {
     const state = stateFor(sessionId);
     state.streamGeneration += 1;
-    cancelSessionReconnect(sessionId);
     closeSessionStream(sessionId);
     projections.release(`chat:${sessionId}`);
     const frame = flushFrames.get(sessionId);
@@ -1456,7 +1253,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.streamState = 'offline';
     state.degradedReason = '';
     state.writable = false;
-    promoteDeferredStreams();
     if (state.attachmentRole !== 'detached') {
       await detachSurface(sessionId);
     }
@@ -1484,7 +1280,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (!sessionId) return;
     clearSessionAuthorizationState(
       sessionId,
-      streams.get(sessionId),
+      sourceLeases.get(sessionId),
       String(detail.reason || 'Gateway revoked this session observer'),
     );
   };
@@ -1509,8 +1305,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     states,
     activeSessionId,
     active,
-    activeStreamCount,
-    maxActiveStreams: MAX_ACTIVE_SESSION_STREAMS,
+    activeSourceCount,
     open,
     load,
     loadOlder,

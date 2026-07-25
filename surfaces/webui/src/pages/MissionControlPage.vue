@@ -18,6 +18,8 @@ import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue
 import StrategyDecisionSummary from '../components/runtime/StrategyDecisionSummary.vue';
 import { useAppStore } from '../stores/app';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
+import { openLiveSource } from '../stores/liveTransport';
+import type { LiveSourceLease } from '../stores/liveTransport';
 import { displayStatus } from '../i18n/domain/status';
 
 const store = useAppStore();
@@ -43,6 +45,7 @@ const actionResult = ref<any>(null);
 const recoveryReport = ref<any>(null);
 const teamRunDetail = ref<any>({});
 const selectedExecutionNode = ref<any>(null);
+let missionLiveSource: LiveSourceLease | null = null;
 const controlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
 
 const mission = computed(() => controlProjection.value?.mission || missionProjection.value?.mission || {});
@@ -405,7 +408,28 @@ function executionCommandLabel(command: string) {
   return labels[command] || command;
 }
 
-onMounted(refresh);
+function attachMissionLiveSource() {
+  const missionId = String(mission.value?.mission_id || '').trim();
+  if (!missionId || missionLiveSource) return;
+  missionLiveSource = openLiveSource(
+    { kind: 'mission', id: missionId, cursor: 0, detail_scope: 'full' },
+    {
+      error: (reason) => { error.value = reason; },
+      envelope: (envelope) => {
+        if (envelope.event === 'mission_snapshot') {
+          missionProjection.value = envelope.payload;
+          return;
+        }
+        if (envelope.source_health === 'resync_required') void refresh();
+      },
+    },
+  );
+}
+
+onMounted(async () => {
+  await refresh();
+  attachMissionLiveSource();
+});
 watch(
   [() => route.query.team_id, () => route.query.execution_id],
   async ([teamId, executionId], [, previousExecutionId]) => {
@@ -421,7 +445,11 @@ watch(
     if (requestedTeamId && requestedTeamId !== selectedTeamId.value) await loadTeamRun(requestedTeamId, false);
   },
 );
-onUnmounted(() => projections.release('mission'));
+onUnmounted(() => {
+  missionLiveSource?.close();
+  missionLiveSource = null;
+  projections.release('mission');
+});
 </script>
 
 <template>

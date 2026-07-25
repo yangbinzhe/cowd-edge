@@ -296,6 +296,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * app GET /api/apps
+         * @description Query Gateway app capability through `/api/apps` handled by `list_apps`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_app_get_api_apps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/apps/mfg/analyses/{analysis_id}/actions/{action_id}/execute": {
         parameters: {
             query?: never;
@@ -306,12 +328,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/analyses/:analysis_id/actions/:action_id/execute
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/analyses/:analysis_id/actions/:action_id/execute` handled by `mfg_action_execute_handler`.
+         * app POST /api/apps/mfg/analyses/:analysis_id/actions/:action_id/execute
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/analyses/:analysis_id/actions/:action_id/execute` handled by `mfg.analysis.action.execute`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_analysis_action_execute"];
+        post: operations["gateway_app_post_api_apps_mfg_analyses_by_analysis_id_actions_by_action_id_execute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -326,12 +348,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/analyses/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/analyses/:id` handled by `mfg_analysis_get_handler`.
+         * app GET /api/apps/mfg/analyses/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/analyses/:id` handled by `mfg.analysis.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_analysis_get"];
+        get: operations["gateway_app_get_api_apps_mfg_analyses_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -348,12 +370,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/app
-         * @description Query Gateway mfg capability through `/api/apps/mfg/app` handled by `mfg_app_handler`.
+         * app GET /api/apps/mfg/app
+         * @description Query Gateway app capability through `/api/apps/mfg/app` handled by `mfg.app.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_app_get"];
+        get: operations["gateway_app_get_api_apps_mfg_app"];
         put?: never;
         post?: never;
         delete?: never;
@@ -370,20 +392,20 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/assignments
-         * @description Query Gateway mfg capability through `/api/apps/mfg/assignments` handled by `mfg_assignment_list_handler`.
+         * app GET /api/apps/mfg/assignments
+         * @description Query Gateway app capability through `/api/apps/mfg/assignments` handled by `mfg.assignment.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_assignment_list"];
+        get: operations["gateway_app_get_api_apps_mfg_assignments"];
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/assignments
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/assignments` handled by `mfg_assignment_upsert_handler`.
+         * app POST /api/apps/mfg/assignments
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/assignments` handled by `mfg.assignment.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_assignment_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_assignments"];
         delete?: never;
         options?: never;
         head?: never;
@@ -398,12 +420,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/assignments/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/assignments/:id` handled by `mfg_assignment_get_handler`.
+         * app GET /api/apps/mfg/assignments/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/assignments/:id` handled by `mfg.assignment.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_assignment_get"];
+        get: operations["gateway_app_get_api_apps_mfg_assignments_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -422,12 +444,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/assignments/:id/command
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/assignments/:id/command` handled by `mfg_assignment_command_handler`.
+         * app POST /api/apps/mfg/assignments/:id/command
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/assignments/:id/command` handled by `mfg.assignment.command`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_assignment_command"];
+        post: operations["gateway_app_post_api_apps_mfg_assignments_by_id_command"];
         delete?: never;
         options?: never;
         head?: never;
@@ -442,12 +464,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cases/search
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cases/search` handled by `mfg_memory_case_search_handler`.
+         * app GET /api/apps/mfg/cases/search
+         * @description Query Gateway app capability through `/api/apps/mfg/cases/search` handled by `mfg.case.search`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_case_search"];
+        get: operations["gateway_app_get_api_apps_mfg_cases_search"];
         put?: never;
         post?: never;
         delete?: never;
@@ -464,12 +486,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cases/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cases/:id` handled by `mfg_memory_case_get_handler`.
+         * app GET /api/apps/mfg/cases/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/cases/:id` handled by `mfg.case.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_case_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cases_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -486,12 +508,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/profiles
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/profiles` handled by `mfg_cockpit_profile_list_handler`.
+         * app GET /api/apps/mfg/cockpit/profiles
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/profiles` handled by `mfg.cockpit.profile.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_cockpit_profile_list"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles"];
         put?: never;
         post?: never;
         delete?: never;
@@ -510,12 +532,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/profiles/upsert
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/upsert` handled by `mfg_cockpit_profile_upsert_handler`.
+         * app POST /api/apps/mfg/cockpit/profiles/upsert
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/upsert` handled by `mfg.cockpit.profile.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_cockpit_profile_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -530,21 +552,21 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/profiles/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id` handled by `mfg_cockpit_profile_get_handler`.
+         * app GET /api/apps/mfg/cockpit/profiles/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id` handled by `mfg.cockpit.profile.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_cockpit_profile_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles_by_id"];
         put?: never;
         post?: never;
         /**
-         * mfg DELETE /api/apps/mfg/cockpit/profiles/:id
-         * @description Delete Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id` handled by `mfg_cockpit_profile_delete_handler`.
+         * app DELETE /api/apps/mfg/cockpit/profiles/:id
+         * @description Delete Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id` handled by `mfg.cockpit.profile.delete`.
          *
          *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state.
          */
-        delete: operations["mfg_cockpit_profile_delete"];
+        delete: operations["gateway_app_delete_api_apps_mfg_cockpit_profiles_by_id"];
         options?: never;
         head?: never;
         patch?: never;
@@ -560,12 +582,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/profiles/:id/clone
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id/clone` handled by `mfg_cockpit_profile_clone_handler`.
+         * app POST /api/apps/mfg/cockpit/profiles/:id/clone
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/clone` handled by `mfg.cockpit.profile.clone`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_cockpit_profile_clone"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_clone"];
         delete?: never;
         options?: never;
         head?: never;
@@ -580,12 +602,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/profiles/:id/projection
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id/projection` handled by `mfg_cockpit_projection_handler`.
+         * app GET /api/apps/mfg/cockpit/profiles/:id/projection
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/projection` handled by `mfg.cockpit.projection.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_cockpit_projection_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_projection"];
         put?: never;
         post?: never;
         delete?: never;
@@ -604,12 +626,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/profiles/:id/reports/generate
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id/reports/generate` handled by `mfg_cockpit_report_generate_handler`.
+         * app POST /api/apps/mfg/cockpit/profiles/:id/reports/generate
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/reports/generate` handled by `mfg.report.generate`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_report_generate"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_reports_generate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -626,12 +648,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/profiles/:id/share
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id/share` handled by `mfg_cockpit_profile_share_handler`.
+         * app POST /api/apps/mfg/cockpit/profiles/:id/share
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/share` handled by `mfg.cockpit.profile.share`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_cockpit_profile_share"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_share"];
         delete?: never;
         options?: never;
         head?: never;
@@ -646,12 +668,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection` handled by `mfg_cockpit_widget_projection_handler`.
+         * app GET /api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/widgets/:instance_id/projection` handled by `mfg.cockpit.widget_projection.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_cockpit_widget_projection_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_widgets_by_instance_id_projection"];
         put?: never;
         post?: never;
         delete?: never;
@@ -668,12 +690,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/report-reviews
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/report-reviews` handled by `mfg_cockpit_report_review_list_handler`.
+         * app GET /api/apps/mfg/cockpit/report-reviews
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/report-reviews` handled by `mfg.report.review.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_report_review_list"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_report_reviews"];
         put?: never;
         post?: never;
         delete?: never;
@@ -690,12 +712,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/report-reviews/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/report-reviews/:id` handled by `mfg_cockpit_report_review_get_handler`.
+         * app GET /api/apps/mfg/cockpit/report-reviews/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/report-reviews/:id` handled by `mfg.report.review.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_report_review_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_report_reviews_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -714,12 +736,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/report-reviews/:id/decision
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/report-reviews/:id/decision` handled by `mfg_cockpit_report_review_decision_handler`.
+         * app POST /api/apps/mfg/cockpit/report-reviews/:id/decision
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/report-reviews/:id/decision` handled by `mfg.report.review.decide`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_report_review_decide"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_report_reviews_by_id_decision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -734,12 +756,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/reports
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/reports` handled by `mfg_cockpit_report_list_handler`.
+         * app GET /api/apps/mfg/cockpit/reports
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/reports` handled by `mfg.report.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_report_list"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_reports"];
         put?: never;
         post?: never;
         delete?: never;
@@ -758,12 +780,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/reports/schedules/run
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/reports/schedules/run` handled by `mfg_cockpit_report_schedule_run_handler`.
+         * app POST /api/apps/mfg/cockpit/reports/schedules/run
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/reports/schedules/run` handled by `mfg.report.schedule.run`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_report_schedule_run"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_reports_schedules_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -778,12 +800,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/reports/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/reports/:id` handled by `mfg_cockpit_report_get_handler`.
+         * app GET /api/apps/mfg/cockpit/reports/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/reports/:id` handled by `mfg.report.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_report_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_reports_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -802,12 +824,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/reports/:id/deliver
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/reports/:id/deliver` handled by `mfg_cockpit_report_deliver_handler`.
+         * app POST /api/apps/mfg/cockpit/reports/:id/deliver
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/reports/:id/deliver` handled by `mfg.report.deliver`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_report_deliver"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_reports_by_id_deliver"];
         delete?: never;
         options?: never;
         head?: never;
@@ -822,12 +844,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/reports/:id/delivery-state
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/reports/:id/delivery-state` handled by `mfg_cockpit_report_delivery_state_handler`.
+         * app GET /api/apps/mfg/cockpit/reports/:id/delivery-state
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/reports/:id/delivery-state` handled by `mfg.report.delivery_state.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_report_delivery_state_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_reports_by_id_delivery_state"];
         put?: never;
         post?: never;
         delete?: never;
@@ -846,12 +868,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/reports/:id/delivery/retry
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/reports/:id/delivery/retry` handled by `mfg_cockpit_report_delivery_retry_handler`.
+         * app POST /api/apps/mfg/cockpit/reports/:id/delivery/retry
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/reports/:id/delivery/retry` handled by `mfg.report.delivery.retry`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_report_delivery_retry"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_reports_by_id_delivery_retry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -868,12 +890,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/cockpit/reports/:id/reviews
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/cockpit/reports/:id/reviews` handled by `mfg_cockpit_report_review_request_handler`.
+         * app POST /api/apps/mfg/cockpit/reports/:id/reviews
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/reports/:id/reviews` handled by `mfg.report.review.request`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_report_review_request"];
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_reports_by_id_reviews"];
         delete?: never;
         options?: never;
         head?: never;
@@ -888,12 +910,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/cockpit/widget-catalog
-         * @description Query Gateway mfg capability through `/api/apps/mfg/cockpit/widget-catalog` handled by `mfg_cockpit_widget_catalog_handler`.
+         * app GET /api/apps/mfg/cockpit/widget-catalog
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/widget-catalog` handled by `mfg.cockpit.widget_catalog.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_cockpit_widget_catalog_get"];
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_widget_catalog"];
         put?: never;
         post?: never;
         delete?: never;
@@ -910,12 +932,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/command-center
-         * @description Query Gateway mfg capability through `/api/apps/mfg/command-center` handled by `mfg_command_center_handler`.
+         * app GET /api/apps/mfg/command-center
+         * @description Query Gateway app capability through `/api/apps/mfg/command-center` handled by `mfg.command_center.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_command_center_get"];
+        get: operations["gateway_app_get_api_apps_mfg_command_center"];
         put?: never;
         post?: never;
         delete?: never;
@@ -932,12 +954,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/command-center/live
-         * @description Query Gateway mfg capability through `/api/apps/mfg/command-center/live` handled by `mfg_command_center_live_handler`.
+         * app GET /api/apps/mfg/command-center/live
+         * @description Query Gateway app capability through `/api/apps/mfg/command-center/live` handled by `mfg.command_center.live.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_command_center_live_get"];
+        get: operations["gateway_app_get_api_apps_mfg_command_center_live"];
         put?: never;
         post?: never;
         delete?: never;
@@ -954,12 +976,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/contract
-         * @description Query Gateway mfg capability through `/api/apps/mfg/contract` handled by `mfg_contract_handler`.
+         * app GET /api/apps/mfg/contract
+         * @description Query Gateway app capability through `/api/apps/mfg/contract` handled by `mfg.contract.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_contract_get"];
+        get: operations["gateway_app_get_api_apps_mfg_contract"];
         put?: never;
         post?: never;
         delete?: never;
@@ -976,12 +998,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/decision-trace
-         * @description Query Gateway mfg capability through `/api/apps/mfg/decision-trace` handled by `mfg_decision_trace_handler`.
+         * app GET /api/apps/mfg/decision-trace
+         * @description Query Gateway app capability through `/api/apps/mfg/decision-trace` handled by `mfg.decision_trace.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_decision_trace_get"];
+        get: operations["gateway_app_get_api_apps_mfg_decision_trace"];
         put?: never;
         post?: never;
         delete?: never;
@@ -998,12 +1020,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/domain/server-manufacturing
-         * @description Query Gateway mfg capability through `/api/apps/mfg/domain/server-manufacturing` handled by `mfg_server_manufacturing_domain_handler`.
+         * app GET /api/apps/mfg/domain/server-manufacturing
+         * @description Query Gateway app capability through `/api/apps/mfg/domain/server-manufacturing` handled by `mfg.domain.server_manufacturing.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_domain_server_manufacturing_get"];
+        get: operations["gateway_app_get_api_apps_mfg_domain_server_manufacturing"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1022,12 +1044,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/domain/server-manufacturing/seed
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/domain/server-manufacturing/seed` handled by `mfg_server_manufacturing_seed_handler`.
+         * app POST /api/apps/mfg/domain/server-manufacturing/seed
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/domain/server-manufacturing/seed` handled by `mfg.domain.server_manufacturing.seed`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_domain_server_manufacturing_seed"];
+        post: operations["gateway_app_post_api_apps_mfg_domain_server_manufacturing_seed"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1042,12 +1064,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/executions/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/executions/:id` handled by `mfg_execution_get_handler`.
+         * app GET /api/apps/mfg/executions/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/executions/:id` handled by `mfg.execution.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_execution_get"];
+        get: operations["gateway_app_get_api_apps_mfg_executions_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1066,12 +1088,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/executions/:id/cross-plane/execute
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/executions/:id/cross-plane/execute` handled by `mfg_execution_cross_plane_bridge_handler`.
+         * app POST /api/apps/mfg/executions/:id/cross-plane/execute
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/executions/:id/cross-plane/execute` handled by `mfg.execution.cross_plane.execute`.
          *
          *     Risk: external. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_execution_cross_plane_execute"];
+        post: operations["gateway_app_post_api_apps_mfg_executions_by_id_cross_plane_execute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1088,12 +1110,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/executions/:id/feedback
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/executions/:id/feedback` handled by `mfg_execution_feedback_handler`.
+         * app POST /api/apps/mfg/executions/:id/feedback
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/executions/:id/feedback` handled by `mfg.execution.feedback.create`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_execution_feedback_create"];
+        post: operations["gateway_app_post_api_apps_mfg_executions_by_id_feedback"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1108,20 +1130,20 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/focus/alert-rules
-         * @description Query Gateway mfg capability through `/api/apps/mfg/focus/alert-rules` handled by `mfg_alert_rule_list_handler`.
+         * app GET /api/apps/mfg/focus/alert-rules
+         * @description Query Gateway app capability through `/api/apps/mfg/focus/alert-rules` handled by `mfg.alert_rule.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_alert_rule_list"];
+        get: operations["gateway_app_get_api_apps_mfg_focus_alert_rules"];
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/focus/alert-rules
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/focus/alert-rules` handled by `mfg_alert_rule_upsert_handler`.
+         * app POST /api/apps/mfg/focus/alert-rules
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/focus/alert-rules` handled by `mfg.alert_rule.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_alert_rule_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_focus_alert_rules"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1136,20 +1158,20 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/focus/alert-subscriptions
-         * @description Query Gateway mfg capability through `/api/apps/mfg/focus/alert-subscriptions` handled by `mfg_alert_subscription_list_handler`.
+         * app GET /api/apps/mfg/focus/alert-subscriptions
+         * @description Query Gateway app capability through `/api/apps/mfg/focus/alert-subscriptions` handled by `mfg.alert_subscription.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_alert_subscription_list"];
+        get: operations["gateway_app_get_api_apps_mfg_focus_alert_subscriptions"];
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/focus/alert-subscriptions
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/focus/alert-subscriptions` handled by `mfg_alert_subscription_upsert_handler`.
+         * app POST /api/apps/mfg/focus/alert-subscriptions
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/focus/alert-subscriptions` handled by `mfg.alert_subscription.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_alert_subscription_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_focus_alert_subscriptions"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1164,12 +1186,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/focus/alerts
-         * @description Query Gateway mfg capability through `/api/apps/mfg/focus/alerts` handled by `mfg_alert_occurrence_list_handler`.
+         * app GET /api/apps/mfg/focus/alerts
+         * @description Query Gateway app capability through `/api/apps/mfg/focus/alerts` handled by `mfg.alert.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_alert_list"];
+        get: operations["gateway_app_get_api_apps_mfg_focus_alerts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1188,12 +1210,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/focus/alerts/:id/command
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/focus/alerts/:id/command` handled by `mfg_alert_command_handler`.
+         * app POST /api/apps/mfg/focus/alerts/:id/command
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/focus/alerts/:id/command` handled by `mfg.alert.command`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_alert_command"];
+        post: operations["gateway_app_post_api_apps_mfg_focus_alerts_by_id_command"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1208,12 +1230,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/focus/forecasts
-         * @description Query Gateway mfg capability through `/api/apps/mfg/focus/forecasts` handled by `mfg_forecast_list_handler`.
+         * app GET /api/apps/mfg/focus/forecasts
+         * @description Query Gateway app capability through `/api/apps/mfg/focus/forecasts` handled by `mfg.forecast.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_forecast_list"];
+        get: operations["gateway_app_get_api_apps_mfg_focus_forecasts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1230,20 +1252,20 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/incidents
-         * @description Query Gateway mfg capability through `/api/apps/mfg/incidents` handled by `mfg_incidents_list_handler`.
+         * app GET /api/apps/mfg/incidents
+         * @description Query Gateway app capability through `/api/apps/mfg/incidents` handled by `mfg.incident.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_incident_list"];
+        get: operations["gateway_app_get_api_apps_mfg_incidents"];
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/incidents
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/incidents` handled by `mfg_incident_create_handler`.
+         * app POST /api/apps/mfg/incidents
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/incidents` handled by `mfg.incident.create`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_incident_create"];
+        post: operations["gateway_app_post_api_apps_mfg_incidents"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1258,12 +1280,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/incidents/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/incidents/:id` handled by `mfg_incident_get_handler`.
+         * app GET /api/apps/mfg/incidents/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/incidents/:id` handled by `mfg.incident.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_incident_get"];
+        get: operations["gateway_app_get_api_apps_mfg_incidents_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1282,12 +1304,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/incidents/:id/analyze
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/incidents/:id/analyze` handled by `mfg_incident_analyze_handler`.
+         * app POST /api/apps/mfg/incidents/:id/analyze
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/incidents/:id/analyze` handled by `mfg.incident.analyze`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_incident_analyze"];
+        post: operations["gateway_app_post_api_apps_mfg_incidents_by_id_analyze"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1304,12 +1326,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/incidents/:id/cases/promote
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/incidents/:id/cases/promote` handled by `mfg_incident_case_promote_handler`.
+         * app POST /api/apps/mfg/incidents/:id/cases/promote
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/incidents/:id/cases/promote` handled by `mfg.incident.case.promote`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_incident_case_promote"];
+        post: operations["gateway_app_post_api_apps_mfg_incidents_by_id_cases_promote"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1326,12 +1348,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/incidents/:id/playbooks/recommend
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/incidents/:id/playbooks/recommend` handled by `mfg_incident_playbook_recommend_handler`.
+         * app POST /api/apps/mfg/incidents/:id/playbooks/recommend
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/incidents/:id/playbooks/recommend` handled by `mfg.incident.playbook.recommend`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_incident_playbook_recommend"];
+        post: operations["gateway_app_post_api_apps_mfg_incidents_by_id_playbooks_recommend"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1346,12 +1368,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/incidents/:id/room
-         * @description Query Gateway mfg capability through `/api/apps/mfg/incidents/:id/room` handled by `mfg_incident_room_handler`.
+         * app GET /api/apps/mfg/incidents/:id/room
+         * @description Query Gateway app capability through `/api/apps/mfg/incidents/:id/room` handled by `mfg.incident.room.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_incident_room_get"];
+        get: operations["gateway_app_get_api_apps_mfg_incidents_by_id_room"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1368,14 +1390,36 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/incidents/:id/skills
-         * @description Query Gateway mfg capability through `/api/apps/mfg/incidents/:id/skills` handled by `mfg_incident_skill_runs_handler`.
+         * app GET /api/apps/mfg/incidents/:id/skills
+         * @description Query Gateway app capability through `/api/apps/mfg/incidents/:id/skills` handled by `mfg.incident.skill_run.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_incident_skill_run_list"];
+        get: operations["gateway_app_get_api_apps_mfg_incidents_by_id_skills"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/incidents/{id}/skills/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * app POST /api/apps/mfg/incidents/:id/skills/commit
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/incidents/:id/skills/commit` handled by `mfg.incident.skill.commit`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_mfg_incidents_by_id_skills_commit"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1392,12 +1436,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/incidents/:id/skills/plan
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/incidents/:id/skills/plan` handled by `mfg_incident_skill_plan_handler`.
+         * app POST /api/apps/mfg/incidents/:id/skills/plan
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/incidents/:id/skills/plan` handled by `mfg.incident.skill.plan`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_incident_skill_plan"];
+        post: operations["gateway_app_post_api_apps_mfg_incidents_by_id_skills_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1414,12 +1458,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/incidents/:id/skills/:skill_id/run
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/incidents/:id/skills/:skill_id/run` handled by `mfg_incident_skill_run_handler`.
+         * app POST /api/apps/mfg/incidents/:id/skills/:skill_id/run
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/incidents/:id/skills/:skill_id/run` handled by `mfg.incident.skill.run`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_incident_skill_run"];
+        post: operations["gateway_app_post_api_apps_mfg_incidents_by_id_skills_by_skill_id_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1434,12 +1478,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/live
-         * @description Query Gateway mfg capability through `/api/apps/mfg/live` handled by `mfg_live_projection_handler`.
+         * app GET /api/apps/mfg/live
+         * @description Query Gateway app capability through `/api/apps/mfg/live` handled by `mfg.live.stream`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_live_stream"];
+        get: operations["gateway_app_get_api_apps_mfg_live"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1456,12 +1500,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/live/snapshot
-         * @description Query Gateway mfg capability through `/api/apps/mfg/live/snapshot` handled by `mfg_live_snapshot_handler`.
+         * app GET /api/apps/mfg/live/snapshot
+         * @description Query Gateway app capability through `/api/apps/mfg/live/snapshot` handled by `mfg.live.snapshot`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_live_snapshot"];
+        get: operations["gateway_app_get_api_apps_mfg_live_snapshot"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1478,12 +1522,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/ontology/server-manufacturing
-         * @description Query Gateway mfg capability through `/api/apps/mfg/ontology/server-manufacturing` handled by `mfg_server_manufacturing_ontology_handler`.
+         * app GET /api/apps/mfg/ontology/server-manufacturing
+         * @description Query Gateway app capability through `/api/apps/mfg/ontology/server-manufacturing` handled by `mfg.ontology.server_manufacturing.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_ontology_server_manufacturing_get"];
+        get: operations["gateway_app_get_api_apps_mfg_ontology_server_manufacturing"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1502,12 +1546,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/ontology/server-manufacturing/seed
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/ontology/server-manufacturing/seed` handled by `mfg_server_manufacturing_ontology_seed_handler`.
+         * app POST /api/apps/mfg/ontology/server-manufacturing/seed
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/ontology/server-manufacturing/seed` handled by `mfg.ontology.server_manufacturing.seed`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_ontology_server_manufacturing_seed"];
+        post: operations["gateway_app_post_api_apps_mfg_ontology_server_manufacturing_seed"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1524,12 +1568,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/playbooks/upsert
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/playbooks/upsert` handled by `mfg_playbook_upsert_handler`.
+         * app POST /api/apps/mfg/playbooks/upsert
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/playbooks/upsert` handled by `mfg.playbook.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_playbook_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_playbooks_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1544,12 +1588,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/playbooks/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/playbooks/:id` handled by `mfg_playbook_get_handler`.
+         * app GET /api/apps/mfg/playbooks/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/playbooks/:id` handled by `mfg.playbook.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_playbook_get"];
+        get: operations["gateway_app_get_api_apps_mfg_playbooks_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1566,12 +1610,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/production/governance
-         * @description Query Gateway mfg capability through `/api/apps/mfg/production/governance` handled by `mfg_production_governance_handler`.
+         * app GET /api/apps/mfg/production/governance
+         * @description Query Gateway app capability through `/api/apps/mfg/production/governance` handled by `mfg.production.governance.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_production_governance_get"];
+        get: operations["gateway_app_get_api_apps_mfg_production_governance"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1588,12 +1632,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/attention/hot
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/attention/hot` handled by `mfg_reality_attention_hot_handler`.
+         * app GET /api/apps/mfg/reality/attention/hot
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/attention/hot` handled by `mfg.reality.attention.hot`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_attention_hot"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_attention_hot"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1610,12 +1654,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/changes
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/changes` handled by `mfg_reality_changes_handler`.
+         * app GET /api/apps/mfg/reality/changes
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/changes` handled by `mfg.reality.change.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_change_list"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_changes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1634,12 +1678,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/compute/jobs/plan
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/compute/jobs/plan` handled by `mfg_reality_compute_job_plan_handler`.
+         * app POST /api/apps/mfg/reality/compute/jobs/plan
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/compute/jobs/plan` handled by `mfg.reality.compute_job.plan`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_compute_job_plan"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_compute_jobs_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1654,12 +1698,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/compute/jobs/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/compute/jobs/:id` handled by `mfg_reality_compute_job_get_handler`.
+         * app GET /api/apps/mfg/reality/compute/jobs/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/compute/jobs/:id` handled by `mfg.reality.compute_job.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_compute_job_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_compute_jobs_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1678,12 +1722,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/compute/jobs/:id/run
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/compute/jobs/:id/run` handled by `mfg_reality_compute_job_run_handler`.
+         * app POST /api/apps/mfg/reality/compute/jobs/:id/run
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/compute/jobs/:id/run` handled by `mfg.reality.compute_job.execute`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_compute_job_execute"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_compute_jobs_by_id_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1698,12 +1742,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/connector-runs/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/connector-runs/:id` handled by `mfg_reality_connector_run_get_handler`.
+         * app GET /api/apps/mfg/reality/connector-runs/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/connector-runs/:id` handled by `mfg.reality.connector_run.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_connector_run_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_connector_runs_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1720,12 +1764,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/data-plane/health
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/data-plane/health` handled by `mfg_reality_data_plane_health_handler`.
+         * app GET /api/apps/mfg/reality/data-plane/health
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/data-plane/health` handled by `mfg.reality.data_plane.health.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_data_plane_health_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_data_plane_health"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1744,12 +1788,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/data-plane/ingest-plan
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/data-plane/ingest-plan` handled by `mfg_reality_data_plane_ingest_plan_handler`.
+         * app POST /api/apps/mfg/reality/data-plane/ingest-plan
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/data-plane/ingest-plan` handled by `mfg.reality.data_plane.ingest_plan`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_data_plane_ingest_plan"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_data_plane_ingest_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1764,12 +1808,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/entities
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/entities` handled by `mfg_reality_entities_handler`.
+         * app GET /api/apps/mfg/reality/entities
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/entities` handled by `mfg.reality.entity.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_entity_list"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_entities"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1788,12 +1832,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/entities/conflict-decision
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/entities/conflict-decision` handled by `mfg_reality_entity_conflict_decision_handler`.
+         * app POST /api/apps/mfg/reality/entities/conflict-decision
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/entities/conflict-decision` handled by `mfg.reality.entity.conflict_decision`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_entity_conflict_decision"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_entities_conflict_decision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1810,12 +1854,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/entities/match-candidate
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/entities/match-candidate` handled by `mfg_reality_entity_match_candidate_handler`.
+         * app POST /api/apps/mfg/reality/entities/match-candidate
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/entities/match-candidate` handled by `mfg.reality.entity.match_candidate`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_entity_match_candidate"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_entities_match_candidate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1832,12 +1876,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/entities/resolve-source-key
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/entities/resolve-source-key` handled by `mfg_reality_entity_resolve_source_key_handler`.
+         * app POST /api/apps/mfg/reality/entities/resolve-source-key
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/entities/resolve-source-key` handled by `mfg.reality.entity.resolve_source_key`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_entity_resolve_source_key"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_entities_resolve_source_key"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1854,12 +1898,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/entities/upsert
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/entities/upsert` handled by `mfg_reality_entity_upsert_handler`.
+         * app POST /api/apps/mfg/reality/entities/upsert
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/entities/upsert` handled by `mfg.reality.entity.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_entity_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_entities_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1874,12 +1918,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/entities/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/entities/:id` handled by `mfg_reality_entity_get_handler`.
+         * app GET /api/apps/mfg/reality/entities/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/entities/:id` handled by `mfg.reality.entity.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_entity_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_entities_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1896,12 +1940,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/entities/:id/impact-path
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/entities/:id/impact-path` handled by `mfg_reality_entity_impact_path_handler`.
+         * app GET /api/apps/mfg/reality/entities/:id/impact-path
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/entities/:id/impact-path` handled by `mfg.reality.entity.impact_path`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_entity_impact_path"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_entities_by_id_impact_path"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1918,12 +1962,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/entities/:id/relations
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/entities/:id/relations` handled by `mfg_reality_entity_relations_handler`.
+         * app GET /api/apps/mfg/reality/entities/:id/relations
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/entities/:id/relations` handled by `mfg.reality.entity.relations`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_entity_relations"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_entities_by_id_relations"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1942,12 +1986,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/evidence/build
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/evidence/build` handled by `mfg_reality_evidence_build_handler`.
+         * app POST /api/apps/mfg/reality/evidence/build
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/evidence/build` handled by `mfg.reality.evidence.build`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_evidence_build"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_evidence_build"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1962,12 +2006,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/evidence/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/evidence/:id` handled by `mfg_reality_evidence_get_handler`.
+         * app GET /api/apps/mfg/reality/evidence/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/evidence/:id` handled by `mfg.reality.evidence.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_evidence_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_evidence_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1984,12 +2028,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/evidence/:id/context
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/evidence/:id/context` handled by `mfg_reality_evidence_context_handler`.
+         * app GET /api/apps/mfg/reality/evidence/:id/context
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/evidence/:id/context` handled by `mfg.reality.evidence.context`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_evidence_context"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_evidence_by_id_context"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2008,12 +2052,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/evidence/:id/quality-gate
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/evidence/:id/quality-gate` handled by `mfg_reality_evidence_quality_gate_handler`.
+         * app POST /api/apps/mfg/reality/evidence/:id/quality-gate
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/evidence/:id/quality-gate` handled by `mfg.reality.evidence.quality_gate`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_evidence_quality_gate"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_evidence_by_id_quality_gate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2030,12 +2074,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/facts/ingest
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/facts/ingest` handled by `mfg_reality_fact_ingest_handler`.
+         * app POST /api/apps/mfg/reality/facts/ingest
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/facts/ingest` handled by `mfg.reality.fact.ingest`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_fact_ingest"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_facts_ingest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2050,12 +2094,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/health
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/health` handled by `mfg_reality_health_handler`.
+         * app GET /api/apps/mfg/reality/health
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/health` handled by `mfg.reality.health.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_health_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_health"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2074,12 +2118,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/metric-dependencies/affected-by-fact-type
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/metric-dependencies/affected-by-fact-type` handled by `mfg_reality_metric_affected_by_fact_type_handler`.
+         * app POST /api/apps/mfg/reality/metric-dependencies/affected-by-fact-type
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/metric-dependencies/affected-by-fact-type` handled by `mfg.reality.metric_dependency.affected_plan`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_metric_dependency_affected_plan"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_metric_dependencies_affected_by_fact_type"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2096,12 +2140,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/metric-dependencies/upsert
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/metric-dependencies/upsert` handled by `mfg_reality_metric_dependency_upsert_handler`.
+         * app POST /api/apps/mfg/reality/metric-dependencies/upsert
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/metric-dependencies/upsert` handled by `mfg.reality.metric_dependency.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_metric_dependency_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_metric_dependencies_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2116,12 +2160,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/metrics
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/metrics` handled by `mfg_reality_metrics_handler`.
+         * app GET /api/apps/mfg/reality/metrics
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/metrics` handled by `mfg.reality.metric.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_metric_list"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_metrics"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2140,12 +2184,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/metrics/attention-plan
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/metrics/attention-plan` handled by `mfg_reality_metric_attention_plan_handler`.
+         * app POST /api/apps/mfg/reality/metrics/attention-plan
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/metrics/attention-plan` handled by `mfg.reality.metric.attention_plan`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_metric_attention_plan"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_metrics_attention_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2162,12 +2206,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/metrics/recompute
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/metrics/recompute` handled by `mfg_reality_metric_recompute_handler`.
+         * app POST /api/apps/mfg/reality/metrics/recompute
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/metrics/recompute` handled by `mfg.reality.metric.recompute`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_metric_recompute"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_metrics_recompute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2184,12 +2228,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/metrics/snapshots/materialize
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/metrics/snapshots/materialize` handled by `mfg_reality_metric_snapshot_materialize_handler`.
+         * app POST /api/apps/mfg/reality/metrics/snapshots/materialize
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/metrics/snapshots/materialize` handled by `mfg.reality.metric_snapshot.materialize`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_metric_snapshot_materialize"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_metrics_snapshots_materialize"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2204,12 +2248,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/metrics/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/metrics/:id` handled by `mfg_reality_metric_detail_handler`.
+         * app GET /api/apps/mfg/reality/metrics/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/metrics/:id` handled by `mfg.reality.metric.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_metric_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_metrics_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2226,12 +2270,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/metrics/:id/lineage
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/metrics/:id/lineage` handled by `mfg_reality_metric_lineage_handler`.
+         * app GET /api/apps/mfg/reality/metrics/:id/lineage
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/metrics/:id/lineage` handled by `mfg.reality.metric.lineage`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_metric_lineage"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_metrics_by_id_lineage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2248,12 +2292,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/quality-gates/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/quality-gates/:id` handled by `mfg_reality_quality_gate_get_handler`.
+         * app GET /api/apps/mfg/reality/quality-gates/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/quality-gates/:id` handled by `mfg.reality.quality_gate.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_quality_gate_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_quality_gates_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2272,12 +2316,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/relations/upsert
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/relations/upsert` handled by `mfg_reality_relation_upsert_handler`.
+         * app POST /api/apps/mfg/reality/relations/upsert
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/relations/upsert` handled by `mfg.reality.relation.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_relation_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_relations_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2294,12 +2338,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/source-packs/upsert
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/source-packs/upsert` handled by `mfg_reality_source_pack_upsert_handler`.
+         * app POST /api/apps/mfg/reality/source-packs/upsert
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/source-packs/upsert` handled by `mfg.reality.source_pack.upsert`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_source_pack_upsert"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_source_packs_upsert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2314,12 +2358,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/reality/source-packs/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/reality/source-packs/:id` handled by `mfg_reality_source_pack_get_handler`.
+         * app GET /api/apps/mfg/reality/source-packs/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/reality/source-packs/:id` handled by `mfg.reality.source_pack.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_reality_source_pack_get"];
+        get: operations["gateway_app_get_api_apps_mfg_reality_source_packs_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2338,12 +2382,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/source-packs/:id/connector-runs/plan
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/source-packs/:id/connector-runs/plan` handled by `mfg_reality_source_pack_connector_run_plan_handler`.
+         * app POST /api/apps/mfg/reality/source-packs/:id/connector-runs/plan
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/source-packs/:id/connector-runs/plan` handled by `mfg.reality.connector_run.plan`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_connector_run_plan"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2360,12 +2404,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/source-packs/:id/connector-runs/run
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/source-packs/:id/connector-runs/run` handled by `mfg_reality_source_pack_connector_run_execute_handler`.
+         * app POST /api/apps/mfg/reality/source-packs/:id/connector-runs/run
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/source-packs/:id/connector-runs/run` handled by `mfg.reality.connector_run.execute`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_connector_run_execute"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2382,12 +2426,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/source-packs/:id/delta-plan
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/source-packs/:id/delta-plan` handled by `mfg_reality_source_pack_delta_plan_handler`.
+         * app POST /api/apps/mfg/reality/source-packs/:id/delta-plan
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/source-packs/:id/delta-plan` handled by `mfg.reality.source_pack.delta_plan`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_source_pack_delta_plan"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_source_packs_by_id_delta_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2404,12 +2448,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/source-packs/:id/ingest-file
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/source-packs/:id/ingest-file` handled by `mfg_reality_source_pack_ingest_file_handler`.
+         * app POST /api/apps/mfg/reality/source-packs/:id/ingest-file
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/source-packs/:id/ingest-file` handled by `mfg.reality.source_pack.ingest_file`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_source_pack_ingest_file"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_source_packs_by_id_ingest_file"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2426,12 +2470,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * mfg POST /api/apps/mfg/reality/source-packs/:id/validate
-         * @description Invoke or create Gateway mfg capability through `/api/apps/mfg/reality/source-packs/:id/validate` handled by `mfg_reality_source_pack_validate_handler`.
+         * app POST /api/apps/mfg/reality/source-packs/:id/validate
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/reality/source-packs/:id/validate` handled by `mfg.reality.source_pack.validate`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["mfg_reality_source_pack_validate"];
+        post: operations["gateway_app_post_api_apps_mfg_reality_source_packs_by_id_validate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2446,12 +2490,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/skill-runs/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/skill-runs/:id` handled by `mfg_skill_run_get_handler`.
+         * app GET /api/apps/mfg/skill-runs/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/skill-runs/:id` handled by `mfg.skill_run.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_skill_run_get"];
+        get: operations["gateway_app_get_api_apps_mfg_skill_runs_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2468,12 +2512,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/skills
-         * @description Query Gateway mfg capability through `/api/apps/mfg/skills` handled by `mfg_skills_handler`.
+         * app GET /api/apps/mfg/skills
+         * @description Query Gateway app capability through `/api/apps/mfg/skills` handled by `mfg.skill.list`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_skill_list"];
+        get: operations["gateway_app_get_api_apps_mfg_skills"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2490,12 +2534,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * mfg GET /api/apps/mfg/skills/:id
-         * @description Query Gateway mfg capability through `/api/apps/mfg/skills/:id` handled by `mfg_skill_get_handler`.
+         * app GET /api/apps/mfg/skills/:id
+         * @description Query Gateway app capability through `/api/apps/mfg/skills/:id` handled by `mfg.skill.get`.
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["mfg_skill_get"];
+        get: operations["gateway_app_get_api_apps_mfg_skills_by_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2878,28 +2922,6 @@ export interface paths {
         get: operations["gateway_connector_get_api_connectors_sources"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/connectors/sources/{adapter_id}/commit-watermark": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * connector POST /api/connectors/sources/:adapter_id/commit-watermark
-         * @description Invoke or create Gateway connector capability through `/api/connectors/sources/:adapter_id/commit-watermark` handled by `connector_source_commit_watermark_handler`.
-         *
-         *     Risk: external. Side effects: mutates_gateway_or_runtime_state, may_call_or_control_external_surface.
-         */
-        post: operations["gateway_connector_post_api_connectors_sources_by_adapter_id_commit_watermark"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7436,6 +7458,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/resources/{id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * resource GET /api/resources/:id/content
+         * @description Query Gateway resource capability through `/api/resources/:id/content` handled by `get_resource_content_handler`.
+         *
+         *     Risk: external. Side effects: .
+         */
+        get: operations["gateway_resource_get_api_resources_by_id_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/resources/{id}/evidence": {
         parameters: {
             query?: never;
@@ -7832,7 +7876,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/runtime/executions/{id}/events": {
+    "/api/runtime/live-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * live POST /api/runtime/live-subscriptions
+         * @description Invoke or create Gateway live capability through `/api/runtime/live-subscriptions` handled by `create_live_subscription`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["runtime_live_subscription_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runtime/live-subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * live DELETE /api/runtime/live-subscriptions/:id
+         * @description Delete Gateway live capability through `/api/runtime/live-subscriptions/:id` handled by `delete_live_subscription`.
+         *
+         *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        delete: operations["runtime_live_subscription_delete"];
+        options?: never;
+        head?: never;
+        /**
+         * live PATCH /api/runtime/live-subscriptions/:id
+         * @description Update Gateway live capability through `/api/runtime/live-subscriptions/:id` handled by `patch_live_subscription`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        patch: operations["runtime_live_subscription_patch"];
+        trace?: never;
+    };
+    "/api/runtime/live/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -7840,12 +7934,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * route_registry GET /api/runtime/executions/:id/events
-         * @description Query Gateway route_registry capability through `/api/runtime/executions/:id/events` handled by `runtime_execution_projection_events`.
+         * live GET /api/runtime/live/:id
+         * @description Query Gateway live capability through `/api/runtime/live/:id` handled by `get_live_stream`.
          *
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
-        get: operations["runtime_execution_projection_events"];
+        get: operations["runtime_live_stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9066,28 +9160,6 @@ export interface paths {
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
         get: operations["gateway_session_get_api_sessions_by_id_stats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/stream": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * session.message GET /api/sessions/:id/stream
-         * @description Query Gateway session.message capability through `/api/sessions/:id/stream` handled by `sse_stream_handler`.
-         *
-         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
-         */
-        get: operations["gateway_session_message_get_api_sessions_by_id_stream"];
         put?: never;
         post?: never;
         delete?: never;
@@ -11047,6 +11119,22 @@ export interface components {
             window_source?: string | null;
             window_tokens?: number | null;
         };
+        CreateLiveSubscriptionRequest: {
+            idempotency_key?: string;
+            selector: {
+                sources: {
+                    cursor?: number;
+                    /** @enum {string} */
+                    detail_scope?: "summary" | "full";
+                    id: string;
+                    /** @enum {string} */
+                    kind: "session" | "execution" | "mission";
+                }[];
+            };
+            surface_instance: string;
+            ttl_seconds?: number;
+        };
+        Empty: Record<string, never>;
         /** @enum {string} */
         EvidenceFreshness: "live" | "durable" | "unavailable";
         ExecutionCommandReceipt: {
@@ -11148,580 +11236,75 @@ export interface components {
         GatewayError: {
             error: string;
         };
-        /** MatrixAttentionItem */
-        MatrixAttentionItem: {
-            attention_id: string;
-            business_domain: string;
-            /** Format: float */
-            confidence: number;
-            /** Format: date-time */
-            created_at: string;
-            /** @default null */
-            entity_ref: string | null;
-            /** @default [] */
-            linked_anomalies: string[];
-            /** @default [] */
-            linked_changes: string[];
-            /** @default [] */
-            linked_impacts: string[];
-            /**
-             * @description Canonical Matrix metric identifiers that caused this attention item.
-             * @default []
-             */
-            metric_refs: string[];
-            /** @default [] */
-            owner_roles: string[];
-            /** @default null */
-            period: string | null;
-            /** Format: float */
-            priority_score: number;
-            /** @default [] */
-            reason_codes: string[];
-            severity: components["schemas"]["MatrixAttentionItem"]["$defs"]["MatrixSeverity"];
-            status: string;
-            /** Format: float */
-            strategic_weight: number;
-            title: string;
-            /** Format: date-time */
-            updated_at: string;
-            /** Format: float */
-            urgency: number;
-            $defs: {
-                /** @enum {string} */
-                MatrixSeverity: "normal" | "warning" | "critical" | "unknown";
+        /**
+         * @example {
+         *       "agent_id": "agent-contract",
+         *       "delivery_class": "durable",
+         *       "detail_scope": "full",
+         *       "end_bytes": 256,
+         *       "event": "TerminalCommitted",
+         *       "execution_id": "execution-contract",
+         *       "mission_id": "mission-contract",
+         *       "payload": {
+         *         "content": "canonical contract fixture",
+         *         "type": "TerminalCommitted"
+         *       },
+         *       "schema_version": 1,
+         *       "session_id": "session-contract",
+         *       "source_cursor": 42,
+         *       "source_health": "live",
+         *       "source_id": "session-contract",
+         *       "source_kind": "session",
+         *       "start_bytes": 128,
+         *       "stream_revision": 3,
+         *       "subscription_id": "subscription-contract",
+         *       "subscription_revision": 7
+         *     }
+         */
+        LiveEnvelope: {
+            agent_id?: string | null;
+            /** @enum {string} */
+            delivery_class: "durable" | "snapshot_reconstructable" | "ephemeral_preview";
+            /** @enum {string} */
+            detail_scope: "summary" | "full";
+            end_bytes?: number | null;
+            event: string;
+            execution_id?: string | null;
+            mission_id?: string | null;
+            payload: unknown;
+            /** @constant */
+            schema_version: 1;
+            session_id?: string | null;
+            source_cursor?: number | null;
+            /** @enum {string} */
+            source_health: "baseline" | "live" | "resync_required" | "revoked";
+            source_id: string;
+            /** @enum {string} */
+            source_kind: "session" | "execution" | "mission" | "subscription";
+            start_bytes?: number | null;
+            stream_revision?: number | null;
+            subscription_id: string;
+            subscription_revision: number;
+        };
+        LiveSubscription: {
+            expires_at_ms: number;
+            id: string;
+            revision: number;
+            /** @constant */
+            schema_version: 1;
+            selector: {
+                sources: {
+                    cursor?: number;
+                    /** @enum {string} */
+                    detail_scope?: "summary" | "full";
+                    id: string;
+                    /** @enum {string} */
+                    kind: "session" | "execution" | "mission";
+                }[];
             };
-        };
-        /** MatrixChangeEvent */
-        MatrixChangeEvent: {
-            change_id: string;
-            change_type: string;
-            /** Format: double */
-            delta: number;
-            /** Format: date-time */
-            detected_at: string;
-            entity_ref: string;
-            /** @default null */
-            from_value: unknown;
-            /** @default null */
-            metric_id: string | null;
-            period: string;
-            severity_hint: string;
-            /** @default [] */
-            source_fact_refs: string[];
-            /** @default null */
-            to_value: unknown;
-        };
-        /** MatrixComputeJob */
-        MatrixComputeJob: {
-            /** Format: uint32 */
-            attempts: number;
-            /** Format: date-time */
-            created_at: string;
-            /** @default null */
-            entity_scope: string | null;
-            job_id: string;
-            /** @default [] */
-            metric_ids: string[];
-            /** @default null */
-            period: string | null;
-            /** Format: float */
-            priority: number;
-            /** @default null */
-            result_summary: unknown;
-            status: string;
-            /** @default [] */
-            trigger_fact_refs: string[];
-            trigger_fact_type: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        /** MatrixConnectorRun */
-        MatrixConnectorRun: {
-            affected_metric_ids: string[];
-            connector_kind: string;
-            /** Format: date-time */
-            created_at: string;
-            /** @default null */
-            credential_ref: string | null;
-            /** Format: uint64 */
-            expected_rows: number;
-            mapped_fact_types: string[];
-            /** @default null */
-            metadata: unknown;
-            mode: string;
-            /** @default null */
-            partition_ref: string | null;
-            quality_report: components["schemas"]["MatrixConnectorRun"]["$defs"]["MatrixConnectorQualityReport"];
-            receipt: components["schemas"]["MatrixConnectorRun"]["$defs"]["MatrixConnectorReceipt"];
-            /** @default null */
-            resource_ref: string | null;
-            run_id: string;
-            source_pack_id: string;
-            status: string;
-            /** Format: date-time */
-            updated_at: string;
-            $defs: {
-                MatrixConnectorQualityReport: {
-                    /** @default [] */
-                    blockers: string[];
-                    /** Format: float */
-                    score: number;
-                    status: string;
-                    /** @default [] */
-                    warnings: string[];
-                };
-                MatrixConnectorReceipt: {
-                    message: string;
-                    receipt_id: string;
-                    /** Format: date-time */
-                    recorded_at: string;
-                    retryable: boolean;
-                    status: string;
-                };
-            };
-        };
-        /** MatrixDataPlaneHealth */
-        MatrixDataPlaneHealth: {
-            /** @default [] */
-            capabilities: components["schemas"]["MatrixDataPlaneHealth"]["$defs"]["MatrixDataPlaneCapability"][];
-            /** Format: date-time */
-            checked_at: string;
-            mode: string;
-            provider: string;
-            status: string;
-            /** Format: uint64 */
-            watermark_count: number;
-            $defs: {
-                MatrixDataPlaneCapability: {
-                    capability_id: string;
-                    description: string;
-                    status: string;
-                };
-            };
-        };
-        /** MatrixDataPlaneIngestPlan */
-        MatrixDataPlaneIngestPlan: {
-            /** @default [] */
-            affected_metric_ids: string[];
-            batch_id: string;
-            /** @default [] */
-            compute_jobs: components["schemas"]["MatrixDataPlaneIngestPlan"]["$defs"]["MatrixComputeJobInput"][];
-            /** Format: uint64 */
-            estimated_rows: number;
-            fact_type: string;
-            idempotency_key: string;
-            partition_ref: string;
-            /** Format: date-time */
-            planned_at: string;
-            replay_policy: string;
-            source_ref: string;
-            watermark: components["schemas"]["MatrixDataPlaneIngestPlan"]["$defs"]["MatrixDataPlaneWatermark"];
-            $defs: {
-                MatrixComputeJobInput: {
-                    /** @default null */
-                    entity_scope: string | null;
-                    /** @default null */
-                    job_id: string | null;
-                    /** @default [] */
-                    metric_ids: string[];
-                    /** @default null */
-                    period: string | null;
-                    /**
-                     * Format: float
-                     * @default null
-                     */
-                    priority: number | null;
-                    /** @default [] */
-                    trigger_fact_refs: string[];
-                    trigger_fact_type: string;
-                };
-                MatrixDataPlaneWatermark: {
-                    fact_type: string;
-                    high_watermark: string;
-                    last_batch_id: string;
-                    partition_ref: string;
-                    source_ref: string;
-                    /** Format: date-time */
-                    updated_at: string;
-                };
-            };
-        };
-        /** MatrixDecisionTraceQuery */
-        MatrixDecisionTraceQuery: {
-            /** @default null */
-            incident_id: string | null;
-            /** @default null */
-            report_id: string | null;
-        };
-        /** MatrixEntity */
-        MatrixEntity: {
-            /** @default null */
-            attributes: unknown;
-            canonical_key: string;
-            /** Format: float */
-            confidence: number;
-            /** Format: date-time */
-            created_at: string;
-            display_name: string;
-            entity_id: string;
-            entity_type: string;
-            /** @default [] */
-            source_keys: components["schemas"]["MatrixEntity"]["$defs"]["MatrixSourceKey"][];
-            /** Format: date-time */
-            updated_at: string;
-            $defs: {
-                MatrixSourceKey: {
-                    source_key: string;
-                    /** @default null */
-                    source_ref: string | null;
-                    source_system: string;
-                };
-            };
-        };
-        /** MatrixEvidencePacket */
-        MatrixEvidencePacket: {
-            /** @default [] */
-            anomaly_evidence: unknown[];
-            /** @default null */
-            attention_id: string | null;
-            /** @default [] */
-            attribution_candidates: unknown[];
-            /** @default null */
-            business_context: unknown;
-            /** @default [] */
-            change_evidence: unknown[];
-            /** Format: float */
-            confidence: number;
-            /** Format: date-time */
-            created_at: string;
-            /** @default [] */
-            impact_paths: unknown[];
-            /** @default [] */
-            metric_evidence: unknown[];
-            /** @default [] */
-            missing_evidence: string[];
-            packet_id: string;
-            problem_statement: string;
-            /** @default [] */
-            source_refs: components["schemas"]["MatrixEvidencePacket"]["$defs"]["MatrixEvidenceSourceRef"][];
-            /** Format: uint64 */
-            token_budget: number;
-            $defs: {
-                MatrixEvidenceSourceRef: {
-                    kind: string;
-                    reference: string;
-                    summary: string;
-                };
-            };
-        };
-        /** MatrixFact */
-        MatrixFact: {
-            /** Format: float */
-            confidence: number;
-            /** @default null */
-            dimensions: unknown;
-            /** @default [] */
-            entity_refs: string[];
-            /** Format: date-time */
-            event_time: string;
-            fact_id: string;
-            fact_type: string;
-            /** @default null */
-            measures: unknown;
-            /** @default null */
-            metric_key: string | null;
-            raw_hash: string;
-            snapshot_id: string;
-            /** @default null */
-            source_ref: string | null;
-            /**
-             * Format: date-time
-             * @default null
-             */
-            valid_from: string | null;
-            /**
-             * Format: date-time
-             * @default null
-             */
-            valid_to: string | null;
-        };
-        /** MatrixMetricAttentionPlan */
-        MatrixMetricAttentionPlan: {
-            /** @default [] */
-            compute_jobs: components["schemas"]["MatrixMetricAttentionPlan"]["$defs"]["MatrixComputeJobInput"][];
-            /** @default null */
-            entity_scope: string | null;
-            /** Format: date-time */
-            generated_at: string;
-            /** Format: uint */
-            limit: number;
-            /** @default null */
-            period: string | null;
-            plan_id: string;
-            /** @default [] */
-            scored_metrics: components["schemas"]["MatrixMetricAttentionPlan"]["$defs"]["MatrixMetricAttentionScore"][];
-            /** @default [] */
-            selected_metric_ids: string[];
-            trigger_fact_type: string;
-            $defs: {
-                MatrixComputeJobInput: {
-                    /** @default null */
-                    entity_scope: string | null;
-                    /** @default null */
-                    job_id: string | null;
-                    /** @default [] */
-                    metric_ids: string[];
-                    /** @default null */
-                    period: string | null;
-                    /**
-                     * Format: float
-                     * @default null
-                     */
-                    priority: number | null;
-                    /** @default [] */
-                    trigger_fact_refs: string[];
-                    trigger_fact_type: string;
-                };
-                MatrixMetricAttentionScore: {
-                    /** Format: float */
-                    business_priority: number;
-                    /** Format: uint */
-                    dependency_count: number;
-                    /**
-                     * Format: double
-                     * @default null
-                     */
-                    latest_delta: number | null;
-                    /** @default null */
-                    latest_status: string | null;
-                    metric_id: string;
-                    /** @default [] */
-                    reason_codes: string[];
-                    /** Format: float */
-                    score: number;
-                };
-            };
-        };
-        /** MatrixMetricDefinition */
-        MatrixMetricDefinition: {
-            /** Format: float */
-            business_priority: number;
-            /** Format: date-time */
-            created_at: string;
-            /** @default [] */
-            dependency_metric_ids: string[];
-            /** @default [] */
-            dimensions: string[];
-            domain: string;
-            formula_ref: string;
-            grain: string;
-            /** @default [] */
-            inputs: string[];
-            metric_id: string;
-            name: string;
-            owner_role: string;
-            refresh_policy: string;
-            /** @default null */
-            threshold_policy: unknown;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        /** MatrixMetricLineage */
-        MatrixMetricLineage: {
-            /** @default [] */
-            downstream_dependencies: components["schemas"]["MatrixMetricLineage"]["$defs"]["MatrixMetricDependency"][];
-            /** Format: date-time */
-            generated_at: string;
-            /** @default [] */
-            impacted_metric_ids: string[];
-            metric_id: string;
-            /** @default [] */
-            upstream_dependencies: components["schemas"]["MatrixMetricLineage"]["$defs"]["MatrixMetricDependency"][];
-            $defs: {
-                MatrixMetricDependency: {
-                    /** Format: float */
-                    confidence: number;
-                    /** Format: date-time */
-                    created_at: string;
-                    dependency_id: string;
-                    dependency_type: string;
-                    downstream_metric_id: string;
-                    /** @default null */
-                    entity_relation_type: string | null;
-                    /** @default null */
-                    notes: string | null;
-                    /** @default [] */
-                    required_fact_types: string[];
-                    /** @default null */
-                    transformation_ref: string | null;
-                    /** Format: date-time */
-                    updated_at: string;
-                    upstream_metric_id: string;
-                };
-            };
-        };
-        /** MatrixMetricSnapshot */
-        MatrixMetricSnapshot: {
-            /** Format: date-time */
-            created_at: string;
-            /** @default [] */
-            items: components["schemas"]["MatrixMetricSnapshot"]["$defs"]["MatrixMetricSnapshotItem"][];
-            /** @default [] */
-            metric_ids: string[];
-            scope_ref: string;
-            snapshot_id: string;
-            summary: string;
-            $defs: {
-                MatrixMetricSnapshotItem: {
-                    metric_id: string;
-                    /** @default null */
-                    state: components["schemas"]["MatrixMetricSnapshot"]["$defs"]["MatrixMetricState"] | null;
-                };
-                MatrixMetricState: {
-                    /** Format: date-time */
-                    computed_at: string;
-                    /** Format: float */
-                    confidence: number;
-                    /** Format: double */
-                    delta: number;
-                    /**
-                     * Format: double
-                     * @default null
-                     */
-                    delta_ratio: number | null;
-                    entity_scope: string;
-                    /** @default [] */
-                    input_fact_refs: string[];
-                    metric_id: string;
-                    period: string;
-                    /**
-                     * Format: double
-                     * @default null
-                     */
-                    previous_value: number | null;
-                    state_id: string;
-                    status: components["schemas"]["MatrixMetricSnapshot"]["$defs"]["MatrixMetricStatus"];
-                    /** Format: double */
-                    value: number;
-                };
-                /** @enum {string} */
-                MatrixMetricStatus: "normal" | "warning" | "critical" | "unknown";
-            };
-        };
-        /** MatrixQualityGateDecision */
-        MatrixQualityGateDecision: {
-            /** Format: date-time */
-            created_at: string;
-            decision: string;
-            gate_id: string;
-            gate_type: string;
-            /** @default [] */
-            reasons: string[];
-            /** @default [] */
-            required_actions: string[];
-            /** Format: float */
-            score: number;
-            target_ref: string;
-        };
-        /** MatrixRelation */
-        MatrixRelation: {
-            /** @default null */
-            attributes: unknown;
-            /** Format: float */
-            confidence: number;
-            /** Format: date-time */
-            created_at: string;
-            from_entity_id: string;
-            relation_id: string;
-            relation_type: string;
-            to_entity_id: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        /** MatrixSourceDeltaPlan */
-        MatrixSourceDeltaPlan: {
-            /** @default [] */
-            affected_metric_ids: string[];
-            compute_scope: string;
-            /** @default [] */
-            fact_types: string[];
-            /** Format: date-time */
-            planned_at: string;
-            source_pack_id: string;
-        };
-        /** MatrixSourcePack */
-        MatrixSourcePack: {
-            access_mode: string;
-            /**
-             * Format: date-time
-             * @default 1970-01-01T00:00:00Z
-             */
-            created_at: string;
-            /** @default [] */
-            entity_mappings: components["schemas"]["MatrixSourcePack"]["$defs"]["MatrixSourceEntityMapping"][];
-            /** @default [] */
-            fact_mappings: components["schemas"]["MatrixSourcePack"]["$defs"]["MatrixSourceFactMapping"][];
-            /** @default null */
-            freshness_sla: string | null;
-            /** @default null */
-            metadata: unknown;
-            owner: string;
-            /** @default [] */
-            quality_rules: string[];
-            /** @default [] */
-            reconciliation_rules: string[];
-            refresh_mode: string;
-            /** @default [] */
-            relation_mappings: components["schemas"]["MatrixSourcePack"]["$defs"]["MatrixSourceRelationMapping"][];
-            /** @default null */
-            security_policy: string | null;
-            source_name: string;
-            source_pack_id: string;
-            /**
-             * Format: date-time
-             * @default 1970-01-01T00:00:00Z
-             */
-            updated_at: string;
-            $defs: {
-                MatrixSourceEntityMapping: {
-                    matrix_entity_type: string;
-                    source_entity: string;
-                    source_key_field: string;
-                };
-                MatrixSourceFactMapping: {
-                    dedup_key: string;
-                    delta_signature: string;
-                    /** @default [] */
-                    entity_ref_fields: string[];
-                    /** @default null */
-                    event_time_field: string | null;
-                    fact_type: string;
-                    /** @default [] */
-                    measure_fields: string[];
-                    metric_key: string;
-                    source_table: string;
-                };
-                MatrixSourceRelationMapping: {
-                    /** @default [] */
-                    attribute_fields: string[];
-                    dedup_key: string;
-                    from_source_key_field: string;
-                    relation_type: string;
-                    source_table: string;
-                    to_source_key_field: string;
-                };
-            };
-        };
-        /** MatrixSourcePackValidation */
-        MatrixSourcePackValidation: {
-            /** @default [] */
-            blockers: string[];
-            source_pack_id: string;
-            status: string;
-            /** Format: date-time */
-            validated_at: string;
-            /** @default [] */
-            warnings: string[];
+            selector_hash: string;
+            stream_url: string;
+            surface_instance: string;
         };
         /** MfgActionContract */
         MfgActionContract: {
@@ -11758,7 +11341,7 @@ export interface components {
                 /** @enum {string} */
                 MfgRevisionSemantics: "not_applicable" | "create_only" | "required";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         };
         /** MfgActionExecution */
@@ -11814,11 +11397,7 @@ export interface components {
                 };
             };
         };
-        /**
-         * MfgActionExecutionIntent
-         * @description Public action execution intent. The authenticated gateway principal is the
-         *     only source of the effective operator id.
-         */
+        /** MfgActionExecutionIntent */
         MfgActionExecutionIntent: {
             /**
              * Format: uint64
@@ -11849,8 +11428,6 @@ export interface components {
             command: components["schemas"]["MfgAlertCommandRequest"]["$defs"]["MfgAlertCommand"];
             /** Format: uint64 */
             expected_revision: number;
-            /** @default null */
-            idempotency_key: string | null;
             /** @default null */
             reason: string | null;
             /**
@@ -11920,8 +11497,6 @@ export interface components {
         };
         /** MfgAlertRuleUpsertRequest */
         MfgAlertRuleUpsertRequest: {
-            /** @default null */
-            idempotency_key: string | null;
             rule: components["schemas"]["MfgAlertRuleUpsertRequest"]["$defs"]["MfgAlertRuleInput"];
             $defs: {
                 MfgAlertRuleInput: {
@@ -11964,8 +11539,6 @@ export interface components {
         };
         /** MfgAlertSubscriptionUpsertRequest */
         MfgAlertSubscriptionUpsertRequest: {
-            /** @default null */
-            idempotency_key: string | null;
             subscription: components["schemas"]["MfgAlertSubscriptionUpsertRequest"]["$defs"]["MfgAlertSubscriptionInput"];
             $defs: {
                 MfgAlertSubscriptionInput: {
@@ -12118,8 +11691,6 @@ export interface components {
             /** Format: uint64 */
             expected_revision: number;
             /** @default null */
-            idempotency_key: string | null;
-            /** @default null */
             reason: string | null;
             /** @default null */
             target_ref: string | null;
@@ -12150,11 +11721,13 @@ export interface components {
              */
             limit: number | null;
         };
-        /** MfgAssignmentUpsertRequest */
+        /**
+         * MfgAssignmentUpsertRequest
+         * @description Assignment writes remain wholly in the MFG APP. Cowd supplies only
+         *     verified task facts and durable Surface delivery through closed effects.
+         */
         MfgAssignmentUpsertRequest: {
             assignment: components["schemas"]["MfgAssignmentUpsertRequest"]["$defs"]["MfgAssignmentInput"];
-            /** @default null */
-            idempotency_key: string | null;
             $defs: {
                 MfgAssignmentInput: {
                     /** @default user */
@@ -12313,16 +11886,12 @@ export interface components {
             /** @default null */
             display_name: string | null;
             /** @default null */
-            idempotency_key: string | null;
-            /** @default null */
             profile_id: string | null;
         };
         /** MfgCockpitProfileDeleteQuery */
         MfgCockpitProfileDeleteQuery: {
             /** Format: uint64 */
             expected_revision: number;
-            /** @default null */
-            idempotency_key: string | null;
         };
         /** MfgCockpitProfileListQuery */
         MfgCockpitProfileListQuery: {
@@ -12338,8 +11907,6 @@ export interface components {
         MfgCockpitProfileShareRequest: {
             /** Format: uint64 */
             expected_revision: number;
-            /** @default null */
-            idempotency_key: string | null;
             sharing_policy: components["schemas"]["MfgCockpitProfileShareRequest"]["$defs"]["MfgDashboardSharingPolicy"];
             $defs: {
                 MfgDashboardSharingPolicy: {
@@ -12351,10 +11918,13 @@ export interface components {
                 };
             };
         };
-        /** MfgCockpitProfileUpsertRequest */
+        /**
+         * MfgCockpitProfileUpsertRequest
+         * @description Cockpit ownership is derived from the verified APP request context. The
+         *     body still carries the domain profile shape, but a caller cannot choose
+         *     its durable owner.
+         */
         MfgCockpitProfileUpsertRequest: {
-            /** @default null */
-            idempotency_key: string | null;
             profile: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgCockpitProfileInput"];
             /** @default null */
             request_id: string | null;
@@ -12579,10 +12149,12 @@ export interface components {
             to: string | null;
         };
         /**
-         * MfgCockpitReportDeliveryIntent
-         * @description Public MFG delivery intent. It cannot deserialize service-owned actor data.
+         * MfgCockpitReportDeliveryRequest
+         * @description Delivery fields are MFG-owned domain intent. The authenticated actor is
+         *     deliberately absent: Cowd derives it from `AppRequestContext` when the
+         *     APP submits the generic cross-plane effect.
          */
-        MfgCockpitReportDeliveryIntent: {
+        MfgCockpitReportDeliveryRequest: {
             /** @default null */
             actor_identity_ref: string | null;
             /** @default null */
@@ -12592,8 +12164,6 @@ export interface components {
              * @default null
              */
             expected_revision: number | null;
-            /** @default null */
-            idempotency_key: string | null;
             /** @default dry_run */
             mode: string;
             /** @default null */
@@ -12609,7 +12179,12 @@ export interface components {
             /** @default null */
             template_id: string | null;
         };
-        /** MfgCockpitReportDeliveryRetryRequest */
+        /**
+         * MfgCockpitReportDeliveryRetryRequest
+         * @description A retry has the same effect shape but names a distinct operation in the
+         *     durable report state machine. No body idempotency field is accepted: the
+         *     canonical HTTP `Idempotency-Key` header is the only replay key.
+         */
         MfgCockpitReportDeliveryRetryRequest: {
             /** @default null */
             actor_identity_ref: string | null;
@@ -12620,9 +12195,7 @@ export interface components {
              * @default null
              */
             expected_revision: number | null;
-            /** @default null */
-            idempotency_key: string | null;
-            /** @default  */
+            /** @default dry_run */
             mode: string;
             /** @default null */
             provider_account: string | null;
@@ -12689,14 +12262,6 @@ export interface components {
         };
         /** MfgCockpitReportGenerateRequest */
         MfgCockpitReportGenerateRequest: {
-            /**
-             * @default {
-             *       "cadence": null,
-             *       "delivery_ref": null,
-             *       "note": null,
-             *       "report_id": null
-             *     }
-             */
             report: components["schemas"]["MfgCockpitReportGenerateRequest"]["$defs"]["MfgCockpitReportRequest"];
             /** @default null */
             request_id: string | null;
@@ -13003,7 +12568,7 @@ export interface components {
                     updated_at: string;
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         };
         /** MfgContractFreshnessV1 */
@@ -13014,11 +12579,7 @@ export interface components {
             /** Format: uint64 */
             stale_after_ms: number;
         };
-        /**
-         * MfgCrossPlaneBridgeIntent
-         * @description Public MFG bridge intent. Gateway authentication owns the effective actor;
-         *     an actor field in an HTTP body is rejected by this closed schema.
-         */
+        /** MfgCrossPlaneBridgeIntent */
         MfgCrossPlaneBridgeIntent: {
             /** @default null */
             actor_identity_ref: string | null;
@@ -13036,6 +12597,13 @@ export interface components {
             source_channel: string | null;
             /** @default null */
             target_ref: string | null;
+        };
+        /** MfgDecisionTraceQuery */
+        MfgDecisionTraceQuery: {
+            /** @default null */
+            incident_id: string | null;
+            /** @default null */
+            report_id: string | null;
         };
         /** MfgEntitlementProjectionV2 */
         MfgEntitlementProjectionV2: {
@@ -13208,7 +12776,7 @@ export interface components {
                     schema_owner: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgSchemaOwner"];
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
                 MfgSurfaceContract: {
@@ -13252,6 +12820,8 @@ export interface components {
             attention_id: string | null;
             /** @default null */
             evidence_packet_id: string | null;
+            /** @default null */
+            incident_id: string | null;
             /** @default null */
             request_id: string | null;
             /** @default null */
@@ -13509,7 +13079,7 @@ export interface components {
                     updated_at: string;
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         } & {
             [key: string]: unknown;
@@ -13766,21 +13336,39 @@ export interface components {
             session_id: string | null;
             $defs: {
                 MatrixDataPlaneIngestPlanInput: {
+                    /** @default null */
+                    adapter_id: string | null;
+                    /** @default null */
+                    cursor: string | null;
                     /**
                      * Format: uint64
                      * @default null
                      */
                     estimated_rows: number | null;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
                     fact_type: string;
                     /** @default null */
                     high_watermark: string | null;
                     /** @default [] */
                     metric_ids: string[];
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    offset: number | null;
                     /** @default null */
                     partition_ref: string | null;
                     /** @default null */
                     raw_checksum: string | null;
                     source_ref: string;
+                    /** @default null */
+                    strategy: string | null;
+                    /** @default null */
+                    table: string | null;
                 };
             };
         };
@@ -14055,7 +13643,12 @@ export interface components {
                 };
             };
         };
-        /** MfgRealitySourcePackUpsertRequest */
+        /**
+         * MfgRealitySourcePackUpsertRequest
+         * @description The external MFG owner accepts the same Matrix source-pack shape as the
+         *     former Gateway route, but owns the CAS and durable MFG replay record at
+         *     this boundary. No Gateway business DTO remains once the route migrates.
+         */
         MfgRealitySourcePackUpsertRequest: {
             /**
              * Format: uint64
@@ -14165,7 +13758,7 @@ export interface components {
                 /** @enum {string} */
                 MfgReceiptStatus: "preview" | "accepted" | "replayed" | "completed" | "conflict" | "rejected" | "failed";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         };
         /** MfgRecoveryAction */
@@ -14416,7 +14009,7 @@ export interface components {
                 /** @enum {string} */
                 MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
             };
@@ -14469,7 +14062,7 @@ export interface components {
                     schema_owner: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgSchemaOwner"];
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
             };
@@ -14520,9 +14113,48 @@ export interface components {
                     schema_owner: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgSchemaOwner"];
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
+            };
+        };
+        /** MfgSkillCommitRequest */
+        MfgSkillCommitRequest: {
+            /** Format: uint64 */
+            expected_revision: number;
+            plan: components["schemas"]["MfgSkillCommitRequest"]["$defs"]["MfgSkillPlan"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MfgSkillManifest: {
+                    analysis_method: string;
+                    domain: string;
+                    /** @default [] */
+                    input_fact_types: string[];
+                    /** @default [] */
+                    input_metric_keys: string[];
+                    /** @default [] */
+                    output_actions: string[];
+                    quality_gate: string;
+                    /** @default [] */
+                    required_evidence: string[];
+                    role: string;
+                    skill_id: string;
+                    success_criteria: string;
+                    /** @default [] */
+                    tools: string[];
+                };
+                MfgSkillPlan: {
+                    /** @default [] */
+                    evidence_requirements: string[];
+                    incident_id: string;
+                    /** @default [] */
+                    planned_agent_nodes: string[];
+                    /** @default [] */
+                    selected_skills: components["schemas"]["MfgSkillCommitRequest"]["$defs"]["MfgSkillManifest"][];
+                };
             };
         };
         /** MfgSkillManifest */
@@ -14663,7 +14295,7 @@ export interface components {
                 /** @enum {string} */
                 MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSurfaceKind: "webui" | "tui" | "cli" | "management";
                 /** @enum {string} */
@@ -14704,6 +14336,21 @@ export interface components {
                 /** @enum {string} */
                 MfgProfileId: "mfg_viewer" | "mfg_legacy_0_9_529" | "mfg_operator" | "mfg_reviewer" | "mfg_manager";
             };
+        };
+        PatchLiveSubscriptionRequest: {
+            expected_revision: number;
+            idempotency_key: string;
+            selector: {
+                sources: {
+                    cursor?: number;
+                    /** @enum {string} */
+                    detail_scope?: "summary" | "full";
+                    id: string;
+                    /** @enum {string} */
+                    kind: "session" | "execution" | "mission";
+                }[];
+            };
+            ttl_seconds?: number;
         };
         ProjectionDelta: {
             base_cursor: number;
@@ -14924,7 +14571,7 @@ export interface components {
         "mfg.command_center.live.get.response.v1": components["schemas"]["MfgReadResponseV1"];
         "mfg.contract.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.contract.get.response.v1": components["schemas"]["MfgFrontendContractV1"];
-        "mfg.decision_trace.get.request.v1": components["schemas"]["MatrixDecisionTraceQuery"];
+        "mfg.decision_trace.get.request.v1": components["schemas"]["MfgDecisionTraceQuery"];
         "mfg.decision_trace.get.response.v1": components["schemas"]["MfgReadResponseV1"];
         "mfg.domain.server_manufacturing.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.domain.server_manufacturing.get.response.v1": components["schemas"]["MfgReadResponseV1"];
@@ -14952,6 +14599,8 @@ export interface components {
         "mfg.incident.playbook.recommend.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.incident.room.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.incident.room.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.incident.skill.commit.request.v1": components["schemas"]["MfgSkillCommitRequest"];
+        "mfg.incident.skill.commit.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.incident.skill.plan.request.v1": components["schemas"]["MfgSkillPlanRequest"];
         "mfg.incident.skill.plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.incident.skill.run.request.v1": components["schemas"]["MfgSkillRunRequest"];
@@ -14992,7 +14641,7 @@ export interface components {
         "mfg.reality.data_plane.health.get.response.v1": components["schemas"]["MfgReadResponseV1"];
         "mfg.reality.data_plane.ingest_plan.request.v1": components["schemas"]["MfgRealityDataPlaneIngestPlanRequest"];
         "mfg.reality.data_plane.ingest_plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
-        "mfg.reality.entity.conflict_decision.request.v1": components["schemas"]["MfgRealityEntityConflictDecisionRequest"];
+        "mfg.reality.entity.conflict_decision.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.entity.conflict_decision.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.reality.entity.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.entity.get.response.v1": components["schemas"]["MfgReadResponseV1"];
@@ -15000,13 +14649,13 @@ export interface components {
         "mfg.reality.entity.impact_path.response.v1": components["schemas"]["MfgReadResponseV1"];
         "mfg.reality.entity.list.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.entity.list.response.v1": components["schemas"]["MfgReadResponseV1"];
-        "mfg.reality.entity.match_candidate.request.v1": components["schemas"]["MfgRealityEntityMatchCandidateRequest"];
+        "mfg.reality.entity.match_candidate.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.entity.match_candidate.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.reality.entity.relations.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.entity.relations.response.v1": components["schemas"]["MfgReadResponseV1"];
-        "mfg.reality.entity.resolve_source_key.request.v1": components["schemas"]["MfgRealityEntityResolveSourceKeyRequest"];
+        "mfg.reality.entity.resolve_source_key.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.entity.resolve_source_key.response.v1": components["schemas"]["MfgMutationResponseV1"];
-        "mfg.reality.entity.upsert.request.v1": components["schemas"]["MfgRealityEntityUpsertRequest"];
+        "mfg.reality.entity.upsert.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.entity.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.reality.evidence.build.request.v1": components["schemas"]["MfgRealityEvidenceBuildRequest"];
         "mfg.reality.evidence.build.response.v1": components["schemas"]["MfgMutationResponseV1"];
@@ -15038,7 +14687,7 @@ export interface components {
         "mfg.reality.metric_snapshot.materialize.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.reality.quality_gate.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.quality_gate.get.response.v1": components["schemas"]["MfgReadResponseV1"];
-        "mfg.reality.relation.upsert.request.v1": components["schemas"]["MfgRealityRelationUpsertRequest"];
+        "mfg.reality.relation.upsert.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.relation.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.reality.source_pack.delta_plan.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.source_pack.delta_plan.response.v1": components["schemas"]["MfgMutationResponseV1"];
@@ -15050,7 +14699,7 @@ export interface components {
         "mfg.reality.source_pack.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.reality.source_pack.validate.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.reality.source_pack.validate.response.v1": components["schemas"]["MfgMutationResponseV1"];
-        "mfg.report.deliver.request.v1": components["schemas"]["MfgCockpitReportDeliveryIntent"];
+        "mfg.report.deliver.request.v1": components["schemas"]["MfgCockpitReportDeliveryRequest"];
         "mfg.report.deliver.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.report.delivery.retry.request.v1": components["schemas"]["MfgCockpitReportDeliveryRetryRequest"];
         "mfg.report.delivery.retry.response.v1": components["schemas"]["MfgMutationResponseV1"];
@@ -15766,7 +15415,50 @@ export interface operations {
             };
         };
     };
-    mfg_analysis_action_execute: {
+    gateway_app_get_api_apps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_app_post_api_apps_mfg_analyses_by_analysis_id_actions_by_action_id_execute: {
         parameters: {
             query?: never;
             header?: never;
@@ -15789,6 +15481,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.analysis.action.execute.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -15856,7 +15549,7 @@ export interface operations {
             };
         };
     };
-    mfg_analysis_get: {
+    gateway_app_get_api_apps_mfg_analyses_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -15941,7 +15634,7 @@ export interface operations {
             };
         };
     };
-    mfg_app_get: {
+    gateway_app_get_api_apps_mfg_app: {
         parameters: {
             query?: never;
             header?: never;
@@ -16024,7 +15717,7 @@ export interface operations {
             };
         };
     };
-    mfg_assignment_list: {
+    gateway_app_get_api_apps_mfg_assignments: {
         parameters: {
             query?: never;
             header?: never;
@@ -16107,7 +15800,7 @@ export interface operations {
             };
         };
     };
-    mfg_assignment_upsert: {
+    gateway_app_post_api_apps_mfg_assignments: {
         parameters: {
             query?: never;
             header?: never;
@@ -16127,6 +15820,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.assignment.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -16194,7 +15888,7 @@ export interface operations {
             };
         };
     };
-    mfg_assignment_get: {
+    gateway_app_get_api_apps_mfg_assignments_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -16279,7 +15973,7 @@ export interface operations {
             };
         };
     };
-    mfg_assignment_command: {
+    gateway_app_post_api_apps_mfg_assignments_by_id_command: {
         parameters: {
             query?: never;
             header?: never;
@@ -16301,6 +15995,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.assignment.command.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -16368,7 +16063,7 @@ export interface operations {
             };
         };
     };
-    mfg_case_search: {
+    gateway_app_get_api_apps_mfg_cases_search: {
         parameters: {
             query?: never;
             header?: never;
@@ -16451,7 +16146,7 @@ export interface operations {
             };
         };
     };
-    mfg_case_get: {
+    gateway_app_get_api_apps_mfg_cases_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -16536,7 +16231,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_profile_list: {
+    gateway_app_get_api_apps_mfg_cockpit_profiles: {
         parameters: {
             query?: never;
             header?: never;
@@ -16619,7 +16314,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_profile_upsert: {
+    gateway_app_post_api_apps_mfg_cockpit_profiles_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -16639,6 +16334,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.cockpit.profile.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -16706,7 +16402,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_profile_get: {
+    gateway_app_get_api_apps_mfg_cockpit_profiles_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -16791,7 +16487,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_profile_delete: {
+    gateway_app_delete_api_apps_mfg_cockpit_profiles_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -16809,6 +16505,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.cockpit.profile.delete.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -16876,7 +16573,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_profile_clone: {
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_clone: {
         parameters: {
             query?: never;
             header?: never;
@@ -16898,6 +16595,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.cockpit.profile.clone.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -16965,7 +16663,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_projection_get: {
+    gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_projection: {
         parameters: {
             query?: never;
             header?: never;
@@ -17050,7 +16748,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_generate: {
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_reports_generate: {
         parameters: {
             query?: never;
             header?: never;
@@ -17072,6 +16770,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.report.generate.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -17139,7 +16838,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_profile_share: {
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_share: {
         parameters: {
             query?: never;
             header?: never;
@@ -17161,6 +16860,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.cockpit.profile.share.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -17228,7 +16928,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_widget_projection_get: {
+    gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_widgets_by_instance_id_projection: {
         parameters: {
             query?: never;
             header?: never;
@@ -17314,7 +17014,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_review_list: {
+    gateway_app_get_api_apps_mfg_cockpit_report_reviews: {
         parameters: {
             query?: never;
             header?: never;
@@ -17397,7 +17097,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_review_get: {
+    gateway_app_get_api_apps_mfg_cockpit_report_reviews_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -17482,7 +17182,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_review_decide: {
+    gateway_app_post_api_apps_mfg_cockpit_report_reviews_by_id_decision: {
         parameters: {
             query?: never;
             header?: never;
@@ -17504,6 +17204,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.report.review.decide.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -17571,7 +17272,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_list: {
+    gateway_app_get_api_apps_mfg_cockpit_reports: {
         parameters: {
             query?: never;
             header?: never;
@@ -17654,7 +17355,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_schedule_run: {
+    gateway_app_post_api_apps_mfg_cockpit_reports_schedules_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -17674,6 +17375,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.report.schedule.run.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -17741,7 +17443,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_get: {
+    gateway_app_get_api_apps_mfg_cockpit_reports_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -17826,7 +17528,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_deliver: {
+    gateway_app_post_api_apps_mfg_cockpit_reports_by_id_deliver: {
         parameters: {
             query?: never;
             header?: never;
@@ -17848,6 +17550,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.report.deliver.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -17915,7 +17618,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_delivery_state_get: {
+    gateway_app_get_api_apps_mfg_cockpit_reports_by_id_delivery_state: {
         parameters: {
             query?: never;
             header?: never;
@@ -18000,7 +17703,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_delivery_retry: {
+    gateway_app_post_api_apps_mfg_cockpit_reports_by_id_delivery_retry: {
         parameters: {
             query?: never;
             header?: never;
@@ -18022,6 +17725,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.report.delivery.retry.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -18089,7 +17793,7 @@ export interface operations {
             };
         };
     };
-    mfg_report_review_request: {
+    gateway_app_post_api_apps_mfg_cockpit_reports_by_id_reviews: {
         parameters: {
             query?: never;
             header?: never;
@@ -18111,6 +17815,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.report.review.request.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -18178,7 +17883,7 @@ export interface operations {
             };
         };
     };
-    mfg_cockpit_widget_catalog_get: {
+    gateway_app_get_api_apps_mfg_cockpit_widget_catalog: {
         parameters: {
             query?: never;
             header?: never;
@@ -18261,7 +17966,7 @@ export interface operations {
             };
         };
     };
-    mfg_command_center_get: {
+    gateway_app_get_api_apps_mfg_command_center: {
         parameters: {
             query?: never;
             header?: never;
@@ -18344,7 +18049,7 @@ export interface operations {
             };
         };
     };
-    mfg_command_center_live_get: {
+    gateway_app_get_api_apps_mfg_command_center_live: {
         parameters: {
             query?: never;
             header?: never;
@@ -18427,7 +18132,7 @@ export interface operations {
             };
         };
     };
-    mfg_contract_get: {
+    gateway_app_get_api_apps_mfg_contract: {
         parameters: {
             query?: never;
             header?: never;
@@ -18510,7 +18215,7 @@ export interface operations {
             };
         };
     };
-    mfg_decision_trace_get: {
+    gateway_app_get_api_apps_mfg_decision_trace: {
         parameters: {
             query?: never;
             header?: never;
@@ -18593,7 +18298,7 @@ export interface operations {
             };
         };
     };
-    mfg_domain_server_manufacturing_get: {
+    gateway_app_get_api_apps_mfg_domain_server_manufacturing: {
         parameters: {
             query?: never;
             header?: never;
@@ -18676,7 +18381,7 @@ export interface operations {
             };
         };
     };
-    mfg_domain_server_manufacturing_seed: {
+    gateway_app_post_api_apps_mfg_domain_server_manufacturing_seed: {
         parameters: {
             query?: never;
             header?: never;
@@ -18696,6 +18401,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.domain.server_manufacturing.seed.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -18763,7 +18469,7 @@ export interface operations {
             };
         };
     };
-    mfg_execution_get: {
+    gateway_app_get_api_apps_mfg_executions_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -18848,7 +18554,7 @@ export interface operations {
             };
         };
     };
-    mfg_execution_cross_plane_execute: {
+    gateway_app_post_api_apps_mfg_executions_by_id_cross_plane_execute: {
         parameters: {
             query?: never;
             header?: never;
@@ -18870,6 +18576,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.execution.cross_plane.execute.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -18937,7 +18644,7 @@ export interface operations {
             };
         };
     };
-    mfg_execution_feedback_create: {
+    gateway_app_post_api_apps_mfg_executions_by_id_feedback: {
         parameters: {
             query?: never;
             header?: never;
@@ -18959,6 +18666,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.execution.feedback.create.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -19026,7 +18734,7 @@ export interface operations {
             };
         };
     };
-    mfg_alert_rule_list: {
+    gateway_app_get_api_apps_mfg_focus_alert_rules: {
         parameters: {
             query?: never;
             header?: never;
@@ -19109,7 +18817,7 @@ export interface operations {
             };
         };
     };
-    mfg_alert_rule_upsert: {
+    gateway_app_post_api_apps_mfg_focus_alert_rules: {
         parameters: {
             query?: never;
             header?: never;
@@ -19129,6 +18837,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.alert_rule.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -19196,7 +18905,7 @@ export interface operations {
             };
         };
     };
-    mfg_alert_subscription_list: {
+    gateway_app_get_api_apps_mfg_focus_alert_subscriptions: {
         parameters: {
             query?: never;
             header?: never;
@@ -19279,7 +18988,7 @@ export interface operations {
             };
         };
     };
-    mfg_alert_subscription_upsert: {
+    gateway_app_post_api_apps_mfg_focus_alert_subscriptions: {
         parameters: {
             query?: never;
             header?: never;
@@ -19299,6 +19008,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.alert_subscription.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -19366,7 +19076,7 @@ export interface operations {
             };
         };
     };
-    mfg_alert_list: {
+    gateway_app_get_api_apps_mfg_focus_alerts: {
         parameters: {
             query?: never;
             header?: never;
@@ -19449,7 +19159,7 @@ export interface operations {
             };
         };
     };
-    mfg_alert_command: {
+    gateway_app_post_api_apps_mfg_focus_alerts_by_id_command: {
         parameters: {
             query?: never;
             header?: never;
@@ -19471,6 +19181,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.alert.command.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -19538,7 +19249,7 @@ export interface operations {
             };
         };
     };
-    mfg_forecast_list: {
+    gateway_app_get_api_apps_mfg_focus_forecasts: {
         parameters: {
             query?: never;
             header?: never;
@@ -19621,7 +19332,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_list: {
+    gateway_app_get_api_apps_mfg_incidents: {
         parameters: {
             query?: never;
             header?: never;
@@ -19704,7 +19415,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_create: {
+    gateway_app_post_api_apps_mfg_incidents: {
         parameters: {
             query?: never;
             header?: never;
@@ -19724,6 +19435,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.incident.create.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -19791,7 +19503,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_get: {
+    gateway_app_get_api_apps_mfg_incidents_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -19876,7 +19588,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_analyze: {
+    gateway_app_post_api_apps_mfg_incidents_by_id_analyze: {
         parameters: {
             query?: never;
             header?: never;
@@ -19898,6 +19610,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.incident.analyze.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -19965,7 +19678,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_case_promote: {
+    gateway_app_post_api_apps_mfg_incidents_by_id_cases_promote: {
         parameters: {
             query?: never;
             header?: never;
@@ -19987,6 +19700,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.incident.case.promote.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -20054,7 +19768,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_playbook_recommend: {
+    gateway_app_post_api_apps_mfg_incidents_by_id_playbooks_recommend: {
         parameters: {
             query?: never;
             header?: never;
@@ -20143,7 +19857,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_room_get: {
+    gateway_app_get_api_apps_mfg_incidents_by_id_room: {
         parameters: {
             query?: never;
             header?: never;
@@ -20228,7 +19942,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_skill_run_list: {
+    gateway_app_get_api_apps_mfg_incidents_by_id_skills: {
         parameters: {
             query?: never;
             header?: never;
@@ -20313,7 +20027,97 @@ export interface operations {
             };
         };
     };
-    mfg_incident_skill_plan: {
+    gateway_app_post_api_apps_mfg_incidents_by_id_skills_commit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.incident.skill.commit.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.incident.skill.commit.response.v1"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_post_api_apps_mfg_incidents_by_id_skills_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -20402,7 +20206,7 @@ export interface operations {
             };
         };
     };
-    mfg_incident_skill_run: {
+    gateway_app_post_api_apps_mfg_incidents_by_id_skills_by_skill_id_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -20425,89 +20229,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.incident.skill.run.response.v1"];
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Capability or scope denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Resource is outside the verified scope */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Revision or idempotency conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Rate limited */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-        };
-    };
-    mfg_live_stream: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["mfg.live.stream.response.v1"];
                     "text/event-stream": string;
                 };
             };
@@ -20576,7 +20297,90 @@ export interface operations {
             };
         };
     };
-    mfg_live_snapshot: {
+    gateway_app_get_api_apps_mfg_live: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.live.stream.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_get_api_apps_mfg_live_snapshot: {
         parameters: {
             query?: never;
             header?: never;
@@ -20659,7 +20463,7 @@ export interface operations {
             };
         };
     };
-    mfg_ontology_server_manufacturing_get: {
+    gateway_app_get_api_apps_mfg_ontology_server_manufacturing: {
         parameters: {
             query?: never;
             header?: never;
@@ -20742,7 +20546,7 @@ export interface operations {
             };
         };
     };
-    mfg_ontology_server_manufacturing_seed: {
+    gateway_app_post_api_apps_mfg_ontology_server_manufacturing_seed: {
         parameters: {
             query?: never;
             header?: never;
@@ -20762,6 +20566,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.ontology.server_manufacturing.seed.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -20829,7 +20634,7 @@ export interface operations {
             };
         };
     };
-    mfg_playbook_upsert: {
+    gateway_app_post_api_apps_mfg_playbooks_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -20849,6 +20654,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.playbook.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -20916,7 +20722,7 @@ export interface operations {
             };
         };
     };
-    mfg_playbook_get: {
+    gateway_app_get_api_apps_mfg_playbooks_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -21001,7 +20807,7 @@ export interface operations {
             };
         };
     };
-    mfg_production_governance_get: {
+    gateway_app_get_api_apps_mfg_production_governance: {
         parameters: {
             query?: never;
             header?: never;
@@ -21084,7 +20890,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_attention_hot: {
+    gateway_app_get_api_apps_mfg_reality_attention_hot: {
         parameters: {
             query?: never;
             header?: never;
@@ -21167,7 +20973,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_change_list: {
+    gateway_app_get_api_apps_mfg_reality_changes: {
         parameters: {
             query?: never;
             header?: never;
@@ -21250,7 +21056,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_compute_job_plan: {
+    gateway_app_post_api_apps_mfg_reality_compute_jobs_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -21270,6 +21076,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.compute_job.plan.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -21337,7 +21144,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_compute_job_get: {
+    gateway_app_get_api_apps_mfg_reality_compute_jobs_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -21422,7 +21229,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_compute_job_execute: {
+    gateway_app_post_api_apps_mfg_reality_compute_jobs_by_id_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -21444,6 +21251,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.compute_job.execute.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -21511,7 +21319,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_connector_run_get: {
+    gateway_app_get_api_apps_mfg_reality_connector_runs_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -21596,7 +21404,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_data_plane_health_get: {
+    gateway_app_get_api_apps_mfg_reality_data_plane_health: {
         parameters: {
             query?: never;
             header?: never;
@@ -21679,7 +21487,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_data_plane_ingest_plan: {
+    gateway_app_post_api_apps_mfg_reality_data_plane_ingest_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -21766,7 +21574,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_list: {
+    gateway_app_get_api_apps_mfg_reality_entities: {
         parameters: {
             query?: never;
             header?: never;
@@ -21849,7 +21657,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_conflict_decision: {
+    gateway_app_post_api_apps_mfg_reality_entities_conflict_decision: {
         parameters: {
             query?: never;
             header?: never;
@@ -21869,6 +21677,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.entity.conflict_decision.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -21936,7 +21745,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_match_candidate: {
+    gateway_app_post_api_apps_mfg_reality_entities_match_candidate: {
         parameters: {
             query?: never;
             header?: never;
@@ -22023,7 +21832,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_resolve_source_key: {
+    gateway_app_post_api_apps_mfg_reality_entities_resolve_source_key: {
         parameters: {
             query?: never;
             header?: never;
@@ -22110,7 +21919,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_upsert: {
+    gateway_app_post_api_apps_mfg_reality_entities_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -22130,6 +21939,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.entity.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -22197,7 +22007,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_get: {
+    gateway_app_get_api_apps_mfg_reality_entities_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -22282,7 +22092,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_impact_path: {
+    gateway_app_get_api_apps_mfg_reality_entities_by_id_impact_path: {
         parameters: {
             query?: never;
             header?: never;
@@ -22367,7 +22177,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_entity_relations: {
+    gateway_app_get_api_apps_mfg_reality_entities_by_id_relations: {
         parameters: {
             query?: never;
             header?: never;
@@ -22452,7 +22262,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_evidence_build: {
+    gateway_app_post_api_apps_mfg_reality_evidence_build: {
         parameters: {
             query?: never;
             header?: never;
@@ -22472,6 +22282,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.evidence.build.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -22539,7 +22350,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_evidence_get: {
+    gateway_app_get_api_apps_mfg_reality_evidence_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -22624,7 +22435,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_evidence_context: {
+    gateway_app_get_api_apps_mfg_reality_evidence_by_id_context: {
         parameters: {
             query?: never;
             header?: never;
@@ -22709,7 +22520,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_evidence_quality_gate: {
+    gateway_app_post_api_apps_mfg_reality_evidence_by_id_quality_gate: {
         parameters: {
             query?: never;
             header?: never;
@@ -22731,6 +22542,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.evidence.quality_gate.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -22798,7 +22610,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_fact_ingest: {
+    gateway_app_post_api_apps_mfg_reality_facts_ingest: {
         parameters: {
             query?: never;
             header?: never;
@@ -22818,6 +22630,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.fact.ingest.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -22885,7 +22698,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_health_get: {
+    gateway_app_get_api_apps_mfg_reality_health: {
         parameters: {
             query?: never;
             header?: never;
@@ -22968,7 +22781,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_dependency_affected_plan: {
+    gateway_app_post_api_apps_mfg_reality_metric_dependencies_affected_by_fact_type: {
         parameters: {
             query?: never;
             header?: never;
@@ -23055,7 +22868,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_dependency_upsert: {
+    gateway_app_post_api_apps_mfg_reality_metric_dependencies_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -23075,6 +22888,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.metric_dependency.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -23142,7 +22956,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_list: {
+    gateway_app_get_api_apps_mfg_reality_metrics: {
         parameters: {
             query?: never;
             header?: never;
@@ -23225,7 +23039,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_attention_plan: {
+    gateway_app_post_api_apps_mfg_reality_metrics_attention_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -23312,7 +23126,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_recompute: {
+    gateway_app_post_api_apps_mfg_reality_metrics_recompute: {
         parameters: {
             query?: never;
             header?: never;
@@ -23332,6 +23146,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.metric.recompute.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -23399,7 +23214,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_snapshot_materialize: {
+    gateway_app_post_api_apps_mfg_reality_metrics_snapshots_materialize: {
         parameters: {
             query?: never;
             header?: never;
@@ -23419,6 +23234,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.metric_snapshot.materialize.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -23486,7 +23302,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_get: {
+    gateway_app_get_api_apps_mfg_reality_metrics_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -23571,7 +23387,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_metric_lineage: {
+    gateway_app_get_api_apps_mfg_reality_metrics_by_id_lineage: {
         parameters: {
             query?: never;
             header?: never;
@@ -23656,7 +23472,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_quality_gate_get: {
+    gateway_app_get_api_apps_mfg_reality_quality_gates_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -23741,7 +23557,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_relation_upsert: {
+    gateway_app_post_api_apps_mfg_reality_relations_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -23761,6 +23577,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.relation.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -23828,7 +23645,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_source_pack_upsert: {
+    gateway_app_post_api_apps_mfg_reality_source_packs_upsert: {
         parameters: {
             query?: never;
             header?: never;
@@ -23848,6 +23665,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.source_pack.upsert.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -23915,7 +23733,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_source_pack_get: {
+    gateway_app_get_api_apps_mfg_reality_source_packs_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -24000,7 +23818,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_connector_run_plan: {
+    gateway_app_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -24022,6 +23840,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.connector_run.plan.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -24089,7 +23908,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_connector_run_execute: {
+    gateway_app_post_api_apps_mfg_reality_source_packs_by_id_connector_runs_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -24111,6 +23930,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.connector_run.execute.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -24178,7 +23998,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_source_pack_delta_plan: {
+    gateway_app_post_api_apps_mfg_reality_source_packs_by_id_delta_plan: {
         parameters: {
             query?: never;
             header?: never;
@@ -24267,7 +24087,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_source_pack_ingest_file: {
+    gateway_app_post_api_apps_mfg_reality_source_packs_by_id_ingest_file: {
         parameters: {
             query?: never;
             header?: never;
@@ -24289,6 +24109,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.reality.source_pack.ingest_file.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -24356,7 +24177,7 @@ export interface operations {
             };
         };
     };
-    mfg_reality_source_pack_validate: {
+    gateway_app_post_api_apps_mfg_reality_source_packs_by_id_validate: {
         parameters: {
             query?: never;
             header?: never;
@@ -24445,7 +24266,7 @@ export interface operations {
             };
         };
     };
-    mfg_skill_run_get: {
+    gateway_app_get_api_apps_mfg_skill_runs_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -24530,7 +24351,7 @@ export interface operations {
             };
         };
     };
-    mfg_skill_list: {
+    gateway_app_get_api_apps_mfg_skills: {
         parameters: {
             query?: never;
             header?: never;
@@ -24613,7 +24434,7 @@ export interface operations {
             };
         };
     };
-    mfg_skill_get: {
+    gateway_app_get_api_apps_mfg_skills_by_id: {
         parameters: {
             query?: never;
             header?: never;
@@ -25539,74 +25360,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_connector_post_api_connectors_sources_by_adapter_id_commit_watermark: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                adapter_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `adapter_id` */
-                        adapter_id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `adapter_id` */
-                        adapter_id: string;
-                    };
-                };
-            };
-        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -36679,6 +36432,51 @@ export interface operations {
             };
         };
     };
+    gateway_resource_get_api_resources_by_id_content: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_resource_get_api_resources_by_id_evidence: {
         parameters: {
             query?: never;
@@ -37594,10 +37392,62 @@ export interface operations {
             };
         };
     };
-    runtime_execution_projection_events: {
+    runtime_live_subscription_create: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Surface instance binding. Must match the subscription owner. */
+                "x-cowd-observer-id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateLiveSubscriptionRequest"];
+                "multipart/form-data": components["schemas"]["CreateLiveSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSubscription"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    runtime_live_subscription_delete: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Surface instance binding. Must match the subscription owner. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
             };
@@ -37611,7 +37461,107 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectionDelta"];
+                    "application/json": components["schemas"]["Empty"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    runtime_live_subscription_patch: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Surface instance binding. Must match the subscription owner. */
+                "x-cowd-observer-id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchLiveSubscriptionRequest"];
+                "multipart/form-data": components["schemas"]["PatchLiveSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSubscription"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    runtime_live_stream_get: {
+        parameters: {
+            query?: {
+                /** @description Browser EventSource Surface binding. Required when x-cowd-observer-id cannot be sent. */
+                surface_instance?: string;
+            };
+            header?: {
+                /** @description Surface instance binding. Must match the subscription owner. */
+                "x-cowd-observer-id"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveEnvelope"];
                     "text/event-stream": string;
                 };
             };
@@ -40892,49 +40842,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_session_message_get_api_sessions_by_id_stream: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string;
                 };
             };
             /** @description Bad request */

@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import MarkdownIt from 'markdown-it';
-import { computed } from 'vue';
+import { ref, watch } from 'vue';
+import { StreamingMarkdownRenderer } from './streamingMarkdown';
 
-const props = defineProps<{ content: string }>();
-const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
-const html = computed(() => md.render(props.content || ''));
+const props = withDefaults(defineProps<{ content: string; streaming?: boolean }>(), {
+  streaming: false,
+});
+const renderer = new StreamingMarkdownRenderer();
+const html = ref('');
+
+watch(
+  () => [props.content, props.streaming] as const,
+  ([content, streaming]) => {
+    html.value = renderer.render(content, streaming).html;
+  },
+  { immediate: true },
+);
 </script>
 
 <template>

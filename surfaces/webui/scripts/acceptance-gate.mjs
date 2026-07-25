@@ -66,8 +66,9 @@ function repositorySource(repository, file) {
 
 const requiredSource = [
   ['frontend', 'surfaces/webui/src/App.vue', 'useCapabilitySection'],
-  ['frontend', 'surfaces/webui/src/stores/projectionRegistry.ts', 'MAX_ACTIVE_PROJECTION_STREAMS'],
-  ['frontend', 'surfaces/webui/src/stores/chatSessions.ts', 'MAX_ACTIVE_SESSION_STREAMS'],
+  ['frontend', 'surfaces/webui/src/stores/liveTransport.ts', 'new EventSource'],
+  ['frontend', 'surfaces/webui/src/stores/projectionRegistry.ts', 'openLiveSource'],
+  ['frontend', 'surfaces/webui/src/stores/chatSessions.ts', 'openSessionLiveSource'],
   ['frontend', 'surfaces/webui/src/components/graph/GraphSurface.vue', 'graphIsAggregated'],
   ['frontend', 'surfaces/webui/src/components/graph/GraphSurface.vue', 'exportGraph'],
   ['frontend', 'surfaces/webui/src/components/evidence/EvidenceInspector.vue', 'evidenceDisplayState'],

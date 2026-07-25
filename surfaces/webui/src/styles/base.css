@@ -128,7 +128,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .run-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .transcript { --assistant-content-max: min(1280px, 100%); --system-content-max: min(1280px, 100%); --user-content-max: min(760px, 88%); flex: 1 1 auto; min-height: 0; overflow: auto; padding: 18px 28px; scroll-padding-bottom: 180px; }
 .app-shell[data-shell="chat-clean"] .transcript { --assistant-content-max: min(1040px, 100%); --system-content-max: min(1040px, 100%); }
-.turn { display: grid; gap: 5px; width: 100%; max-width: min(1320px, 100%); min-width: 0; margin: 0 auto 18px; }
+.turn { display: grid; gap: 5px; width: 100%; max-width: min(1320px, 100%); min-width: 0; margin: 0 auto 18px; content-visibility: auto; contain-intrinsic-size: auto 160px; contain: layout paint style; }
 .app-shell[data-shell="chat-clean"] .turn { max-width: min(1080px, 100%); }
 .turn[data-role="user"] { justify-items: end; }
 .turn[data-role="assistant"], .turn[data-role="system"] { justify-items: start; }
@@ -244,7 +244,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .stage-row[data-status="observed"] { border-color: color-mix(in srgb, var(--success) 35%, var(--border)); }
 .stage-row[data-status="failed"] { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .evidence-list { display: grid; gap: 8px; }
-.evidence-item { min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 9px; }
+.evidence-item { min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 9px; content-visibility: auto; contain-intrinsic-size: auto 84px; contain: layout paint style; }
 .evidence-item strong { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evidence-item p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .runtime-input-item .inline-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -513,7 +513,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .data-table td[data-kind="long"] span,
 .data-table td[data-kind="list"] span,
 .data-table td[data-kind="object"] span { white-space: normal; line-height: 1.45; }
-.data-table tbody tr { cursor: default; }
+.data-table tbody tr { cursor: default; content-visibility: auto; contain-intrinsic-size: auto 42px; }
 .data-table tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 62%, transparent); }
 .data-table tbody tr:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
 .data-table tbody tr[data-selected="true"] { background: color-mix(in srgb, var(--info) 14%, var(--bg)); }

@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
 import { api, capabilityPageEndpointsFromContract, WEBUI_REQUESTED_CAPABILITIES } from './api/client';
 import ChatPage from './pages/ChatPage.vue';
@@ -26,6 +26,7 @@ import { useChatSessionsStore } from './stores/chatSessions';
 import { useMfgCockpitStore } from '@cowd/app-mfg-webui/stores/mfgCockpit';
 import { createMfgMutationIntent } from '@cowd/app-mfg-webui/stores/mutationIntents';
 import { useProjectionRegistryStore } from './stores/projectionRegistry';
+import { resetLiveTransportForTests } from './stores/liveTransport';
 import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
 import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
@@ -34,6 +35,8 @@ import { canonicalMfgMutationResponse } from './testing/mfgReceiptMock';
 
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
 vi.mock('vue-echarts', () => ({ default: { template: '<div class="chart"></div>' } }));
+
+afterEach(() => resetLiveTransportForTests());
 
 function mountApp(path = '/chat') {
   const router = createRouter({
@@ -786,7 +789,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(stale.__last_success_at).toBeTruthy();
   });
 
-  it('keeps independent execution streams and merges detail scope per projection', async () => {
+  it('merges execution detail scopes over one physical live transport', async () => {
     const urls: string[] = [];
     const closed: string[] = [];
     class FakeEventSource {
@@ -795,8 +798,41 @@ describe('Cowd Vue WebUI shell', () => {
       close() { closed.push(this.url); }
     }
     vi.stubGlobal('EventSource', FakeEventSource);
-    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
-      const executionId = String(input).match(/\/executions\/([^/?]+)/)?.[1] || '';
+    let subscriptionRevision = 0;
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path === '/api/runtime/live-subscriptions') {
+        subscriptionRevision = 1;
+        const request = JSON.parse(String(init?.body || '{}'));
+        return Promise.resolve(new Response(JSON.stringify({
+          schema_version: 1,
+          id: 'live-test',
+          surface_instance: request.surface_instance,
+          revision: subscriptionRevision,
+          selector: request.selector,
+          selector_hash: 'selector-1',
+          expires_at_ms: Date.now() + 60_000,
+          stream_url: '/api/runtime/live/live-test',
+        }), { status: 201 }));
+      }
+      if (path === '/api/runtime/live-subscriptions/live-test' && init?.method === 'PATCH') {
+        subscriptionRevision += 1;
+        const request = JSON.parse(String(init.body || '{}'));
+        return Promise.resolve(new Response(JSON.stringify({
+          schema_version: 1,
+          id: 'live-test',
+          surface_instance: 'webui:test',
+          revision: subscriptionRevision,
+          selector: request.selector,
+          selector_hash: `selector-${subscriptionRevision}`,
+          expires_at_ms: Date.now() + 60_000,
+          stream_url: '/api/runtime/live/live-test',
+        }), { status: 200 }));
+      }
+      if (path === '/api/runtime/live-subscriptions/live-test' && init?.method === 'DELETE') {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      const executionId = path.match(/\/executions\/([^/?]+)/)?.[1] || '';
       return Promise.resolve(new Response(JSON.stringify({
         schema_version: 1,
         execution_id: decodeURIComponent(executionId),
@@ -810,18 +846,13 @@ describe('Cowd Vue WebUI shell', () => {
     registry.acquire('exec-1', 'chat:session-1', 'summary');
     await vi.waitFor(() => expect(urls).toHaveLength(1));
     registry.acquire('exec-1', 'mission', 'full');
-    await vi.waitFor(() => expect(urls).toHaveLength(2));
+    await vi.waitFor(() => expect(registry.entries['exec-1'].detailScope).toBe('full'));
     registry.release('mission');
-    await vi.waitFor(() => expect(urls).toHaveLength(3));
+    await vi.waitFor(() => expect(registry.entries['exec-1'].detailScope).toBe('summary'));
     registry.acquire('exec-2', 'agents', 'full');
-    await vi.waitFor(() => expect(urls).toHaveLength(4));
-    expect(urls).toEqual([
-      '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=summary',
-      '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=full',
-      '/api/runtime/executions/exec-1/events?cursor=0&detail_scope=summary',
-      '/api/runtime/executions/exec-2/events?cursor=0&detail_scope=full',
-    ]);
-    expect(closed).toHaveLength(2);
+    await vi.waitFor(() => expect(registry.activeSourceCount).toBe(2));
+    expect(urls).toEqual(['/api/runtime/live/live-test']);
+    expect(closed).toHaveLength(0);
     registry.release('chat:session-1');
     registry.release('agents');
 
@@ -845,7 +876,7 @@ describe('Cowd Vue WebUI shell', () => {
 
     await vi.waitFor(() => {
       expect(registry.entries['missing-execution'].connectionState).toBe('error');
-      expect(registry.activeStreamCount).toBe(0);
+      expect(registry.activeSourceCount).toBe(0);
     });
     expect(closed).toEqual([]);
     registry.release('chat:missing-session');

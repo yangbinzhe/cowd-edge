@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
 const gatewayUrl = (process.env.COWD_GATEWAY_URL || 'http://127.0.0.1:8642').replace(/\/$/, '');
@@ -8,6 +8,9 @@ const mfgContractUrl = `${gatewayUrl}/api/apps/mfg/contract`;
 const output = process.env.COWD_GENERATED_API_OUTPUT
   ? resolve(process.env.COWD_GENERATED_API_OUTPUT)
   : resolve('src/generated/gateway-api.ts');
+const liveContractOutput = process.env.COWD_GENERATED_LIVE_CONTRACT_OUTPUT
+  ? resolve(process.env.COWD_GENERATED_LIVE_CONTRACT_OUTPUT)
+  : resolve(dirname(output), 'live-contract-meta.ts');
 const requiredMfgOperations = {
   '/api/apps/mfg/cockpit/profiles': ['get'],
   '/api/apps/mfg/cockpit/profiles/upsert': ['post'],
@@ -76,8 +79,8 @@ function operationHasNamedSchema(operation) {
 
 function assertMfgCapabilitySchema(document, contract) {
   const activeRoutes = (contract?.routes || []).filter((route) => route.availability === 'active');
-  if (activeRoutes.length !== 104) {
-    throw new Error(`MFG contract must expose exactly 104 active routes, received ${activeRoutes.length}`);
+  if (activeRoutes.length !== 105) {
+    throw new Error(`MFG contract must expose exactly 105 active routes, received ${activeRoutes.length}`);
   }
   const missing = Object.entries(requiredMfgOperations).flatMap(([route, methods]) => methods
     .filter((method) => !document.paths?.[route]?.[method])
@@ -124,14 +127,42 @@ if (!contractResponse.ok) {
 }
 const contract = await contractResponse.json();
 assertMfgCapabilitySchema(document, contract);
+const liveEnvelopeSchema = document?.components?.schemas?.LiveEnvelope;
+const liveContractHash = liveEnvelopeSchema?.['x-cowd-schema-hash'];
+const liveContractFixture = liveEnvelopeSchema?.example;
+if (
+  typeof liveContractHash !== 'string'
+  || !/^[a-f0-9]{64}$/.test(liveContractHash)
+  || liveContractFixture?.schema_version !== 1
+  || liveContractFixture?.subscription_revision < 1
+) {
+  throw new Error('Gateway OpenAPI is missing the canonical LiveEnvelope schema hash or fixture');
+}
 
 await mkdir(dirname(output), { recursive: true });
+await mkdir(dirname(liveContractOutput), { recursive: true });
+const temporaryOutput = resolve(dirname(output), '.gateway-api.generated.ts');
+const temporaryLiveContract = resolve(dirname(liveContractOutput), '.live-contract-meta.generated.ts');
 const temporarySpec = resolve('.gateway-openapi.generated.json');
 await writeFile(temporarySpec, `${JSON.stringify(document, null, 2)}\n`);
+await writeFile(
+  temporaryLiveContract,
+  [
+    '// Generated from Gateway OpenAPI. Do not edit manually.',
+    `export const LIVE_CONTRACT_SCHEMA_VERSION = ${JSON.stringify(liveContractFixture.schema_version)} as const;`,
+    `export const LIVE_ENVELOPE_SCHEMA_HASH = ${JSON.stringify(liveContractHash)} as const;`,
+    `export const LIVE_ENVELOPE_CANONICAL_FIXTURE = ${JSON.stringify(liveContractFixture, null, 2)} as const;`,
+    '',
+  ].join('\n'),
+);
 try {
-  execFileSync('npx', ['openapi-typescript', temporarySpec, '-o', output], {
+  execFileSync('npx', ['openapi-typescript', temporarySpec, '-o', temporaryOutput], {
     stdio: 'inherit',
   });
+  await rename(temporaryOutput, output);
+  await rename(temporaryLiveContract, liveContractOutput);
 } finally {
   await rm(temporarySpec, { force: true });
+  await rm(temporaryOutput, { force: true });
+  await rm(temporaryLiveContract, { force: true });
 }

@@ -388,6 +388,35 @@ async function chatScenario(browser) {
     const request = route.request();
     const url = new URL(request.url());
     const pathname = url.pathname;
+    if (pathname === '/api/runtime/live-subscriptions' && request.method() === 'POST') {
+      const body = request.postDataJSON();
+      return routeJson(route, {
+        schema_version: 1,
+        id: 'performance-live',
+        surface_instance: body.surface_instance,
+        revision: 1,
+        selector: body.selector,
+        selector_hash: 'performance-selector',
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: '/api/runtime/live/performance-live',
+      }, 201);
+    }
+    if (pathname === '/api/runtime/live-subscriptions/performance-live' && request.method() === 'PATCH') {
+      const body = request.postDataJSON();
+      return routeJson(route, {
+        schema_version: 1,
+        id: 'performance-live',
+        surface_instance: 'webui:performance',
+        revision: 1,
+        selector: body.selector,
+        selector_hash: 'performance-selector',
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: '/api/runtime/live/performance-live',
+      });
+    }
+    if (pathname === '/api/runtime/live-subscriptions/performance-live' && request.method() === 'DELETE') {
+      return route.fulfill({ status: 204 });
+    }
     if (pathname === '/api/sessions' && request.method() === 'GET') return routeJson(route, { sessions });
     const messageMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
     if (messageMatch && request.method() === 'GET') return routeJson(route, { messages: [] });
@@ -423,9 +452,8 @@ async function chatScenario(browser) {
       await page.locator('.session-row').nth(index).click();
       await page.waitForFunction((sessionId) => document.querySelector('.session-row.active')?.textContent?.includes(sessionId.replace('performance-session-', 'Performance session ')), sessions[index].id);
     }
-    const sourceCount = await page.evaluate(() => window.__cowdEventSources.filter((item) => !item.closed && item.url.includes('/api/sessions/')).length);
-    assert(sourceCount === 12, `session stream budget opened ${sourceCount} streams`);
-    assert((await page.locator('.session-row.active').textContent()).includes('budget reached (12)'), 'overflow session did not expose its degraded reason');
+    const sourceCount = await page.evaluate(() => window.__cowdEventSources.filter((item) => !item.closed && item.url.includes('/api/runtime/live/')).length);
+    assert(sourceCount === 1, `multiplex transport opened ${sourceCount} physical streams`);
 
     const isolated = [];
     for (let index = 0; index < 3; index += 1) {
@@ -433,8 +461,21 @@ async function chatScenario(browser) {
       await page.locator('.composer textarea').fill(`prompt-${index}`);
       await page.locator('.composer .primary-action').click();
       await page.evaluate(({ sessionId, index }) => {
-        window.__cowdEmit(`/api/sessions/${sessionId}/stream`, 'message', { type: 'TextDelta', text: `reply-${index}` });
-        window.__cowdEmit(`/api/sessions/${sessionId}/stream`, 'message', { type: 'ExecutionPhase', status: 'calling_model', detail: `waiting-provider-${index}` });
+        const emit = (payload) => window.__cowdEmit('/api/runtime/live/performance-live', 'live', {
+          schema_version: 1,
+          subscription_id: 'performance-live',
+          subscription_revision: 1,
+          source_kind: 'session',
+          source_id: sessionId,
+          detail_scope: 'summary',
+          source_cursor: 0,
+          delivery_class: 'ephemeral_preview',
+          source_health: 'live',
+          event: payload.type,
+          payload,
+        });
+        emit({ type: 'TextDelta', text: `reply-${index}` });
+        emit({ type: 'ExecutionPhase', status: 'calling_model', detail: `waiting-provider-${index}` });
       }, { sessionId: sessions[index].id, index });
       await page.waitForTimeout(40);
       isolated.push({
@@ -452,7 +493,21 @@ async function chatScenario(browser) {
     const activeSession = sessions[2].id;
     const burstStarted = Date.now();
     await page.evaluate((sessionId) => {
-      for (let index = 0; index < 1_000; index += 1) window.__cowdEmit(`/api/sessions/${sessionId}/stream`, 'message', { type: 'TextDelta', text: 'x' });
+      for (let index = 0; index < 1_000; index += 1) {
+        window.__cowdEmit('/api/runtime/live/performance-live', 'live', {
+          schema_version: 1,
+          subscription_id: 'performance-live',
+          subscription_revision: 1,
+          source_kind: 'session',
+          source_id: sessionId,
+          detail_scope: 'summary',
+          source_cursor: 0,
+          delivery_class: 'ephemeral_preview',
+          source_health: 'live',
+          event: 'TextDelta',
+          payload: { type: 'TextDelta', text: 'x' },
+        });
+      }
     }, activeSession);
     await page.waitForFunction(() => (document.querySelector('.transcript')?.textContent?.match(/x/g) || []).length >= 1_000, undefined, { timeout: 2_000 });
     const burstMs = Date.now() - burstStarted;
@@ -462,7 +517,7 @@ async function chatScenario(browser) {
     const menuMs = Date.now() - menuStarted;
     assert(burstMs < 500, `1,000 deltas took ${burstMs}ms to coalesce`);
     assert(menuMs < 300, `command menu took ${menuMs}ms while task waited`);
-    passed('P-05', '14 sessions respected the 12-stream budget and overflow stayed explicitly degraded', { active_streams: sourceCount, requested_sessions: 14, isolated_sessions: isolated.length });
+    passed('P-05', '14 sessions shared one physical multiplex stream without a logical-session cap', { physical_streams: sourceCount, requested_sessions: 14, isolated_sessions: isolated.length });
     passed('P-08', 'long task without content exposed wait reason while 1,000 deltas batched and menus stayed responsive', { delta_burst_ms: burstMs, menu_ms: menuMs, wait_reason: isolated[2].run_status });
     passed('LIVE-01', 'three simultaneous browser sessions kept prompts, replies, evidence and progress isolated', { sessions: isolated });
   } catch (error) {

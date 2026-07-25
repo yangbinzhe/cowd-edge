@@ -1,11 +1,9 @@
 import { defineStore } from 'pinia';
-import { computed, onScopeDispose, reactive, ref } from 'vue';
+import { onScopeDispose, reactive, ref } from 'vue';
 import { api } from '../api/client';
 import type { ExecutionProjection, ExecutionProjectionDelta } from '../types';
-import {
-  acquireLongLivedConnection,
-  releaseLongLivedConnection,
-} from '../utils/longLivedConnectionBudget';
+import { openLiveSource } from './liveTransport';
+import type { LiveEnvelope, LiveSourceLease } from './liveTransport';
 
 export type ProjectionDetailScope = 'summary' | 'full';
 export type ProjectionConnectionState = 'idle' | 'materializing' | 'connecting' | 'live' | 'reconnecting' | 'degraded' | 'stale' | 'offline' | 'error' | 'terminal';
@@ -29,33 +27,22 @@ export interface ExecutionProjectionRegistryEntry {
 }
 
 const terminalStatuses = new Set(['complete', 'cancelled', 'error']);
-// Two chat streams plus one selected execution projection and one optional
-// APP stream keep the aggregate HTTP/1.1 long-lived budget at four, leaving
-// two origin sockets for navigation, cancellation and ordinary API calls.
-export const MAX_ACTIVE_PROJECTION_STREAMS = 2;
 const INITIAL_MATERIALIZATION_DELAYS_MS = [50, 100, 200, 400, 800, 1_600];
-const PROJECTION_RECONNECT_BASE_MS = 250;
-const PROJECTION_RECONNECT_MAX_MS = 5_000;
-const MAX_STREAM_RECONNECT_ATTEMPTS = 8;
-const PROJECTION_STREAM_HEALTHY_MS = 10_000;
 const MIN_PROJECTION_REFRESH_INTERVAL_MS = 100;
 
 export const useProjectionRegistryStore = defineStore('projectionRegistry', () => {
   const entries = reactive<Record<string, ExecutionProjectionRegistryEntry>>({});
-  const streams = new Map<string, EventSource>();
+  const sourceLeases = new Map<string, LiveSourceLease>();
   const streamScopes = new Map<string, ProjectionDetailScope>();
   const reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const initialMaterializationAttempts = new Map<string, number>();
-  const streamReconnectAttempts = new Map<string, number>();
-  const streamOpenedAt = new Map<string, number>();
   const connectionLoads = new Set<string>();
   const inFlightLoads = new Map<string, Promise<ExecutionProjection | null>>();
   const dirtyLoads = new Set<string>();
   const pendingLoadScopes = new Map<string, ProjectionDetailScope>();
   const lastLoadStartedAt = new Map<string, number>();
   const consumerExecutions = new Map<string, string>();
-  const activeStreams = ref(0);
-  const activeStreamCount = computed(() => activeStreams.value);
+  const activeSourceCount = ref(0);
 
   function ensureEntry(executionId: string) {
     if (!entries[executionId]) {
@@ -123,7 +110,6 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     reconnectTimers.delete(executionId);
     if (resetAttempts) {
       initialMaterializationAttempts.delete(executionId);
-      streamReconnectAttempts.delete(executionId);
     }
   }
 
@@ -133,7 +119,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       || entry.reconnectBlocked
       || !hasActiveConsumer(entry)
       || isTerminal(entry.projection)
-      || streams.has(executionId)) return;
+      || sourceLeases.has(executionId)) return;
     if (reconnectTimers.has(executionId)) return;
     const attempt = initialMaterializationAttempts.get(executionId) || 0;
     if (attempt >= INITIAL_MATERIALIZATION_DELAYS_MS.length) {
@@ -145,35 +131,6 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     const delay = INITIAL_MATERIALIZATION_DELAYS_MS[attempt];
     initialMaterializationAttempts.set(executionId, attempt + 1);
     entry.connectionState = 'materializing';
-    const timer = setTimeout(() => {
-      reconnectTimers.delete(executionId);
-      if (!hasActiveConsumer(entry) || isTerminal(entry.projection)) return;
-      establishConnection(executionId, requestedScope);
-    }, delay);
-    reconnectTimers.set(executionId, timer);
-  }
-
-  function scheduleStreamReconnect(executionId: string, requestedScope?: ProjectionDetailScope) {
-    const entry = entries[executionId];
-    if (!entry
-      || entry.reconnectBlocked
-      || !hasActiveConsumer(entry)
-      || isTerminal(entry.projection)
-      || streams.has(executionId)
-      || reconnectTimers.has(executionId)) return;
-    const attempt = streamReconnectAttempts.get(executionId) || 0;
-    if (attempt >= MAX_STREAM_RECONNECT_ATTEMPTS) {
-      entry.connectionState = 'degraded';
-      entry.degradedReason = 'execution projection stream reconnect budget exhausted';
-      entry.lastUpdatedAt = Date.now();
-      return;
-    }
-    const delay = Math.min(
-      PROJECTION_RECONNECT_BASE_MS * (2 ** Math.min(attempt, 5)),
-      PROJECTION_RECONNECT_MAX_MS,
-    );
-    streamReconnectAttempts.set(executionId, attempt + 1);
-    entry.connectionState = 'reconnecting';
     const timer = setTimeout(() => {
       reconnectTimers.delete(executionId);
       if (!hasActiveConsumer(entry) || isTerminal(entry.projection)) return;
@@ -252,7 +209,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         entry.connectionState = 'terminal';
         promoteDeferredStreams();
       } else {
-        entry.connectionState = streams.has(id) ? 'live' : (entry.degradedReason ? 'degraded' : 'offline');
+        entry.connectionState = sourceLeases.has(id) ? 'live' : (entry.degradedReason ? 'degraded' : 'offline');
       }
       return projection;
     } catch (error) {
@@ -360,7 +317,6 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       void load(expectedExecutionId);
       return;
     }
-    streamReconnectAttempts.delete(expectedExecutionId);
     entry.cursor = delta.target_cursor;
     entry.lastUpdatedAt = Date.now();
     entry.lastEventAt = entry.lastUpdatedAt;
@@ -368,45 +324,31 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
   }
 
   function closeStream(executionId: string) {
-    streams.get(executionId)?.close();
-    streams.delete(executionId);
-    releaseLongLivedConnection(`projection:${executionId}`);
+    sourceLeases.get(executionId)?.close();
+    sourceLeases.delete(executionId);
+    activeSourceCount.value = sourceLeases.size;
     streamScopes.delete(executionId);
-    streamOpenedAt.delete(executionId);
-    activeStreams.value = streams.size;
   }
 
   function promoteDeferredStreams() {
-    if (streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) return;
     Object.values(entries)
-      .filter((entry) => entry.connectionState === 'degraded'
-        && (
-          entry.degradedReason.startsWith('projection connection budget')
-          || entry.degradedReason.startsWith('shared live-connection budget')
-          || entry.degradedReason.includes('yielded the shared live-connection budget')
-        )
-        && Object.keys(entry.consumers).length > 0)
-      .sort((left, right) => left.lastUpdatedAt - right.lastUpdatedAt)
-      .slice(0, MAX_ACTIVE_PROJECTION_STREAMS - streams.size)
+      .filter((entry) => hasActiveConsumer(entry) && !entry.reconnectBlocked)
       .forEach((entry) => establishConnection(entry.executionId));
   }
 
   function establishConnection(executionId: string, requestedScope?: ProjectionDetailScope) {
     const entry = ensureEntry(executionId);
     const scope = requestedScope || desiredScope(entry);
-    if (streams.has(executionId) && streamScopes.get(executionId) === scope) return;
     entry.detailScope = scope;
-    if (streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) {
-      entry.connectionState = 'degraded';
-      entry.degradedReason = `projection connection budget reached (${MAX_ACTIVE_PROJECTION_STREAMS})`;
-      return;
-    }
+    if (sourceLeases.has(executionId) && streamScopes.get(executionId) === scope) return;
     if (connectionLoads.has(executionId)) return;
     connectionLoads.add(executionId);
     void (async () => {
       try {
         const projection = await load(executionId, scope);
         if (!hasActiveConsumer(entry) || entry.reconnectBlocked || isTerminal(entry.projection)) return;
+        const currentScope = desiredScope(entry);
+        if (currentScope !== scope) return;
         if (projection?.execution_id === executionId) {
           openStream(executionId, scope);
         } else if (!entry.projection && allowsInitialSnapshotRetry(entry)) {
@@ -414,6 +356,14 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         }
       } finally {
         connectionLoads.delete(executionId);
+        if (
+          hasActiveConsumer(entry)
+          && !entry.reconnectBlocked
+          && !isTerminal(entry.projection)
+          && entry.detailScope !== scope
+        ) {
+          establishConnection(executionId);
+        }
       }
     })();
   }
@@ -421,105 +371,100 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
   function openStream(
     executionId: string,
     scope: ProjectionDetailScope,
-    leaseGranted = false,
   ) {
     const entry = ensureEntry(executionId);
-    if (!entry.projection || isTerminal(entry.projection)) {
-      if (leaseGranted) releaseLongLivedConnection(`projection:${executionId}`);
-      return;
-    }
-    if (streams.has(executionId) && streamScopes.get(executionId) === scope) return;
-    if (!streams.has(executionId) && streams.size >= MAX_ACTIVE_PROJECTION_STREAMS) {
-      if (leaseGranted) releaseLongLivedConnection(`projection:${executionId}`);
-      entry.connectionState = 'degraded';
-      entry.degradedReason = `projection connection budget reached (${MAX_ACTIVE_PROJECTION_STREAMS})`;
-      promoteDeferredStreams();
-      return;
-    }
+    if (!entry.projection || isTerminal(entry.projection)) return;
+    if (sourceLeases.has(executionId) && streamScopes.get(executionId) === scope) return;
     cancelReconnect(executionId, false);
-    if (streams.has(executionId)) closeStream(executionId);
-    if (typeof EventSource === 'undefined') {
-      if (leaseGranted) releaseLongLivedConnection(`projection:${executionId}`);
-      entry.connectionState = 'offline';
-      return;
-    }
+    if (sourceLeases.has(executionId)) closeStream(executionId);
     entry.connectionState = 'connecting';
     entry.degradedReason = '';
-    if (!leaseGranted && !acquireLongLivedConnection(
-      `projection:${executionId}`,
-      10,
-      () => {
-        closeStream(executionId);
-        entry.connectionState = 'degraded';
-        entry.degradedReason = 'projection yielded the shared live-connection budget to higher-priority work';
+    const lease = openLiveSource(
+      {
+        kind: 'execution',
+        id: executionId,
+        cursor: entry.cursor,
+        detail_scope: scope,
       },
-      () => {
-        if (
-          !hasActiveConsumer(entry)
-          || entry.reconnectBlocked
-          || !entry.projection
-          || isTerminal(entry.projection)
-        ) {
-          releaseLongLivedConnection(`projection:${executionId}`);
-          return;
-        }
-        openStream(executionId, desiredScope(entry), true);
+      {
+        open: () => {
+          if (sourceLeases.get(executionId) !== lease) return;
+          const now = Date.now();
+          entry.lastEventAt = now;
+          entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'live';
+        },
+        error: (reason) => {
+          if (sourceLeases.get(executionId) !== lease || isTerminal(entry.projection)) return;
+          entry.connectionState = 'reconnecting';
+          entry.degradedReason = reason;
+        },
+        envelope: (envelope) => applyProjectionEnvelope(executionId, scope, lease, envelope),
       },
-    )) {
-      entry.connectionState = 'degraded';
-      entry.degradedReason = 'shared live-connection budget reached';
+    );
+    sourceLeases.set(executionId, lease);
+    activeSourceCount.value = sourceLeases.size;
+    streamScopes.set(executionId, scope);
+  }
+
+  function applyProjectionEnvelope(
+    executionId: string,
+    scope: ProjectionDetailScope,
+    lease: LiveSourceLease,
+    envelope: LiveEnvelope,
+  ) {
+    if (sourceLeases.get(executionId) !== lease) return;
+    const entry = ensureEntry(executionId);
+    entry.lastEventAt = Date.now();
+    if (envelope.event === 'source.authorization_revoked') {
+      failClosed(
+        entry,
+        String(envelope.payload?.reason || 'Gateway revoked the execution projection source'),
+      );
       return;
     }
-    const stream = new EventSource(`/api/runtime/executions/${encodeURIComponent(executionId)}/events?cursor=${entry.cursor}&detail_scope=${scope}`);
-    streams.set(executionId, stream);
-    streamScopes.set(executionId, scope);
-    activeStreams.value = streams.size;
-    stream.onopen = () => {
-      if (streams.get(executionId) === stream) {
-        const now = Date.now();
-        streamOpenedAt.set(executionId, now);
-        entry.lastEventAt = now;
-        entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'live';
-      }
-    };
-    stream.addEventListener('projection_delta', (event) => {
-      if (streams.get(executionId) !== stream) return;
-      try {
-        entry.lastEventAt = Date.now();
-        applyDelta(
-          JSON.parse((event as MessageEvent).data) as ExecutionProjectionDelta,
-          executionId,
-        );
-      } catch (error) {
-        entry.lastError = error instanceof Error ? error.message : String(error);
-        void load(executionId, scope);
-      }
-    });
-    stream.addEventListener('projection_resync', () => {
-      if (streams.get(executionId) !== stream) return;
-      entry.lastEventAt = Date.now();
+    if (envelope.source_health === 'resync_required') {
       entry.resyncCount += 1;
       void load(executionId, scope);
-    });
-    stream.addEventListener('projection_authorization_revoked', () => {
-      if (streams.get(executionId) === stream) {
-        // Gateway revalidated a stream that was opened under an older
-        // credential.  Do not retain its last full snapshot or schedule a
-        // retry with that credential: the next user-authenticated refresh is
-        // the only authority allowed to restore it.
-        failClosed(entry, 'Gateway revoked the execution projection stream');
+      return;
+    }
+    if (envelope.event === 'projection_delta') {
+      applyDelta(envelope.payload as ExecutionProjectionDelta, executionId);
+      return;
+    }
+    if (envelope.event === 'projection_live') {
+      if (entry.projection && envelope.payload?.execution_id === executionId) {
+        entry.projection.live = envelope.payload.live;
+        entry.lastUpdatedAt = Date.now();
+        entry.connectionState = isTerminal(entry.projection) ? 'terminal' : 'live';
+        if (isTerminal(entry.projection)) closeStream(executionId);
       }
-    });
-    stream.onerror = () => {
-      if (streams.get(executionId) === stream && !isTerminal(entry.projection)) {
-        const openedAt = streamOpenedAt.get(executionId) || 0;
-        const wasHealthy = openedAt > 0 && Date.now() - openedAt >= PROJECTION_STREAM_HEALTHY_MS;
-        closeStream(executionId);
-        if (wasHealthy) streamReconnectAttempts.delete(executionId);
-        entry.connectionState = 'reconnecting';
-        scheduleStreamReconnect(executionId, scope);
+      return;
+    }
+    if (envelope.event === 'projection_snapshot') {
+      const projection = envelope.payload as ExecutionProjection;
+      if (
+        Number(projection?.schema_version) !== 1
+        || projection?.execution_id !== executionId
+      ) {
+        failClosed(entry, 'Gateway live projection snapshot contract mismatch');
+        return;
       }
-    };
+      if (
+        entry.projection
+        && Number(projection.revision || 0) < Number(entry.projection.revision || 0)
+      ) return;
+      entry.projection = projection;
+      entry.cursor = Math.max(entry.cursor, Number(projection.cursor || 0));
+      entry.lastUpdatedAt = Date.now();
+      entry.connectionState = isTerminal(projection) ? 'terminal' : 'live';
+      lease.update({
+        kind: 'execution',
+        id: executionId,
+        cursor: entry.cursor,
+        detail_scope: scope,
+      });
+      if (isTerminal(projection)) closeStream(executionId);
+    }
   }
 
   function refreshAuthorization() {
@@ -676,8 +621,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
 
   return {
     entries,
-    activeStreamCount,
-    maxActiveStreams: MAX_ACTIVE_PROJECTION_STREAMS,
+    activeSourceCount,
     acquire,
     release,
     load,

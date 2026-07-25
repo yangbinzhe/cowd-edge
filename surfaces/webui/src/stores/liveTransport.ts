@@ -1,0 +1,486 @@
+import { reactive, ref } from 'vue';
+import { api, ApiWriteError, webuiObserverId } from '../api/client';
+
+export type LiveSourceKind = 'session' | 'execution' | 'mission';
+export type LiveDetailScope = 'summary' | 'full';
+
+export type LiveSourceSelector = {
+  kind: LiveSourceKind;
+  id: string;
+  cursor?: number;
+  detail_scope?: LiveDetailScope;
+};
+
+export type LiveEnvelope = {
+  schema_version: number;
+  subscription_id: string;
+  subscription_revision: number;
+  source_kind: string;
+  source_id: string;
+  detail_scope: LiveDetailScope;
+  source_cursor?: number;
+  delivery_class: 'durable' | 'snapshot_reconstructable' | 'ephemeral_preview';
+  source_health: 'baseline' | 'live' | 'resync_required' | 'revoked';
+  event: string;
+  payload: any;
+  session_id?: string;
+  execution_id?: string;
+  mission_id?: string;
+  agent_id?: string;
+  stream_revision?: number;
+  start_bytes?: number;
+  end_bytes?: number;
+};
+
+type SourceCallbacks = {
+  open?: () => void;
+  error?: (reason: string) => void;
+  envelope: (envelope: LiveEnvelope) => void;
+};
+
+export type LiveSourceLease = {
+  close: () => void;
+  update: (selector: LiveSourceSelector) => void;
+};
+
+export type SessionLiveSource = LiveSourceLease & {
+  onopen: (() => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent) => void) | null;
+};
+
+type SourceOwner = {
+  selector: LiveSourceSelector;
+  consumers: Map<string, SourceCallbacks>;
+};
+
+type LiveSubscription = {
+  id: string;
+  revision: number;
+  selector_hash: string;
+  stream_url: string;
+};
+
+const sources = new Map<string, SourceOwner>();
+const physical = reactive({
+  state: 'offline' as 'offline' | 'connecting' | 'connected' | 'reconnecting' | 'degraded',
+  subscriptionId: '',
+  revision: 0,
+  selectorHash: '',
+  lastEventAtMs: 0,
+  reconnectCount: 0,
+  error: '',
+});
+const subscriptionHealth = reactive({
+  state: 'offline' as 'offline' | 'syncing' | 'ready' | 'degraded',
+  revision: 0,
+  error: '',
+});
+const sourceHealth = reactive(new Map<string, LiveEnvelope['source_health']>());
+const physicalConnectionCount = ref(0);
+let subscription: LiveSubscription | null = null;
+let stream: EventSource | null = null;
+let readyRevision = 0;
+let pendingRevisionEnvelopes: LiveEnvelope[] = [];
+let syncGeneration = 0;
+let syncedGeneration = 0;
+let syncFlight: Promise<void> | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingDelete: LiveSubscription | null = null;
+
+export function parseLiveEnvelope(data: string): LiveEnvelope {
+  const envelope = JSON.parse(data) as LiveEnvelope;
+  if (
+    envelope?.schema_version !== 1
+    || !envelope.subscription_id
+    || !Number.isInteger(envelope.subscription_revision)
+    || envelope.subscription_revision < 1
+    || !envelope.source_kind
+    || !envelope.source_id
+    || !['summary', 'full'].includes(envelope.detail_scope)
+    || !['durable', 'snapshot_reconstructable', 'ephemeral_preview']
+      .includes(envelope.delivery_class)
+    || !['baseline', 'live', 'resync_required', 'revoked'].includes(envelope.source_health)
+    || !envelope.event
+  ) {
+    throw new Error('Gateway live stream emitted an invalid LiveEnvelope');
+  }
+  return envelope;
+}
+
+function randomId() {
+  return globalThis.crypto?.randomUUID?.()
+    || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function sourceKey(selector: LiveSourceSelector) {
+  return `${selector.kind}:${selector.id}`;
+}
+
+function normalizedSelector(selector: LiveSourceSelector): LiveSourceSelector {
+  return {
+    kind: selector.kind,
+    id: selector.id.trim(),
+    cursor: Math.max(0, Number(selector.cursor || 0)),
+    detail_scope: selector.detail_scope || 'summary',
+  };
+}
+
+function mergedSelector(owner: SourceOwner, next: LiveSourceSelector) {
+  owner.selector.cursor = Math.max(
+    Number(owner.selector.cursor || 0),
+    Number(next.cursor || 0),
+  );
+  if (next.detail_scope === 'full') owner.selector.detail_scope = 'full';
+}
+
+function selectorPayload() {
+  return [...sources.values()]
+    .map((owner) => normalizedSelector(owner.selector))
+    .sort((left, right) => sourceKey(left).localeCompare(sourceKey(right)));
+}
+
+function surfaceInstance() {
+  return webuiObserverId();
+}
+
+function closePhysical() {
+  stream?.close();
+  stream = null;
+  physicalConnectionCount.value = 0;
+}
+
+function notifyError(reason: string) {
+  physical.error = reason;
+  subscriptionHealth.state = 'degraded';
+  subscriptionHealth.error = reason;
+  for (const owner of sources.values()) {
+    for (const callbacks of owner.consumers.values()) callbacks.error?.(reason);
+  }
+}
+
+function deliverEnvelope(envelope: LiveEnvelope) {
+  const key = `${envelope.source_kind}:${envelope.source_id}`;
+  sourceHealth.set(key, envelope.source_health);
+  const owner = sources.get(key);
+  if (!owner) return;
+  if (Number.isFinite(Number(envelope.source_cursor))) {
+    owner.selector.cursor = Math.max(
+      Number(owner.selector.cursor || 0),
+      Number(envelope.source_cursor),
+    );
+  }
+  for (const callbacks of owner.consumers.values()) callbacks.envelope(envelope);
+}
+
+function openPhysical(expected: LiveSubscription) {
+  closePhysical();
+  if (typeof EventSource === 'undefined') {
+    physical.state = 'offline';
+    return;
+  }
+  physical.state = physical.reconnectCount ? 'reconnecting' : 'connecting';
+  const next = new EventSource(expected.stream_url);
+  stream = next;
+  physicalConnectionCount.value = 1;
+  next.onopen = () => {
+    if (stream !== next) return;
+    physical.state = 'connected';
+    physical.error = '';
+    for (const owner of sources.values()) {
+      for (const callbacks of owner.consumers.values()) callbacks.open?.();
+    }
+  };
+  const handleLiveEvent = (event: MessageEvent) => {
+    if (stream !== next) return;
+    let envelope: LiveEnvelope;
+    try {
+      envelope = parseLiveEnvelope(event.data);
+    } catch {
+      notifyError('Gateway live stream emitted invalid JSON');
+      scheduleRecreate();
+      return;
+    }
+    if (envelope.schema_version !== 1 || envelope.subscription_id !== expected.id) {
+      notifyError('Gateway live stream identity or revision mismatch');
+      scheduleRecreate();
+      return;
+    }
+    const currentRevision = Number(subscription?.revision || 0);
+    if (envelope.subscription_revision < currentRevision) return;
+    if (envelope.subscription_revision > currentRevision) {
+      notifyError('Gateway live stream advanced beyond the acknowledged subscription revision');
+      scheduleRecreate();
+      return;
+    }
+    physical.lastEventAtMs = Date.now();
+    if (
+      envelope.event === 'subscription.ready'
+      || envelope.event === 'subscription.revision.changed'
+    ) {
+      readyRevision = envelope.subscription_revision;
+      subscriptionHealth.state = 'ready';
+      subscriptionHealth.revision = readyRevision;
+      subscriptionHealth.error = '';
+      physical.state = 'connected';
+      const pending = pendingRevisionEnvelopes;
+      pendingRevisionEnvelopes = [];
+      for (const queued of pending) {
+        if (queued.subscription_revision === readyRevision) deliverEnvelope(queued);
+      }
+      return;
+    }
+    if (
+      envelope.source_kind === 'subscription'
+      && envelope.source_health === 'resync_required'
+    ) {
+      notifyError(String(envelope.payload?.reason || 'Gateway requested subscription resync'));
+      scheduleRecreate();
+      return;
+    }
+    const canPrecedeBarrier = envelope.source_health === 'baseline'
+      || envelope.source_health === 'revoked'
+      || envelope.source_health === 'resync_required';
+    if (readyRevision !== envelope.subscription_revision && !canPrecedeBarrier) {
+      if (pendingRevisionEnvelopes.length >= 1_024) {
+        notifyError('Gateway live revision barrier buffer exceeded its safety bound');
+        scheduleRecreate();
+        return;
+      }
+      pendingRevisionEnvelopes.push(envelope);
+      return;
+    }
+    deliverEnvelope(envelope);
+  };
+  next.addEventListener('live', handleLiveEvent as EventListener);
+  next.onerror = () => {
+    if (stream !== next) return;
+    physical.state = 'reconnecting';
+    physical.reconnectCount += 1;
+    // A physical transport interruption is owned and recovered here. Logical
+    // source consumers remain attached and must not start competing reconnects.
+    scheduleRecreate();
+  };
+}
+
+function scheduleRecreate() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    closePhysical();
+    pendingDelete = subscription;
+    subscription = null;
+    readyRevision = 0;
+    pendingRevisionEnvelopes = [];
+    physical.subscriptionId = '';
+    physical.revision = 0;
+    subscriptionHealth.state = 'syncing';
+    subscriptionHealth.revision = 0;
+    syncedGeneration = 0;
+    requestSync();
+  }, 5_000);
+}
+
+async function synchronize() {
+  while (syncedGeneration !== syncGeneration) {
+    const targetGeneration = syncGeneration;
+    const selected = selectorPayload();
+    if (!selected.length) {
+      closePhysical();
+      if (subscription) {
+        try {
+          await api.deleteLiveSubscription(subscription.id);
+        } catch {
+          // The server may already have expired a disconnected subscription.
+        }
+      }
+      subscription = null;
+      readyRevision = 0;
+      pendingRevisionEnvelopes = [];
+      physical.subscriptionId = '';
+      physical.revision = 0;
+      physical.state = 'offline';
+      subscriptionHealth.state = 'offline';
+      subscriptionHealth.revision = 0;
+      subscriptionHealth.error = '';
+      sourceHealth.clear();
+      syncedGeneration = targetGeneration;
+      continue;
+    }
+    try {
+      subscriptionHealth.state = 'syncing';
+      if (!subscription && pendingDelete) {
+        const stale = pendingDelete;
+        try {
+          await api.deleteLiveSubscription(stale.id);
+          pendingDelete = null;
+        } catch (error) {
+          if (error instanceof ApiWriteError && [404, 410].includes(error.status)) {
+            pendingDelete = null;
+          } else {
+            throw error;
+          }
+        }
+      }
+      const previousRevision = subscription?.revision || 0;
+      const response: any = subscription
+        ? await api.patchLiveSubscription(subscription.id, {
+          expected_revision: subscription.revision,
+          idempotency_key: `webui-live-patch:${subscription.id}:${subscription.revision}`,
+          selector: { sources: selected },
+        })
+        : await api.createLiveSubscription({
+          surface_instance: surfaceInstance(),
+          selector: { sources: selected },
+          idempotency_key: `webui-live:${surfaceInstance()}`,
+        });
+      if (response?.__state && response.__state !== 'ready') {
+        throw new Error(String(response.__error || response.__state));
+      }
+      const changedIdentity = !subscription || subscription.id !== String(response.id);
+      subscription = {
+        id: String(response.id),
+        revision: Number(response.revision),
+        selector_hash: String(response.selector_hash || ''),
+        stream_url: String(response.stream_url),
+      };
+      physical.subscriptionId = subscription.id;
+      physical.revision = subscription.revision;
+      physical.selectorHash = subscription.selector_hash;
+      if (previousRevision !== subscription.revision) {
+        readyRevision = 0;
+        pendingRevisionEnvelopes = [];
+        subscriptionHealth.revision = subscription.revision;
+      }
+      syncedGeneration = targetGeneration;
+      if (changedIdentity || !stream) openPhysical(subscription);
+    } catch (error) {
+      physical.state = 'degraded';
+      notifyError(error instanceof Error ? error.message : String(error));
+      scheduleRecreate();
+      return;
+    }
+  }
+}
+
+function requestSync() {
+  syncGeneration += 1;
+  if (syncFlight) return;
+  syncFlight = synchronize().finally(() => {
+    syncFlight = null;
+    if (syncedGeneration !== syncGeneration && !reconnectTimer) requestSync();
+  });
+}
+
+export function openLiveSource(
+  selector: LiveSourceSelector,
+  callbacks: SourceCallbacks,
+): LiveSourceLease {
+  const normalized = normalizedSelector(selector);
+  const key = sourceKey(normalized);
+  const consumerId = randomId();
+  const owner = sources.get(key) || {
+    selector: normalized,
+    consumers: new Map<string, SourceCallbacks>(),
+  };
+  mergedSelector(owner, normalized);
+  owner.consumers.set(consumerId, callbacks);
+  sources.set(key, owner);
+  requestSync();
+  return {
+    close: () => {
+      const current = sources.get(key);
+      current?.consumers.delete(consumerId);
+      if (current && current.consumers.size === 0) sources.delete(key);
+      requestSync();
+    },
+    update: (next) => {
+      const current = sources.get(key);
+      if (!current) return;
+      mergedSelector(current, normalizedSelector(next));
+      requestSync();
+    },
+  };
+}
+
+export function openSessionLiveSource(
+  sessionId: string,
+  cursor: number,
+): SessionLiveSource {
+  let adapter: SessionLiveSource;
+  const lease = openLiveSource(
+    {
+      kind: 'session',
+      id: sessionId,
+      cursor,
+      detail_scope: 'summary',
+    },
+    {
+      open: () => adapter.onopen?.(),
+      error: () => adapter.onerror?.(new Event('error')),
+      envelope: (envelope) => {
+        let payload = envelope.payload;
+        if (envelope.event === 'source.authorization_revoked') {
+          payload = {
+            type: 'SessionAuthorizationRevoked',
+            session_id: sessionId,
+            reason: envelope.payload?.reason,
+          };
+        } else if (envelope.source_health === 'resync_required') {
+          payload = {
+            type: 'session_stream_resync',
+            session_id: sessionId,
+            runtime_commit_cursor: envelope.source_cursor,
+            reason: envelope.payload?.reason,
+          };
+        }
+        adapter.onmessage?.(
+          new MessageEvent('message', { data: JSON.stringify(payload) }),
+        );
+      },
+    },
+  );
+  adapter = {
+    ...lease,
+    onopen: null,
+    onerror: null,
+    onmessage: null,
+  };
+  return adapter;
+}
+
+export function liveTransportHealth() {
+  return {
+    physical,
+    subscription: subscriptionHealth,
+    sources: sourceHealth,
+    physicalConnectionCount,
+    sourceCount: () => sources.size,
+  };
+}
+
+export function resetLiveTransportForTests() {
+  if (import.meta.env.MODE !== 'test') return;
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  closePhysical();
+  sources.clear();
+  subscription = null;
+  syncGeneration = 0;
+  syncedGeneration = 0;
+  syncFlight = null;
+  pendingDelete = null;
+  readyRevision = 0;
+  pendingRevisionEnvelopes = [];
+  physical.state = 'offline';
+  physical.subscriptionId = '';
+  physical.revision = 0;
+  physical.selectorHash = '';
+  physical.lastEventAtMs = 0;
+  physical.reconnectCount = 0;
+  physical.error = '';
+  subscriptionHealth.state = 'offline';
+  subscriptionHealth.revision = 0;
+  subscriptionHealth.error = '';
+  sourceHealth.clear();
+}

@@ -1034,14 +1034,11 @@ test('composer model workspace and command controls are clickable', async ({ pag
 
 test('all shell controls remain interactive while a conversation is running', async ({ page }) => {
   const sessionId = 'interaction-running-session';
-  let releaseSessionStream;
-  const keepSessionStreamOpen = new Promise((resolve) => {
-    releaseSessionStream = resolve;
+  let releaseLiveStream;
+  const keepLiveStreamOpen = new Promise((resolve) => {
+    releaseLiveStream = resolve;
   });
-  let releaseProjectionStream;
-  const keepProjectionStreamOpen = new Promise((resolve) => {
-    releaseProjectionStream = resolve;
-  });
+  let liveRevision = 0;
   await page.route(`**/api/sessions/${sessionId}/attach`, async (route) => {
     await route.fulfill({
       status: 200,
@@ -1088,11 +1085,48 @@ test('all shell controls remain interactive while a conversation is running', as
   await page.route(`**/api/sessions/${sessionId}/execution`, async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ session_id: sessionId, active_execution_ids: [] }) });
   });
-  await page.route(`**/api/sessions/${sessionId}/stream`, async (route) => {
-    // Keep this deterministic observer request open until the interaction
-    // audit is complete. Returning 204 immediately creates a synthetic
-    // reconnect loop and can hide the canonical queued projection.
-    await keepSessionStreamOpen;
+  await page.route('**/api/runtime/live-subscriptions', async (route) => {
+    liveRevision = 1;
+    const body = route.request().postDataJSON();
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        schema_version: 1,
+        id: 'interaction-live',
+        surface_instance: body.surface_instance,
+        revision: liveRevision,
+        selector: body.selector,
+        selector_hash: `interaction-${liveRevision}`,
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: '/api/runtime/live/interaction-live',
+      }),
+    });
+  });
+  await page.route('**/api/runtime/live-subscriptions/interaction-live', async (route) => {
+    if (route.request().method() === 'DELETE') {
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    liveRevision += 1;
+    const body = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        schema_version: 1,
+        id: 'interaction-live',
+        surface_instance: 'webui:interaction',
+        revision: liveRevision,
+        selector: body.selector,
+        selector_hash: `interaction-${liveRevision}`,
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: '/api/runtime/live/interaction-live',
+      }),
+    });
+  });
+  await page.route('**/api/runtime/live/interaction-live', async (route) => {
+    await keepLiveStreamOpen;
     await route.fulfill({ status: 204 });
   });
   await page.route(`**/api/sessions/${sessionId}/messages`, async (route) => {
@@ -1115,11 +1149,6 @@ test('all shell controls remain interactive while a conversation is running', as
       }),
     });
   });
-  await page.route(/\/api\/runtime\/executions\/interaction-execution\/events(?:\?.*)?$/, async (route) => {
-    await keepProjectionStreamOpen;
-    await route.fulfill({ status: 204 });
-  });
-
   await page.goto('/index.html#/chat');
   await expect(page.locator('.session-row.active')).toContainText('Running interaction audit');
   await expect(page.locator('.composer textarea')).toBeVisible();
@@ -1150,8 +1179,7 @@ test('all shell controls remain interactive while a conversation is running', as
   await expect(page).toHaveURL(/tools/);
   await page.locator('.rail-button[title="Chat"]').click();
   await expect(page.locator('.run-status')).toBeVisible();
-  releaseProjectionStream();
-  releaseSessionStream();
+  releaseLiveStream();
   await page.getByRole('button', { name: /Stop|停止/ }).click();
   await expect(page.locator('.modal-scrim')).toHaveCount(0);
 });

@@ -2,7 +2,20 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { resetLongLivedConnectionBudgetForTests } from '../utils/longLivedConnectionBudget';
-import { MAX_ACTIVE_SESSION_STREAMS, useChatSessionsStore } from './chatSessions';
+import { useChatSessionsStore } from './chatSessions';
+
+vi.mock('./liveTransport', () => ({
+  openSessionLiveSource: (sessionId: string) => {
+    if (typeof EventSource !== 'undefined') {
+      return new EventSource(`/test/live/session/${sessionId}`);
+    }
+    return { onopen: null, onerror: null, onmessage: null, close() {}, update() {} };
+  },
+  openLiveSource: (_selector: unknown, callbacks: any) => {
+    queueMicrotask(() => callbacks.open?.());
+    return { close() {}, update() {} };
+  },
+}));
 
 const emptyEvidence = { session_id: '', evidence_refs: [], turns: [], freshness: 'unavailable' };
 
@@ -128,7 +141,7 @@ describe('chatSessions', () => {
     chat.close('stream-B');
   });
 
-  it('keeps the selected conversation live and resumes a deferred observer after release', async () => {
+  it('keeps eight logical Session sources live without the former per-topic cap', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();
     const chat = useChatSessionsStore();
@@ -144,19 +157,15 @@ describe('chatSessions', () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     mockEmptySessionReads();
 
-    for (let index = 0; index <= MAX_ACTIVE_SESSION_STREAMS; index += 1) {
+    for (let index = 0; index < 8; index += 1) {
       await chat.open(`budget-${index}`);
     }
 
-    expect(streams).toHaveLength(MAX_ACTIVE_SESSION_STREAMS + 1);
-    expect(chat.activeStreamCount).toBe(MAX_ACTIVE_SESSION_STREAMS);
-    expect(chat.states[`budget-${MAX_ACTIVE_SESSION_STREAMS}`].streamState).toBe('connecting');
-    expect(chat.states['budget-0'].streamState).toBe('degraded');
-    chat.close(`budget-${MAX_ACTIVE_SESSION_STREAMS}`);
-    expect(streams).toHaveLength(MAX_ACTIVE_SESSION_STREAMS + 2);
-    expect(chat.activeStreamCount).toBe(MAX_ACTIVE_SESSION_STREAMS);
-    expect(chat.states['budget-0'].streamState).toBe('connecting');
-    for (let index = 0; index < MAX_ACTIVE_SESSION_STREAMS; index += 1) chat.close(`budget-${index}`);
+    expect(streams).toHaveLength(8);
+    expect(chat.activeSourceCount).toBe(8);
+    expect(Object.values(chat.states).every((state) => state.streamState === 'connecting')).toBe(true);
+    await Promise.all(Array.from({ length: 8 }, (_, index) => chat.close(`budget-${index}`)));
+    expect(chat.activeSourceCount).toBe(0);
   });
 
   it('ignores replayed or unrelated terminals while the current execution is pending', async () => {
@@ -911,16 +920,10 @@ describe('chatSessions', () => {
     expect(chat.states['session-A'].lastError).toContain('session identity mismatch');
   });
 
-  it('closes a failed native EventSource before a bounded reconnect attempt', async () => {
-    vi.useFakeTimers();
+  it('keeps the logical Session source attached while the physical transport reconnects', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();
     mockEmptySessionReads();
-    vi.spyOn(api, 'authVerify').mockResolvedValue({
-      valid: true,
-      auth_required: true,
-      __state: 'ready',
-    } as any);
     const streams: Array<{
       closed: boolean;
       onmessage?: (event: MessageEvent) => void;
@@ -941,21 +944,18 @@ describe('chatSessions', () => {
     const chat = useChatSessionsStore();
 
     await chat.open('reconnect-session');
-    expect(chat.activeStreamCount).toBe(1);
+    expect(chat.activeSourceCount).toBe(1);
     streams[0].onopen?.();
     streams[0].onerror?.();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(streams[0].closed).toBe(true);
-    expect(chat.activeStreamCount).toBe(0);
+    expect(streams[0].closed).toBe(false);
+    expect(chat.activeSourceCount).toBe(1);
     expect(chat.states['reconnect-session'].streamState).toBe('reconnecting');
 
-    await vi.advanceTimersByTimeAsync(250);
-    expect(streams).toHaveLength(2);
-    expect(chat.activeStreamCount).toBe(1);
+    streams[0].onopen?.();
+    expect(streams).toHaveLength(1);
+    expect(chat.activeSourceCount).toBe(1);
+    expect(chat.states['reconnect-session'].streamState).toBe('connected');
     await chat.close('reconnect-session');
-    vi.useRealTimers();
   });
 
   it('compensates an in-flight writer attachment that completes after authorization revocation', async () => {
