@@ -4,7 +4,7 @@ import { nextTick } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
-import { api, capabilityPageEndpointsFromContract, WEBUI_REQUESTED_CAPABILITIES } from './api/client';
+import { api, capabilityPageEndpointsFromContract } from './api/client';
 import ChatPage from './pages/ChatPage.vue';
 import AgentsPage from './pages/AgentsPage.vue';
 import AuditPage from './pages/AuditPage.vue';
@@ -1301,7 +1301,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/ontology/server-manufacturing/seed', expect.objectContaining({ method: 'POST' }));
   });
 
-  it('combines bounded core and generated APP capabilities for WebUI authentication', async () => {
+  it('does not let compiled APP capabilities override the broker authentication catalogue', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
       success: true,
       surface_id: 'webui',
@@ -1311,15 +1311,10 @@ describe('Cowd Vue WebUI shell', () => {
 
     await api.authLogin('credential');
 
-    expect(WEBUI_REQUESTED_CAPABILITIES).toContain('approval.respond');
-    expect(WEBUI_REQUESTED_CAPABILITIES).not.toContain('mfg.report.review');
-    expect(WEBUI_REQUESTED_CAPABILITIES).not.toContain('*');
     const [, request] = fetchMock.mock.calls[0];
     const body = JSON.parse(String(request.body));
     expect(body).toMatchObject({ token: 'credential', surface_id: 'webui' });
-    expect(body.requested_capabilities).toContain('approval.respond');
-    expect(body.requested_capabilities).toContain('mfg.report.review');
-    expect(body.requested_capabilities).not.toContain('*');
+    expect(body.requested_capabilities).toEqual([]);
   });
 
   it('calls real MFG incident and cockpit report endpoints', async () => {
@@ -1399,7 +1394,15 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/auth/verify') return Promise.resolve(new Response(JSON.stringify({
         valid: true,
         auth_required: true,
-        entitlement: { granted: ['mfg.read'], denied: [] },
+        entitlement: {
+          core_profile_id: 'core_operator',
+          app_profiles: { mfg: 'mfg_operator' },
+          profile_revision: 1,
+          credential_epoch: 1,
+          ceiling: ['mfg.read'],
+          granted: ['mfg.read'],
+          denied: [],
+        },
       })));
       if (url === '/api/apps/mfg/cockpit/profiles') return Promise.resolve(new Response(JSON.stringify({ items: [{ profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }] })));
       if (url === '/api/apps/mfg/cockpit/widget-catalog') return Promise.resolve(new Response(JSON.stringify({ items: [] })));

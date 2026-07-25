@@ -1,7 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 import { Factory, type Icon } from 'lucide-vue-next';
 import { registerMessages, t } from '../i18n';
-import { setRequestedAppCapabilities } from '../api/client';
 import { appContributions } from '../apps.generated';
 import type { CowdWebUiAppContribution } from '../apps/types';
 import type { CapabilitySpec, NavItem } from '../types';
@@ -78,9 +77,6 @@ export function configureEnabledAppPlugins(enabledAppIds: readonly string[]) {
   pluginCapabilitySpecs = Object.fromEntries(
     webuiPagePlugins.map((plugin) => [plugin.appId, capabilityFor(plugin)]),
   ) as Record<string, CapabilitySpec>;
-  setRequestedAppCapabilities(
-    contributions.flatMap((contribution) => contribution.readiness.requiredCapabilities),
-  );
 }
 
 // Unit mounts import the registry without the production bootstrap. Start

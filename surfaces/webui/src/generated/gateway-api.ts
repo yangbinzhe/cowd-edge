@@ -2627,7 +2627,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_public_get_api_auth_verify"];
+        get: operations["auth_verify"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8753,7 +8753,7 @@ export interface paths {
          *
          *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
-        post: operations["gateway_session_post_api_sessions_by_id_cancel"];
+        post: operations["session_turn_cancel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8775,7 +8775,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
-        post: operations["gateway_session_post_api_sessions_by_id_compact"];
+        post: operations["session_compact"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9001,7 +9001,7 @@ export interface paths {
          *
          *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
-        post: operations["gateway_session_message_post_api_sessions_by_id_inputs_by_input_id_cancel"];
+        post: operations["session_input_cancel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9023,7 +9023,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
-        post: operations["gateway_session_message_post_api_sessions_by_id_inputs_by_input_id_reclassify"];
+        post: operations["session_input_reclassify"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9073,7 +9073,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
-        post: operations["gateway_session_message_post_api_sessions_by_id_messages"];
+        post: operations["session_message_send"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9579,7 +9579,7 @@ export interface paths {
          *
          *     Risk: external. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_slash_post_api_slash_dispatch"];
+        post: operations["slash_dispatch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -11094,6 +11094,28 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuthVerifyResponse: {
+            auth_required: boolean;
+            entitlement?: components["schemas"]["HumanEntitlementProjection"];
+            /** @enum {string} */
+            transport?: "bearer" | "browser_session";
+            valid: boolean;
+        };
+        CancelSessionTurnReceipt: {
+            aborted: boolean;
+            actor_id: string;
+            execution_ids: string[];
+            /** @constant */
+            ok: true;
+            reason: string;
+            run_id?: string | null;
+            session_id: string;
+            /** @constant */
+            status: "cancel_requested";
+        };
+        CancelSessionTurnRequest: {
+            reason?: string | null;
+        };
         ChildExecutionProjection: {
             cursor: number;
             execution_id: string;
@@ -11102,6 +11124,16 @@ export interface components {
             parent_node_id: string;
             revision: number;
             status: string;
+        };
+        ContextCompactionResult: {
+            compacted_session?: {
+                [key: string]: unknown;
+            };
+            formatted_summary: string;
+            removed_message_count: number;
+            source_message_end: number;
+            source_message_start: number;
+            summary: string;
         };
         ContextComponentUsage: {
             kind: string;
@@ -11235,6 +11267,17 @@ export interface components {
         };
         GatewayError: {
             error: string;
+        };
+        HumanEntitlementProjection: {
+            app_profiles: {
+                [key: string]: string;
+            };
+            ceiling: string[];
+            core_profile_id: string;
+            credential_epoch: number;
+            denied: string[];
+            granted: string[];
+            profile_revision: number;
         };
         /**
          * @example {
@@ -12604,27 +12647,6 @@ export interface components {
             incident_id: string | null;
             /** @default null */
             report_id: string | null;
-        };
-        /** MfgEntitlementProjectionV2 */
-        MfgEntitlementProjectionV2: {
-            /** @default [] */
-            ceiling: string[];
-            core_profile_id: components["schemas"]["MfgEntitlementProjectionV2"]["$defs"]["MfgCoreProfileId"];
-            /** Format: uint64 */
-            credential_epoch: number;
-            /** @default [] */
-            denied: string[];
-            /** @default [] */
-            granted: string[];
-            mfg_profile_id: components["schemas"]["MfgEntitlementProjectionV2"]["$defs"]["MfgProfileId"];
-            /** Format: uint64 */
-            profile_revision: number;
-            $defs: {
-                /** @enum {string} */
-                MfgCoreProfileId: "core_legacy_0_9_530" | "core_manager";
-                /** @enum {string} */
-                MfgProfileId: "mfg_viewer" | "mfg_legacy_0_9_529" | "mfg_operator" | "mfg_reviewer" | "mfg_manager";
-            };
         };
         /** MfgExecutionFeedbackRequest */
         MfgExecutionFeedbackRequest: {
@@ -14302,41 +14324,6 @@ export interface components {
                 MfgSurfaceRole: "enhanced_management" | "console_unavailable" | "console_read_only" | "console_operational_control" | "minimal_core_control";
             };
         };
-        /** MfgSurfaceStatusV1 */
-        MfgSurfaceStatusV1: {
-            contract_version: string;
-            /** @default [] */
-            degraded_domains: string[];
-            entitlement: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgEntitlementProjectionV2"];
-            freshness: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgContractFreshnessV1"];
-            $defs: {
-                MfgContractFreshnessV1: {
-                    /** Format: date-time */
-                    generated_at: string;
-                    is_stale: boolean;
-                    /** Format: uint64 */
-                    stale_after_ms: number;
-                };
-                /** @enum {string} */
-                MfgCoreProfileId: "core_legacy_0_9_530" | "core_manager";
-                MfgEntitlementProjectionV2: {
-                    /** @default [] */
-                    ceiling: string[];
-                    core_profile_id: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgCoreProfileId"];
-                    /** Format: uint64 */
-                    credential_epoch: number;
-                    /** @default [] */
-                    denied: string[];
-                    /** @default [] */
-                    granted: string[];
-                    mfg_profile_id: components["schemas"]["MfgSurfaceStatusV1"]["$defs"]["MfgProfileId"];
-                    /** Format: uint64 */
-                    profile_revision: number;
-                };
-                /** @enum {string} */
-                MfgProfileId: "mfg_viewer" | "mfg_legacy_0_9_529" | "mfg_operator" | "mfg_reviewer" | "mfg_manager";
-            };
-        };
         PatchLiveSubscriptionRequest: {
             expected_revision: number;
             idempotency_key: string;
@@ -14378,6 +14365,35 @@ export interface components {
             tool_calls: number;
             total_tokens: number;
         };
+        SendMessageReceipt: {
+            execution: {
+                [key: string]: unknown;
+            };
+            input: {
+                [key: string]: unknown;
+            };
+            input_projection?: {
+                [key: string]: unknown;
+            } | null;
+            materialized: {
+                [key: string]: unknown;
+            } | null;
+            /** @enum {string} */
+            mode: "attached_to_active_turn" | "queued_new_turn";
+            run_id: string;
+            session_id: string;
+            /** @constant */
+            status: "accepted";
+            turn_inbox?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        SendMessageRequest: {
+            client_message_id?: string | null;
+            content: string;
+            idempotency_key?: string | null;
+            resource_ids?: string[];
+        };
         SessionEvidenceProjection: {
             evidence_refs: string[];
             freshness: components["schemas"]["EvidenceFreshness"];
@@ -14396,6 +14412,43 @@ export interface components {
         };
         SessionExecutionIndicesProjection: {
             items: components["schemas"]["SessionExecutionIndexProjection"][];
+        };
+        SessionInputCancelRequest: {
+            reason?: string | null;
+        };
+        SessionInputMutationReceipt: {
+            input: {
+                [key: string]: unknown;
+            };
+            input_projection?: {
+                [key: string]: unknown;
+            } | null;
+            /** @enum {string} */
+            kind: "session_input.cancel" | "session_input.reclassify";
+            session_id: string;
+            turn_inbox?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        SessionInputReclassifyRequest: {
+            /** @enum {string} */
+            decision: "start_new_turn" | "supplement_current_turn" | "interrupt_and_replan" | "enqueue_next_step" | "spawn_subtask" | "route_cross_session" | "create_new_session" | "control_or_approval" | "reject_duplicate" | "reject_policy";
+            reason?: string | null;
+        };
+        SlashDispatchReceipt: {
+            action: string | Record<string, never>;
+            data: unknown;
+            executed_at_ms: number;
+            id: string;
+            ok: boolean;
+            slash: string;
+            status: string;
+        };
+        SlashDispatchRequest: {
+            args?: {
+                [key: string]: unknown;
+            } | null;
+            command: string;
         };
         StrategyActualProjection: {
             actual_speedup_ratio_bp?: number | null;
@@ -24678,7 +24731,7 @@ export interface operations {
             };
         };
     };
-    gateway_public_get_api_auth_verify: {
+    auth_verify: {
         parameters: {
             query?: never;
             header?: never;
@@ -24693,9 +24746,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AuthVerifyResponse"];
                 };
             };
             /** @description Bad request */
@@ -37347,13 +37398,16 @@ export interface operations {
     runtime_execution_projection_command: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["ExecutionCommandRequest"];
                 "multipart/form-data": components["schemas"]["ExecutionCommandRequest"];
@@ -37383,6 +37437,20 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Gateway internal error */
             500: {
                 headers: {
@@ -37402,7 +37470,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["CreateLiveSubscriptionRequest"];
                 "multipart/form-data": components["schemas"]["CreateLiveSubscriptionRequest"];
@@ -37499,7 +37567,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
                 "application/json": components["schemas"]["PatchLiveSubscriptionRequest"];
                 "multipart/form-data": components["schemas"]["PatchLiveSubscriptionRequest"];
@@ -39732,37 +39800,22 @@ export interface operations {
             };
         };
     };
-    gateway_session_post_api_sessions_by_id_cancel: {
+    session_turn_cancel: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["CancelSessionTurnRequest"];
+                "multipart/form-data": components["schemas"]["CancelSessionTurnRequest"];
             };
         };
         responses: {
@@ -39772,9 +39825,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CancelSessionTurnReceipt"];
                 };
             };
             /** @description Bad request */
@@ -39786,6 +39837,20 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -39800,10 +39865,13 @@ export interface operations {
             };
         };
     };
-    gateway_session_post_api_sessions_by_id_compact: {
+    session_compact: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
             };
@@ -39811,26 +39879,8 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["Empty"];
+                "multipart/form-data": components["schemas"]["Empty"];
             };
         };
         responses: {
@@ -39840,9 +39890,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ContextCompactionResult"];
                 };
             };
             /** @description Bad request */
@@ -39854,6 +39902,20 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -40383,42 +40445,23 @@ export interface operations {
             };
         };
     };
-    gateway_session_message_post_api_sessions_by_id_inputs_by_input_id_cancel: {
+    session_input_cancel: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
                 input_id: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `input_id` */
-                        input_id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `input_id` */
-                        input_id: string;
-                    };
-                };
+                "application/json": components["schemas"]["SessionInputCancelRequest"];
+                "multipart/form-data": components["schemas"]["SessionInputCancelRequest"];
             };
         };
         responses: {
@@ -40428,9 +40471,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SessionInputMutationReceipt"];
                 };
             };
             /** @description Bad request */
@@ -40442,6 +40483,20 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -40456,42 +40511,23 @@ export interface operations {
             };
         };
     };
-    gateway_session_message_post_api_sessions_by_id_inputs_by_input_id_reclassify: {
+    session_input_reclassify: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
                 input_id: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `input_id` */
-                        input_id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `input_id` */
-                        input_id: string;
-                    };
-                };
+                "application/json": components["schemas"]["SessionInputReclassifyRequest"];
+                "multipart/form-data": components["schemas"]["SessionInputReclassifyRequest"];
             };
         };
         responses: {
@@ -40501,9 +40537,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SessionInputMutationReceipt"];
                 };
             };
             /** @description Bad request */
@@ -40515,6 +40549,20 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -40619,37 +40667,22 @@ export interface operations {
             };
         };
     };
-    gateway_session_message_post_api_sessions_by_id_messages: {
+    session_message_send: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["SendMessageRequest"];
+                "multipart/form-data": components["schemas"]["SendMessageRequest"];
             };
         };
         responses: {
@@ -40659,9 +40692,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SendMessageReceipt"];
                 };
             };
             /** @description Bad request */
@@ -40673,6 +40704,20 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -41773,27 +41818,20 @@ export interface operations {
             };
         };
     };
-    gateway_slash_post_api_slash_dispatch: {
+    slash_dispatch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Required when slash dispatch resolves to a mutating command with an authoritative session_id. */
+                "x-cowd-observer-id"?: string;
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["SlashDispatchRequest"];
+                "multipart/form-data": components["schemas"]["SlashDispatchRequest"];
             };
         };
         responses: {
@@ -41803,9 +41841,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SlashDispatchReceipt"];
                 };
             };
             /** @description Bad request */
@@ -41817,6 +41853,20 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

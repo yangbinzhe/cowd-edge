@@ -310,38 +310,12 @@ export function invalidateSessionAuthorization(
   }
 }
 
-export const WEBUI_REQUESTED_CAPABILITIES = [
-  'approval.respond',
-  'definition.manage',
-  'definition.default.set',
-  'definition.rollback',
-  'evolution.release.manage',
-  'mission.observe',
-  'runtime.maintenance.manage',
-  'runtime.outbox.retry',
-] as const;
-
-const registeredAppCapabilities = new Set<string>();
-
-export function registerRequestedCapabilities(capabilities: readonly string[]) {
-  for (const capability of capabilities) {
-    if (typeof capability === 'string' && capability) registeredAppCapabilities.add(capability);
-  }
-}
-
-/** Replace APP-requested capabilities with the Gateway-confirmed APP set.
- *
- * The browser may contain statically bundled APP contributions that the
- * current Gateway deliberately disabled. Replacing rather than accumulating
- * prevents inactive APP capabilities from being requested at login.
- */
-export function setRequestedAppCapabilities(capabilities: readonly string[]) {
-  registeredAppCapabilities.clear();
-  registerRequestedCapabilities(capabilities);
-}
-
-function requestedCapabilities() {
-  return [...new Set([...WEBUI_REQUESTED_CAPABILITIES, ...registeredAppCapabilities])];
+function requestedCapabilityProbeSubset(capabilities: readonly string[]) {
+  return [...new Set(
+    capabilities
+      .map((capability) => capability.trim())
+      .filter((capability) => capability.length > 0 && capability !== '*'),
+  )];
 }
 
 function readStatusFor(response: Response): ApiReadStatus {
@@ -882,7 +856,9 @@ export const api = {
     tool_count: 0,
     tools: [],
   }),
-  authLogin: (credential: string) => write<{
+  // Normal login sends an empty set so the Broker catalogue remains authoritative.
+  // A bounded explicit subset exists only for permission-probe tests.
+  authLogin: (credential: string, capabilityProbe: readonly string[] = []) => write<{
     success: boolean;
     surface_id: string;
     entitlement?: Record<string, unknown>;
@@ -891,7 +867,7 @@ export const api = {
     body: JSON.stringify({
       token: credential,
       surface_id: 'webui',
-      requested_capabilities: requestedCapabilities(),
+      requested_capabilities: requestedCapabilityProbeSubset(capabilityProbe),
     }),
   }),
   authVerify: () => read<{

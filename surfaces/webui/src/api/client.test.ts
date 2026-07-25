@@ -173,3 +173,55 @@ describe('API authorization epoch', () => {
     expect(response.data).not.toHaveProperty('metadata');
   });
 });
+
+describe('WebUI authorization catalogue', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('delegates normal login capability selection to the broker catalogue', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      surface_id: 'webui',
+      entitlement: { granted: ['approval.respond'] },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.authLogin('credential');
+
+    const [, request] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(request.body))).toEqual({
+      token: 'credential',
+      surface_id: 'webui',
+      requested_capabilities: [],
+    });
+  });
+
+  it('normalizes an explicit capability subset used by permission probes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      surface_id: 'webui',
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.authLogin('credential', [
+      ' approval.respond ',
+      'approval.respond',
+      '',
+      '*',
+      'mission.observe',
+    ]);
+
+    const [, request] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(request.body)).requested_capabilities).toEqual([
+      'approval.respond',
+      'mission.observe',
+    ]);
+  });
+});

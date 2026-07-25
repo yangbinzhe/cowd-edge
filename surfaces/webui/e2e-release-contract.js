@@ -1,27 +1,3 @@
-export const gatewayRequestedCapabilityList = [
-  'approval.respond',
-  'definition.manage',
-  'definition.default.set',
-  'definition.rollback',
-  'evolution.release.manage',
-  'mission.observe',
-  'runtime.maintenance.manage',
-  'runtime.outbox.retry',
-  'mfg.read',
-  'mfg.incident.operate',
-  'mfg.playbook.manage',
-  'mfg.alert.respond',
-  'mfg.alert.manage',
-  'mfg.assignment.manage',
-  'mfg.assignment.lifecycle',
-  'mfg.execution.operate',
-  'mfg.execution.feedback',
-  'mfg.report.generate',
-  'mfg.report.deliver',
-  'mfg.report.review',
-  'mfg.skill.run',
-  'mfg.cockpit.manage',
-  'mfg.data.manage',
-];
-
-export const gatewayRequestedCapabilities = gatewayRequestedCapabilityList.join(',');
+// An empty request delegates the effective WebUI + enabled APP capability set
+// to the Gateway authorization catalogue.
+export const gatewayRequestedCapabilities = '';

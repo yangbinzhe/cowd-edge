@@ -39,11 +39,64 @@ use prost::Message as ProstMessage;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 const WRITE_CHANNEL_CAPACITY: usize = 128;
+type FeishuWsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReconnectPolicy {
+    Disabled,
+    Limited(u32),
+}
+
+impl ReconnectPolicy {
+    fn from_max_attempts(max_attempts: u32) -> Self {
+        if max_attempts == 0 {
+            Self::Disabled
+        } else {
+            Self::Limited(max_attempts)
+        }
+    }
+
+    fn max_attempts(self) -> Option<u32> {
+        match self {
+            Self::Disabled => None,
+            Self::Limited(limit) => Some(limit),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ReconnectState {
+    policy: ReconnectPolicy,
+    consecutive_attempts: u32,
+}
+
+impl ReconnectState {
+    fn new(policy: ReconnectPolicy) -> Self {
+        Self {
+            policy,
+            consecutive_attempts: 0,
+        }
+    }
+
+    fn begin_attempt(&mut self) -> Option<(u32, u32)> {
+        let limit = self.policy.max_attempts()?;
+        if self.consecutive_attempts >= limit {
+            return None;
+        }
+        self.consecutive_attempts += 1;
+        Some((self.consecutive_attempts, limit))
+    }
+
+    fn connected(&mut self) {
+        self.consecutive_attempts = 0;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Pin registration types
@@ -116,7 +169,7 @@ pub struct FeishuWsClient {
     app_id: String,
     app_secret: String,
     base_url: String,
-    reconnect_max_attempts: u32,
+    reconnect_policy: ReconnectPolicy,
     reconnect_interval_secs: u64,
 }
 
@@ -128,7 +181,7 @@ impl FeishuWsClient {
             app_id: app_id.to_string(),
             app_secret: app_secret.to_string(),
             base_url: "https://open.feishu.cn".to_string(),
-            reconnect_max_attempts: 30,
+            reconnect_policy: ReconnectPolicy::Limited(30),
             reconnect_interval_secs: 120,
         }
     }
@@ -141,10 +194,11 @@ impl FeishuWsClient {
 
     /// Override reconnect behaviour.
     ///
-    /// * `max_attempts` — total reconnect tries before giving up (0 = no reconnect).
+    /// * `max_attempts` — consecutive reconnect tries before giving up.
+    ///   Zero disables the WebSocket transport before registration or connection.
     /// * `interval_secs` — seconds to wait between reconnect attempts.
     pub fn with_reconnect(mut self, max_attempts: u32, interval_secs: u64) -> Self {
-        self.reconnect_max_attempts = max_attempts;
+        self.reconnect_policy = ReconnectPolicy::from_max_attempts(max_attempts);
         self.reconnect_interval_secs = interval_secs;
         self
     }
@@ -156,32 +210,36 @@ impl FeishuWsClient {
     ///
     /// The background reader task decodes protobuf [`Frame`] messages, handles
     /// PING/PONG control frames, assembles multi-part messages, and
-    /// auto-reconnects on disconnect up to `reconnect_max_attempts` times.
+    /// auto-reconnects on disconnect according to the configured reconnect policy.
     /// Drop the receiver to trigger graceful shutdown.
     pub async fn connect(&self) -> PlatformResult<mpsc::Receiver<serde_json::Value>> {
+        if self.reconnect_policy == ReconnectPolicy::Disabled {
+            return Err(PlatformError::ConfigError(
+                "feishu websocket is disabled because reconnect max_attempts is 0".to_string(),
+            ));
+        }
+
         // Register pin — get WebSocket URL and client config
         let result = register_pin(&self.app_id, &self.app_secret, &self.base_url).await?;
         let ws_url = result.ws_url;
         let ping_interval_secs = result.ping_interval.map(|v| v.max(1) as u64).unwrap_or(90);
-        let probe_url = ws_url.clone();
 
-        let probe = tokio::time::timeout(
+        let (initial_stream, _) = tokio::time::timeout(
             Duration::from_secs(15),
-            tokio_tungstenite::connect_async(&probe_url),
+            tokio_tungstenite::connect_async(&ws_url),
         )
         .await
         .map_err(|_| {
             PlatformError::ConnectionFailed(format!(
-                "feishu websocket probe timed out for {probe_url}"
+                "feishu websocket connect timed out for {ws_url}"
             ))
         })?
         .map_err(|e| {
             PlatformError::ConnectionFailed(format!(
-                "feishu websocket probe failed for {probe_url}: {e}"
+                "feishu websocket connect failed for {ws_url}: {e}"
             ))
         })?;
-        drop(probe);
-        tracing::info!("Feishu WS: initial websocket probe succeeded");
+        tracing::info!("Feishu WS: initial websocket connection established");
 
         // Create event channel
         let (tx, rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
@@ -190,17 +248,18 @@ impl FeishuWsClient {
         let app_id = self.app_id.clone();
         let app_secret = self.app_secret.clone();
         let base_url = self.base_url.clone();
-        let max_attempts = self.reconnect_max_attempts;
+        let reconnect_policy = self.reconnect_policy;
         let interval_secs = self.reconnect_interval_secs;
 
         tokio::spawn(async move {
             reader_loop(
+                initial_stream,
                 ws_url,
                 app_id,
                 app_secret,
                 base_url,
                 tx,
-                max_attempts,
+                reconnect_policy,
                 interval_secs,
                 ping_interval_secs,
             )
@@ -282,67 +341,28 @@ pub async fn register_pin(
 /// 3. Spawns a PING heartbeat task that sends protobuf PING frames.
 /// 4. Runs the protobuf frame read loop on the source.
 async fn reader_loop(
+    mut ws_stream: FeishuWsStream,
     mut ws_url: String,
     app_id: String,
     app_secret: String,
     base_url: String,
     tx: mpsc::Sender<serde_json::Value>,
-    max_attempts: u32,
+    reconnect_policy: ReconnectPolicy,
     interval_secs: u64,
     mut ping_interval_secs: u64,
 ) {
-    let mut attempt: u32 = 0;
+    let mut reconnect = ReconnectState::new(reconnect_policy);
 
-    'outer: loop {
-        if max_attempts > 0 && attempt >= max_attempts {
-            tracing::warn!(
-                "Feishu WS: reached max reconnect attempts ({max_attempts}), exiting reader"
-            );
-            break;
-        }
-
-        if attempt > 0 {
-            tracing::info!(
-                "Feishu WS: reconnecting in {interval_secs}s (attempt {attempt}/{max_attempts})"
-            );
-            tokio::time::sleep(Duration::from_secs(interval_secs)).await;
-
-            // Re-register on every reconnect
-            match register_pin(&app_id, &app_secret, &base_url).await {
-                Ok(result) => {
-                    ws_url = result.ws_url;
-                    if let Some(pi) = result.ping_interval {
-                        ping_interval_secs = pi.max(1) as u64;
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Feishu WS: pin re-register failed: {e}");
-                    attempt += 1;
-                    continue 'outer;
-                }
-            }
-        }
-
+    'connected: loop {
         let service_id = extract_service_id(&ws_url);
-
-        // Connect WebSocket
-        let (ws_stream, _) = match tokio_tungstenite::connect_async(&ws_url).await {
-            Ok(tuple) => tuple,
-            Err(e) => {
-                tracing::warn!("Feishu WS: connect failed: {e}");
-                attempt += 1;
-                continue 'outer;
-            }
-        };
-
         tracing::info!("Feishu WS: connected to {ws_url} (service_id={service_id})");
-        attempt = 0;
+        reconnect.connected();
 
         let (ws_sink, ws_source) = ws_stream.split();
         let (write_tx, mut write_rx) = mpsc::channel::<Vec<u8>>(WRITE_CHANNEL_CAPACITY);
 
         // Writer task: forward outgoing protobuf bytes to WebSocket
-        tokio::spawn(async move {
+        let writer_task = tokio::spawn(async move {
             let mut sink = ws_sink;
             while let Some(bytes) = write_rx.recv().await {
                 if sink.send(Message::Binary(bytes.into())).await.is_err() {
@@ -355,7 +375,7 @@ async fn reader_loop(
         let ping_tx = write_tx.clone();
         let ping_secs = ping_interval_secs;
         let ping_service_id = service_id;
-        tokio::spawn(async move {
+        let ping_task = tokio::spawn(async move {
             loop {
                 tokio::time::sleep(Duration::from_secs(ping_secs)).await;
                 let ping_frame = create_ping_frame(ping_service_id);
@@ -366,7 +386,13 @@ async fn reader_loop(
         });
 
         // Inner read loop
-        match ws_read_loop(ws_source, &tx, write_tx, service_id).await {
+        let read_outcome = ws_read_loop(ws_source, &tx, write_tx, service_id).await;
+        ping_task.abort();
+        writer_task.abort();
+        let _ = ping_task.await;
+        let _ = writer_task.await;
+
+        match read_outcome {
             Ok(true) => {
                 tracing::info!("Feishu WS: receiver closed, shutting down reader");
                 return;
@@ -374,8 +400,73 @@ async fn reader_loop(
             Ok(false) | Err(()) => {}
         }
 
-        // Connection lost — increment and retry
-        attempt += 1;
+        loop {
+            if tx.is_closed() {
+                tracing::info!("Feishu WS: receiver closed before reconnect");
+                return;
+            }
+            let Some((attempt, limit)) = reconnect.begin_attempt() else {
+                tracing::warn!("Feishu WS: reached reconnect limit, exiting reader");
+                return;
+            };
+
+            tracing::info!(
+                "Feishu WS: reconnecting in {interval_secs}s (attempt {attempt}/{limit})"
+            );
+            if !wait_for_reconnect(&tx, interval_secs).await {
+                tracing::info!("Feishu WS: receiver closed before reconnect");
+                return;
+            }
+
+            if tx.is_closed() {
+                return;
+            }
+            let registration = tokio::select! {
+                biased;
+                () = tx.closed() => return,
+                result = register_pin(&app_id, &app_secret, &base_url) => result,
+            };
+            let result = match registration {
+                Ok(result) => result,
+                Err(e) => {
+                    tracing::warn!("Feishu WS: pin re-register failed: {e}");
+                    continue;
+                }
+            };
+            ws_url = result.ws_url;
+            if let Some(pi) = result.ping_interval {
+                ping_interval_secs = pi.max(1) as u64;
+            }
+
+            if tx.is_closed() {
+                return;
+            }
+            let connection = tokio::select! {
+                biased;
+                () = tx.closed() => return,
+                result = tokio_tungstenite::connect_async(&ws_url) => result,
+            };
+            match connection {
+                Ok((stream, _)) => {
+                    ws_stream = stream;
+                    continue 'connected;
+                }
+                Err(e) => {
+                    tracing::warn!("Feishu WS: connect failed: {e}");
+                }
+            }
+        }
+    }
+}
+
+async fn wait_for_reconnect(tx: &mpsc::Sender<serde_json::Value>, interval_secs: u64) -> bool {
+    if tx.is_closed() {
+        return false;
+    }
+    tokio::select! {
+        biased;
+        () = tx.closed() => false,
+        () = tokio::time::sleep(Duration::from_secs(interval_secs)) => !tx.is_closed(),
     }
 }
 
@@ -397,7 +488,15 @@ async fn ws_read_loop(
     let mut fragment_buffer = FragmentBuffer::new();
 
     loop {
-        let _msg = match ws_source.next().await {
+        if tx.is_closed() {
+            return Ok(true);
+        }
+        let next_message = tokio::select! {
+            biased;
+            () = tx.closed() => return Ok(true),
+            message = ws_source.next() => message,
+        };
+        let _msg = match next_message {
             // ── Binary frame: decode as protobuf Frame ──────────────
             Some(Ok(Message::Binary(data))) => {
                 let frame = match Frame::decode(data.as_ref()) {
@@ -457,7 +556,13 @@ async fn ws_read_loop(
                         let json_str = String::from_utf8_lossy(&payload_bytes);
                         match serde_json::from_str::<serde_json::Value>(&json_str) {
                             Ok(value) => {
-                                send_response_frame(&ws_sender, &frame, service_id, 200).await;
+                                if !send_response_unless_receiver_closed(
+                                    tx, &ws_sender, &frame, service_id, 200,
+                                )
+                                .await
+                                {
+                                    return Ok(true);
+                                }
 
                                 if tx.send(value).await.is_err() {
                                     return Ok(true);
@@ -467,7 +572,13 @@ async fn ws_read_loop(
                                 tracing::warn!(
                                     "Feishu WS: payload JSON parse error: {e}, type={msg_type}"
                                 );
-                                send_response_frame(&ws_sender, &frame, service_id, 500).await;
+                                if !send_response_unless_receiver_closed(
+                                    tx, &ws_sender, &frame, service_id, 500,
+                                )
+                                .await
+                                {
+                                    return Ok(true);
+                                }
                             }
                         }
                         continue;
@@ -504,6 +615,23 @@ async fn ws_read_loop(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+async fn send_response_unless_receiver_closed(
+    event_tx: &mpsc::Sender<serde_json::Value>,
+    sender: &mpsc::Sender<Vec<u8>>,
+    request_frame: &Frame,
+    service_id: i32,
+    status_code: i32,
+) -> bool {
+    if event_tx.is_closed() {
+        return false;
+    }
+    tokio::select! {
+        biased;
+        () = event_tx.closed() => false,
+        () = send_response_frame(sender, request_frame, service_id, status_code) => true,
+    }
+}
 
 /// Send a response frame back through the write channel.
 ///
@@ -628,22 +756,73 @@ mod tests {
         let client = FeishuWsClient::new("cli_test", "secret_test");
         assert_eq!(client.app_id, "cli_test");
         assert_eq!(client.app_secret, "secret_test");
-        assert_eq!(client.reconnect_max_attempts, 30);
+        assert_eq!(client.reconnect_policy.max_attempts(), Some(30));
         assert_eq!(client.reconnect_interval_secs, 120);
     }
 
     #[test]
     fn test_reconnect_settings_are_stored() {
         let client = FeishuWsClient::new("app", "sec").with_reconnect(5, 30);
-        assert_eq!(client.reconnect_max_attempts, 5);
+        assert_eq!(client.reconnect_policy.max_attempts(), Some(5));
         assert_eq!(client.reconnect_interval_secs, 30);
     }
 
     #[test]
     fn test_with_reconnect_zero_attempts() {
         let client = FeishuWsClient::new("app", "sec").with_reconnect(0, 60);
-        assert_eq!(client.reconnect_max_attempts, 0);
+        assert_eq!(client.reconnect_policy, ReconnectPolicy::Disabled);
         assert_eq!(client.reconnect_interval_secs, 60);
+    }
+
+    #[tokio::test]
+    async fn disabled_policy_never_registers_or_connects() {
+        use httpmock::prelude::{MockServer, POST};
+
+        let server = MockServer::start();
+        let register = server.mock(|when, then| {
+            when.method(POST).path("/callback/ws/endpoint");
+            then.status(500);
+        });
+        let client = FeishuWsClient::new("app", "sec")
+            .with_base_url(server.base_url())
+            .with_reconnect(0, 60);
+
+        let error = client
+            .connect()
+            .await
+            .expect_err("disabled policy must fail closed");
+
+        assert!(matches!(error, PlatformError::ConfigError(_)));
+        register.assert_hits(0);
+    }
+
+    #[test]
+    fn limited_policy_allows_exactly_n_consecutive_attempts() {
+        let mut state = ReconnectState::new(ReconnectPolicy::from_max_attempts(3));
+
+        // Registration and connection failures consume the same state budget.
+        assert_eq!(state.begin_attempt(), Some((1, 3)));
+        assert_eq!(state.begin_attempt(), Some((2, 3)));
+        assert_eq!(state.begin_attempt(), Some((3, 3)));
+        assert_eq!(state.begin_attempt(), None);
+    }
+
+    #[test]
+    fn successful_connection_resets_consecutive_attempts() {
+        let mut state = ReconnectState::new(ReconnectPolicy::from_max_attempts(2));
+
+        assert_eq!(state.begin_attempt(), Some((1, 2)));
+        assert_eq!(state.begin_attempt(), Some((2, 2)));
+        state.connected();
+        assert_eq!(state.begin_attempt(), Some((1, 2)));
+    }
+
+    #[tokio::test]
+    async fn receiver_drop_wins_over_zero_reconnect_interval() {
+        let (tx, rx) = mpsc::channel::<serde_json::Value>(1);
+        drop(rx);
+
+        assert!(!wait_for_reconnect(&tx, 0).await);
     }
 
     // -- Endpoint response deserialization ---------------------------------
@@ -870,6 +1049,34 @@ mod tests {
         assert_eq!(payload["code"], 200);
     }
 
+    #[tokio::test]
+    async fn receiver_drop_interrupts_a_blocked_response_write() {
+        let (event_tx, event_rx) = mpsc::channel::<serde_json::Value>(1);
+        let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(1);
+        write_tx.send(vec![0]).await.expect("fill response queue");
+        drop(event_rx);
+        let request = Frame {
+            seq_id: 1,
+            log_id: 2,
+            service: 5,
+            method: FRAME_DATA,
+            headers: vec![],
+            payload_encoding: None,
+            payload_type: None,
+            payload: Some(b"{}".to_vec()),
+            log_id_new: None,
+        };
+
+        let sent = tokio::time::timeout(
+            Duration::from_millis(50),
+            send_response_unless_receiver_closed(&event_tx, &write_tx, &request, 5, 200),
+        )
+        .await
+        .expect("receiver closure must cancel a blocked response write");
+
+        assert!(!sent);
+    }
+
     // -- Fragment buffer -----------------------------------------------------
 
     #[test]
@@ -993,10 +1200,8 @@ mod tests {
             Ok(Message::Close(None)),
         ];
 
-        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
+        let (tx, _rx) = mpsc::channel::<serde_json::Value>(64);
         let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(64);
-
-        drop(rx); // No events expected
 
         let result = ws_read_loop(stream::iter(messages), &tx, write_tx, 5).await;
 
@@ -1055,6 +1260,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_ws_read_loop_receiver_drop_interrupts_idle_stream() {
+        use futures::stream;
+
+        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
+        let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(64);
+        drop(rx);
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(50),
+            ws_read_loop(stream::pending(), &tx, write_tx, 5),
+        )
+        .await
+        .expect("receiver drop must interrupt an idle websocket");
+
+        assert_eq!(result, Ok(true));
+    }
+
+    #[tokio::test]
     async fn test_ws_read_loop_garbage_binary_skipped() {
         use futures::stream;
 
@@ -1064,10 +1287,8 @@ mod tests {
             Ok(Message::Close(None)),
         ];
 
-        let (tx, rx) = mpsc::channel::<serde_json::Value>(64);
+        let (tx, _rx) = mpsc::channel::<serde_json::Value>(64);
         let (write_tx, _write_rx) = mpsc::channel::<Vec<u8>>(64);
-
-        drop(rx);
 
         let result = ws_read_loop(stream::iter(messages), &tx, write_tx, 5).await;
 

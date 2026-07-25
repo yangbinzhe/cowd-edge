@@ -397,6 +397,7 @@ apps:
     '--workers=1',
     '--forbid-only',
     '--reporter=json',
+    `--output=${join(dirname(evidencePath), 'playwright-artifacts')}`,
   ], {
     cwd: root,
     stdio: 'inherit',

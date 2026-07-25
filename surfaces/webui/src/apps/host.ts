@@ -7,7 +7,6 @@ export {
   read,
   write,
   writeWithMetadata,
-  registerRequestedCapabilities,
 } from '../api/client';
 export type {
   ApiWriteMetadataValidation,

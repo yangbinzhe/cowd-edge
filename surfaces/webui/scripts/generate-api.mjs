@@ -11,60 +11,6 @@ const output = process.env.COWD_GENERATED_API_OUTPUT
 const liveContractOutput = process.env.COWD_GENERATED_LIVE_CONTRACT_OUTPUT
   ? resolve(process.env.COWD_GENERATED_LIVE_CONTRACT_OUTPUT)
   : resolve(dirname(output), 'live-contract-meta.ts');
-const requiredMfgOperations = {
-  '/api/apps/mfg/cockpit/profiles': ['get'],
-  '/api/apps/mfg/cockpit/profiles/upsert': ['post'],
-  '/api/apps/mfg/cockpit/profiles/{id}': ['get', 'delete'],
-  '/api/apps/mfg/cockpit/profiles/{id}/clone': ['post'],
-  '/api/apps/mfg/cockpit/profiles/{id}/share': ['post'],
-  '/api/apps/mfg/cockpit/widget-catalog': ['get'],
-  '/api/apps/mfg/cockpit/profiles/{id}/projection': ['get'],
-  '/api/apps/mfg/cockpit/profiles/{id}/widgets/{instance_id}/projection': ['get'],
-  '/api/apps/mfg/cockpit/profiles/{id}/reports/generate': ['post'],
-  '/api/apps/mfg/cockpit/reports': ['get'],
-  '/api/apps/mfg/cockpit/reports/{id}': ['get'],
-  '/api/apps/mfg/cockpit/reports/{id}/deliver': ['post'],
-  '/api/apps/mfg/cockpit/reports/{id}/delivery-state': ['get'],
-  '/api/apps/mfg/cockpit/reports/{id}/delivery/retry': ['post'],
-  '/api/apps/mfg/cockpit/reports/{id}/reviews': ['post'],
-  '/api/apps/mfg/cockpit/report-reviews': ['get'],
-  '/api/apps/mfg/cockpit/report-reviews/{id}': ['get'],
-  '/api/apps/mfg/cockpit/report-reviews/{id}/decision': ['post'],
-  '/api/apps/mfg/cockpit/reports/schedules/run': ['post'],
-  '/api/apps/mfg/focus/alert-rules': ['get', 'post'],
-  '/api/apps/mfg/focus/alerts': ['get'],
-  '/api/apps/mfg/focus/alert-subscriptions': ['get', 'post'],
-  '/api/apps/mfg/focus/alerts/{id}/command': ['post'],
-  '/api/apps/mfg/focus/forecasts': ['get'],
-  '/api/apps/mfg/assignments': ['get', 'post'],
-  '/api/apps/mfg/assignments/{id}': ['get'],
-  '/api/apps/mfg/assignments/{id}/command': ['post'],
-  '/api/apps/mfg/reality/source-packs/upsert': ['post'],
-  '/api/apps/mfg/reality/source-packs/{id}': ['get'],
-  '/api/apps/mfg/reality/source-packs/{id}/validate': ['post'],
-  '/api/apps/mfg/reality/source-packs/{id}/delta-plan': ['post'],
-  '/api/apps/mfg/reality/source-packs/{id}/connector-runs/plan': ['post'],
-  '/api/apps/mfg/reality/source-packs/{id}/connector-runs/run': ['post'],
-  '/api/apps/mfg/reality/connector-runs/{id}': ['get'],
-  '/api/apps/mfg/reality/compute/jobs/plan': ['post'],
-  '/api/apps/mfg/reality/compute/jobs/{id}': ['get'],
-  '/api/apps/mfg/reality/compute/jobs/{id}/run': ['post'],
-  '/api/apps/mfg/reality/evidence/build': ['post'],
-  '/api/apps/mfg/reality/evidence/{id}': ['get'],
-  '/api/apps/mfg/reality/evidence/{id}/quality-gate': ['post'],
-  '/api/apps/mfg/reality/evidence/{id}/context': ['get'],
-  '/api/apps/mfg/incidents': ['get', 'post'],
-  '/api/apps/mfg/incidents/{id}/room': ['get'],
-  '/api/apps/mfg/incidents/{id}/analyze': ['post'],
-  '/api/apps/mfg/analyses/{analysis_id}/actions/{action_id}/execute': ['post'],
-  '/api/apps/mfg/executions/{id}': ['get'],
-  '/api/apps/mfg/executions/{id}/cross-plane/execute': ['post'],
-  '/api/apps/mfg/executions/{id}/feedback': ['post'],
-  '/api/apps/mfg/decision-trace': ['get'],
-  '/api/apps/mfg/live': ['get'],
-  '/api/apps/mfg/live/snapshot': ['get'],
-};
-
 function openApiPath(path) {
   return path.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
 }
@@ -79,14 +25,29 @@ function operationHasNamedSchema(operation) {
 
 function assertMfgCapabilitySchema(document, contract) {
   const activeRoutes = (contract?.routes || []).filter((route) => route.availability === 'active');
-  if (activeRoutes.length !== 105) {
-    throw new Error(`MFG contract must expose exactly 105 active routes, received ${activeRoutes.length}`);
+  if (activeRoutes.length === 0) {
+    throw new Error('MFG contract does not expose any active routes');
   }
-  const missing = Object.entries(requiredMfgOperations).flatMap(([route, methods]) => methods
-    .filter((method) => !document.paths?.[route]?.[method])
-    .map((method) => `${method.toUpperCase()} ${route}`));
-  if (missing.length) {
-    throw new Error(`Gateway OpenAPI is missing revisioned MFG operations: ${missing.join(', ')}`);
+  const routeIds = activeRoutes.map((route) => route.route_id);
+  const operationIds = activeRoutes.map(
+    (route) => `${String(route.method || '').toUpperCase()} ${openApiPath(route.path || '')}`,
+  );
+  if (
+    routeIds.some((routeId) => typeof routeId !== 'string' || routeId.length === 0)
+    || new Set(routeIds).size !== routeIds.length
+  ) {
+    throw new Error('MFG contract contains a missing or duplicate active route ID');
+  }
+  if (
+    activeRoutes.some(
+      (route) => typeof route.method !== 'string'
+        || route.method.length === 0
+        || typeof route.path !== 'string'
+        || !route.path.startsWith('/api/apps/mfg/'),
+    )
+    || new Set(operationIds).size !== operationIds.length
+  ) {
+    throw new Error('MFG contract contains a missing or duplicate active method/path operation');
   }
   const contractMissing = activeRoutes.flatMap((route) => {
     const path = openApiPath(route.path);

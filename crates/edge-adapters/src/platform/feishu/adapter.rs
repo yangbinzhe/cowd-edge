@@ -1183,7 +1183,6 @@ impl PlatformAdapter for FeishuAdapter {
     async fn connect(&self) -> PlatformResult<()> {
         let token = self.authenticate().await?;
         *self.access_token.write().await = Some(token);
-        *self.connected.write().await = true;
 
         let ws_client =
             super::ws::FeishuWsClient::new(&self.config.app_id, &self.config.app_secret)
@@ -1203,6 +1202,7 @@ impl PlatformAdapter for FeishuAdapter {
             }
         }
 
+        *self.connected.write().await = true;
         tracing::info!("feishu adapter connected");
         Ok(())
     }
@@ -1301,7 +1301,13 @@ impl PlatformAdapter for FeishuAdapter {
                 self.processing_queue.release(chat_id).await;
                 Ok(Some(msg))
             }
-            Ok(None) => Ok(None),
+            Ok(None) => {
+                *guard = None;
+                drop(guard);
+                *self.connected.write().await = false;
+                tracing::info!("feishu adapter: WebSocket event channel closed");
+                Ok(None)
+            }
             Err(_) => Ok(None),
         }
     }
@@ -2090,6 +2096,41 @@ mod tests {
         let config = FeishuConfig::new("app_id", "app_secret");
         let adapter = FeishuAdapter::new(config);
         let _ = &adapter.processing_queue;
+    }
+
+    #[tokio::test]
+    async fn receiver_close_marks_adapter_disconnected() {
+        let config = FeishuConfig::new("app_id", "app_secret");
+        let adapter = FeishuAdapter::new(config);
+        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        *adapter.ws_events.lock().await = Some(rx);
+        *adapter.connected.write().await = true;
+        drop(tx);
+
+        assert!(adapter
+            .receive()
+            .await
+            .expect("closed channel is not an error")
+            .is_none());
+        assert!(!adapter.is_connected());
+        assert!(adapter.ws_events.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn receive_timeout_preserves_connected_state() {
+        let config = FeishuConfig::new("app_id", "app_secret");
+        let adapter = FeishuAdapter::new(config);
+        let (_tx, rx) = tokio::sync::mpsc::channel(1);
+        *adapter.ws_events.lock().await = Some(rx);
+        *adapter.connected.write().await = true;
+
+        assert!(adapter
+            .receive()
+            .await
+            .expect("timeout is not an error")
+            .is_none());
+        assert!(adapter.is_connected());
+        assert!(adapter.ws_events.lock().await.is_some());
     }
 
     #[test]
