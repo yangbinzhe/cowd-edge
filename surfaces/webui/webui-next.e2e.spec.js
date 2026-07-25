@@ -220,6 +220,8 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
 test('session authorization revocation clears that view, fences reconnects, and leaves another session interactive', async ({ page }) => {
   const revokedSession = 'revoked-session-A';
   const healthySession = 'healthy-session-B';
+  const liveSubscriptionId = 'revocation-live-subscription';
+  let liveSubscriptionRevision = 0;
   let revokedStreamRequests = 0;
   const json = (route, body, status = 200) => route.fulfill({
     status,
@@ -241,27 +243,90 @@ test('session authorization revocation clears that view, fences reconnects, and 
         ],
       });
     }
+    if (path === '/api/runtime/live-subscriptions' && request.method() === 'POST') {
+      const body = request.postDataJSON();
+      liveSubscriptionRevision += 1;
+      return json(route, {
+        schema_version: 1,
+        id: liveSubscriptionId,
+        surface_instance: body.surface_instance,
+        revision: liveSubscriptionRevision,
+        selector: body.selector,
+        selector_hash: `revocation-selector-${liveSubscriptionRevision}`,
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: `/api/runtime/live/${liveSubscriptionId}`,
+      });
+    }
+    if (
+      path === `/api/runtime/live-subscriptions/${liveSubscriptionId}`
+      && request.method() === 'PATCH'
+    ) {
+      const body = request.postDataJSON();
+      liveSubscriptionRevision += 1;
+      return json(route, {
+        schema_version: 1,
+        id: liveSubscriptionId,
+        surface_instance: 'webui:revocation-e2e',
+        revision: liveSubscriptionRevision,
+        selector: body.selector,
+        selector_hash: `revocation-selector-${liveSubscriptionRevision}`,
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: `/api/runtime/live/${liveSubscriptionId}`,
+      });
+    }
+    if (
+      path === `/api/runtime/live-subscriptions/${liveSubscriptionId}`
+      && request.method() === 'DELETE'
+    ) {
+      return route.fulfill({ status: 204 });
+    }
+    if (path === `/api/runtime/live/${liveSubscriptionId}`) {
+      revokedStreamRequests += 1;
+      const envelope = (event, sourceKind, sourceId, sourceHealth, payload) => [
+        'event: live',
+        `data: ${JSON.stringify({
+          schema_version: 1,
+          subscription_id: liveSubscriptionId,
+          subscription_revision: liveSubscriptionRevision,
+          source_kind: sourceKind,
+          source_id: sourceId,
+          detail_scope: 'summary',
+          source_cursor: 1,
+          delivery_class: 'durable',
+          source_health: sourceHealth,
+          event,
+          payload,
+          session_id: sourceKind === 'session' ? sourceId : undefined,
+        })}`,
+        '',
+      ].join('\n');
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        headers: { 'cache-control': 'no-cache' },
+        body: [
+          envelope(
+            'subscription.ready',
+            'subscription',
+            liveSubscriptionId,
+            'live',
+            {},
+          ),
+          envelope(
+            'source.authorization_revoked',
+            'session',
+            revokedSession,
+            'revoked',
+            { reason: 'credential epoch revoked' },
+          ),
+          '',
+        ].join('\n'),
+      });
+    }
     const sessionMatch = path.match(/^\/api\/sessions\/(revoked-session-A|healthy-session-B)\/(messages|attach|detach|evidence|execution|attachments|inputs|turn-inbox|stream)$/);
     if (sessionMatch) {
       const [, sessionId, resource] = sessionMatch;
-      if (resource === 'stream') {
-        if (sessionId === revokedSession) {
-          revokedStreamRequests += 1;
-          return route.fulfill({
-            status: 200,
-            contentType: 'text/event-stream',
-            headers: { 'cache-control': 'no-cache' },
-            body: [
-              `data: ${JSON.stringify({ type: 'Connected', session_id: sessionId })}`,
-              '',
-              `data: ${JSON.stringify({ type: 'SessionAuthorizationRevoked', session_id: sessionId, reason: 'credential epoch revoked' })}`,
-              '',
-              '',
-            ].join('\n'),
-          });
-        }
-        return route.fulfill({ status: 204 });
-      }
+      if (resource === 'stream') return route.fulfill({ status: 410 });
       if (resource === 'messages') {
         const text = sessionId === revokedSession
           ? 'SECRET-A-MUST-BE-CLEARED'
@@ -532,9 +597,10 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   test.setTimeout(90_000);
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const writerHeaders = {
-    'x-cowd-observer-id': `webui:playwright-team-${suffix}`,
-  };
+  // Keep the writer on the observer identity authenticated by the release
+  // harness. Rebinding one bearer credential to a second observer is a real
+  // authorization transition and must remain fail-closed.
+  const writerHeaders = {};
   const create = await page.request.post('/api/sessions', { data: {} });
   await expectOk(create, 'real Gateway session creation');
   const session = await create.json();
