@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "postgres",
   "name": "PostgreSQL Source Connector",
-  "version": "0.9.598",
+  "version": "0.9.599",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",

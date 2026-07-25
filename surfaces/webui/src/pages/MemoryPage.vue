@@ -142,6 +142,12 @@ const governanceRows = computed(() => Array.isArray(knowledgeNamespaces.value?.g
 const recallQuality = computed(() => knowledgeMaintenance.value?.recall_quality || knowledge.value?.projection?.recall_quality || {});
 const linkCount = computed(() => Number(links.value?.total || links.value?.links?.length || 0));
 const healthLevel = computed(() => status.value?.kernel_health?.degraded ? 'degraded' : (status.value?.status || 'unknown'));
+const backgroundExtraction = computed(() => status.value?.kernel_health?.background_extraction || {});
+const backgroundExtractionStatus = computed(() => {
+  if (backgroundExtraction.value?.last_error || Number(backgroundExtraction.value?.failed_requests || 0) > 0) return 'degraded';
+  if (Number(backgroundExtraction.value?.pending_requests || 0) > 0) return 'active';
+  return 'ready';
+});
 const memoryContext = computed(() => [
   { label: t('script.pages.memorypage.label.c1f65ddb75'), value: 'Reality Core / Memory' },
   { label: t('script.pages.memorypage.label.3703cd2168'), value: healthLevel.value, tone: healthLevel.value === 'ready' ? 'success' : 'warn' },
@@ -455,6 +461,16 @@ watch(
         <span>{{ t('memory.contextEnvelope.label') }}</span>
         <strong>{{ displayStatus(contextEnvelopeStatus) }}</strong>
         <small>{{ t('memory.contextEnvelope.used', { value: contextEnvelopeRatio }) }}</small>
+      </article>
+      <article class="metric-card" :data-tone="backgroundExtractionStatus === 'ready' ? 'success' : 'warn'">
+        <span>{{ t('memory.backgroundExtraction.label') }}</span>
+        <strong>{{ displayStatus(backgroundExtractionStatus) }}</strong>
+        <small>
+          {{ t('memory.backgroundExtraction.summary', {
+            pending: backgroundExtraction.pending_requests || 0,
+            failed: backgroundExtraction.failed_requests || 0,
+          }) }}
+        </small>
       </article>
     </section>
 

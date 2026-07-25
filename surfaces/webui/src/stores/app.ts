@@ -699,6 +699,18 @@ export const useAppStore = defineStore('app', () => {
     activity.value = activity.value.slice(0, 80);
   }
 
+  function recordProjectionWarnings(receipt: any) {
+    const warnings = Array.isArray(receipt?.projection_warnings) ? receipt.projection_warnings : [];
+    for (const warning of warnings) {
+      recordActivity(
+        'runtime',
+        t('chat.input.projectionWarning'),
+        `${warning?.projection || 'projection'}: ${warning?.error || t('chat.input.projectionUnavailable')}`,
+        'attention',
+      );
+    }
+  }
+
   async function cancelSessionInput(inputId: string, reason = 'cancelled from webui') {
     if (!activeSessionId.value || !inputId) return null;
     const sessionId = activeSessionId.value;
@@ -707,6 +719,7 @@ export const useAppStore = defineStore('app', () => {
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return receipt;
     if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
     if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
+    recordProjectionWarnings(receipt);
     recordActivity('runtime', t('chat.input.cancelled'), inputId, receipt?.input ? 'complete' : 'error');
     return receipt;
   }
@@ -719,6 +732,7 @@ export const useAppStore = defineStore('app', () => {
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return receipt;
     if (receipt?.input_projection) sessionInputProjection.value = receipt.input_projection;
     if (receipt?.turn_inbox) turnInbox.value = receipt.turn_inbox;
+    recordProjectionWarnings(receipt);
     recordActivity('runtime', t('chat.input.reclassified'), `${inputId} -> ${decision}`, receipt?.input ? 'complete' : 'error');
     return receipt;
   }

@@ -2003,7 +2003,18 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
       if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
       if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
-      if (url === '/api/memory/status') return Promise.resolve(new Response(JSON.stringify({ enabled: true, status: 'ready', kernel_health: { degraded: false } })));
+      if (url === '/api/memory/status') return Promise.resolve(new Response(JSON.stringify({
+        enabled: true,
+        status: 'degraded',
+        kernel_health: {
+          degraded: true,
+          background_extraction: {
+            pending_requests: 3,
+            failed_requests: 2,
+            last_error: 'extractor unavailable',
+          },
+        },
+      })));
       if (url === '/api/memory/stats') return Promise.resolve(new Response(JSON.stringify({ total_entries: 1, entity_count: 1, triple_count: 1, vector_count: 1 })));
       if (url === '/api/memory/layers') return Promise.resolve(new Response(JSON.stringify({ layers: [{ layer: 'L2', entry_count: 1 }] })));
       if (url === '/api/memory/L2') return Promise.resolve(new Response(JSON.stringify({ enabled: true, entries: [{ id: 'mem-1', title: 'Line A fact', content: 'Torque deviation', tags: ['quality'], priority: 'High' }] })));
@@ -2030,6 +2041,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Line A fact');
     expect(wrapper.text()).toContain('结构化数据核心');
     expect(wrapper.text()).toContain('记忆选中证据');
+    expect(wrapper.text()).toContain('3 条待处理 / 2 条失败');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/memory/recall/explain?q=manufacturing%20quality%20anomaly&limit=12', expect.any(Object));
     await wrapper.get('.search-field input').setValue('manufacturing quality anomaly');
     await wrapper.get('.search-field input').trigger('keyup.enter');

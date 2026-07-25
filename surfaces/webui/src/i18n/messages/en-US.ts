@@ -2529,4 +2529,8 @@ export const enUS: MessageCatalog = {
   "column.backend": "Backend",
   "column.webui": "WebUI",
   "column.tui": "TUI",
+  "chat.input.projectionWarning": "Runtime projection warning",
+  "chat.input.projectionUnavailable": "projection unavailable",
+  "memory.backgroundExtraction.label": "Background extraction",
+  "memory.backgroundExtraction.summary": "{pending} pending / {failed} failed",
 };

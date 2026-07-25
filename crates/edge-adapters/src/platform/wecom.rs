@@ -396,7 +396,19 @@ impl WeComAdapter {
         let callback: WeComCallback = match serde_json::from_slice(payload) {
             Ok(c) => c,
             Err(_) => {
-                // Try parsing as direct event (non-encrypted)
+                if payload
+                    .iter()
+                    .copied()
+                    .find(|byte| !byte.is_ascii_whitespace())
+                    == Some(b'<')
+                {
+                    let xml = std::str::from_utf8(payload).map_err(|error| {
+                        PlatformError::ReceiveFailed(format!(
+                            "WeCom callback is not valid UTF-8: {error}"
+                        ))
+                    })?;
+                    return self.parse_decrypted_event(xml);
+                }
                 return self.parse_direct_event(payload);
             }
         };
@@ -435,7 +447,7 @@ impl WeComAdapter {
             return Ok(None);
         }
 
-        Ok(None)
+        self.parse_direct_event(payload)
     }
 
     /// Parse a direct (non-encrypted) event payload.
@@ -757,8 +769,16 @@ impl PlatformAdapter for WeComAdapter {
         Err(PlatformError::NotImplemented("send_card".into()))
     }
 
-    async fn on_event(&self, _event: &PlatformEvent) -> PlatformResult<Option<InboundMessage>> {
-        Ok(None)
+    async fn on_event(&self, event: &PlatformEvent) -> PlatformResult<Option<InboundMessage>> {
+        if let Some(raw) = event.data.get("raw").and_then(serde_json::Value::as_str) {
+            return self.process_webhook_event(raw.as_bytes());
+        }
+        let payload = serde_json::to_vec(&event.data).map_err(|error| {
+            PlatformError::ReceiveFailed(format!(
+                "failed to encode WeCom callback payload: {error}"
+            ))
+        })?;
+        self.process_webhook_event(&payload)
     }
 }
 
@@ -886,6 +906,30 @@ mod tests {
             Some("user1".to_string())
         );
         assert_eq!(extract_xml_value(xml, "NonExistent"), None);
+    }
+
+    #[tokio::test]
+    async fn callback_event_reuses_the_wecom_webhook_parser() {
+        let adapter = WeComAdapter::new(WeComConfig::new("corp", "secret", "agent"));
+        let event = PlatformEvent {
+            event_type: "message.callback".into(),
+            platform: Platform::WeChat,
+            data: serde_json::json!({
+                "MsgType": "text",
+                "Content": "hello",
+                "MsgId": "message-1",
+                "FromUserName": "user-1"
+            }),
+            timestamp: Utc::now(),
+        };
+
+        let message = adapter
+            .on_event(&event)
+            .await
+            .expect("callback parses")
+            .expect("callback creates an inbound message");
+        assert_eq!(message.text, "hello");
+        assert_eq!(message.message_id.as_deref(), Some("message-1"));
     }
 
     #[test]

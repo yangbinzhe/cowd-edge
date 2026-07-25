@@ -222,7 +222,9 @@ pub fn message_connector_required_fields(connector: &str) -> Vec<&'static str> {
         "feishu" => vec!["app_id", "app_secret"],
         "wecom" => vec!["corp_id", "corp_secret", "agent_id"],
         "wechat-ilink" => vec!["bot_id", "bot_secret"],
-        "email" => vec!["smtp_host", "smtp_user", "smtp_password"],
+        // Email supports outbound-only SMTP and inbound-only IMAP. The
+        // adapter validates the selected mode atomically at connect time.
+        "email" => Vec::new(),
         _ => Vec::new(),
     }
 }
@@ -388,10 +390,7 @@ mod tests {
     fn email_required_fields_match_current_config_template() {
         let contract = MessageConnectorContract::for_connector("email");
 
-        assert_eq!(
-            contract.required_fields,
-            vec!["smtp_host", "smtp_user", "smtp_password"]
-        );
+        assert!(contract.required_fields.is_empty());
         assert!(contract
             .resource_modes
             .contains(&MessageResourceMode::Document));

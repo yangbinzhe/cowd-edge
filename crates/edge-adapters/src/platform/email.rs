@@ -12,12 +12,13 @@ use chrono::Utc;
 use lettre::Transport;
 use mail_parser::MimeHeaders;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 /// Email adapter configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,11 +56,21 @@ impl Default for EmailConfig {
 
 impl EmailConfig {
     pub fn is_smtp_configured(&self) -> bool {
-        !self.smtp_host.is_empty() && !self.from_address.is_empty()
+        !self.smtp_host.trim().is_empty() && !self.from_address.trim().is_empty()
     }
 
     pub fn is_imap_configured(&self) -> bool {
-        self.imap_host.as_ref().map_or(false, |h| !h.is_empty()) && self.imap_username.is_some()
+        self.imap_host
+            .as_ref()
+            .is_some_and(|host| !host.trim().is_empty())
+            && self
+                .imap_username
+                .as_ref()
+                .is_some_and(|username| !username.trim().is_empty())
+            && self
+                .imap_password
+                .as_ref()
+                .is_some_and(|password| !password.is_empty())
     }
 
     pub fn new(
@@ -102,6 +113,7 @@ pub struct EmailAdapter {
     config: EmailConfig,
     connected: Arc<AtomicBool>,
     last_poll: Arc<RwLock<Option<Instant>>>,
+    pending_inbox: Arc<Mutex<VecDeque<InboundMessage>>>,
 }
 
 impl EmailAdapter {
@@ -110,6 +122,7 @@ impl EmailAdapter {
             config,
             connected: Arc::new(AtomicBool::new(false)),
             last_poll: Arc::new(RwLock::new(None)),
+            pending_inbox: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
 
@@ -117,11 +130,153 @@ impl EmailAdapter {
         email.contains('@') && email.contains('.') && email.len() > 5
     }
 
+    fn validate_config(&self) -> PlatformResult<()> {
+        let smtp_started = !self.config.smtp_host.trim().is_empty()
+            || !self.config.smtp_username.trim().is_empty()
+            || !self.config.smtp_password.is_empty()
+            || !self.config.from_address.trim().is_empty();
+        let imap_started = self
+            .config
+            .imap_host
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty())
+            || self
+                .config
+                .imap_username
+                .as_ref()
+                .is_some_and(|value| !value.trim().is_empty())
+            || self
+                .config
+                .imap_password
+                .as_ref()
+                .is_some_and(|value| !value.is_empty());
+
+        if !smtp_started && !imap_started {
+            return Err(PlatformError::ConfigError(
+                "email requires a complete SMTP or IMAP configuration".into(),
+            ));
+        }
+        if smtp_started {
+            if !self.config.is_smtp_configured() {
+                return Err(PlatformError::ConfigError(
+                    "SMTP requires smtp_host and from_address".into(),
+                ));
+            }
+            if !Self::is_valid_email(&self.config.from_address) {
+                return Err(PlatformError::ConfigError(
+                    "from_address is not a valid email address".into(),
+                ));
+            }
+            if self.config.smtp_port == 0 {
+                return Err(PlatformError::ConfigError(
+                    "smtp_port must be greater than zero".into(),
+                ));
+            }
+            let has_username = !self.config.smtp_username.trim().is_empty();
+            let has_password = !self.config.smtp_password.is_empty();
+            if has_username != has_password {
+                return Err(PlatformError::ConfigError(
+                    "smtp_username and smtp_password must be configured together".into(),
+                ));
+            }
+        }
+        if imap_started && !self.config.is_imap_configured() {
+            return Err(PlatformError::ConfigError(
+                "IMAP requires imap_host, imap_username and imap_password".into(),
+            ));
+        }
+        if self.config.imap_port == Some(0) {
+            return Err(PlatformError::ConfigError(
+                "imap_port must be greater than zero".into(),
+            ));
+        }
+        if self.config.polling_interval_secs == 0 {
+            return Err(PlatformError::ConfigError(
+                "polling_interval_secs must be greater than zero".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn smtp_transport(&self) -> PlatformResult<lettre::SmtpTransport> {
+        let mut builder = if self.config.use_tls {
+            lettre::SmtpTransport::relay(&self.config.smtp_host)
+                .map_err(|error| {
+                    PlatformError::ConnectionFailed(format!("SMTP relay error: {error}"))
+                })?
+                .port(self.config.smtp_port)
+        } else {
+            lettre::SmtpTransport::builder_dangerous(&self.config.smtp_host)
+                .port(self.config.smtp_port)
+        };
+        if !self.config.smtp_username.trim().is_empty() {
+            builder =
+                builder.credentials(lettre::transport::smtp::authentication::Credentials::new(
+                    self.config.smtp_username.clone(),
+                    self.config.smtp_password.clone(),
+                ));
+        }
+        Ok(builder.build())
+    }
+
+    async fn probe_configured_endpoints(&self) -> PlatformResult<()> {
+        if self.config.is_smtp_configured() {
+            let transport = self.smtp_transport()?;
+            let reachable = tokio::task::spawn_blocking(move || transport.test_connection())
+                .await
+                .map_err(|error| {
+                    PlatformError::ConnectionFailed(format!("SMTP probe task failed: {error}"))
+                })?
+                .map_err(|error| {
+                    PlatformError::ConnectionFailed(format!("SMTP probe failed: {error}"))
+                })?;
+            if !reachable {
+                return Err(PlatformError::ConnectionFailed(
+                    "SMTP server rejected the connection probe".into(),
+                ));
+            }
+        }
+        if self.config.is_imap_configured() {
+            let host = self.config.imap_host.clone().unwrap_or_default();
+            let port = self.config.imap_port.unwrap_or(993);
+            let username = self.config.imap_username.clone().unwrap_or_default();
+            let password = self.config.imap_password.clone().unwrap_or_default();
+            tokio::task::spawn_blocking(move || -> PlatformResult<()> {
+                let client = imap::ClientBuilder::new(&host, port)
+                    .connect()
+                    .map_err(|error| {
+                        PlatformError::ConnectionFailed(format!("IMAP probe failed: {error}"))
+                    })?;
+                let mut session = client.login(&username, &password).map_err(|error| {
+                    PlatformError::AuthenticationFailed(format!(
+                        "IMAP probe login failed: {}",
+                        error.0
+                    ))
+                })?;
+                session.select("INBOX").map_err(|error| {
+                    PlatformError::ConnectionFailed(format!(
+                        "IMAP probe could not select INBOX: {error}"
+                    ))
+                })?;
+                session.logout().map_err(|error| {
+                    PlatformError::ConnectionFailed(format!("IMAP probe logout failed: {error}"))
+                })?;
+                Ok(())
+            })
+            .await
+            .map_err(|error| {
+                PlatformError::ConnectionFailed(format!("IMAP probe task failed: {error}"))
+            })??;
+        }
+        Ok(())
+    }
+
     /// Send an email via SMTP.
     async fn send_email(&self, msg: &OutboundMessage) -> PlatformResult<()> {
         if !self.config.is_smtp_configured() {
-            tracing::warn!("SMTP not configured, skipping email send");
-            return Ok(());
+            return Err(PlatformError::ConfigError(
+                "SMTP is not configured for outbound email".into(),
+            ));
         }
 
         let to_address = &msg.session_key.user_id;
@@ -153,23 +308,7 @@ impl EmailAdapter {
             )
             .map_err(|e| PlatformError::SendFailed(format!("failed to build email: {}", e)))?;
 
-        let creds = lettre::transport::smtp::authentication::Credentials::new(
-            self.config.smtp_username.clone(),
-            self.config.smtp_password.clone(),
-        );
-
-        let mailer = if self.config.use_tls {
-            lettre::SmtpTransport::relay(&self.config.smtp_host)
-                .map_err(|e| PlatformError::SendFailed(format!("SMTP relay error: {}", e)))?
-                .port(self.config.smtp_port)
-                .credentials(creds)
-                .build()
-        } else {
-            lettre::SmtpTransport::builder_dangerous(&self.config.smtp_host)
-                .port(self.config.smtp_port)
-                .credentials(creds)
-                .build()
-        };
+        let mailer = self.smtp_transport()?;
 
         // lettre send is blocking, so we run it in a spawn_blocking context
         let result: Result<
@@ -276,11 +415,18 @@ impl EmailAdapter {
                                     "attachment_names": attachment_names,
                                 }),
                                 message_type: MessageType::Text,
-                                message_id: None,
+                                message_id: Some(format!("imap:{uid}")),
                                 reply_to_message_id: None,
                                 media_urls,
                                 media_types,
                             });
+                            session
+                                .uid_store(uid.to_string(), "+FLAGS (\\Seen)")
+                                .map_err(|error| {
+                                    PlatformError::ReceiveFailed(format!(
+                                        "IMAP mark-seen failed for UID {uid}: {error}"
+                                    ))
+                                })?;
                         }
                     }
                 }
@@ -412,6 +558,8 @@ impl PlatformAdapter for EmailAdapter {
     }
 
     async fn connect(&self) -> PlatformResult<()> {
+        self.validate_config()?;
+        self.probe_configured_endpoints().await?;
         if self.config.is_smtp_configured() {
             tracing::info!(host = %self.config.smtp_host, port = self.config.smtp_port, "email adapter: SMTP configured");
         }
@@ -428,6 +576,8 @@ impl PlatformAdapter for EmailAdapter {
 
     async fn disconnect(&self) -> PlatformResult<()> {
         self.connected.store(false, Ordering::Relaxed);
+        self.pending_inbox.lock().await.clear();
+        *self.last_poll.write().await = None;
         Ok(())
     }
 
@@ -439,15 +589,19 @@ impl PlatformAdapter for EmailAdapter {
         if !self.connected.load(Ordering::Relaxed) {
             return Ok(None);
         }
+        if let Some(message) = self.pending_inbox.lock().await.pop_front() {
+            return Ok(Some(message));
+        }
 
-        // Respect polling interval
         if !self.should_poll().await {
             return Ok(None);
         }
 
-        self.update_poll_time().await;
         let messages = self.receive_emails().await?;
-        Ok(messages.into_iter().next())
+        self.update_poll_time().await;
+        let mut pending = self.pending_inbox.lock().await;
+        pending.extend(messages);
+        Ok(pending.pop_front())
     }
 
     async fn send(&self, msg: &OutboundMessage) -> PlatformResult<SendResult> {
@@ -493,5 +647,46 @@ mod tests {
         // Update poll time, then second poll should be throttled (interval is 60s)
         adapter.update_poll_time().await;
         assert!(!adapter.should_poll().await);
+    }
+
+    #[tokio::test]
+    async fn pending_inbox_drains_every_polled_message_without_dropping_the_tail() {
+        let adapter = EmailAdapter::new(EmailConfig::default());
+        adapter.connected.store(true, Ordering::Relaxed);
+        let messages = ["first", "second", "third"]
+            .into_iter()
+            .enumerate()
+            .map(|(index, text)| InboundMessage {
+                platform: Platform::Email,
+                session_key: SessionKey::new("email", "sender@example.com"),
+                text: text.to_string(),
+                sender_name: None,
+                timestamp: Utc::now(),
+                metadata: serde_json::Value::Null,
+                message_type: MessageType::Text,
+                message_id: Some(format!("imap:{index}")),
+                reply_to_message_id: None,
+                media_urls: Vec::new(),
+                media_types: Vec::new(),
+            });
+        adapter.pending_inbox.lock().await.extend(messages);
+
+        assert_eq!(adapter.receive().await.unwrap().unwrap().text, "first");
+        assert_eq!(adapter.receive().await.unwrap().unwrap().text, "second");
+        assert_eq!(adapter.receive().await.unwrap().unwrap().text, "third");
+        assert!(adapter.pending_inbox.lock().await.is_empty());
+    }
+
+    #[test]
+    fn partial_email_configuration_is_rejected() {
+        let config = EmailConfig {
+            smtp_host: "smtp.example.com".into(),
+            ..EmailConfig::default()
+        };
+        let adapter = EmailAdapter::new(config);
+        assert!(matches!(
+            adapter.validate_config(),
+            Err(PlatformError::ConfigError(_))
+        ));
     }
 }

@@ -113,7 +113,6 @@ where
 pub mod adapter;
 pub mod approval;
 pub mod auth;
-pub mod batch;
 pub mod card_handler;
 pub mod markdown;
 pub mod media;
@@ -133,7 +132,6 @@ pub use approval::{
     HERMES_ACTION_DENY, LABEL_ALLOW_ONCE, LABEL_APPROVE_ALWAYS, LABEL_APPROVE_SESSION, LABEL_DENY,
 };
 pub use auth::*;
-pub use batch::*;
 pub use markdown::*;
 pub use media::*;
 pub use normalize::*;

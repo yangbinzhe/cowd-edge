@@ -1,4 +1,4 @@
-//! Persistent LRU message dedup store.
+//! In-memory LRU message dedup store.
 //!
 //! Tracks seen message IDs with TTL-based expiration and LRU eviction.
 //! Mirrors Hermes' `_seen_message_ids` pattern for cross-platform
@@ -9,12 +9,8 @@
 //! - New entries are appended to the end of a `VecDeque`
 //! - Oldest entries are evicted when capacity is reached (FIFO/LRU)
 //! - Entries older than `ttl_seconds` are considered expired
-//! - Optional JSON file persistence with atomic write (temp → rename)
 
 use std::collections::VecDeque;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
@@ -27,7 +23,7 @@ fn now_secs() -> i64 {
         .as_secs() as i64
 }
 
-/// Persistent LRU message dedup store.
+/// In-memory LRU message dedup store.
 ///
 /// Tracks seen message IDs with TTL-based expiration and LRU eviction.
 /// Mirrors Hermes' `_seen_message_ids` pattern.
@@ -50,10 +46,6 @@ pub struct DedupStore {
     max_size: usize,
     /// Time-to-live in seconds.
     ttl_seconds: i64,
-    /// Optional persistence file path.
-    state_path: Option<PathBuf>,
-    /// Whether there are unsaved changes.
-    dirty: RwLock<bool>,
 }
 
 impl DedupStore {
@@ -63,66 +55,7 @@ impl DedupStore {
             seen_ids: RwLock::new(VecDeque::with_capacity(max_size.min(64))),
             max_size,
             ttl_seconds,
-            state_path: None,
-            dirty: RwLock::new(false),
         }
-    }
-
-    /// Create a new `DedupStore` with JSON file persistence.
-    ///
-    /// On creation, loads existing state from `state_path` if the file
-    /// exists. The file format is a JSON array of `[message_id, seen_at]`
-    /// pairs.
-    pub fn with_persistence(max_size: usize, ttl_seconds: i64, state_path: PathBuf) -> Self {
-        let seen_ids = Self::load_from_path(&state_path, max_size);
-        Self {
-            seen_ids: RwLock::new(seen_ids),
-            max_size,
-            ttl_seconds,
-            state_path: Some(state_path),
-            dirty: RwLock::new(false),
-        }
-    }
-
-    /// Load seen_ids from a JSON file.
-    ///
-    /// Returns an empty `VecDeque` if the file does not exist or cannot
-    /// be parsed.
-    fn load_from_path(path: &Path, max_size: usize) -> VecDeque<(String, i64)> {
-        if !path.exists() {
-            return VecDeque::with_capacity(max_size.min(64));
-        }
-
-        let file = match fs::File::open(path) {
-            Ok(f) => f,
-            Err(e) => {
-                tracing::warn!(
-                    "DedupStore: failed to open state file {}: {}",
-                    path.display(),
-                    e
-                );
-                return VecDeque::with_capacity(max_size.min(64));
-            }
-        };
-
-        let pairs: Vec<(String, i64)> = match serde_json::from_reader(file) {
-            Ok(pairs) => pairs,
-            Err(e) => {
-                tracing::warn!(
-                    "DedupStore: failed to parse state file {}: {}",
-                    path.display(),
-                    e
-                );
-                return VecDeque::with_capacity(max_size.min(64));
-            }
-        };
-
-        // Truncate to max_size in case the persisted file grew beyond
-        // the new limit.
-        let effective = pairs.len().min(max_size);
-        let mut deque = VecDeque::with_capacity(max_size.min(64));
-        deque.extend(pairs.into_iter().take(effective));
-        deque
     }
 
     /// Check whether `message_id` is a duplicate (already seen within TTL).
@@ -154,11 +87,6 @@ impl DedupStore {
 
         guard.push_back((message_id.to_string(), now));
 
-        // Mark dirty if persistence is enabled.
-        if self.state_path.is_some() {
-            *self.dirty.write().await = true;
-        }
-
         false
     }
 
@@ -181,44 +109,6 @@ impl DedupStore {
         }
 
         guard.push_back((message_id.to_string(), now_secs()));
-
-        if self.state_path.is_some() {
-            *self.dirty.write().await = true;
-        }
-    }
-
-    /// Persist the current state to disk.
-    ///
-    /// Uses atomic write (temp file → rename) to avoid corruption.
-    /// Returns immediately if no `state_path` is configured or if there
-    /// are no unsaved changes.
-    pub async fn persist(&self) -> Result<(), io::Error> {
-        let state_path = match &self.state_path {
-            Some(p) => p.clone(),
-            None => return Ok(()),
-        };
-
-        // Fast-path: skip if nothing changed.
-        if !*self.dirty.read().await {
-            return Ok(());
-        }
-
-        // Hold the write lock on seen_ids while we persist so the
-        // snapshot is consistent.
-        let guard = self.seen_ids.read().await;
-        let entries: Vec<&(String, i64)> = guard.iter().collect();
-
-        // Atomic write: temp file → rename.
-        let temp_path = state_path.with_extension("tmp");
-        let file = fs::File::create(&temp_path)?;
-        serde_json::to_writer(file, &entries)?;
-        fs::rename(&temp_path, &state_path)?;
-
-        // Drop the read guard before acquiring the dirty write lock.
-        drop(guard);
-        *self.dirty.write().await = false;
-
-        Ok(())
     }
 
     /// Number of entries currently in the store.
@@ -232,32 +122,9 @@ impl DedupStore {
     }
 }
 
-impl Drop for DedupStore {
-    fn drop(&mut self) {
-        if let Some(state_path) = &self.state_path {
-            // Best-effort synchronous persist during shutdown.
-            if let Ok(guard) = self.seen_ids.try_write() {
-                let entries: Vec<&(String, i64)> = guard.iter().collect();
-                if let Ok(file) = fs::File::create(state_path) {
-                    let _ = serde_json::to_writer(file, &entries);
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
-
-    /// Helper: create a store that will be cleaned up after the test.
-    fn temp_persistent_store(max_size: usize, ttl_seconds: i64) -> (DedupStore, TempDir) {
-        let dir = TempDir::new().expect("tempdir");
-        let path = dir.path().join("dedup_state.json");
-        let store = DedupStore::with_persistence(max_size, ttl_seconds, path);
-        (store, dir)
-    }
 
     #[tokio::test]
     async fn test_duplicate_detection_within_ttl() {
@@ -302,31 +169,6 @@ mod tests {
 
         // "a" was evicted — not a duplicate (but re-added by this call).
         assert!(!store.is_duplicate("a").await);
-    }
-
-    #[tokio::test]
-    async fn test_persistence_roundtrip() {
-        let (store, dir) = temp_persistent_store(100, 3600);
-
-        // Add some entries.
-        store.is_duplicate("msg_a").await;
-        store.is_duplicate("msg_b").await;
-        store.is_duplicate("msg_c").await;
-
-        // Persist.
-        store.persist().await.expect("persist should succeed");
-
-        // Re-load from the same file.
-        let path = dir.path().join("dedup_state.json");
-        let store2 = DedupStore::with_persistence(100, 3600, path);
-
-        // Previously seen messages should now be duplicates.
-        assert!(store2.is_duplicate("msg_a").await);
-        assert!(store2.is_duplicate("msg_b").await);
-        assert!(store2.is_duplicate("msg_c").await);
-
-        // New message should not be a duplicate.
-        assert!(!store2.is_duplicate("msg_new").await);
     }
 
     #[tokio::test]
@@ -378,23 +220,5 @@ mod tests {
 
         // "a" was evicted — re-checking it re-adds it (evicting "b").
         assert!(!store.is_duplicate("a").await);
-    }
-
-    #[tokio::test]
-    async fn test_persist_skips_when_clean() {
-        let (store, _dir) = temp_persistent_store(100, 3600);
-
-        // Fresh store is clean — persist should be a no-op.
-        store.persist().await.expect("persist on clean store");
-    }
-
-    #[tokio::test]
-    async fn test_persist_without_state_path_is_noop() {
-        let store = DedupStore::new(10, 3600);
-        store.is_duplicate("some_msg").await;
-        store
-            .persist()
-            .await
-            .expect("persist without path is no-op");
     }
 }

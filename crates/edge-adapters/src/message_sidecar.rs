@@ -602,13 +602,17 @@ async fn dispatch_callback_action(
     };
     let callback_result = adapter.on_event(&event).await;
     match callback_result {
-        Ok(Some(message)) => {
-            let _ = emit_inbound_event(surface_id, &events, message).await;
-            SurfaceFrame::Ok {
+        Ok(Some(message)) => match emit_inbound_event(surface_id, &events, message).await {
+            Ok(()) => SurfaceFrame::Ok {
                 id,
                 payload: serde_json::json!({"status": "received", "surface": surface_id}),
-            }
-        }
+            },
+            Err(error) => SurfaceFrame::Error {
+                id: Some(id),
+                code: format!("{surface_id}_callback_delivery_failed"),
+                message: format!("callback parsed but Gateway event delivery failed: {error}"),
+            },
+        },
         Ok(None) => SurfaceFrame::Ok {
             id,
             payload: serde_json::json!({"status": "ignored", "surface": surface_id}),
@@ -1238,6 +1242,29 @@ mod tests {
         assert_ok_status(disconnected, "disconnected");
     }
 
+    #[tokio::test]
+    async fn callback_reports_delivery_failure_when_gateway_event_stream_is_closed() {
+        let adapter: Arc<dyn PlatformAdapter> = Arc::new(CallbackAdapter);
+        let (events, event_rx) = mpsc::channel(1);
+        drop(event_rx);
+
+        let frame = dispatch_callback_action(
+            "fake",
+            "callback-1".into(),
+            serde_json::json!({"type": "message", "text": "hello"}),
+            adapter,
+            events,
+        )
+        .await;
+
+        match frame {
+            SurfaceFrame::Error { code, .. } => {
+                assert_eq!(code, "fake_callback_delivery_failed");
+            }
+            other => panic!("expected callback delivery error, got {other:?}"),
+        }
+    }
+
     fn test_adapter_factory(
         _settings: &serde_json::Value,
     ) -> PlatformResult<Box<dyn PlatformAdapter>> {
@@ -1258,6 +1285,8 @@ mod tests {
     struct FakeAdapter {
         calls: Arc<StdMutex<Vec<String>>>,
     }
+
+    struct CallbackAdapter;
 
     struct DelayAdapter {
         active: Arc<AtomicUsize>,
@@ -1296,6 +1325,53 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(30)).await;
             self.active.fetch_sub(1, AtomicOrdering::SeqCst);
             Ok(SendResult::success(None))
+        }
+    }
+
+    #[async_trait]
+    impl PlatformAdapter for CallbackAdapter {
+        fn platform(&self) -> Platform {
+            Platform::Custom("fake".into())
+        }
+
+        fn platform_name(&self) -> &str {
+            "fake"
+        }
+
+        async fn connect(&self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        async fn disconnect(&self) -> PlatformResult<()> {
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            true
+        }
+
+        async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
+            Ok(None)
+        }
+
+        async fn send(&self, _msg: &OutboundMessage) -> PlatformResult<SendResult> {
+            Ok(SendResult::success(None))
+        }
+
+        async fn on_event(&self, _event: &PlatformEvent) -> PlatformResult<Option<InboundMessage>> {
+            Ok(Some(InboundMessage {
+                platform: Platform::Custom("fake".into()),
+                session_key: SessionKey::new("fake", "user-1"),
+                text: "hello".into(),
+                sender_name: None,
+                timestamp: Utc::now(),
+                metadata: serde_json::Value::Null,
+                message_type: crate::platform::MessageType::Text,
+                message_id: Some("message-1".into()),
+                reply_to_message_id: None,
+                media_urls: Vec::new(),
+                media_types: Vec::new(),
+            }))
         }
     }
 

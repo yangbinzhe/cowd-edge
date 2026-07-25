@@ -2529,4 +2529,8 @@ export const zhCN: MessageCatalog = {
   "column.backend": "后端状态",
   "column.webui": "WebUI",
   "column.tui": "TUI",
+  "chat.input.projectionWarning": "运行时投影告警",
+  "chat.input.projectionUnavailable": "投影不可用",
+  "memory.backgroundExtraction.label": "后台记忆抽取",
+  "memory.backgroundExtraction.summary": "{pending} 条待处理 / {failed} 条失败",
 };

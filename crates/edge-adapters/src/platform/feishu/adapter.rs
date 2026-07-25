@@ -20,7 +20,6 @@
 //!   the WebSocket client, not polling.
 
 use super::auth::AccessControl;
-use super::batch::{BatchSender, TextBatchManager};
 use super::card_handler::CardActionHandler;
 use super::markdown::{build_post_payload, build_text_payload, strip_markdown};
 use super::processing::{ChatProcessingQueue, ProcessingDecision};
@@ -165,7 +164,6 @@ pub struct FeishuAdapter {
     token_expires_at: Arc<RwLock<Option<DateTime<Utc>>>>,
     pub access_control: AccessControl,
     pub reactions: ProcessingReactions,
-    pub batch_manager: Option<TextBatchManager>,
     pub processing_queue: ChatProcessingQueue,
     ws_events: Arc<Mutex<Option<tokio::sync::mpsc::Receiver<serde_json::Value>>>>,
     approval_id_counter: Arc<AtomicU64>,
@@ -183,25 +181,10 @@ impl FeishuAdapter {
             token_expires_at: Arc::new(RwLock::new(None)),
             access_control: AccessControl::new(&bot_open_id, &bot_name),
             reactions: ProcessingReactions::new(),
-            batch_manager: None,
             processing_queue: ChatProcessingQueue::new(1000),
             ws_events: Arc::new(Mutex::new(None)),
             approval_id_counter: Arc::new(AtomicU64::new(0)),
         }
-    }
-
-    /// Activate text batching. After calling, `send()` will buffer messages via `TextBatchManager`.
-    ///
-    /// Due to a circular reference issue (`BatchSender` requires `Arc<Self>`),
-    /// `batch_manager` defaults to `None`. The `send()` method sends directly
-    /// when `batch_manager` is `None`. This method is retained as a future extension point.
-    pub fn enable_batching(&mut self, delay_ms: u64, max_messages: usize, max_chars: usize) {
-        tracing::info!(
-            "feishu: batch manager configured (delay={}ms, max_msg={}, max_chars={})",
-            delay_ms,
-            max_messages,
-            max_chars
-        );
     }
 
     /// Check if the token needs refresh (expires within 5 minutes).
@@ -1154,22 +1137,6 @@ impl FeishuAdapter {
     }
 }
 
-#[async_trait::async_trait]
-impl BatchSender for FeishuAdapter {
-    async fn send_batch(&self, chat_id: &str, text: &str) -> PlatformResult<()> {
-        let chat_id = chat_id.to_string();
-        let text = text.to_string();
-        self.feishu_send_with_retry(move || {
-            let chat_id = chat_id.clone();
-            let text = text.clone();
-            let target = resolve_receive_target(&chat_id);
-            async move { self.send_internal(&target, &text, None).await }
-        })
-        .await
-        .map(|_result| ())
-    }
-}
-
 #[async_trait]
 impl PlatformAdapter for FeishuAdapter {
     fn platform(&self) -> Platform {
@@ -1313,16 +1280,6 @@ impl PlatformAdapter for FeishuAdapter {
     }
 
     async fn send(&self, msg: &OutboundMessage) -> PlatformResult<SendResult> {
-        if let Some(ref batch_mgr) = self.batch_manager {
-            let chat_id = msg
-                .session_key
-                .thread_id
-                .as_deref()
-                .unwrap_or(&msg.session_key.user_id);
-            batch_mgr.queue(chat_id, &msg.text).await;
-            return Ok(SendResult::success(None));
-        }
-
         let receive_id = msg
             .session_key
             .thread_id
@@ -1695,7 +1652,14 @@ impl PlatformAdapter for FeishuAdapter {
                     &self.config.bot_open_id,
                 ))
             }
-            _ => Ok(None),
+            _ => {
+                let payload = serde_json::to_vec(&event.data).map_err(|error| {
+                    PlatformError::ReceiveFailed(format!(
+                        "failed to encode Feishu callback payload: {error}"
+                    ))
+                })?;
+                self.process_webhook_event_with_media(&payload).await
+            }
         }
     }
 }
@@ -2085,13 +2049,6 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_manager_defaults_to_none() {
-        let config = FeishuConfig::new("app_id", "app_secret");
-        let adapter = FeishuAdapter::new(config);
-        assert!(adapter.batch_manager.is_none());
-    }
-
-    #[test]
     fn test_processing_queue_field_accessible() {
         let config = FeishuConfig::new("app_id", "app_secret");
         let adapter = FeishuAdapter::new(config);
@@ -2385,6 +2342,44 @@ mod tests {
         assert_eq!(msg.metadata["local_media_urls"][0], msg.media_urls[0]);
         token_mock.assert_hits(1);
         image_mock.assert_hits(1);
+    }
+
+    #[tokio::test]
+    async fn callback_event_reuses_the_feishu_webhook_parser() {
+        let adapter = FeishuAdapter::new(FeishuConfig::new("app_id", "app_secret"));
+        let event = PlatformEvent {
+            event_type: "message.callback".into(),
+            platform: Platform::Feishu,
+            data: serde_json::json!({
+                "schema": "2.0",
+                "header": {
+                    "event_id": "event-1",
+                    "event_type": "im.message.receive_v1"
+                },
+                "event": {
+                    "sender": {
+                        "sender_id": {"open_id": "user-1"},
+                        "sender_type": "user"
+                    },
+                    "message": {
+                        "message_id": "message-1",
+                        "chat_id": "chat-1",
+                        "chat_type": "p2p",
+                        "message_type": "text",
+                        "body": {"content": "{\"text\":\"hello\"}"}
+                    }
+                }
+            }),
+            timestamp: Utc::now(),
+        };
+
+        let message = adapter
+            .on_event(&event)
+            .await
+            .expect("callback parses")
+            .expect("callback creates an inbound message");
+        assert_eq!(message.text, "hello");
+        assert_eq!(message.message_id.as_deref(), Some("message-1"));
     }
 
     #[tokio::test]
