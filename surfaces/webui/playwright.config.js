@@ -9,6 +9,7 @@ const gatewayRequestedCapabilities = [
   'definition.default.set',
   'definition.rollback',
   'evolution.release.manage',
+  'mission.observe',
   'runtime.maintenance.manage',
   'runtime.outbox.retry',
   'mfg.read',

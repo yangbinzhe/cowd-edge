@@ -1004,9 +1004,15 @@ test('real gateway cockpit editing and concurrent observers close without silent
     page.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
     observer.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`),
   ]);
+  const primaryEdit = page.getByRole('button', { name: 'Edit layout' });
+  const observerEdit = observer.getByRole('button', { name: 'Edit layout' });
   await Promise.all([
-    page.getByRole('button', { name: 'Edit layout' }).click(),
-    observer.getByRole('button', { name: 'Edit layout' }).click(),
+    expect(primaryEdit).toBeEnabled(),
+    expect(observerEdit).toBeEnabled(),
+  ]);
+  await Promise.all([
+    primaryEdit.click(),
+    observerEdit.click(),
   ]);
   await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
   await expect(observer.locator('.mfg-revision')).toHaveText('Revision 2');
