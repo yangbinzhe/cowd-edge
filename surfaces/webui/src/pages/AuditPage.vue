@@ -65,6 +65,7 @@ const evolutionMissions = computed(() => items(state.value.evolutionMissions, 'm
 const evolutionProposals = computed(() => items(state.value.evolutionProposals, 'proposals'));
 const evolutionCandidates = computed(() => items(state.value.evolutionCandidates, 'candidates'));
 const evolutionReviews = computed(() => items(state.value.evolutionReviews, 'reviews'));
+const evolutionProjector = computed(() => state.value.evolutionSignals?.projector || {});
 const evaluationPolicy = computed(() => state.value.evaluationPolicy || {});
 const evaluationPolicyReviews = computed(() => items(state.value.evaluationPolicyReviews, 'reviews'));
 const evolutionGraph = computed(() => adaptEvolutionGraph({
@@ -233,6 +234,8 @@ const evolutionDiagnosisRows = computed(() => evolutionDiagnoses.value.slice(0, 
   cause: diagnosis.root_cause_kind,
   owner: diagnosis.affected_owner,
   recurrence: diagnosis.recurrence,
+  hypotheses: Array.isArray(diagnosis.competing_hypotheses) ? diagnosis.competing_hypotheses.length : 0,
+  falsification: diagnosis.competing_hypotheses?.[0]?.falsification_experiment || '-',
   candidate: diagnosis.recommended_candidate_kind,
   gates: Array.isArray(diagnosis.acceptance_gates) ? diagnosis.acceptance_gates.length : 0,
   impact: diagnosis.impact,
@@ -254,19 +257,27 @@ const evolutionProposalRows = computed(() => evolutionProposals.value.slice(0, 1
   status: proposal.status,
   risk: proposal.risk?.level || '-',
   approval: proposal.risk?.approval_required ? 'yes' : 'no',
+  candidates: Array.isArray(proposal.candidate_ids) ? proposal.candidate_ids.length : 0,
+  evidence: Array.isArray(proposal.current_evidence) ? proposal.current_evidence.length : 0,
   benefit: proposal.expected_benefit,
 })));
 const evolutionCandidateRows = computed(() => evolutionCandidates.value.slice(0, 10).map((candidate: any) => ({
   id: candidate.candidate_id,
+  proposal: candidate.proposal_id || '-',
   subject: candidate.subject?.kind === 'agent_definition'
     ? `${candidate.subject?.revision_ref?.definition_id || '-'}@${candidate.subject?.revision_ref?.revision || '-'}`
     : `${candidate.subject?.revision_ref?.template_id || '-'}@${candidate.subject?.revision_ref?.revision || '-'}`,
   lifecycle: candidate.lifecycle,
   baseline: candidate.baseline_revision,
-  contract: candidate.evaluation_contract_digest,
+  contract: candidate.evaluation_contract_digest || candidate.evaluation_contract?.contract_id || '-',
+  evidence: Array.isArray(candidate.source_evidence_refs) ? candidate.source_evidence_refs.length : 0,
   report: candidate.comparison_report_ref || '-',
   canary: candidate.canary_review_ref || '-',
   stable: candidate.stable_review_ref || '-',
+  canaryObservation: candidate.canary_observation?.observation_id || '-',
+  evaluateReady: ['validated', 'evaluation_blocked'].includes(String(candidate.lifecycle)),
+  canaryReady: candidate.lifecycle === 'evaluated_eligible' && !candidate.canary_review_ref,
+  stableReady: Boolean(candidate.canary_review_ref && candidate.canary_observation && !candidate.stable_review_ref),
 })));
 const selectedEvolutionProposal = computed(() => evolutionProposalRows.value.find((row: any) => row.id === selectedEvolutionProposalId.value) || null);
 const selectedEvolutionCandidate = computed(() => evolutionCandidateRows.value.find((row: any) => row.id === selectedEvolutionCandidateId.value) || null);
@@ -291,7 +302,10 @@ const evaluationPolicyReviewRows = computed(() => evaluationPolicyReviews.value.
 const selectedEvaluationPolicyReview = computed(() => evaluationPolicyReviewRows.value.find((row: any) => row.id === selectedEvaluationPolicyReviewId.value) || null);
 const evolutionDraftSummary = computed(() => {
   if (!evolutionDraft.value || typeof evolutionDraft.value !== 'object') return null;
-  const draft = evolutionDraft.value as Record<string, any>;
+  const payload = evolutionDraft.value as Record<string, any>;
+  const draft = payload.draft && typeof payload.draft === 'object'
+    ? payload.draft as Record<string, any>
+    : payload;
   return {
     proposal: draft.proposal_id || draft.id || '-',
     status: draft.status || '-',
@@ -487,7 +501,12 @@ async function createEvolutionSignal() {
       team_id: null,
       run_id: null,
     },
-    evidence_refs: ['webui:audit:evolution'],
+    evidence_refs: [{
+      ref_type: 'operator_action',
+      id: `webui:audit:evolution:${Date.now()}`,
+      source: 'webui.audit',
+      boundary: 'observed',
+    }],
     severity: 'warning',
     summary: t('page.audit.evolution.signalSummary'),
     suggested_action: 'create proposal and sandbox evaluation before adoption',
@@ -516,6 +535,13 @@ async function openEvolutionDraft(row: Record<string, unknown>) {
 function selectEvolutionCandidate(row: Record<string, unknown>) {
   selectedEvolutionCandidateId.value = String(row.id || '');
   selectedDetail.value = { ...row, source: 'evolution.candidate', evidence: row.id, status: row.status };
+}
+
+async function requestEvolutionEvaluation(row: Record<string, unknown>) {
+  const id = String(row.id || '');
+  if (!id) return;
+  evolutionActionResult.value = await api.evolutionCandidateEvaluate(id);
+  await refresh();
 }
 
 async function requestEvolutionCanaryReview(row: Record<string, unknown>) {
@@ -867,10 +893,10 @@ onMounted(refresh);
             <strong>{{ evolutionReviews.length }}</strong>
             <small>{{ t('page.audit.evolution.approvalBoundary') }}</small>
           </article>
-          <article class="metric-card" data-tone="success">
-            <span>{{ t('page.audit.evolution.runtimeOwned') }}</span>
-            <strong>{{ evolutionReviews.filter((review: any) => review.status === 'approved').length }}</strong>
-            <small>{{ t('page.audit.evolution.noMainlineWrite') }}</small>
+          <article class="metric-card" :data-tone="evolutionProjector.dead_letter_count ? 'danger' : evolutionProjector.lag_commits ? 'warn' : 'success'">
+            <span>{{ t('page.audit.evolution.projector') }}</span>
+            <strong>{{ evolutionProjector.lag_commits ?? 0 }}</strong>
+            <small>{{ t('page.audit.evolution.projectorDetail', { dead: evolutionProjector.dead_letter_count ?? 0, running: evolutionProjector.worker_running ? t('page.audit.evolution.running') : t('page.audit.evolution.stopped') }) }}</small>
           </article>
         </div>
         <GraphSurface
@@ -881,17 +907,18 @@ onMounted(refresh);
           @select-edge="selectedDetail = $event.raw || $event"
         />
         <DataTable v-if="evolutionSignalRows.length" searchable copyable :rows="evolutionSignalRows" :columns="['id', 'type', 'severity', 'owner', 'continue', 'summary']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.signal', evidence: $event.id, status: $event.severity, summary: $event.summary }" />
-        <DataTable v-if="evolutionDiagnosisRows.length" searchable copyable :rows="evolutionDiagnosisRows" :columns="['id', 'cause', 'owner', 'recurrence', 'candidate', 'gates', 'impact']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.diagnosis', evidence: $event.id, status: $event.cause, summary: $event.impact }" />
+        <DataTable v-if="evolutionDiagnosisRows.length" searchable copyable :rows="evolutionDiagnosisRows" :columns="['id', 'cause', 'owner', 'recurrence', 'hypotheses', 'falsification', 'candidate', 'gates', 'impact']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.diagnosis', evidence: $event.id, status: $event.cause, summary: $event.impact }" />
         <DataTable v-if="evolutionMissionRows.length" searchable copyable :rows="evolutionMissionRows" :columns="['id', 'status', 'owner', 'goals', 'signals', 'proposals', 'candidates']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.mission', evidence: $event.id, status: $event.status }" />
-        <DataTable v-if="evolutionProposalRows.length" searchable copyable :rows="evolutionProposalRows" :columns="['id', 'kind', 'diagnosis', 'owner', 'status', 'risk', 'approval', 'benefit']" row-key="id" @row-click="openEvolutionDraft" />
+        <DataTable v-if="evolutionProposalRows.length" searchable copyable :rows="evolutionProposalRows" :columns="['id', 'kind', 'diagnosis', 'owner', 'status', 'risk', 'approval', 'candidates', 'evidence', 'benefit']" row-key="id" @row-click="openEvolutionDraft" />
         <div v-if="evolutionProposalRows.length" class="button-row">
-          <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal" @click="selectedEvolutionProposal && decideEvolutionProposal(selectedEvolutionProposal, 'approved')">{{ t('page.audit.evolution.approve') }}</button>
-          <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal" @click="selectedEvolutionProposal && decideEvolutionProposal(selectedEvolutionProposal, 'archived')">{{ t('page.audit.evolution.archive') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal || selectedEvolutionProposal.status !== 'draft'" @click="selectedEvolutionProposal && decideEvolutionProposal(selectedEvolutionProposal, 'approved')">{{ t('page.audit.evolution.approve') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal || selectedEvolutionProposal.status !== 'draft'" @click="selectedEvolutionProposal && decideEvolutionProposal(selectedEvolutionProposal, 'archived')">{{ t('page.audit.evolution.archive') }}</button>
         </div>
-        <DataTable v-if="evolutionCandidateRows.length" searchable copyable :rows="evolutionCandidateRows" :columns="['id', 'subject', 'lifecycle', 'baseline', 'contract', 'report', 'canary', 'stable']" row-key="id" @row-click="selectEvolutionCandidate" />
+        <DataTable v-if="evolutionCandidateRows.length" searchable copyable :rows="evolutionCandidateRows" :columns="['id', 'proposal', 'subject', 'lifecycle', 'baseline', 'contract', 'evidence', 'report', 'canary', 'canaryObservation', 'stable']" row-key="id" @row-click="selectEvolutionCandidate" />
         <div v-if="evolutionCandidateRows.length" class="button-row">
-          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate" @click="selectedEvolutionCandidate && requestEvolutionCanaryReview(selectedEvolutionCandidate)">{{ t('page.audit.evolution.requestCanaryReview') }}</button>
-          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate" @click="selectedEvolutionCandidate && requestEvolutionStableReview(selectedEvolutionCandidate)">{{ t('page.audit.evolution.requestStableReview') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate?.evaluateReady" @click="selectedEvolutionCandidate && requestEvolutionEvaluation(selectedEvolutionCandidate)">{{ t('page.audit.evolution.evaluateCandidate') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate?.canaryReady" @click="selectedEvolutionCandidate && requestEvolutionCanaryReview(selectedEvolutionCandidate)">{{ t('page.audit.evolution.requestCanaryReview') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate?.stableReady" @click="selectedEvolutionCandidate && requestEvolutionStableReview(selectedEvolutionCandidate)">{{ t('page.audit.evolution.requestStableReview') }}</button>
         </div>
         <DataTable v-if="evolutionReviewRows.length" searchable copyable :rows="evolutionReviewRows" :columns="['id', 'class', 'action', 'status', 'candidate', 'approval', 'observation']" row-key="id" @row-click="selectEvolutionReview" />
         <div v-if="evolutionReviewRows.length" class="button-row">

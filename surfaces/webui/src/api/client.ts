@@ -1593,6 +1593,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
+  evolutionCandidateEvaluate: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/evaluate`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }),
   evolutionCandidateCanaryReview: (id: string) => writeWithReceipt(`/api/evolution/candidates/${encodeURIComponent(id)}/reviews/canary`, {
     method: 'POST',
     body: JSON.stringify({}),

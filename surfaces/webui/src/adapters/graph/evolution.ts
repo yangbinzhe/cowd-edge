@@ -1,7 +1,12 @@
 import type { GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/graph';
 
 function refs(value: unknown) {
-  return Array.isArray(value) ? value.map((item: any) => String(item?.ref || item?.reference || item || '')).filter(Boolean) : [];
+  return Array.isArray(value)
+    ? value.map((item: any) => {
+      if (item?.id) return `${String(item.ref_type || 'evidence')}:${String(item.id)}`;
+      return String(item?.ref || item?.reference || item || '');
+    }).filter(Boolean)
+    : [];
 }
 
 export function adaptEvolutionGraph(input: Record<string, any>, title = ''): GraphViewModel {

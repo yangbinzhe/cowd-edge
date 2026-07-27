@@ -15,7 +15,7 @@ function expectComplete(model: ReturnType<typeof adaptEvolutionGraph>) {
 describe('public runtime graph adapters', () => {
   it('maps Evolution signal through governed review and report evidence', () => {
     const model = adaptEvolutionGraph({
-      signals: [{ signal_id: 'signal-1', signal_type: 'regression', evidence_refs: ['ev-signal'] }],
+      signals: [{ signal_id: 'signal-1', signal_type: 'regression', evidence_refs: [{ ref_type: 'runtime_event', id: 'ev-signal', boundary: 'observed' }] }],
       diagnoses: [{ diagnosis_id: 'diagnosis-1', source_signal_ids: ['signal-1'], evidence_refs: ['ev-diagnosis'] }],
       missions: [{ mission_id: 'mission-1', diagnosis_id: 'diagnosis-1', proposal_ids: ['proposal-1'], candidate_ids: ['candidate-1'] }],
       proposals: [{ proposal_id: 'proposal-1', diagnosis_id: 'diagnosis-1', source_signal_ids: ['signal-1'] }],
@@ -23,7 +23,7 @@ describe('public runtime graph adapters', () => {
       reviews: [{ review_id: 'review-1', candidate_id: 'candidate-1', action: 'approve', evidence_refs: ['ev-review'] }],
     });
     expectComplete(model);
-    expect(model.nodes.find((node) => node.id === 'signal-1')?.evidenceRefs).toEqual(['ev-signal']);
+    expect(model.nodes.find((node) => node.id === 'signal-1')?.evidenceRefs).toEqual(['runtime_event:ev-signal']);
     expect(model.edges.some((edge) => edge.type === 'evidence_for')).toBe(true);
   });
 

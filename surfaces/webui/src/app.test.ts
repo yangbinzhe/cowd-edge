@@ -552,7 +552,7 @@ describe('Cowd Vue WebUI shell', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await api.evolutionSignals();
-    await api.evolutionCreateSignal({ signal_type: 'slow_progress', summary: 'slow', source: { owner: 'test' }, severity: 'warning', suggested_action: 'review' });
+    await api.evolutionCreateSignal({ signal_type: 'slow_progress', summary: 'slow', source: { owner: 'test' }, severity: 'warning', suggested_action: 'review', evidence_refs: [{ ref_type: 'test', id: 'signal-1', boundary: 'observed' }] });
     await api.evolutionDiagnoses();
     await api.evolutionCreateDiagnosis(['signal-1']);
     await api.evolutionMissionsSummary();
@@ -565,12 +565,13 @@ describe('Cowd Vue WebUI shell', () => {
     await api.evolutionSkillDraft('proposal-1');
     await api.evolutionCandidates();
     await api.evolutionCandidateDetail('candidate-1');
-    await api.evolutionCreateCandidate({ candidate_id: 'candidate-1', subject: { kind: 'agent_definition' }, baseline_revision: 1, evaluation_contract_digest: 'sha256:test', source_evidence_refs: ['eval:1'], protected_dimensions: ['policy'] });
+    await api.evolutionCreateCandidate({ candidate_id: 'candidate-1', proposal_id: 'proposal-1', subject: { kind: 'agent_definition', revision_ref: { definition_id: 'workspace/cowd/test', revision: 2 } }, baseline_revision: 1, source_evidence_refs: [{ ref_type: 'eval', id: '1', boundary: 'observed' }] });
+    await api.evolutionCandidateEvaluate('candidate-1');
     await api.evolutionCandidateCanaryReview('candidate-1');
     await api.evolutionCandidateStableReview('candidate-1');
     await api.evolutionReviews();
     await api.evolutionReview('review-1');
-    await api.evolutionCreateReleaseReview({ request_id: 'rollback-1', subject: { kind: 'agent_definition' }, action: 'rollback', selector: { kind: 'exact_approved_revision', revision: 1 }, evidence_refs: ['run:1'] });
+    await api.evolutionCreateReleaseReview({ request_id: 'rollback-1', subject: { kind: 'agent_definition' }, action: 'rollback', selector: { kind: 'exact_approved_revision', revision: 1 }, evidence_refs: [{ ref_type: 'run', id: '1', boundary: 'observed' }] });
     await api.evolutionReviewDecision('review-1', 'approve', 'verified');
     await api.evolutionEvaluationPolicy();
     await api.evolutionEvaluationPolicyReviews();
@@ -592,6 +593,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/evaluate', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/reviews/canary', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/candidates/candidate-1/reviews/stable', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenCalledWith('/api/evolution/reviews', expect.any(Object));
