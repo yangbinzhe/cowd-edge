@@ -3,10 +3,13 @@ import { computed, onScopeDispose, ref } from 'vue';
 import {
   api,
   invalidateApiReadCache,
-  normalizeActivity,
   providerModels,
   type EndpointSnapshot,
 } from '../api/client';
+import {
+  adaptRuntimeTimeline,
+  type RuntimeTimelineRow,
+} from '../adapters/graph/runtimeTimeline';
 import { t } from '../i18n';
 import type {
   ActivityEvent,
@@ -107,6 +110,33 @@ function sanitizeActivityEvent(event: ActivityEvent): ActivityEvent {
   };
 }
 
+function timelineActivityKind(row: RuntimeTimelineRow): ActivityEvent['kind'] {
+  if (row.domain === 'tool') return 'tool';
+  if (row.domain === 'context') return 'context';
+  if (row.kind.toLowerCase().includes('approval')) return 'approval';
+  if (row.kind.toLowerCase().includes('thinking')) return 'think';
+  if (['error', 'failed', 'denied', 'timed_out'].includes(row.status.toLowerCase())) return 'error';
+  return 'runtime';
+}
+
+function timelineActivity(row: RuntimeTimelineRow): ActivityEvent {
+  return sanitizeActivityEvent({
+    id: row.id,
+    kind: timelineActivityKind(row),
+    title: row.title,
+    detail: row.detail,
+    status: row.status,
+    at: row.at,
+    domain: row.domain,
+    event_kind: row.kind,
+    sequence: row.sequence,
+    route: row.route,
+    correlation: row.correlation,
+    refs: row.refs,
+    raw: row.raw,
+  });
+}
+
 function updatedAtMs(session: SessionSummary) {
   const value = session.updated_at || session.created_at || 0;
   if (typeof value === 'number') return value > 10_000_000_000 ? value : value * 1000;
@@ -176,6 +206,13 @@ export const useAppStore = defineStore('app', () => {
   const currentContextEnvelope = ref<any>(null);
   const currentRealityFlow = ref<any>({});
   const currentTimeline = ref<any>({});
+  const runtimeTimelineRows = computed(() => adaptRuntimeTimeline(
+    Array.isArray(currentTimeline.value?.events)
+      ? currentTimeline.value.events
+      : Array.isArray(currentTimeline.value?.timeline)
+        ? currentTimeline.value.timeline
+        : [],
+  ));
   const sessionInputProjection = ref<any>(null);
   const turnInbox = ref<any>(null);
   const selectedActivity = ref<Record<string, unknown> | null>(null);
@@ -647,7 +684,7 @@ export const useAppStore = defineStore('app', () => {
     const data: any = await api.runtimeTimeline(sessionId);
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     currentTimeline.value = data;
-    activity.value = normalizeActivity(data.events || data.timeline || []).map(sanitizeActivityEvent);
+    activity.value = runtimeTimelineRows.value.slice(0, 50).map(timelineActivity);
   }
 
   async function refreshChatProjection(
@@ -1590,6 +1627,7 @@ export const useAppStore = defineStore('app', () => {
     currentContextEnvelope,
     currentRealityFlow,
     currentTimeline,
+    runtimeTimelineRows,
     sessionInputProjection,
     turnInbox,
     selectedActivity,

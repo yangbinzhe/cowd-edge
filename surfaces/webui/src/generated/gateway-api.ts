@@ -6495,7 +6495,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
-        get: operations["gateway_mission_get_api_mission_control"];
+        get: operations["mission_control_get"];
         put?: never;
         /**
          * mission POST /api/mission/control
@@ -6503,7 +6503,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
-        post: operations["gateway_mission_post_api_mission_control"];
+        post: operations["mission_control_command"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6532,22 +6532,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mission/control/command": {
+    "/api/mission/control/delta": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * mission POST /api/mission/control/command
-         * @description Invoke or create Gateway mission capability through `/api/mission/control/command` handled by `execute_mission_control_command_handler`.
+         * mission GET /api/mission/control/delta
+         * @description Query Gateway mission capability through `/api/mission/control/delta` handled by `mission_control_delta_handler`.
          *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
-        post: operations["gateway_mission_post_api_mission_control_command"];
+        get: operations["mission_control_delta_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6592,28 +6592,6 @@ export interface paths {
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
         post: operations["gateway_mission_post_api_mission_control_sessions_bridge"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mission/control/sessions/dispatch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * mission POST /api/mission/control/sessions/dispatch
-         * @description Invoke or create Gateway mission capability through `/api/mission/control/sessions/dispatch` handled by `dispatch_mission_sessions_handler`.
-         *
-         *     Risk: external. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
-         */
-        post: operations["gateway_mission_post_api_mission_control_sessions_dispatch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6789,13 +6767,7 @@ export interface paths {
          */
         get: operations["gateway_mission_get_api_mission_relations"];
         put?: never;
-        /**
-         * mission POST /api/mission/relations
-         * @description Invoke or create Gateway mission capability through `/api/mission/relations` handled by `add_mission_relation_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
-         */
-        post: operations["gateway_mission_post_api_mission_relations"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7050,28 +7022,6 @@ export interface paths {
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
         post: operations["gateway_mission_post_api_mission_sessions_by_id_switch"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/mission/sessions/{id}/teams/runtime": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * mission POST /api/mission/sessions/:id/teams/runtime
-         * @description Invoke or create Gateway mission capability through `/api/mission/sessions/:id/teams/runtime` handled by `start_mission_team_runtime_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
-         */
-        post: operations["gateway_mission_post_api_mission_sessions_by_id_teams_runtime"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8644,6 +8594,28 @@ export interface paths {
         patch: operations["gateway_session_patch_api_sessions_by_id"];
         trace?: never;
     };
+    "/api/sessions/{id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * session POST /api/sessions/:id/archive
+         * @description Invoke or create Gateway session capability through `/api/sessions/:id/archive` handled by `archive_session_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["gateway_session_post_api_sessions_by_id_archive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/attach": {
         parameters: {
             query?: never;
@@ -8865,7 +8837,7 @@ export interface paths {
         put?: never;
         /**
          * session POST /api/sessions/:id/ensure
-         * @description Invoke or create Gateway session capability through `/api/sessions/:id/ensure` handled by `ensure_session_handler`.
+         * @description Invoke or create Gateway session capability through `/api/sessions/:id/ensure` handled by `ensure_surface_session_handler`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
@@ -11169,6 +11141,14 @@ export interface components {
         Empty: Record<string, never>;
         /** @enum {string} */
         EvidenceFreshness: "live" | "durable" | "unavailable";
+        EvidenceRef: {
+            /** @enum {string} */
+            boundary: "observed" | "inferred" | "simulated" | "hypothetical" | "conflict";
+            confidence_bp?: number | null;
+            id: string;
+            ref_type: string;
+            source?: string | null;
+        };
         ExecutionCommandReceipt: {
             accepted_revision: number;
             command_id: string;
@@ -14324,6 +14304,242 @@ export interface components {
                 MfgSurfaceRole: "enhanced_management" | "console_unavailable" | "console_read_only" | "console_operational_control" | "minimal_core_control";
             };
         };
+        MissionCommand: {
+            /** @enum {string} */
+            action: "create" | "activate" | "background" | "pause" | "resume" | "cancel" | "close" | "input" | "continue" | "branch" | "approve" | "reject" | "replan" | "link" | "unlink";
+            actor?: string;
+            command_id: string;
+            correlation_id?: string;
+            evidence_refs?: components["schemas"]["EvidenceRef"][];
+            expected_revision?: number | null;
+            payload?: unknown;
+            target: components["schemas"]["MissionCommandTarget"];
+        };
+        MissionCommandReceipt: {
+            accepted_revision: number;
+            /** @enum {string} */
+            action: "create" | "activate" | "background" | "pause" | "resume" | "cancel" | "close" | "input" | "continue" | "branch" | "approve" | "reject" | "replan" | "link" | "unlink";
+            command_id: string;
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            reason?: string | null;
+            result: unknown;
+            status: string;
+            target: components["schemas"]["MissionCommandTarget"];
+        };
+        MissionCommandResponse: {
+            envelope?: unknown;
+            /** @constant */
+            kind: "mission_control.command_result";
+            ok: boolean;
+            receipt: components["schemas"]["MissionCommandReceipt"];
+            saga: components["schemas"]["MissionCommandSagaRecord"];
+            snapshot: components["schemas"]["MissionMaterializedSnapshot"];
+        };
+        MissionCommandSagaRecord: {
+            command: components["schemas"]["MissionCommand"];
+            effect_result?: unknown;
+            error?: string | null;
+            /** @enum {string} */
+            phase: "reserved" | "effect_committed" | "receipt_committed" | "finalized" | "rejected" | "reconciliation_required";
+            receipt?: components["schemas"]["MissionCommandReceipt"] | null;
+            reserved_target_revision: number;
+            revision: number;
+            schema_version: number;
+            updated_at_ms: number;
+        };
+        MissionCommandTarget: {
+            /** @constant */
+            kind: "mission";
+            mission_id: string;
+        } | {
+            /** @constant */
+            kind: "session";
+            session_id: string;
+        } | {
+            /** @constant */
+            kind: "task";
+            task_id: string;
+        } | {
+            graph_id: string;
+            /** @constant */
+            kind: "graph";
+        } | {
+            /** @constant */
+            kind: "team";
+            team_id: string;
+        } | {
+            agent_id: string;
+            /** @constant */
+            kind: "agent";
+        } | {
+            approval_id: string;
+            /** @constant */
+            kind: "approval";
+        } | {
+            /** @constant */
+            kind: "relation";
+            relation_id: string;
+        };
+        MissionControlAgentNode: {
+            agent_id: string;
+            backend?: string | null;
+            detail: {
+                [key: string]: unknown;
+            };
+            session_id?: string | null;
+            status?: string | null;
+        };
+        MissionControlApprovalNode: {
+            action?: string | null;
+            approval_id: string;
+            detail: {
+                [key: string]: unknown;
+            };
+            source_session_id?: string | null;
+            status: string;
+        };
+        MissionControlEventLine: {
+            actor?: string | null;
+            created_at_ms: number;
+            cursor: number;
+            event_id: string;
+            kind: string;
+            scope: string;
+            status?: string | null;
+            stream_id: string;
+            transaction_index: number;
+        };
+        MissionControlProjection: {
+            agents: components["schemas"]["MissionControlAgentNode"][];
+            approvals: components["schemas"]["MissionControlApprovalNode"][];
+            capabilities: unknown;
+            conflicts: unknown;
+            control_readiness: components["schemas"]["MissionControlReadiness"];
+            event_digest: {
+                latest: components["schemas"]["MissionControlEventLine"][];
+                latest_errors: components["schemas"]["MissionControlEventLine"][];
+                recovery_required: components["schemas"]["MissionControlEventLine"][];
+                scope_counts: {
+                    [key: string]: number;
+                };
+                total_recent_events: number;
+            };
+            evidence: unknown;
+            execution_graphs: unknown;
+            health: unknown;
+            /** @constant */
+            kind: "mission_control.projection";
+            mission: unknown;
+            relations: unknown;
+            schema_version: number;
+            sessions: components["schemas"]["MissionControlSessionNode"][];
+            summary: components["schemas"]["MissionControlSummary"];
+            tasks: components["schemas"]["MissionControlTaskNode"][];
+            teams: components["schemas"]["MissionControlTeamNode"][];
+            workspace: components["schemas"]["MissionWorkspaceProjection"];
+        };
+        MissionControlReadiness: {
+            actions: {
+                action: string;
+                available: boolean;
+                policy_marker?: string | null;
+                reason: string;
+                requires_approval: boolean;
+                target_count: number;
+            }[];
+            blocked_count: number;
+            kind: string;
+            ready_count: number;
+        };
+        MissionControlResponse: {
+            envelope?: unknown;
+            ok: boolean;
+            snapshot: components["schemas"]["MissionMaterializedSnapshot"];
+        };
+        MissionControlSessionNode: {
+            active: boolean;
+            agent_count: number;
+            attachment_count: number;
+            created_at_ms: number;
+            hydration: string;
+            last_error?: string | null;
+            lifecycle: string;
+            session_id: string;
+            status: string;
+            team_count: number;
+            title: string;
+            updated_at_ms: number;
+        };
+        MissionControlSummary: {
+            active_session_id?: string | null;
+            agent_count: number;
+            background_session_count: number;
+            closed_session_count: number;
+            paused_session_count: number;
+            pending_approval_count: number;
+            recovery_required_count: number;
+            session_count: number;
+            task_count: number;
+            team_count: number;
+        };
+        MissionControlTaskNode: {
+            blocker_reason?: string | null;
+            created_at_ms: number;
+            current_phase_id?: string | null;
+            failure_count: number;
+            graph_count: number;
+            mission_id: string;
+            objective: string;
+            phase_count: number;
+            revision: number;
+            source_session_id: string;
+            status: string;
+            task_id: string;
+            updated_at_ms: number;
+        };
+        MissionControlTeamNode: {
+            agent_count: number;
+            detail: {
+                [key: string]: unknown;
+            };
+            graph_id: string;
+            session_id?: string | null;
+            status?: string | null;
+            team_id: string;
+        };
+        MissionMaterializedSnapshot: {
+            cursor: number;
+            /** @constant */
+            kind: "mission_control.materialized_snapshot";
+            needs_resync: boolean;
+            projection: components["schemas"]["MissionControlProjection"];
+            revision: number;
+            schema_version: number;
+        };
+        MissionProjectionDelta: {
+            changed_domains: string[];
+            events: components["schemas"]["MissionControlEventLine"][];
+            from_cursor: number;
+            from_revision?: number | null;
+            /** @constant */
+            kind: "mission_control.projection_delta";
+            needs_resync: boolean;
+            patch: {
+                [key: string]: unknown;
+            };
+            revision: number;
+            schema_version: number;
+            to_cursor: number;
+        };
+        MissionWorkspaceProjection: {
+            active_session_id?: string | null;
+            pending_approval_count: number;
+            recovery_required_count: number;
+            running_agent_count: number;
+            session_count: number;
+            title: string;
+            workspace_id: string;
+        };
         PatchLiveSubscriptionRequest: {
             expected_revision: number;
             idempotency_key: string;
@@ -14474,23 +14690,31 @@ export interface components {
             write_attempt_refs: string[];
         };
         StrategyCandidateEstimate: {
-            assumed: boolean;
-            calibration_sample_count: number;
-            calibration_source: string;
             /** @enum {string} */
             candidate: "direct" | "parallel_tools" | "team";
             context_duplication_tokens: number;
+            duration_calibration_source: string;
+            /** @enum {string} */
+            duration_provenance: "observed" | "calibrated" | "assumed" | "unknown";
+            duration_sample_count: number;
             eligible: boolean;
             estimated_critical_path_ms: number;
             estimated_serial_ms: number;
             evidence_overlap_penalty_bp: number;
             expected_quality_lift_bp: number;
             merge_cost_ms: number;
-            net_benefit_score: number;
             provider_concurrency_penalty_bp: number;
+            quality_calibration_source: string;
+            /** @enum {string} */
+            quality_provenance: "observed" | "calibrated" | "assumed" | "unknown";
+            quality_sample_count: number;
             reasons: string[];
             risk_approval_penalty_bp: number;
+            /** @enum {string} */
+            risk_provenance: "observed" | "calibrated" | "assumed" | "unknown";
             startup_overhead_ms: number;
+            /** @enum {string} */
+            token_provenance: "observed" | "calibrated" | "assumed" | "unknown";
         };
         StrategyDecisionProjection: {
             actual?: components["schemas"]["StrategyActualProjection"] | null;
@@ -14540,7 +14764,8 @@ export interface components {
             scope_hash: string;
         };
         StrategyResourceSnapshot: {
-            assumed: boolean;
+            /** @enum {string} */
+            provenance: "observed" | "calibrated" | "assumed" | "unknown";
             provider_available: boolean;
             provider_concurrency: number;
             provider_concurrency_penalty_bp: number;
@@ -33981,7 +34206,7 @@ export interface operations {
             };
         };
     };
-    gateway_mission_get_api_mission_control: {
+    mission_control_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -33996,9 +34221,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MissionControlResponse"];
                 };
             };
             /** @description Bad request */
@@ -34024,27 +34247,20 @@ export interface operations {
             };
         };
     };
-    gateway_mission_post_api_mission_control: {
+    mission_control_command: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Required when the operation resolves to a mutation of an authoritative Session. */
+                "x-cowd-observer-id"?: string;
+            };
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["MissionCommand"];
+                "multipart/form-data": components["schemas"]["MissionCommand"];
             };
         };
         responses: {
@@ -34054,9 +34270,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MissionCommandResponse"];
                 };
             };
             /** @description Bad request */
@@ -34068,6 +34282,20 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -34127,29 +34355,19 @@ export interface operations {
             };
         };
     };
-    gateway_mission_post_api_mission_control_command: {
+    mission_control_delta_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Last applied Runtime event commit cursor. */
+                cursor?: number;
+                /** @description Last applied Mission materialized-view revision. */
+                revision?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -34157,9 +34375,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MissionProjectionDelta"];
                 };
             };
             /** @description Bad request */
@@ -34244,64 +34460,6 @@ export interface operations {
         };
     };
     gateway_mission_post_api_mission_control_sessions_bridge: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mission_post_api_mission_control_sessions_dispatch: {
         parameters: {
             query?: never;
             header?: never;
@@ -34714,64 +34872,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mission_post_api_mission_relations: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -35521,74 +35621,6 @@ export interface operations {
         };
     };
     gateway_mission_post_api_mission_sessions_by_id_switch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_mission_post_api_mission_sessions_by_id_teams_runtime: {
         parameters: {
             query?: never;
             header?: never;
@@ -39505,6 +39537,74 @@ export interface operations {
             };
         };
     };
+    gateway_session_post_api_sessions_by_id_archive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_session_post_api_sessions_by_id_attach: {
         parameters: {
             query?: never;
@@ -41822,7 +41922,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Required when slash dispatch resolves to a mutating command with an authoritative session_id. */
+                /** @description Required when the operation resolves to a mutation of an authoritative Session. */
                 "x-cowd-observer-id"?: string;
             };
             path?: never;

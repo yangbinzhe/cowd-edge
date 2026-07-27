@@ -89,7 +89,7 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
     ],
     [
       { label: t('capability.mission.action.refresh'), kind: 'primary', endpoint: '/api/mission/control' },
-      { label: t('capability.mission.action.dispatch'), kind: 'secondary', endpoint: '/api/mission/sessions/dispatch' },
+      { label: t('capability.mission.action.dispatch'), kind: 'secondary', endpoint: '/api/mission/control' },
       { label: t('capability.mission.action.recovery'), kind: 'secondary', endpoint: '/api/runtime/recovery/report' },
     ],
     [

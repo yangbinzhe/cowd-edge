@@ -44,6 +44,14 @@ export interface SessionSummary {
   message_count?: number;
 }
 
+export type BranchSessionReceipt = GatewayComponents['schemas']['BranchSessionReceipt'];
+export type MissionCommand = GatewayComponents['schemas']['MissionCommand'];
+export type MissionCommandResponse = GatewayComponents['schemas']['MissionCommandResponse'];
+export type MissionControlProjection = GatewayComponents['schemas']['MissionControlProjection'];
+export type MissionControlResponse = GatewayComponents['schemas']['MissionControlResponse'];
+export type MissionMaterializedSnapshot = GatewayComponents['schemas']['MissionMaterializedSnapshot'];
+export type MissionProjectionDelta = GatewayComponents['schemas']['MissionProjectionDelta'];
+
 export interface ChatTurn {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -68,7 +76,14 @@ export interface ActivityEvent {
   title: string;
   detail?: string;
   status?: string;
-  at?: string;
+  at?: string | number;
+  domain?: string;
+  event_kind?: string;
+  sequence?: string | number;
+  route?: string;
+  correlation?: string;
+  refs?: string[];
+  raw?: Record<string, unknown>;
 }
 
 export type ExecutionProjectionEntity = GatewayComponents['schemas']['ExecutionProjectionEntity'];

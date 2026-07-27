@@ -6,6 +6,7 @@ import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import MarkdownBlock from './MarkdownBlock.vue';
+import RawPayload from './workbench/RawPayload.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 import WorkspaceTree from './workspace/WorkspaceTree.vue';
@@ -43,7 +44,7 @@ const contextItems = computed(() => {
   ].slice(0, 12);
 });
 const realityStages = computed(() => (Array.isArray(store.currentRealityFlow?.stages) ? store.currentRealityFlow.stages : []).slice(0, 12));
-const timelineEvents = computed(() => (Array.isArray(store.currentTimeline?.events) ? store.currentTimeline.events : []).slice(0, 14));
+const timelineEvents = computed(() => store.runtimeTimelineRows.slice(0, 14));
 const runtimeInputItems = computed(() => {
   const seen = new Set<string>();
   const rows = [
@@ -394,12 +395,14 @@ onBeforeUnmount(() => {
         <span>{{ timelineEvents.length }}</span>
       </div>
       <div class="activity-list">
-        <article v-for="event in timelineEvents" :key="String(event.sequence || event.id || JSON.stringify(event).slice(0, 40))" class="activity-item" :data-kind="String(event.kind || event.type || 'runtime').toLowerCase().includes('error') ? 'error' : 'runtime'">
+        <article v-for="event in timelineEvents" :key="event.id" class="activity-item" :data-kind="['error', 'failed', 'denied', 'timed_out'].includes(event.status.toLowerCase()) ? 'error' : event.domain">
           <div>
-            <strong>{{ event.kind || event.type || event.event_type || t('component.companion.panel.inline.edbaf9232e') }}</strong>
-            <p>{{ event.summary || event.detail || (event.status ? displayStatus(event.status) : JSON.stringify(event).slice(0, 180)) }}</p>
+            <strong>{{ event.title }}</strong>
+            <p>{{ event.detail }}</p>
+            <small v-if="event.correlation">{{ event.correlation }}</small>
           </div>
-          <span>{{ event.status ? displayStatus(event.status) : (event.sequence || t('component.companion.panel.inline.77e447be0d')) }}</span>
+          <span>{{ displayStatus(event.status) }}</span>
+          <RawPayload :title="t('component.workbench.evidence.object.detail.title.payload')" :data="event.raw" />
         </article>
       </div>
     </section>

@@ -7,6 +7,7 @@ import { useRoute } from 'vue-router';
 import { GitBranch, Play, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
@@ -14,6 +15,7 @@ import GovernedActionPanel from '../components/workbench/GovernedActionPanel.vue
 import GraphSurface from '../components/graph/GraphSurface.vue';
 import { useAppStore } from '../stores/app';
 import { adaptToolOperationsGraph } from '../adapters/graph/toolOperations';
+import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 
 const store = useAppStore();
 const route = useRoute();
@@ -39,6 +41,7 @@ const checkpointLabel = ref('webui-tool-ops');
 const selectedCheckpointId = ref('');
 const restoreArmedId = ref('');
 const expectedHashes = ref<Record<string, string>>({});
+const selectedToolEvent = ref<Record<string, unknown> | null>(null);
 
 const tools = computed(() => Array.isArray(state.value.tools?.tools) ? state.value.tools.tools : []);
 const commands = computed(() => Array.isArray(state.value.commands?.commands) ? state.value.commands.commands : []);
@@ -49,8 +52,8 @@ const checkpoints = computed(() => {
 });
 const cacheStats = computed(() => state.value.cache?.data || state.value.cache || {});
 const timelineEvents = computed(() => Array.isArray(state.value.timeline?.events) ? state.value.timeline.events : []);
-const toolLedger = computed(() => timelineEvents.value.filter((event: any) => String(event.kind || '').includes('tool')));
-const toolOperationsGraph = computed(() => adaptToolOperationsGraph(result.value, checkpoints.value, toolLedger.value, t('page.tools.page.text.86c5ed2cc8')));
+const toolLedger = computed(() => adaptRuntimeTimeline(timelineEvents.value).filter((event) => event.domain === 'tool'));
+const toolOperationsGraph = computed(() => adaptToolOperationsGraph(result.value, checkpoints.value, toolLedger.value.map((event) => event.raw), t('page.tools.page.text.86c5ed2cc8')));
 
 const toolRows = computed(() => tools.value.map((tool: any) => ({
   name: tool.name,
@@ -115,12 +118,10 @@ const mutationPreviewRows = computed(() => {
     changed: file.changed === false ? 'no' : 'yes',
   }));
 });
-const ledgerRows = computed(() => toolLedger.value.slice(0, 16).map((event: any) => ({
-  seq: event.sequence || event.seq || '-',
-  kind: event.kind || '-',
-  status: event.status || event.level || '-',
-  tool: event.tool || event.tool_name || event.name || '-',
-  at: event.timestamp || event.created_at || '-',
+const ledgerRows = computed(() => toolLedger.value.slice(0, 16).map((event) => ({
+  ...event,
+  seq: event.sequence,
+  tool: event.tool_name || '-',
 })));
 const activeSessionId = computed(() => store.currentSessionId || 'api-context');
 const toolContext = computed(() => [
@@ -486,9 +487,10 @@ onMounted(refresh);
           <h2>{{ t('page.tools.page.text.237dfb0a3b') }}</h2>
           <span>{{ ledgerRows.length }} recent events</span>
         </header>
-        <DataTable v-if="ledgerRows.length" searchable copyable row-key="seq" :rows="ledgerRows" :columns="['seq', 'kind', 'status', 'tool', 'at']" />
+        <DataTable v-if="ledgerRows.length" searchable copyable row-key="id" :rows="ledgerRows" :columns="['seq', 'title', 'status', 'tool', 'detail', 'at']" @row-click="selectedToolEvent = $event" />
         <EmptyState v-else :title="t('page.tools.page.title.31c128d6c2')" :detail="t('page.tools.page.detail.ad2723c87a')" />
         <RequestReceipt :receipt="result" :title="t('page.tools.page.title.184f1d349a')" />
+        <DetailDrawer v-if="selectedToolEvent" :title="t('component.workbench.evidence.object.detail.title.payload')" :row="selectedToolEvent" @close="selectedToolEvent = null" />
         <ObjectInspectorDrawer :title="t('page.tools.page.title.d1d15f8e25')" :data="result || state.cache || {}" />
       </section>
 

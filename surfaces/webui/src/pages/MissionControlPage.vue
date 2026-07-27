@@ -10,6 +10,7 @@ import {
 } from 'lucide-vue-next';
 import { api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
+import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
 import StatusPill from '../components/workbench/StatusPill.vue';
 import DataTable from '../components/workbench/DataTable.vue';
@@ -21,6 +22,14 @@ import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import { openLiveSource } from '../stores/liveTransport';
 import type { LiveSourceLease } from '../stores/liveTransport';
 import { displayStatus } from '../i18n/domain/status';
+import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
+import { applyMissionProjectionDelta } from '../adapters/missionProjection';
+import type {
+  MissionCommand,
+  MissionControlProjection,
+  MissionMaterializedSnapshot,
+  MissionProjectionDelta,
+} from '../types';
 
 const store = useAppStore();
 const projections = useProjectionRegistryStore();
@@ -34,7 +43,7 @@ const selectedExecutionId = ref('');
 const teamObjective = ref(t('page.mission.control.team.objectiveDefault'));
 const routeTarget = ref('');
 const routeCommand = ref(t('page.mission.control.route.commandDefault'));
-const missionProjection = ref<any>({});
+const missionSnapshot = ref<MissionMaterializedSnapshot | null>(null);
 const approvals = ref<any>({});
 const relations = ref<any>({});
 const conflicts = ref<any>({});
@@ -45,15 +54,27 @@ const actionResult = ref<any>(null);
 const recoveryReport = ref<any>(null);
 const teamRunDetail = ref<any>({});
 const selectedExecutionNode = ref<any>(null);
+const selectedTraceEvidence = ref<Record<string, unknown> | null>(null);
 let missionLiveSource: LiveSourceLease | null = null;
-const controlProjection = computed(() => missionProjection.value?.projection || missionProjection.value || {});
+const controlProjection = computed<MissionControlProjection | Record<string, never>>(
+  () => missionSnapshot.value?.projection || {},
+);
 
-const mission = computed(() => controlProjection.value?.mission || missionProjection.value?.mission || {});
-const sessions = computed(() => Array.isArray(mission.value?.sessions) ? mission.value.sessions : []);
+const mission = computed<any>(() => controlProjection.value?.mission || {});
+const sessions = computed(() => Array.isArray(controlProjection.value?.sessions)
+  ? controlProjection.value.sessions
+  : []);
+const tasks = computed(() => Array.isArray(controlProjection.value?.tasks)
+  ? controlProjection.value.tasks
+  : []);
 const missionSessionIds = computed(() => new Set(sessions.value
   .map((session: any) => String(session.session_id || session.id || '').trim())
   .filter(Boolean)));
-const declaredActiveSessionId = computed(() => String(mission.value?.active_session_id || '').trim());
+const declaredActiveSessionId = computed(() => String(
+  controlProjection.value?.workspace?.active_session_id
+  || controlProjection.value?.summary?.active_session_id
+  || '',
+).trim());
 const activeSession = computed(() => {
   if (selectedSessionId.value && missionSessionIds.value.has(selectedSessionId.value)) return selectedSessionId.value;
   if (declaredActiveSessionId.value && missionSessionIds.value.has(declaredActiveSessionId.value)) return declaredActiveSessionId.value;
@@ -78,7 +99,9 @@ const collaborationRuns = computed(() => {
   if (Array.isArray(directRuns) && directRuns.length) return directRuns;
   return teams.value.map((team: any) => ({ team, agent_runs: team.agents || [] }));
 });
-const events = computed(() => Array.isArray(mission.value?.events) ? mission.value.events : []);
+const events = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest)
+  ? controlProjection.value.event_digest.latest
+  : []);
 const runtimeDigestEvents = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest) ? controlProjection.value.event_digest.latest : []);
 const relationCount = computed(() => controlProjection.value?.relations?.relation_count || relations.value?.relations?.relation_count || mission.value?.relation_projection?.relation_count || 0);
 const relationRows = computed(() => {
@@ -152,7 +175,7 @@ const controlReadinessRows = computed(() => {
 });
 const evidenceRows = computed(() => {
   if (!showFullTrace.value) return [];
-  const runtimeEvents = Array.isArray(timeline.value?.events) ? timeline.value.events : [];
+  const runtimeEvents = adaptRuntimeTimeline(Array.isArray(timeline.value?.events) ? timeline.value.events : []);
   const realityEvents = Array.isArray(realityFlow.value?.events) ? realityFlow.value.events : [];
   return [
     ...events.value.slice(0, 8).map((event: any) => ({
@@ -161,11 +184,12 @@ const evidenceRows = computed(() => {
       status: event.status || '-',
       summary: event.message || event.summary || event.session_id || '-',
     })),
-    ...runtimeEvents.slice(0, 8).map((event: any) => ({
-      source: 'runtime',
-      kind: event.kind || event.type || '-',
-      status: event.status || event.phase || '-',
-      summary: event.detail || event.summary || event.message || '-',
+    ...runtimeEvents.slice(0, 8).map((event) => ({
+      source: event.domain,
+      kind: event.title,
+      status: event.status,
+      summary: event.detail,
+      raw: event.raw,
     })),
     ...runtimeDigestEvents.value.slice(0, 8).map((event: any) => ({
       source: 'eventstore',
@@ -218,8 +242,17 @@ const sessionRows = computed(() => sessions.value.map((session: any) => ({
   id: session.session_id || session.id || '-',
   title: session.title || session.summary || session.session_id || '-',
   status: session.status || '-',
-  teams: Array.isArray(session.active_team_ids) ? session.active_team_ids.length : 0,
-  agents: Array.isArray(session.active_agent_ids) ? session.active_agent_ids.length : 0,
+  teams: Number(session.team_count || 0),
+  agents: Number(session.agent_count || 0),
+})));
+const taskRows = computed(() => tasks.value.map((task: any) => ({
+  id: task.task_id || '-',
+  status: task.status || '-',
+  session: task.source_session_id || '-',
+  objective: task.objective || '-',
+  phase: task.current_phase_id || '-',
+  graphs: Number(task.graph_count || 0),
+  failures: Number(task.failure_count || 0),
 })));
 const teamRunRows = computed(() => collaborationRuns.value.slice(0, 8).map((run: any) => {
   const team = run.team || run;
@@ -280,7 +313,7 @@ async function refresh() {
       api.missionRelations().catch(() => ({})),
       api.missionConflicts().catch(() => ({})),
     ]);
-    missionProjection.value = nextMission;
+    missionSnapshot.value = nextMission.snapshot;
     approvals.value = nextApprovals;
     relations.value = nextRelations;
     conflicts.value = nextConflicts;
@@ -325,10 +358,50 @@ async function selectSession(sessionId: string) {
 
 async function startTeam() {
   if (!activeSession.value || !teamObjective.value.trim()) return;
-  actionResult.value = await api.startMissionTeamRuntime(activeSession.value, teamObjective.value.trim());
-  const teamId = actionResult.value?.team?.team_id || actionResult.value?.receipt?.result?.team?.team_id;
-  if (teamId) {
-    selectedTeamId.value = teamId;
+  const commandId = `mission-team-create-${randomId()}`;
+  const teamId = `team-${randomId()}`;
+  const missionId = String(mission.value?.mission_id || '').trim();
+  if (!missionId) {
+    error.value = 'Mission projection does not expose a canonical mission_id';
+    return;
+  }
+  const command: MissionCommand = {
+    command_id: commandId,
+    action: 'create',
+    target: { kind: 'team', team_id: teamId },
+    actor: 'webui',
+    correlation_id: commandId,
+    payload: {
+      request_id: commandId,
+      team_id: teamId,
+      session_id: activeSession.value,
+      mission_id: missionId,
+      selection_mode: 'explicit',
+      strategy_binding: null,
+      template_selector: {
+        kind: 'latest_stable',
+        template_id: 'builtin/cowd/execute-review',
+      },
+      objective: teamObjective.value.trim(),
+      acceptance: ['summary', 'evidence'],
+      risk: null,
+      role_binding_overrides: [],
+      cardinality_overrides: [],
+      focus_partition_plans: [],
+      permission_lease: 'workspace-write',
+      model_lease: 'default',
+      budget_lease: null,
+      managed_invocation: null,
+      resource_scopes: ['workspace:read', 'workspace:write'],
+    },
+    evidence_refs: [],
+  };
+  actionResult.value = await api.missionControlCommand(command);
+  const startedTeamId = actionResult.value?.data?.receipt?.result?.team_id
+    || actionResult.value?.data?.receipt?.result?.team?.team_id
+    || teamId;
+  if (startedTeamId) {
+    selectedTeamId.value = startedTeamId;
   }
   await refresh();
 }
@@ -412,18 +485,58 @@ function attachMissionLiveSource() {
   const missionId = String(mission.value?.mission_id || '').trim();
   if (!missionId || missionLiveSource) return;
   missionLiveSource = openLiveSource(
-    { kind: 'mission', id: missionId, cursor: 0, detail_scope: 'full' },
+    {
+      kind: 'mission',
+      id: missionId,
+      cursor: missionSnapshot.value?.cursor || 0,
+      detail_scope: showFullTrace.value ? 'full' : 'summary',
+    },
     {
       error: (reason) => { error.value = reason; },
       envelope: (envelope) => {
-        if (envelope.event === 'mission_snapshot') {
-          missionProjection.value = envelope.payload;
+        if (envelope.source_health === 'resync_required') {
+          void refresh();
           return;
         }
-        if (envelope.source_health === 'resync_required') void refresh();
+        if (envelope.event === 'mission_snapshot') {
+          missionSnapshot.value = envelope.payload as MissionMaterializedSnapshot;
+          return;
+        }
+        if (envelope.event === 'mission_delta') {
+          if (!applyMissionDelta(envelope.payload as MissionProjectionDelta)) void refresh();
+          return;
+        }
       },
     },
   );
+}
+
+function applyMissionDelta(delta: MissionProjectionDelta) {
+  const next = applyMissionProjectionDelta(missionSnapshot.value, delta);
+  if (!next) return false;
+  missionSnapshot.value = next;
+  return true;
+}
+
+function randomId() {
+  return globalThis.crypto?.randomUUID?.()
+    || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function setTraceMode(enabled: boolean) {
+  showFullTrace.value = enabled;
+  timeline.value = {};
+  realityFlow.value = {};
+  const missionId = String(mission.value?.mission_id || '').trim();
+  if (missionId) {
+    missionLiveSource?.update({
+      kind: 'mission',
+      id: missionId,
+      cursor: missionSnapshot.value?.cursor || 0,
+      detail_scope: enabled ? 'full' : 'summary',
+    });
+  }
+  await refreshSelectedSession();
 }
 
 onMounted(async () => {
@@ -461,8 +574,8 @@ onUnmounted(() => {
       </div>
       <div class="chat-top-actions">
         <label class="mode-switch" :title="t('page.mission.control.page.title.1d58605a7b')">
-          <button type="button" :class="{ active: showFullTrace }" @click="showFullTrace = true; refreshSelectedSession()">{{ t('page.mission.control.page.text.3c1abbcbcf') }}</button>
-          <button type="button" :class="{ active: !showFullTrace }" @click="showFullTrace = false; refreshSelectedSession()">{{ t('page.mission.control.page.text.f0c3c77173') }}</button>
+          <button type="button" :class="{ active: showFullTrace }" @click="setTraceMode(true)">{{ t('page.mission.control.page.text.3c1abbcbcf') }}</button>
+          <button type="button" :class="{ active: !showFullTrace }" @click="setTraceMode(false)">{{ t('page.mission.control.page.text.f0c3c77173') }}</button>
         </label>
         <button class="ghost-action" type="button" :disabled="loading" @click="refresh">
           <RefreshCw :size="16" />{{ t('page.mission.control.page.text.8364cc9fa6') }}</button>
@@ -477,6 +590,11 @@ onUnmounted(() => {
         <span>{{ t('page.mission.control.page.text.3ca3f069de') }}</span>
         <strong>{{ sessions.length }}</strong>
         <small>{{ mission.active_session_id || activeSession || t('page.mission.control.page.inline.e68413410a') }}</small>
+      </article>
+      <article class="metric-card">
+        <span>{{ t('unit.tasks') }}</span>
+        <strong>{{ tasks.length }}</strong>
+        <small>{{ formatCount('tasks', tasks.length) }}</small>
       </article>
       <article class="metric-card">
         <span>{{ t('page.mission.control.page.text.e9a0adf323') }}</span>
@@ -685,6 +803,14 @@ onUnmounted(() => {
           <span class="mini-chip"><Database :size="14" />{{ t('page.mission.control.runtimeV2.evidence') }} {{ missionEvidenceRows.length }}</span>
         </div>
         <DataTable
+          v-if="taskRows.length"
+          searchable
+          copyable
+          row-key="id"
+          :rows="taskRows"
+          :columns="['id', 'status', 'session', 'objective', 'phase', 'graphs', 'failures']"
+        />
+        <DataTable
           v-if="executionGraphRows.length"
           searchable
           copyable
@@ -716,7 +842,7 @@ onUnmounted(() => {
           :rows="executionNodeRows"
           :columns="['id', 'kind', 'status', 'executor', 'evidence']"
         />
-        <p v-if="!executionGraphRows.length && !conflictItems.length && !actionContractRows.length" class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
+        <p v-if="!taskRows.length && !executionGraphRows.length && !conflictItems.length && !actionContractRows.length" class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
       </section>
     </div>
 
@@ -754,15 +880,29 @@ onUnmounted(() => {
         <span>{{ formatCount('records', evidenceRows.length) }}</span>
       </header>
       <div class="evidence-list">
-        <article v-for="item in evidenceRows" :key="`${item.source}-${item.kind}-${item.summary}`" class="evidence-item">
+        <article
+          v-for="item in evidenceRows"
+          :key="`${item.source}-${item.kind}-${item.summary}`"
+          class="evidence-item"
+          :role="item.raw ? 'button' : undefined"
+          :tabindex="item.raw ? 0 : undefined"
+          @click="item.raw && (selectedTraceEvidence = item)"
+          @keydown.enter.prevent="item.raw && (selectedTraceEvidence = item)"
+        >
           <strong>{{ item.source }} · {{ item.kind }} · {{ displayStatus(item.status) }}</strong>
           <p>{{ item.summary }}</p>
         </article>
         <p v-if="!evidenceRows.length" class="empty-note">{{ t('page.mission.control.page.text.4c14c2f5a7') }}</p>
       </div>
+      <DetailDrawer
+        v-if="selectedTraceEvidence"
+        :title="t('component.workbench.evidence.object.detail.title.payload')"
+        :row="selectedTraceEvidence"
+        @close="selectedTraceEvidence = null"
+      />
     </section>
 
     <RequestReceipt v-if="actionResult" :receipt="actionResult" />
-    <ObjectInspectorDrawer :title="t('page.mission.control.page.title.7ac6ef49a7')" :data="missionProjection" />
+    <ObjectInspectorDrawer :title="t('page.mission.control.page.title.7ac6ef49a7')" :data="missionSnapshot" />
   </section>
 </template>

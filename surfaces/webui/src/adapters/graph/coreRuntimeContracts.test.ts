@@ -82,4 +82,133 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
     expect(rows[0].correlation).toContain('ctx-41');
     expect(rows[0].route).toContain('execution_id=exec-41');
   });
+
+  it('renders APP, Context, and every recoverable Surface phase as semantic timeline rows', () => {
+    const events = [
+      {
+        sequence: 1,
+        type: 'application.execution_outcome',
+        scope: 'application_task',
+        status: 'succeeded',
+        payload: { title: 'Quality snapshot', summary: '12 facts synchronized', kind: 'structured_fact' },
+      },
+      {
+        sequence: 2,
+        type: 'context.recommendation_action',
+        scope: 'context',
+        payload: { recommendation: 'retain evidence', action: 'accepted', note: 'needed by the active turn' },
+      },
+      {
+        sequence: 3,
+        type: 'surface.message_received',
+        scope: 'message',
+        payload: { surface: 'feishu', message_id: 'om-1', content_preview: 'inspect incident' },
+      },
+      {
+        sequence: 4,
+        type: 'surface.runtime_activated',
+        scope: 'session',
+        payload: { surface: 'feishu', session_id: 'session-1', message_id: 'om-1' },
+      },
+      {
+        sequence: 5,
+        type: 'surface.resources_registered',
+        scope: 'tool',
+        payload: { message_id: 'om-1', current: [], recent: [] },
+      },
+      {
+        sequence: 6,
+        type: 'surface.message_accepted',
+        scope: 'turn',
+        payload: { surface: 'feishu', message_id: 'om-1', turn_id: 'turn-1', execution_id: 'exec-1' },
+      },
+      {
+        sequence: 7,
+        type: 'surface.message_replied',
+        scope: 'message',
+        payload: {
+          surface: 'feishu',
+          message_id: 'om-1',
+          turn_id: 'turn-1',
+          execution_id: 'exec-1',
+          terminal_id: 'terminal-1',
+          empty_terminal: true,
+        },
+      },
+      {
+        sequence: 8,
+        event_id: 'tool-event-1',
+        type: 'tool.invocation.completed',
+        scope: 'tool',
+        status: 'completed',
+        refs: [{ kind: 'tool_call', id: 'tool-1' }],
+        payload: {
+          contract_version: 2,
+          invocation_id: 'tool-inv-1',
+          tool_call_id: 'tool-1',
+          tool_name: 'glob_search',
+          status: 'completed',
+          output_preview: '12 matching files',
+          full_output_ref: 'tool://raw-1',
+          duration_ms: 42,
+          context_saved_tokens: 90,
+        },
+      },
+    ];
+
+    const rows = adaptRuntimeTimeline(events);
+
+    expect(rows.every((row) => row.detail !== '-' && row.status !== '-')).toBe(true);
+    expect(rows[0].detail).toContain('12 facts synchronized');
+    expect(rows[1].detail).toContain('needed by the active turn');
+    expect(rows[2].detail).toContain('inspect incident');
+    expect(rows[4].detail).toContain('No resources attached');
+    expect(rows[6]).toMatchObject({
+      status: 'empty_terminal',
+      execution_id: 'exec-1',
+      turn_id: 'turn-1',
+      raw: events[6],
+    });
+    expect(rows[6].detail).toContain('without a text reply');
+    expect(rows.map((row) => row.domain)).toEqual([
+      'app',
+      'context',
+      'surface',
+      'surface',
+      'surface',
+      'surface',
+      'surface',
+      'tool',
+    ]);
+    expect(rows[7]).toMatchObject({
+      id: 'tool-event-1',
+      domain: 'tool',
+      title: 'glob_search completed',
+      status: 'completed',
+      tool_call_id: 'tool-1',
+      tool_name: 'glob_search',
+      raw: events[7],
+    });
+    expect(rows[7].detail).toContain('12 matching files');
+    expect(rows[7].refs).toEqual(['tool-1', 'tool://raw-1']);
+  });
+
+  it('keeps unknown future events inspectable without serializing payload JSON as the primary label', () => {
+    const event = {
+      sequence: 9,
+      type: 'runtime.future_signal',
+      payload: { opaque: { nested: true } },
+    };
+
+    const [row] = adaptRuntimeTimeline([event]);
+
+    expect(row).toMatchObject({
+      domain: 'runtime',
+      title: 'Runtime future signal',
+      detail: 'Runtime future signal',
+      status: 'recorded',
+      raw: event,
+    });
+    expect(row.detail).not.toContain('"opaque"');
+  });
 });

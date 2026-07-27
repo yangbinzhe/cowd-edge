@@ -231,7 +231,9 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .activity-item { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
 .activity-item strong { font-size: 13px; }
 .activity-item p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.activity-item small { display: block; margin-top: 5px; color: var(--text-faint); font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
 .activity-item > span { color: var(--text-faint); font-size: 11px; }
+.activity-item > .raw-payload { grid-column: 1 / -1; margin-top: 2px; }
 .activity-item:hover { border-color: var(--border-2); }
 .evidence-tab { display: grid; align-content: start; gap: 12px; }
 .evidence-tab .panel-title { margin-bottom: 0; }

@@ -59,11 +59,10 @@ const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
 const timelineRows = computed(() => adaptRuntimeTimeline(Array.isArray(timeline.value?.events) ? timeline.value.events : []).slice(0, 16));
 const timelineListItems = computed(() => timelineRows.value.map((row: any) => ({
-  id: row.sequence,
-  title: row.kind,
-  status: row.status,
-  detail: `${row.scope} · ${row.detail}`,
   ...row,
+  id: row.id,
+  title: row.title,
+  detail: `${row.domain} · ${row.detail}`,
 })));
 const taskRows = computed(() => (Array.isArray(tasks.value?.tasks) ? tasks.value.tasks : []).slice(0, 12).map((task: any) => ({
   id: task.id,
@@ -451,7 +450,7 @@ onUnmounted(() => projections.release('runtime-page'));
           <StatusPill :status="timeline.__state || 'ready'" />
         </header>
         <TimelineList v-if="timelineListItems.length" :items="timelineListItems" live @select="selectedDetail = $event" />
-        <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'scope', 'kind', 'status', 'correlation', 'detail']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'domain', 'title', 'status', 'correlation', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.16b97cb353')" :detail="t('page.runtime.page.detail.059281d68e')" />
       </section>
 

@@ -1107,15 +1107,20 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('reads Mission Control projections through gateway endpoints', async () => {
     const fetchMock = vi.fn((path: RequestInfo | URL) => Promise.resolve(new Response(JSON.stringify({
-      mission: {
-        active_session_id: 'mission-a',
-        sessions: [{ session_id: 'mission-a', title: 'Mission A', status: 'active' }],
-        events: [],
-        approval_projection: { pending_count: 1 },
-        relation_projection: { relation_count: 2 },
+      ok: true,
+      snapshot: {
+        schema_version: 1,
+        kind: 'mission_control.materialized_snapshot',
+        cursor: 4,
+        revision: 2,
+        needs_resync: false,
+        projection: {
+          schema_version: 1,
+          kind: 'mission_control.projection',
+          workspace: { active_session_id: 'mission-a' },
+          sessions: [{ session_id: 'mission-a', title: 'Mission A', status: 'active' }],
+        },
       },
-      approvals: { pending_count: 1, requests: [] },
-      relations: { relation_count: 2, relations: [] },
     }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.missionControl();
@@ -1130,7 +1135,18 @@ describe('Cowd Vue WebUI shell', () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
-    await api.startMissionTeamRuntime('mission-a', 'inspect runtime evidence', 'register_only');
+    await api.missionControlCommand({
+      command_id: 'mission-team-create-1',
+      action: 'create',
+      target: { kind: 'team', team_id: 'team-1' },
+      payload: {
+        request_id: 'mission-team-create-1',
+        team_id: 'team-1',
+        session_id: 'mission-a',
+        mission_id: 'mission-1',
+        objective: 'inspect runtime evidence',
+      },
+    });
     await api.interpretMissionCommand({
       current_session_id: 'mission-a',
       target_ref: 'mission-b',
@@ -1141,9 +1157,20 @@ describe('Cowd Vue WebUI shell', () => {
     await api.runtimeRecoveryReport();
     await api.applyRuntimeRecovery();
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/mission/sessions/mission-a/teams/runtime', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/mission/control', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ objective: 'inspect runtime evidence', execution_mode: 'register_only' }),
+      body: JSON.stringify({
+        command_id: 'mission-team-create-1',
+        action: 'create',
+        target: { kind: 'team', team_id: 'team-1' },
+        payload: {
+          request_id: 'mission-team-create-1',
+          team_id: 'team-1',
+          session_id: 'mission-a',
+          mission_id: 'mission-1',
+          objective: 'inspect runtime evidence',
+        },
+      }),
     }));
     expect(fetchMock).toHaveBeenCalledWith('/api/mission/control/interpret', expect.objectContaining({
       method: 'POST',
@@ -1223,7 +1250,10 @@ describe('Cowd Vue WebUI shell', () => {
       method: 'POST',
       body: JSON.stringify({ content: '# Skill', path: 'SKILL.md', locale: 'zh-CN' }),
     }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/s1/branch', expect.objectContaining({ method: 'POST' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/s1/branch', expect.objectContaining({
+      method: 'POST',
+      body: expect.stringContaining('"idempotency_key":"session-branch:s1:'),
+    }));
   });
 
   it('calls critical MFG write endpoints with explicit request bodies', async () => {

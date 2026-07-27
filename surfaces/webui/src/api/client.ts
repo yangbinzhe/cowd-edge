@@ -1,10 +1,14 @@
 import type {
-  ActivityEvent,
   ApiReadState,
   ApiReadStatus,
+  BranchSessionReceipt,
   GatewayCapability,
   GatewayCapabilityContract,
   GatewayOpenAiTools,
+  MissionCommand,
+  MissionCommandResponse,
+  MissionControlResponse,
+  MissionProjectionDelta,
   NavId,
   ExecutionProjection,
   SessionEvidenceProjection,
@@ -156,6 +160,12 @@ export function webuiObserverId() {
     }
     return fallbackObserverId;
   }
+}
+
+function requestIdempotencyKey(scope: string) {
+  const suffix = globalThis.crypto?.randomUUID?.()
+    || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${scope}:${suffix}`;
 }
 
 function withoutServerActor(value: Record<string, unknown>, fields = ['actor_principal']): Record<string, unknown> {
@@ -884,7 +894,10 @@ export const api = {
     body: JSON.stringify({ model }),
   }),
   deleteSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
-  branchSession: (sessionId: string) => writeWithReceipt<SessionSummary>(`/api/sessions/${encodeURIComponent(sessionId)}/branch`, { method: 'POST' }),
+  branchSession: (sessionId: string) => writeWithReceipt<BranchSessionReceipt>(`/api/sessions/${encodeURIComponent(sessionId)}/branch`, {
+    method: 'POST',
+    body: JSON.stringify({ idempotency_key: requestIdempotencyKey(`session-branch:${sessionId}`) }),
+  }),
   compactSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/compact`, { method: 'POST' }),
   cancelSessionTurn: (sessionId: string) => writeWithReceipt(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, {
     method: 'POST',
@@ -1033,8 +1046,58 @@ export const api = {
   }),
   runtimeTurn: (id: string) => read(`/api/runtime/turns/${encodeURIComponent(id)}`, {}),
   cancelRuntimeTurn: (id: string) => writeWithReceipt(`/api/runtime/turns/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
-  missionControl: () => read('/api/mission/control', { projection: { mission: { sessions: [], events: [] }, sessions: [], teams: [], agents: [], approvals: [], stewards: [], event_digest: { latest: [] } } }),
-  missionControlCommand: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/control/command', {
+  missionControl: () => read<MissionControlResponse>('/api/mission/control', {
+    ok: true,
+    snapshot: {
+      schema_version: 1,
+      kind: 'mission_control.materialized_snapshot',
+      cursor: 0,
+      revision: 1,
+      needs_resync: false,
+      projection: {
+        schema_version: 1,
+        kind: 'mission_control.projection',
+        workspace: {},
+        summary: {},
+        control_readiness: {},
+        mission: {},
+        sessions: [],
+        teams: [],
+        agents: [],
+        approvals: [],
+        relations: {},
+        execution_graphs: {},
+        conflicts: {},
+        evidence: {},
+        capabilities: {},
+        event_digest: {
+          total_recent_events: 0,
+          scope_counts: {},
+          latest_errors: [],
+          recovery_required: [],
+          latest: [],
+        },
+        health: {},
+      },
+    },
+  } as MissionControlResponse),
+  missionControlDelta: (cursor: number, revision?: number) => {
+    const params = new URLSearchParams({ cursor: String(Math.max(0, cursor)) });
+    if (Number.isFinite(revision)) params.set('revision', String(revision));
+    return read<MissionProjectionDelta>(`/api/mission/control/delta?${params.toString()}`, {
+      schema_version: 1,
+      kind: 'mission_control.projection_delta',
+      from_cursor: cursor,
+      from_revision: revision,
+      to_cursor: cursor,
+      revision: revision || 1,
+      needs_resync: false,
+      changed_domains: [],
+      events: [],
+      patch: {},
+    });
+  },
+  missionControlCommand: (body: MissionCommand) => writeWithReceipt<MissionCommandResponse>('/api/mission/control', {
     method: 'POST',
     body: JSON.stringify(body),
   }),
@@ -1049,7 +1112,21 @@ export const api = {
   teamExecutionPlan: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/execution`, {}),
   collaborationRuns: () => read('/api/mission/control/teams', { projection: { runs: [] } }),
   collaborationRun: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/run`, {}),
-  cancelTeamRuntime: (teamId: string) => writeWithReceipt(`/api/mission/control/teams/${encodeURIComponent(teamId)}/cancel`, { method: 'POST' }),
+  cancelTeamRuntime: (teamId: string) => {
+    const commandId = `mission-team-cancel-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`;
+    return writeWithReceipt<MissionCommandResponse>('/api/mission/control', {
+      method: 'POST',
+      body: JSON.stringify({
+        command_id: commandId,
+        action: 'cancel',
+        target: { kind: 'team', team_id: teamId },
+        actor: 'webui',
+        correlation_id: commandId,
+        payload: {},
+        evidence_refs: [],
+      } satisfies MissionCommand),
+    });
+  },
   teamMissionEvidence: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/evidence`, { events: [], tasks: [], evidence: [] }),
   agentMissionEvents: (agentId: string) => read(`/api/mission/control/agents/${encodeURIComponent(agentId)}/events`, { events: [], tasks: [] }),
   runtimeRecoveryReport: () => read('/api/runtime/events/replay-report', {}),
@@ -1058,10 +1135,6 @@ export const api = {
   missionRelations: () => read('/api/mission/relations', { relations: { relations: [], proxies: [] } }),
   missionConflicts: () => read('/api/mission/conflicts', { conflicts: { receipts: [], count: 0 } }),
   missionSessionDetail: (sessionId: string) => read(`/api/mission/sessions/${encodeURIComponent(sessionId)}`, {}),
-  startMissionTeamRuntime: (sessionId: string, objective: string, executionMode = 'provider_in_process') => writeWithReceipt(`/api/mission/sessions/${encodeURIComponent(sessionId)}/teams/runtime`, {
-    method: 'POST',
-    body: JSON.stringify({ objective, execution_mode: executionMode }),
-  }),
   decideMissionApproval: (approvalId: string, approved: boolean, reason = '') => writeWithReceipt(`/api/mission/approvals/${encodeURIComponent(approvalId)}/decision`, {
     method: 'POST',
     body: JSON.stringify({ approved, decided_by: 'webui', reason }),
@@ -1656,15 +1729,4 @@ export function providerModels(controlPlane: any, config: any): string[] {
     providerNames.forEach((name: string) => models.add(`${name}:default`));
   }
   return Array.from(models);
-}
-
-export function normalizeActivity(raw: any[]): ActivityEvent[] {
-  if (!Array.isArray(raw) || raw.length === 0) return [];
-  return raw.slice(0, 50).map((event, index) => ({
-    id: String(event.id || event.sequence || index),
-    kind: event.kind || event.type || 'runtime',
-    title: event.title || event.type || event.kind || 'Runtime event',
-    detail: event.detail || event.message || event.summary || JSON.stringify(event.payload || event).slice(0, 240),
-    status: event.status || event.phase || 'observed',
-  }));
 }
