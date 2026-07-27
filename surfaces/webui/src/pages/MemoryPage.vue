@@ -4,7 +4,7 @@ const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Database, GitBranch, Network, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next';
+import { Database, GitBranch, Network, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
@@ -56,10 +56,13 @@ const knowledge = ref<any>({});
 const knowledgeNamespaces = ref<any>({});
 const knowledgeConflicts = ref<any>({});
 const knowledgeMaintenance = ref<any>({});
+const knowledgeCandidates = ref<any>({});
 const structured = ref<any>({});
 const structuredPlan = ref<any>(null);
 const actionResult = ref<any>(null);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
+const selectedKnowledgeCandidate = ref<any>(null);
+const rollbackReason = ref('');
 
 const entryTitle = ref('');
 const entryContent = ref('');
@@ -137,6 +140,16 @@ const knowledgeConflictRows = computed(() => {
   return Array.isArray(projection.conflicts) ? projection.conflicts : [];
 });
 const knowledgeMaintenanceRows = computed(() => Array.isArray(knowledgeMaintenance.value?.maintenance_candidates) ? knowledgeMaintenance.value.maintenance_candidates : []);
+const knowledgeCandidateRows = computed(() => (Array.isArray(knowledgeCandidates.value?.candidates) ? knowledgeCandidates.value.candidates : []).map((projection: any) => ({
+  candidate_id: projection.candidate?.candidate_id || '-',
+  title: projection.candidate?.title || '-',
+  scope: projection.candidate?.scope?.id ? `${projection.candidate.scope.kind}:${projection.candidate.scope.id}` : projection.candidate?.scope?.kind || '-',
+  novelty: projection.candidate?.novelty || '-',
+  state: projection.state || '-',
+  approval_id: projection.approval_id || '-',
+  reason: projection.reason || '-',
+  raw: projection,
+})));
 const activationPolicyRows = computed(() => Array.isArray(knowledgeNamespaces.value?.activation_policy_distribution) ? knowledgeNamespaces.value.activation_policy_distribution : []);
 const governanceRows = computed(() => Array.isArray(knowledgeNamespaces.value?.governance_distribution) ? knowledgeNamespaces.value.governance_distribution : []);
 const recallQuality = computed(() => knowledgeMaintenance.value?.recall_quality || knowledge.value?.projection?.recall_quality || {});
@@ -244,6 +257,7 @@ async function refresh() {
       nextKnowledgeNamespaces,
       nextKnowledgeConflicts,
       nextKnowledgeMaintenance,
+      nextKnowledgeCandidates,
       sources,
       facts,
       evidence,
@@ -263,6 +277,7 @@ async function refresh() {
       api.memoryKnowledgeNamespaces(),
       api.memoryKnowledgeConflicts(),
       api.memoryKnowledgeMaintenance(),
+      api.memoryKnowledgeCandidates(),
       api.structuredSources(),
       api.structuredFacts(),
       api.structuredEvidence(),
@@ -283,9 +298,28 @@ async function refresh() {
     knowledgeNamespaces.value = nextKnowledgeNamespaces;
     knowledgeConflicts.value = nextKnowledgeConflicts;
     knowledgeMaintenance.value = nextKnowledgeMaintenance;
+    knowledgeCandidates.value = nextKnowledgeCandidates;
     structured.value = { sources, facts, evidence, watermarks };
     await loadLayer();
     await runRecall();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function rollbackKnowledgeCandidate() {
+  const candidateId = String(selectedKnowledgeCandidate.value?.candidate_id || '');
+  const reason = rollbackReason.value.trim();
+  if (!candidateId || !reason) return;
+  loading.value = true;
+  error.value = '';
+  try {
+    actionResult.value = await api.rollbackMemoryKnowledgeCandidate(candidateId, reason);
+    knowledgeCandidates.value = await api.memoryKnowledgeCandidates();
+    selectedKnowledgeCandidate.value = knowledgeCandidateRows.value.find((row: any) => row.candidate_id === candidateId) || null;
+    rollbackReason.value = '';
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -630,6 +664,11 @@ watch(
               <strong>{{ knowledgeMaintenanceRows.length }}</strong>
               <small>{{ t('memory.knowledgeGovernance.precision', { value: Math.round(Number(recallQuality.precision_estimate ?? 1) * 100) }) }}</small>
             </article>
+            <article class="metric-card" data-tone="success">
+              <span>{{ t('memory.knowledgeGovernance.candidates') }}</span>
+              <strong>{{ knowledgeCandidateRows.length }}</strong>
+              <small>{{ t('memory.knowledgeGovernance.promotedCount', { count: knowledgeCandidateRows.filter((row: any) => row.state === 'promoted').length }) }}</small>
+            </article>
           </div>
           <div class="memory-tabs">
             <article>
@@ -642,6 +681,35 @@ watch(
               <DataTable v-if="activationPolicyRows.length || governanceRows.length" copyable :rows="[...activationPolicyRows.map((row: any) => ({ kind: 'activation', ...row })), ...governanceRows.map((row: any) => ({ kind: 'governance', ...row }))]" :columns="['kind', 'key', 'count']" @row-click="selectedDetail = $event" />
               <EmptyState v-else :title="t('memory.knowledgeGovernance.emptyPolicy')" :detail="t('memory.knowledgeGovernance.emptyPolicyDetail')" />
             </article>
+          </div>
+          <div class="section-heading">
+            <div>
+              <h3>{{ t('memory.knowledgeGovernance.candidateLifecycle') }}</h3>
+              <p>{{ t('memory.knowledgeGovernance.candidateLifecycleDetail') }}</p>
+            </div>
+          </div>
+          <DataTable
+            v-if="knowledgeCandidateRows.length"
+            searchable
+            copyable
+            :rows="knowledgeCandidateRows"
+            :columns="['candidate_id', 'title', 'scope', 'novelty', 'state', 'approval_id', 'reason']"
+            @row-click="selectedKnowledgeCandidate = $event; selectedDetail = $event.raw || $event"
+          />
+          <EmptyState
+            v-else
+            :title="t('memory.knowledgeGovernance.emptyCandidates')"
+            :detail="t('memory.knowledgeGovernance.emptyCandidatesDetail')"
+          />
+          <div v-if="selectedKnowledgeCandidate?.state === 'promoted'" class="filter-row">
+            <label class="field-line">
+              {{ t('memory.knowledgeGovernance.rollbackReason') }}
+              <input v-model="rollbackReason" type="text" :placeholder="t('memory.knowledgeGovernance.rollbackReasonPlaceholder')" />
+            </label>
+            <button class="danger-action" type="button" :disabled="!rollbackReason.trim() || loading" @click="rollbackKnowledgeCandidate">
+              <RotateCcw :size="15" />
+              {{ t('memory.knowledgeGovernance.rollback') }}
+            </button>
           </div>
           <DataTable v-if="knowledgeConflictRows.length" searchable copyable :rows="knowledgeConflictRows" :columns="['id', 'type', 'pack_id', 'decision', 'summary']" @row-click="selectedDetail = $event" />
           <DataTable v-if="knowledgeMaintenanceRows.length" searchable copyable :rows="knowledgeMaintenanceRows" :columns="['id', 'kind', 'severity', 'status', 'reason']" @row-click="selectedDetail = $event" />

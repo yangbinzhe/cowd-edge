@@ -1209,6 +1209,11 @@ export const api = {
   memoryKnowledgeNamespaces: () => read('/api/memory/knowledge/namespaces', { namespace_tree: [] }),
   memoryKnowledgeConflicts: () => read('/api/memory/knowledge/conflicts', { conflict_projection: { conflicts: [] } }),
   memoryKnowledgeMaintenance: () => read('/api/memory/knowledge/maintenance', { maintenance_candidates: [], recall_quality: {} }),
+  memoryKnowledgeCandidates: () => read('/api/memory/knowledge/candidates', { candidates: [], total: 0 }),
+  rollbackMemoryKnowledgeCandidate: (candidateId: string, reason: string) => write(`/api/memory/knowledge/candidates/${encodeURIComponent(candidateId)}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  }),
   memoryStats: () => read('/api/memory/stats', {}),
   memoryLayers: () => read('/api/memory/layers', { layers: [] }),
   memoryLayer: (layer: string) => read(`/api/memory/${encodeURIComponent(layer)}`, { entries: [] }),
