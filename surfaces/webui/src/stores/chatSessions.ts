@@ -66,6 +66,7 @@ const attachmentFlights = new Map<string, Promise<unknown>>();
 const canonicalResyncFlights = new Map<string, Promise<void>>();
 const HISTORY_PAGE_SIZE = 100;
 const HISTORY_WINDOW_CAP = 1_000;
+const DURABLE_MESSAGE_ROLES = new Set(['user', 'assistant', 'system', 'tool']);
 const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'Connected',
   'SessionAuthorizationRevoked',
@@ -158,7 +159,7 @@ function messagesIdentityIssue(page: any, sessionId: string, label: string) {
     if (!id) return `${label} message is missing its canonical identity`;
     if (seen.has(id)) return `${label} contains duplicate message identity ${id}`;
     seen.add(id);
-    if (!['user', 'assistant', 'system'].includes(String(message?.role || ''))) {
+    if (!DURABLE_MESSAGE_ROLES.has(String(message?.role || ''))) {
       return `${label} message ${id} has an unsupported role`;
     }
   }

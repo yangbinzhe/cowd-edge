@@ -54,7 +54,7 @@ export type MissionProjectionDelta = GatewayComponents['schemas']['MissionProjec
 
 export interface ChatTurn {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   status?: 'streaming' | 'complete' | 'error';
   activity?: ActivityEvent[];

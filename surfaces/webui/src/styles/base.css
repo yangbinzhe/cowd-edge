@@ -131,10 +131,11 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .turn { display: grid; gap: 5px; width: 100%; max-width: min(1320px, 100%); min-width: 0; margin: 0 auto 18px; content-visibility: auto; contain-intrinsic-size: auto 160px; contain: layout paint style; }
 .app-shell[data-shell="chat-clean"] .turn { max-width: min(1080px, 100%); }
 .turn[data-role="user"] { justify-items: end; }
-.turn[data-role="assistant"], .turn[data-role="system"] { justify-items: start; }
+.turn[data-role="assistant"], .turn[data-role="system"], .turn[data-role="tool"] { justify-items: start; }
 .turn .markdown-body { min-width: 0; width: 100%; }
 .turn[data-role="assistant"] .markdown-body { max-width: var(--assistant-content-max); }
 .turn[data-role="system"] .markdown-body { max-width: var(--system-content-max); }
+.turn[data-role="tool"] .markdown-body { max-width: var(--assistant-content-max); }
 .turn[data-role="user"] .markdown-body { max-width: var(--user-content-max); }
 .message-meta { min-width: 0; width: 100%; max-width: var(--assistant-content-max); display: flex; gap: 6px; align-items: center; color: var(--text-faint); font-size: 11px; }
 .turn[data-role="system"] .message-meta { max-width: var(--system-content-max); }
@@ -161,6 +162,8 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .turn-usage small { min-height: 22px; display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 0 7px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .turn[data-role="user"] .markdown-body { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; }
 .turn[data-role="system"] .markdown-body { background: color-mix(in srgb, var(--info) 8%, var(--surface)); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; color: var(--text-muted); }
+.turn[data-role="tool"] .markdown-body { background: var(--surface); border-left: 2px solid var(--border-2); padding: 7px 10px; color: var(--text-muted); }
+.app-shell[data-shell="chat-clean"] .turn[data-role="tool"] { display: none; }
 .turn-evidence-drawer { margin: 0 auto 16px; width: min(1120px, calc(100% - 56px)); max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 14px; display: grid; gap: 12px; }
 .turn-evidence-drawer > header { position: sticky; top: -14px; z-index: 2; display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 0 0 10px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .turn-evidence-drawer h2, .turn-evidence-drawer h3 { margin: 0; font-size: 13px; }
@@ -211,6 +214,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
 .run-status[data-status='error'], .run-status[data-status='waiting_approval'] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 42%, var(--border)); }
 .turn-run-state { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; }
 .composer-actions { display: flex; gap: 8px; align-items: center; }
+.composer-actions .composer-icon-action { width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; }
 
 .companion-panel { position: relative; border-left: 1px solid var(--border); border-right: 0; display: flex; flex-direction: column; min-height: 0; }
 .companion-toggle { position: fixed; right: 16px; top: 16px; z-index: 12; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--text-muted); box-shadow: 0 10px 28px rgba(0,0,0,.18); }
@@ -876,6 +880,7 @@ body.resizing-session-sidebar { cursor: col-resize; user-select: none; }
   .transcript { padding: 14px; }
   .composer { padding: 10px 12px; }
   .composer textarea { min-height: 64px; max-height: 140px; }
+  .composer-actions .composer-icon-action { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
   .workspace-tree { max-height: none; }
   .workspace-tree-node { min-height: 44px; }
   .workspace-tree-main { min-height: 38px; }

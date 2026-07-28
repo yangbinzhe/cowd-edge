@@ -687,6 +687,67 @@ describe('chatSessions', () => {
     expect(chat.states['history-window'].historyTotal).toBe(205);
   });
 
+  it('accepts canonical tool messages in durable history', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockImplementation(async (sessionId) => ({
+      __state: 'ready',
+      session_id: sessionId,
+      messages: [
+        {
+          id: 'user-1',
+          session_id: sessionId,
+          sequence: 0,
+          role: 'user',
+          blocks: [{ type: 'text', text: 'inspect the workspace' }],
+        },
+        {
+          id: 'tool-1',
+          session_id: sessionId,
+          sequence: 1,
+          role: 'tool',
+          tool_name: 'workspace_snapshot',
+          blocks: [{
+            type: 'tool_result',
+            tool_use_id: 'call-1',
+            tool_name: 'workspace_snapshot',
+            output: 'workspace snapshot loaded',
+            is_error: false,
+          }],
+        },
+        {
+          id: 'assistant-1',
+          session_id: sessionId,
+          sequence: 2,
+          role: 'assistant',
+          blocks: [{ type: 'text', text: 'done' }],
+        },
+      ],
+      total: 3,
+      offset: 0,
+      limit: 100,
+      has_more: false,
+    }) as any);
+    vi.spyOn(api, 'sessionEvidence').mockImplementation(async (sessionId) => ({
+      ...emptyEvidence, session_id: sessionId, __state: 'ready',
+    }) as any);
+    vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
+      session_id: sessionId, active_execution_ids: [], __state: 'ready',
+    }) as any);
+
+    await chat.load('tool-history');
+
+    expect(chat.states['tool-history'].lastError).toBe('');
+    expect(chat.states['tool-history'].streamState).not.toBe('degraded');
+    expect(chat.states['tool-history'].turns.map((turn) => turn.role)).toEqual([
+      'user',
+      'tool',
+      'assistant',
+    ]);
+    expect(chat.states['tool-history'].turns[1].content).toBe('workspace snapshot loaded');
+  });
+
   it('keeps history authorization failures visible instead of presenting an empty conversation', async () => {
     setActivePinia(createPinia());
     const chat = useChatSessionsStore();

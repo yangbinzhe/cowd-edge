@@ -2365,7 +2365,7 @@ export const enUS: MessageCatalog = {
   "settings.gateway.replaceCredential": "Replace credential",
   "settings.gateway.capabilityDenied": "This session is valid but does not grant MFG live access. Use a credential with mfg.read, or ask an administrator to grant that capability.",
   "settings.gateway.logout": "End secure session",
-  "settings.gateway.sessionNotice": "The credential is not stored in the browser, conversation, tool environment, or logs. Gateway retains only a short-lived HttpOnly session.",
+  "settings.gateway.sessionNotice": "The credential is not stored in the browser, conversation, tool environment, or logs. Gateway retains only a revocable HttpOnly session for up to one day.",
   "graph.title.default": "Runtime graph",
   "graph.summary": "{nodes} nodes · {edges} edges",
   "graph.a11y.summary": "Runtime graph: {nodes} nodes, {edges} edges, status {status}. Use arrow keys to browse nodes.",

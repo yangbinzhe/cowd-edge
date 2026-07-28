@@ -2365,7 +2365,7 @@ export const zhCN: MessageCatalog = {
   "settings.gateway.replaceCredential": "更换凭据",
   "settings.gateway.capabilityDenied": "当前会话有效，但没有 MFG 实时访问权限。请更换具备 mfg.read 的凭据，或联系管理员授予该能力。",
   "settings.gateway.logout": "退出安全会话",
-  "settings.gateway.sessionNotice": "凭据不会保存到浏览器、对话、工具环境或日志；Gateway 仅保留短期 HttpOnly 会话。",
+  "settings.gateway.sessionNotice": "凭据不会保存到浏览器、对话、工具环境或日志；Gateway 仅保留最长一天且可随时撤销的 HttpOnly 会话。",
   "graph.title.default": "运行图",
   "graph.summary": "{nodes} 个节点 · {edges} 条边",
   "graph.a11y.summary": "运行图：{nodes} 个节点、{edges} 条边，状态为 {status}。使用方向键浏览节点。",

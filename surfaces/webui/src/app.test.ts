@@ -144,6 +144,11 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.companion-panel').exists()).toBe(true);
     expect(wrapper.text()).toContain('上下文');
     expect(wrapper.text()).toContain('上下文 —');
+    const composerActions = wrapper.get('.composer-actions').findAll('button');
+    const commandButton = composerActions.find((button) => button.attributes('aria-label') === '命令');
+    const sendButton = composerActions.find((button) => button.attributes('aria-label') === '发送');
+    expect(commandButton?.text()).toBe('');
+    expect(sendButton?.text()).toBe('');
     expect(wrapper.get('.chat-page').exists()).toBe(true);
   });
 
