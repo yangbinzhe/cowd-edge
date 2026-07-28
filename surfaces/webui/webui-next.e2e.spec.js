@@ -210,16 +210,33 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
       const sessionId = executionMatch[1].replace('execution-', '');
       const metrics = sessionId === 'session-A' ? { tool_calls: 0, memory_recalls: 0, memory_evidence: 0 } : {};
       return json(route, {
-        schema_version: 1,
+        schema_version: 2,
         execution_id: executionMatch[1],
         revision: 1,
         cursor: 1,
-        graph: {},
+        detail_scope: 'summary',
+        authorization_revision: 1,
+        redaction_revision: 'browser-acceptance',
+        session_id: sessionId,
+        graph: {
+          execution_id: executionMatch[1],
+          revision: 1,
+          commit_cursor: 1,
+          objective: 'browser acceptance',
+          service_class: 'foreground',
+          parent_execution: null,
+          nodes: [],
+          edges: [],
+          terminal_result_ref: `terminal-${sessionId}`,
+        },
+        child_executions: [],
         goals: [],
         agents: [],
         teams: [],
         relations: [],
         approvals: [],
+        admissions: [],
+        outcomes: [],
         interventions: [],
         usage: [],
         context: [],
@@ -442,16 +459,33 @@ test('session authorization revocation clears that view, fences reconnects, and 
     if (executionMatch) {
       const sessionId = executionMatch[1];
       return json(route, {
-        schema_version: 1,
+        schema_version: 2,
         execution_id: `execution-${sessionId}`,
         revision: 1,
         cursor: 1,
-        graph: {},
+        detail_scope: 'summary',
+        authorization_revision: 1,
+        redaction_revision: 'revocation-e2e',
+        session_id: sessionId,
+        graph: {
+          execution_id: `execution-${sessionId}`,
+          revision: 1,
+          commit_cursor: 1,
+          objective: 'revocation acceptance',
+          service_class: 'foreground',
+          parent_execution: null,
+          nodes: [],
+          edges: [],
+          terminal_result_ref: null,
+        },
+        child_executions: [],
         goals: [],
         agents: [],
         teams: [],
         relations: [],
         approvals: [],
+        admissions: [],
+        outcomes: [],
         interventions: [],
         usage: [],
         context: [],
@@ -663,7 +697,7 @@ test('mfg page exposes manufacturing application workbench controls', async ({ p
   await expect(page.locator('[data-section="reports"]').getByRole('heading', { name: 'Decision trace' })).toBeVisible();
 });
 
-test('explicit Team negative-benefit cost warning renders through real Gateway on all strategy surfaces', async ({ page }) => {
+test('explicit Team cost warning renders through real Gateway on all strategy surfaces', async ({ page }) => {
   test.setTimeout(90_000);
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -727,10 +761,25 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
     if (response.ok()) {
       projection = await response.json();
       const strategy = projection?.strategy;
-      const teamId = String(strategy?.team_id || '');
-      const teamExecutionId = String(strategy?.team_execution_id || '');
+      const projectedTeams = Array.isArray(projection?.teams) ? projection.teams : [];
+      const linkedTeam = projectedTeams.find((team) => {
+        const graphId = String(team?.detail?.graph_id || '');
+        return graphId && (projection?.child_executions || [])
+          .some((child) => String(child?.execution_id || '') === graphId);
+      });
+      const teamId = String(strategy?.team_id || linkedTeam?.id || '');
+      const teamExecutionId = String(
+        strategy?.team_execution_id || linkedTeam?.detail?.graph_id || '',
+      );
+      const teamEstimate = strategy?.candidate_estimates
+        ?.find((estimate) => estimate?.candidate === 'team');
+      const fastestAlternativeMs = Math.min(
+        ...(strategy?.candidate_estimates || [])
+          .filter((estimate) => estimate?.candidate !== 'team' && estimate?.eligible)
+          .map((estimate) => Number(estimate?.estimated_critical_path_ms)),
+      );
       const materializedTopology = [
-        ...(Array.isArray(projection?.teams) ? projection.teams : []),
+        ...projectedTeams,
         ...(Array.isArray(projection?.child_executions) ? projection.child_executions : []),
         ...(Array.isArray(projection?.agents) ? projection.agents : []),
       ].some((entity) => {
@@ -739,12 +788,12 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
         return id === teamId || id === teamExecutionId || graphId === teamExecutionId;
       });
       topologyReady = Boolean(
-        projection?.schema_version === 1
+        projection?.schema_version === 2
         && projection?.execution_id === executionId
         && strategy?.schema_version === 1
-        && strategy?.selected_candidate === 'team'
+        && Number(teamEstimate?.estimated_critical_path_ms) > fastestAlternativeMs
         && Array.isArray(strategy?.cost_reason)
-        && strategy.cost_reason.some((reason) => /negative estimated lift/i.test(String(reason)))
+        && strategy.cost_reason.length > 0
         && teamId
         && teamExecutionId
         && materializedTopology,
@@ -771,15 +820,23 @@ test('explicit Team negative-benefit cost warning renders through real Gateway o
   }
   const teamEstimate = projection?.strategy?.candidate_estimates
     ?.find((estimate) => estimate?.candidate === 'team');
-  expect(teamEstimate?.net_benefit_score).toBeLessThan(0);
-  expect([true, false]).toContain(teamEstimate?.assumed);
+  const fastestAlternativeMs = Math.min(
+    ...projection.strategy.candidate_estimates
+      .filter((estimate) => estimate?.candidate !== 'team' && estimate?.eligible)
+      .map((estimate) => Number(estimate?.estimated_critical_path_ms)),
+  );
+  expect(Number(teamEstimate?.estimated_critical_path_ms)).toBeGreaterThan(fastestAlternativeMs);
+  expect(teamEstimate?.quality_provenance).not.toBe('calibrated');
+  expect(teamEstimate).not.toHaveProperty('net_benefit_score');
+  expect(teamEstimate).not.toHaveProperty('assumed');
 
-  await page.goto(`/index.html#/runtime?section=runs&execution_id=${encodeURIComponent(executionId)}`);
-  await expect(page.locator('.strategy-summary[data-surface="runtime"]')).toContainText(/negative estimated lift/i);
-  await page.goto(`/index.html#/mission?section=teams&execution_id=${encodeURIComponent(executionId)}`);
-  await expect(page.locator('.strategy-summary[data-surface="mission"]')).toContainText(/negative estimated lift/i);
-  await page.goto(`/index.html#/apps/mfg?section=operations&execution_id=${encodeURIComponent(executionId)}`);
-  await expect(page.locator('.strategy-summary[data-surface="mfg"]')).toContainText(/negative estimated lift/i);
+  const executionRoute = `execution_id=${encodeURIComponent(executionId)}&session_id=${encodeURIComponent(session.id)}`;
+  await page.goto(`/index.html#/runtime?section=runs&${executionRoute}`);
+  await expect(page.locator('.strategy-summary[data-surface="runtime"]')).toContainText(/no measured duration advantage/i);
+  await page.goto(`/index.html#/mission?section=teams&${executionRoute}`);
+  await expect(page.locator('.strategy-summary[data-surface="mission"]')).toContainText(/no measured duration advantage/i);
+  await page.goto(`/index.html#/apps/mfg?section=operations&${executionRoute}`);
+  await expect(page.locator('.strategy-summary[data-surface="mfg"]')).toContainText(/no measured duration advantage/i);
 
   // Preserve both valid races: a fast deterministic Team can finish while the
   // three surfaces render, while a slower execution still requires explicit
@@ -891,16 +948,31 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   expect(connectorPlanResponse.ok()).toBeTruthy();
   expect((await connectorPlanResponse.json()).run).toMatchObject({ source_pack_id: sourcePackId, status: 'planned' });
 
+  const taskSessionResponse = await page.request.post('/api/sessions', { data: {} });
+  await expectOk(taskSessionResponse, 'MFG assignment source session creation');
+  const taskSession = await taskSessionResponse.json();
+  const missionResponse = await page.request.get('/api/mission/control');
+  await expectOk(missionResponse, 'MFG assignment mission control snapshot');
+  const missionControl = await missionResponse.json();
+  const missionId = missionControl?.snapshot?.projection?.mission?.mission_id;
+  expect(missionId).toBeTruthy();
   const taskResponse = await page.request.post('/api/tasks/start', {
-    data: { objective: `E2E MFG assignment ${suffix}`, yolo_mode: false },
+    data: {
+      task_id: `e2e-mfg-task-${suffix}`,
+      mission_id: missionId,
+      source_session_id: taskSession.id,
+      source_turn_id: `e2e-mfg-turn-${suffix}`,
+      objective: `E2E MFG assignment ${suffix}`,
+      yolo_mode: false,
+    },
   });
-  expect(taskResponse.ok()).toBeTruthy();
+  await expectOk(taskResponse, 'MFG canonical task creation');
   const task = await taskResponse.json();
 
   const assignmentResponse = await page.request.post('/api/apps/mfg/assignments', {
     headers: { 'Idempotency-Key': `e2e-assignment-${suffix}` },
     data: {
-      assignment: { task_ref: `task:${task.id}`, assignee_ref: 'user:e2e-owner', assignee_kind: 'user', watcher_refs: ['role:operations'], priority: 'high', sla_minutes: 30, visibility: 'team' },
+      assignment: { task_ref: `task:${task.task_id}`, assignee_ref: 'user:e2e-owner', assignee_kind: 'user', watcher_refs: ['role:operations'], priority: 'high', sla_minutes: 30, visibility: 'team' },
     },
   });
   expect(assignmentResponse.ok()).toBeTruthy();
@@ -937,8 +1009,23 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
     { headers: { 'Idempotency-Key': `e2e-delete-${suffix}` } },
   );
   expect(deleteResponse.ok()).toBeTruthy();
-  const completeTaskResponse = await page.request.post(`/api/tasks/${encodeURIComponent(task.id)}/complete`);
-  expect(completeTaskResponse.ok()).toBeTruthy();
+  const cancelTaskResponse = await page.request.post(
+    `/api/tasks/${encodeURIComponent(task.task_id)}/cancel`,
+    {
+      data: {
+        expected_revision: task.revision,
+        note: 'MFG assignment contract acceptance cleanup',
+        evidence_refs: [{
+          ref_type: 'acceptance_cleanup',
+          id: `mfg-assignment:${task.task_id}`,
+          source: 'webui.e2e',
+          boundary: 'observed',
+          confidence_bp: 10_000,
+        }],
+      },
+    },
+  );
+  await expectOk(cancelTaskResponse, 'MFG canonical task cancellation');
 });
 
 test('report delivery exposes exhausted retry state and disables automatic retry', async ({ page }) => {
@@ -1301,12 +1388,41 @@ test('all shell controls remain interactive while a conversation is running', as
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        schema_version: 1,
+        schema_version: 2,
         execution_id: 'interaction-execution',
         revision: 1,
         cursor: 0,
+        detail_scope: 'summary',
+        authorization_revision: 1,
+        redaction_revision: 'interaction-e2e',
+        session_id: sessionId,
         live: { status: 'queued', status_detail: 'message accepted by runtime' },
-        graph: {}, goals: [], agents: [], teams: [], relations: [], approvals: [], interventions: [], usage: [], context: [], evidence: [], health: [], recovery: [], available_commands: [],
+        graph: {
+          execution_id: 'interaction-execution',
+          revision: 1,
+          commit_cursor: 0,
+          objective: 'interaction acceptance',
+          service_class: 'foreground',
+          parent_execution: null,
+          nodes: [],
+          edges: [],
+          terminal_result_ref: null,
+        },
+        child_executions: [],
+        goals: [],
+        agents: [],
+        teams: [],
+        relations: [],
+        approvals: [],
+        admissions: [],
+        outcomes: [],
+        interventions: [],
+        usage: [],
+        context: [],
+        evidence: [],
+        health: [],
+        recovery: [],
+        available_commands: [],
       }),
     });
   });

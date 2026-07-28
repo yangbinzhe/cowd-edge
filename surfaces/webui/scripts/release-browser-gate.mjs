@@ -29,6 +29,8 @@ const providerStdoutPath = resolve(dirname(evidencePath), 'release-browser-provi
 const profileEvidencePath = resolve(dirname(evidencePath), 'release-browser-profile-manager.json');
 const gatewayToken = randomBytes(32).toString('hex');
 const gatewayObserverId = `webui:playwright-release:${randomBytes(8).toString('hex')}`;
+const requiredGatewayBranch = process.env.COWD_E2E_GATEWAY_BRANCH || 'develop';
+const requiredEdgeBranch = process.env.COWD_E2E_EDGE_BRANCH || 'develop';
 const required = (name) => {
   const value = String(process.env[name] || '').trim();
   if (!value) throw new Error(`${name} is required by the release browser gate`);
@@ -174,7 +176,11 @@ try {
   if (actualCommit !== expectedCommit) {
     throw new Error(`Gateway source commit mismatch: expected ${expectedCommit}, received ${actualCommit}`);
   }
-  if (branch !== 'develop') throw new Error(`Gateway source must be on develop, received ${branch || 'detached'}`);
+  if (branch !== requiredGatewayBranch) {
+    throw new Error(
+      `Gateway source must be on ${requiredGatewayBranch}, received ${branch || 'detached'}`,
+    );
+  }
   if (command('git', ['status', '--porcelain'], { cwd: sourceDir })) {
     throw new Error('Gateway source provenance is dirty; commit the reviewed develop state first');
   }
@@ -189,7 +195,11 @@ try {
     );
   }
   const edgeBranch = command('git', ['branch', '--show-current'], { cwd: repoRoot });
-  if (edgeBranch !== 'develop') throw new Error(`Edge release source must be on develop, received ${edgeBranch || 'detached'}`);
+  if (edgeBranch !== requiredEdgeBranch) {
+    throw new Error(
+      `Edge release source must be on ${requiredEdgeBranch}, received ${edgeBranch || 'detached'}`,
+    );
+  }
   if (command('git', ['status', '--porcelain'], { cwd: repoRoot })) {
     throw new Error('Edge release source is dirty; commit the reviewed develop state first');
   }

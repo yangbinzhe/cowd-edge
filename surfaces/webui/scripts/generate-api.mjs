@@ -11,6 +11,12 @@ const output = process.env.COWD_GENERATED_API_OUTPUT
 const liveContractOutput = process.env.COWD_GENERATED_LIVE_CONTRACT_OUTPUT
   ? resolve(process.env.COWD_GENERATED_LIVE_CONTRACT_OUTPUT)
   : resolve(dirname(output), 'live-contract-meta.ts');
+const projectionGoldenOutput = process.env.COWD_GENERATED_PROJECTION_GOLDEN_OUTPUT
+  ? resolve(process.env.COWD_GENERATED_PROJECTION_GOLDEN_OUTPUT)
+  : resolve(dirname(output), 'projection-v2-golden.ts');
+const projectionContractOutput = process.env.COWD_GENERATED_PROJECTION_CONTRACT_OUTPUT
+  ? resolve(process.env.COWD_GENERATED_PROJECTION_CONTRACT_OUTPUT)
+  : resolve(dirname(output), 'projection-contract-meta.ts');
 function openApiPath(path) {
   return path.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
 }
@@ -91,6 +97,7 @@ assertMfgCapabilitySchema(document, contract);
 const liveEnvelopeSchema = document?.components?.schemas?.LiveEnvelope;
 const liveContractHash = liveEnvelopeSchema?.['x-cowd-schema-hash'];
 const liveContractFixture = liveEnvelopeSchema?.example;
+const projectionGolden = document?.['x-cowd-projection-v2-golden'];
 if (
   typeof liveContractHash !== 'string'
   || !/^[a-f0-9]{64}$/.test(liveContractHash)
@@ -99,11 +106,29 @@ if (
 ) {
   throw new Error('Gateway OpenAPI is missing the canonical LiveEnvelope schema hash or fixture');
 }
+if (
+  projectionGolden?.initial?.schema_version !== 2
+  || projectionGolden?.delta?.schema_version !== 2
+  || projectionGolden?.delta?.reducer_version !== 1
+  || projectionGolden?.expected?.schema_version !== 2
+) {
+  throw new Error('Gateway OpenAPI is missing the canonical projection v2 golden corpus');
+}
 
 await mkdir(dirname(output), { recursive: true });
 await mkdir(dirname(liveContractOutput), { recursive: true });
+await mkdir(dirname(projectionGoldenOutput), { recursive: true });
+await mkdir(dirname(projectionContractOutput), { recursive: true });
 const temporaryOutput = resolve(dirname(output), '.gateway-api.generated.ts');
 const temporaryLiveContract = resolve(dirname(liveContractOutput), '.live-contract-meta.generated.ts');
+const temporaryProjectionGolden = resolve(
+  dirname(projectionGoldenOutput),
+  '.projection-v2-golden.generated.ts',
+);
+const temporaryProjectionContract = resolve(
+  dirname(projectionContractOutput),
+  '.projection-contract-meta.generated.ts',
+);
 const temporarySpec = resolve('.gateway-openapi.generated.json');
 await writeFile(temporarySpec, `${JSON.stringify(document, null, 2)}\n`);
 await writeFile(
@@ -116,14 +141,35 @@ await writeFile(
     '',
   ].join('\n'),
 );
+await writeFile(
+  temporaryProjectionGolden,
+  [
+    '// Generated from Gateway OpenAPI. Do not edit manually.',
+    `export const PROJECTION_V2_GOLDEN = ${JSON.stringify(projectionGolden, null, 2)} as const;`,
+    '',
+  ].join('\n'),
+);
+await writeFile(
+  temporaryProjectionContract,
+  [
+    '// Generated from Gateway OpenAPI. Do not edit manually.',
+    `export const EXECUTION_PROJECTION_SCHEMA_VERSION = ${projectionGolden.delta.schema_version} as const;`,
+    `export const EXECUTION_PROJECTION_REDUCER_VERSION = ${projectionGolden.delta.reducer_version} as const;`,
+    '',
+  ].join('\n'),
+);
 try {
   execFileSync('npx', ['openapi-typescript', temporarySpec, '-o', temporaryOutput], {
     stdio: 'inherit',
   });
   await rename(temporaryOutput, output);
   await rename(temporaryLiveContract, liveContractOutput);
+  await rename(temporaryProjectionGolden, projectionGoldenOutput);
+  await rename(temporaryProjectionContract, projectionContractOutput);
 } finally {
   await rm(temporarySpec, { force: true });
   await rm(temporaryOutput, { force: true });
   await rm(temporaryLiveContract, { force: true });
+  await rm(temporaryProjectionGolden, { force: true });
+  await rm(temporaryProjectionContract, { force: true });
 }

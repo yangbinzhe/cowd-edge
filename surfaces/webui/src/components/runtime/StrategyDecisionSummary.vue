@@ -125,7 +125,7 @@ function trackVisualState(event: Event) {
         <strong>{{ view.estimated ? formatDuration(view.estimated.estimated_critical_path_ms) : t('strategy.value.unknown') }}</strong>
         <small v-if="view.estimated">
           {{ t('strategy.metric.merge') }} {{ formatDuration(view.estimated.merge_cost_ms) }}
-          · {{ t('strategy.metric.score') }} {{ view.estimated.net_benefit_score }}
+          · {{ t('strategy.metric.qualityLift') }} {{ formatBasisPointPercent(view.estimated.expected_quality_lift_bp) }}
           · {{ formatCount('tokens', estimatedTokens) }}
         </small>
       </section>

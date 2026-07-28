@@ -404,7 +404,7 @@ describe('chatSessions', () => {
     )?.content).toBe('你好');
 
     projectionSpy.mockResolvedValue({
-      schema_version: 1,
+      schema_version: 2,
       execution_id: 'utf8-execution',
       revision: 4,
       cursor: 4,
@@ -476,7 +476,7 @@ describe('chatSessions', () => {
       turn_id: 'turn-current',
     }) as any);
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 1,
+      schema_version: 2,
       execution_id: 'execution-current',
       revision: 1,
       cursor: 1,

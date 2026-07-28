@@ -45,6 +45,15 @@ const forceCredentialReplacement = computed(() => (
   route.query.replaceCredential === '1'
   || route.query.reason === 'forbidden'
 ));
+const gatewayAuthenticationRequired = computed(() => (
+  forceCredentialReplacement.value
+  || ['required', 'invalidated'].includes(store.authorizationState)
+  || String(authResult.value?.__state || '') === 'forbidden'
+  || (
+    authResult.value?.auth_required === true
+    && authResult.value?.valid !== true
+  )
+));
 const providerModels = computed(() => store.providers?.models || []);
 const providerRows = computed(() => store.providers?.providers || []);
 const configuredModel = computed(() => store.providers?.configured_model || store.controlPlane?.configured_model || store.settings?.model || '');
@@ -215,8 +224,26 @@ watch(
   { deep: true, immediate: true },
 );
 
-watch(activeSettingsSection, (section) => {
-  if (section === 'gateway' && !authResult.value) void verifyAuth();
+watch(() => store.authorizationViewGeneration, () => {
+  // Settings remains mounted as the authentication recovery surface, so clear
+  // every server-derived local projection without discarding the typed credential.
+  settingsError.value = '';
+  authResult.value = null;
+  settingsReceipt.value = null;
+  selectedDetail.value = null;
+  defaultModel.value = '';
+  profileName.value = '';
+  lastSavedSection.value = '';
+  lastRestoredSection.value = '';
+});
+
+watch([activeSettingsSection, () => store.authorizationState], ([section, authorizationState]) => {
+  if (
+    section === 'gateway'
+    && authorizationState === 'ready'
+    && !forceCredentialReplacement.value
+    && !authResult.value
+  ) void verifyAuth();
 }, { immediate: true });
 
 async function run(label: string, action: () => Promise<unknown>) {
@@ -323,6 +350,7 @@ async function deleteProfile(id: string) {
 }
 
 async function verifyAuth() {
+  if (busyAction.value === 'auth-verify') return;
   await run('auth-verify', async () => {
     authResult.value = await store.verifyAuth();
   });
@@ -606,20 +634,20 @@ function selectSettingsSection(id: string) {
         <p class="security-note">{{ t('page.settings.security.origin', { origin }) }}</p>
         <p class="security-note">{{ t('page.settings.security.mode', { mode: accessMode }) }}</p>
         <div class="button-row">
-          <button class="ghost-action" type="button" @click="verifyAuth">{{ t('page.settings.page.text.1dad098952') }}</button>
+          <button class="ghost-action" type="button" :disabled="!!busyAction" @click="verifyAuth">{{ t('page.settings.page.text.1dad098952') }}</button>
           <button v-if="authResult?.valid" class="ghost-action" type="button" @click="logoutGateway">{{ t('settings.gateway.logout') }}</button>
         </div>
         <p v-if="route.query.reason === 'forbidden'" class="security-note" data-gateway-forbidden-recovery>
           {{ t('settings.gateway.capabilityDenied') }}
         </p>
-        <form v-if="forceCredentialReplacement || (authResult?.auth_required && !authResult?.valid)" class="gateway-auth-form" @submit.prevent="loginGateway">
+        <form v-if="gatewayAuthenticationRequired" class="gateway-auth-form" @submit.prevent="loginGateway">
           <label>
             <span>{{ t('settings.gateway.credential') }}</span>
             <input v-model="authCredential" type="password" autocomplete="current-password" :placeholder="t('settings.gateway.credentialPlaceholder')" required />
           </label>
           <button class="primary-action" type="submit" :disabled="!authCredential.trim() || busyAction === 'auth-login'">{{ forceCredentialReplacement ? t('settings.gateway.replaceCredential') : t('settings.gateway.login') }}</button>
         </form>
-        <p v-if="forceCredentialReplacement || (authResult?.auth_required && !authResult?.valid)" class="panel-note">{{ t('settings.gateway.sessionNotice') }}</p>
+        <p v-if="gatewayAuthenticationRequired" class="panel-note">{{ t('settings.gateway.sessionNotice') }}</p>
         <dl v-if="authResult" class="contract-list">
           <dt>{{ t('page.settings.page.text.dcfaad321b') }}</dt>
           <dd>{{ authResult.valid === true ? displayStatus('valid') : (authResult.status ? displayStatus(authResult.status) : authResult.authenticated !== undefined ? displayBoolean(authResult.authenticated) : t('page.settings.page.inline.3be9ccc7cd')) }}</dd>

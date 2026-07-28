@@ -248,11 +248,21 @@ export function adaptStrategyDecision(
   const degraded = downgrades.length > 0
     || earlyStops.length > 0
     || ['degraded', 'downgraded', 'early_stopped'].includes(status.toLowerCase());
+  const estimateProvenance = estimated
+    ? [
+        estimated.duration_provenance,
+        estimated.token_provenance,
+        estimated.quality_provenance,
+        estimated.risk_provenance,
+      ]
+    : [];
   const estimateMode: StrategyEstimateMode = !estimated
     ? 'unknown'
-    : estimated.assumed
-      ? 'assumed'
-      : 'calibrated';
+    : estimateProvenance.includes('unknown')
+      ? 'unknown'
+      : estimateProvenance.includes('assumed')
+        ? 'assumed'
+        : 'calibrated';
   const proofMode = proofStatus(projection.proof_status);
   const projectionKind = normalizedEnum(projection.kind, ['strategy_decision']);
   const pattern = normalizedEnum(

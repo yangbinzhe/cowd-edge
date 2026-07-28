@@ -2,6 +2,10 @@ import { defineStore } from 'pinia';
 import { onScopeDispose, reactive, ref } from 'vue';
 import { api } from '../api/client';
 import type { ExecutionProjection, ExecutionProjectionDelta } from '../types';
+import {
+  EXECUTION_PROJECTION_SCHEMA_VERSION,
+  reduceExecutionProjectionDelta,
+} from '../adapters/executionProjection';
 import { openLiveSource } from './liveTransport';
 import type { LiveEnvelope, LiveSourceLease } from './liveTransport';
 
@@ -170,7 +174,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         }
         return entry.projection;
       }
-      if (Number(projection.schema_version) !== 1) {
+      if (Number(projection.schema_version) !== EXECUTION_PROJECTION_SCHEMA_VERSION) {
         failClosed(
           entry,
           `unsupported execution projection schema_version ${String(projection.schema_version)}`,
@@ -297,9 +301,9 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
           'stale',
         );
       }
-      return;
+      return false;
     }
-    if (Number(delta.schema_version) !== 1) {
+    if (Number(delta.schema_version) !== EXECUTION_PROJECTION_SCHEMA_VERSION) {
       if (entry) {
         failClosed(
           entry,
@@ -307,20 +311,50 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
           'stale',
         );
       }
-      return;
+      return false;
     }
-    if (!entry || entry.cursor !== delta.base_cursor || delta.target_cursor < delta.base_cursor) {
-      if (entry) {
-        entry.resyncCount += 1;
-        entry.lastError = `projection cursor mismatch (${entry.cursor} -> ${delta.base_cursor})`;
-      }
-      void load(expectedExecutionId);
-      return;
+    if (!entry?.projection) {
+      if (entry) entry.lastError = 'projection delta arrived before its baseline snapshot';
+      return false;
     }
-    entry.cursor = delta.target_cursor;
-    entry.lastUpdatedAt = Date.now();
-    entry.lastEventAt = entry.lastUpdatedAt;
-    if (delta.events.length) void load(expectedExecutionId);
+    try {
+      const projection = reduceExecutionProjectionDelta(entry.projection, delta);
+      entry.projection = projection;
+      entry.cursor = Number(projection.cursor || 0);
+      entry.lastUpdatedAt = Date.now();
+      entry.lastEventAt = entry.lastUpdatedAt;
+      entry.lastError = '';
+      entry.connectionState = isTerminal(projection) ? 'terminal' : 'live';
+      if (isTerminal(projection)) closeStream(expectedExecutionId);
+      return true;
+    } catch (error) {
+      entry.resyncCount += 1;
+      entry.lastError = error instanceof Error ? error.message : String(error);
+      entry.connectionState = 'stale';
+      return false;
+    }
+  }
+
+  async function recoverProjectionSource(
+    executionId: string,
+    scope: ProjectionDetailScope,
+    lease: LiveSourceLease,
+  ) {
+    const projection = await load(executionId, scope);
+    const entry = entries[executionId];
+    if (
+      sourceLeases.get(executionId) !== lease
+      || entry?.reconnectBlocked
+      || !projection
+      || isTerminal(projection)
+    ) return;
+    lease.update({
+      kind: 'execution',
+      id: executionId,
+      cursor: Number(projection.cursor || 0),
+      revision: Number(projection.revision || 0),
+      detail_scope: scope,
+    });
   }
 
   function closeStream(executionId: string) {
@@ -384,6 +418,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         kind: 'execution',
         id: executionId,
         cursor: entry.cursor,
+        revision: Number(entry.projection?.revision || 0),
         detail_scope: scope,
       },
       {
@@ -424,11 +459,14 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     }
     if (envelope.source_health === 'resync_required') {
       entry.resyncCount += 1;
-      void load(executionId, scope);
+      void recoverProjectionSource(executionId, scope, lease);
       return;
     }
     if (envelope.event === 'projection_delta') {
-      applyDelta(envelope.payload as ExecutionProjectionDelta, executionId);
+      const applied = applyDelta(envelope.payload as ExecutionProjectionDelta, executionId);
+      if (!applied && !entry.reconnectBlocked) {
+        void recoverProjectionSource(executionId, scope, lease);
+      }
       return;
     }
     if (envelope.event === 'projection_live') {
@@ -443,7 +481,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
     if (envelope.event === 'projection_snapshot') {
       const projection = envelope.payload as ExecutionProjection;
       if (
-        Number(projection?.schema_version) !== 1
+        Number(projection?.schema_version) !== EXECUTION_PROJECTION_SCHEMA_VERSION
         || projection?.execution_id !== executionId
       ) {
         failClosed(entry, 'Gateway live projection snapshot contract mismatch');
@@ -461,6 +499,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
         kind: 'execution',
         id: executionId,
         cursor: entry.cursor,
+        revision: Number(entry.projection?.revision || 0),
         detail_scope: scope,
       });
       if (isTerminal(projection)) closeStream(executionId);

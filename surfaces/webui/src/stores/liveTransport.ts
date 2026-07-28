@@ -8,6 +8,7 @@ export type LiveSourceSelector = {
   kind: LiveSourceKind;
   id: string;
   cursor?: number;
+  revision?: number;
   detail_scope?: LiveDetailScope;
 };
 
@@ -122,6 +123,7 @@ function normalizedSelector(selector: LiveSourceSelector): LiveSourceSelector {
     kind: selector.kind,
     id: selector.id.trim(),
     cursor: Math.max(0, Number(selector.cursor || 0)),
+    revision: Math.max(0, Number(selector.revision || 0)),
     detail_scope: selector.detail_scope || 'summary',
   };
 }
@@ -130,6 +132,10 @@ function mergedSelector(owner: SourceOwner, next: LiveSourceSelector) {
   owner.selector.cursor = Math.max(
     Number(owner.selector.cursor || 0),
     Number(next.cursor || 0),
+  );
+  owner.selector.revision = Math.max(
+    Number(owner.selector.revision || 0),
+    Number(next.revision || 0),
   );
   if (next.detail_scope === 'full') owner.selector.detail_scope = 'full';
 }
@@ -169,6 +175,16 @@ function deliverEnvelope(envelope: LiveEnvelope) {
       Number(owner.selector.cursor || 0),
       Number(envelope.source_cursor),
     );
+  }
+  if (envelope.source_kind === 'execution') {
+    const revision = envelope.event === 'projection_snapshot'
+      ? Number(envelope.payload?.revision)
+      : envelope.event === 'projection_delta'
+        ? Number(envelope.payload?.target_revision)
+        : Number.NaN;
+    if (Number.isFinite(revision)) {
+      owner.selector.revision = Math.max(Number(owner.selector.revision || 0), revision);
+    }
   }
   for (const callbacks of owner.consumers.values()) callbacks.envelope(envelope);
 }

@@ -836,10 +836,13 @@ describe('Cowd Vue WebUI shell', () => {
       }
       const executionId = path.match(/\/executions\/([^/?]+)/)?.[1] || '';
       return Promise.resolve(new Response(JSON.stringify({
-        schema_version: 1,
+        schema_version: 2,
         execution_id: decodeURIComponent(executionId),
         revision: 1,
         cursor: 0,
+        detail_scope: 'summary',
+        authorization_revision: 1,
+        redaction_revision: 'redaction-1',
         live: { status: 'running' },
       }), { status: 200 }));
     }));
@@ -1053,6 +1056,33 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.find('.authorization-gate').exists()).toBe(true);
     expect(wrapper.find('.chat-page').exists()).toBe(false);
     expect(wrapper.find('.authorization-gate').text()).toContain('Gateway');
+    wrapper.unmount();
+  });
+
+  it('keeps Gateway credential recovery visible and mounted across authorization invalidation', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    store.authorizationState = 'invalidated';
+    await settle();
+
+    await wrapper.get('.authorization-gate button').trigger('click');
+    await settleAsync();
+
+    const credential = wrapper.get<HTMLInputElement>('[data-section="gateway"] input[type="password"]');
+    expect(credential.isVisible()).toBe(true);
+    await credential.setValue('temporary-test-credential');
+    const credentialElement = credential.element;
+
+    window.dispatchEvent(new CustomEvent('cowd:authorization-invalidated', {
+      detail: { reason: 'credential expired again' },
+    }));
+    await settle();
+
+    const stableCredential = wrapper.get<HTMLInputElement>('[data-section="gateway"] input[type="password"]');
+    expect(stableCredential.element).toBe(credentialElement);
+    expect(stableCredential.element.value).toBe('temporary-test-credential');
+    expect(wrapper.get('[data-section="gateway"] button[type="submit"]').attributes('disabled')).toBeUndefined();
     wrapper.unmount();
   });
 

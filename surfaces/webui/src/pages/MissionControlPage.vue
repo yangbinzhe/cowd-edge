@@ -16,6 +16,7 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import DataTable from '../components/workbench/DataTable.vue';
 import MissionActionPreview from '../components/workbench/MissionActionPreview.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
+import ExecutionTruthSummary from '../components/runtime/ExecutionTruthSummary.vue';
 import StrategyDecisionSummary from '../components/runtime/StrategyDecisionSummary.vue';
 import { useAppStore } from '../stores/app';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
@@ -75,7 +76,11 @@ const declaredActiveSessionId = computed(() => String(
   || controlProjection.value?.summary?.active_session_id
   || '',
 ).trim());
+const routedSessionId = computed(() => typeof route.query.session_id === 'string'
+  ? route.query.session_id.trim()
+  : '');
 const activeSession = computed(() => {
+  if (routedSessionId.value) return routedSessionId.value;
   if (selectedSessionId.value && missionSessionIds.value.has(selectedSessionId.value)) return selectedSessionId.value;
   if (declaredActiveSessionId.value && missionSessionIds.value.has(declaredActiveSessionId.value)) return declaredActiveSessionId.value;
   return '';
@@ -544,8 +549,10 @@ onMounted(async () => {
   attachMissionLiveSource();
 });
 watch(
-  [() => route.query.team_id, () => route.query.execution_id],
-  async ([teamId, executionId], [, previousExecutionId]) => {
+  [() => route.query.team_id, () => route.query.execution_id, () => route.query.session_id],
+  async ([teamId, executionId, sessionAuthority], previous) => {
+    const previousExecutionId = previous?.[1];
+    if (previous && previous[2] !== sessionAuthority) projections.release('mission');
     const requestedExecutionId = typeof executionId === 'string' ? executionId.trim() : '';
     if (requestedExecutionId) {
       selectExecutionProjection(requestedExecutionId);
@@ -670,6 +677,11 @@ onUnmounted(() => {
           :execution-id="selectedExecutionId"
           :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
           surface="mission"
+        />
+        <ExecutionTruthSummary
+          v-if="executionProjection"
+          :projection="executionProjection"
+          :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
         />
         <div v-if="executionCommandRows.length" class="button-row" :aria-label="t('runtime.execution.commandGroup')">
           <button

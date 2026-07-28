@@ -14,6 +14,7 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import TimelineList from '../components/workbench/TimelineList.vue';
+import ExecutionTruthSummary from '../components/runtime/ExecutionTruthSummary.vue';
 import StrategyDecisionSummary from '../components/runtime/StrategyDecisionSummary.vue';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
@@ -49,7 +50,10 @@ const leaseMode = ref<'collaborative' | 'exclusive'>('collaborative');
 const turnPrompt = ref(t('runtime.defaultPrompt'));
 const selectedTurnId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
-const sessionId = computed(() => store.activeSessionId || 'api-context');
+const sessionId = computed(() => {
+  const routed = typeof route.query.session_id === 'string' ? route.query.session_id.trim() : '';
+  return routed || store.activeSessionId || 'api-context';
+});
 const configReloadStatus = computed(() => store.configReloadStatus || {});
 const configReloadRestartFields = computed(() => {
   const fields = configReloadStatus.value?.restart_required?.fields;
@@ -287,9 +291,12 @@ async function respondApproval(approval: any, approved: boolean) {
   await refresh();
 }
 
-watch(activeExecutionId, (executionId) => {
+watch([activeExecutionId, sessionId], ([executionId, authority], previous) => {
+  if (previous && (previous[0] !== executionId || previous[1] !== authority)) {
+    projections.release('runtime-page');
+  }
   if (executionId) {
-    projections.acquire(executionId, 'runtime-page', 'full', 'bounded', sessionId.value);
+    projections.acquire(executionId, 'runtime-page', 'full', 'bounded', authority);
   }
   else projections.release('runtime-page');
 }, { immediate: true });
@@ -346,6 +353,14 @@ onUnmounted(() => projections.release('runtime-page'));
         :execution-id="activeExecutionId"
         :connection-state="projections.stateFor(activeExecutionId)"
         surface="runtime"
+      />
+      <ExecutionTruthSummary
+        v-if="executionProjection"
+        class="runtime-panel wide"
+        v-show="isSectionActive('runs')"
+        data-section="runs"
+        :projection="executionProjection"
+        :connection-state="projections.stateFor(activeExecutionId)"
       />
       <section class="management-panel runtime-panel" v-show="isSectionActive('overview')" data-section="overview">
         <header>

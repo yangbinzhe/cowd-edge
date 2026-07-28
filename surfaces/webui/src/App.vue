@@ -168,7 +168,13 @@ async function selectCapabilitySection(sectionId: string) {
 }
 
 function openGatewayAuthentication() {
-  router.push({ path: '/settings', query: { section: 'gateway' } });
+  router.push({
+    path: '/settings',
+    query: {
+      section: 'gateway',
+      replaceCredential: '1',
+    },
+  });
 }
 
 onMounted(() => {
@@ -264,7 +270,10 @@ onBeforeUnmount(() => {
           {{ t('app.authorizationGate.action') }}
         </button>
       </section>
-      <RouterView v-else :key="store.authorizationViewGeneration" />
+      <RouterView
+        v-else
+        :key="isSettingsRoute ? 'settings-auth-recovery' : store.authorizationViewGeneration"
+      />
     </main>
 
     <button

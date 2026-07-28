@@ -5754,6 +5754,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/memory/knowledge/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * memory GET /api/memory/knowledge/candidates
+         * @description Query Gateway memory capability through `/api/memory/knowledge/candidates` handled by `memory_knowledge_candidates_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_memory_get_api_memory_knowledge_candidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/knowledge/candidates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * memory GET /api/memory/knowledge/candidates/:id
+         * @description Query Gateway memory capability through `/api/memory/knowledge/candidates/:id` handled by `memory_knowledge_candidate_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_memory_get_api_memory_knowledge_candidates_by_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/knowledge/candidates/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * memory POST /api/memory/knowledge/candidates/:id/rollback
+         * @description Invoke or create Gateway memory capability through `/api/memory/knowledge/candidates/:id/rollback` handled by `rollback_memory_knowledge_candidate_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_memory_post_api_memory_knowledge_candidates_by_id_rollback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/memory/knowledge/conflicts": {
         parameters: {
             query?: never;
@@ -11066,6 +11132,31 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AdmissionProjection: {
+            /** Format: uint64 */
+            accepted_at_ms: number;
+            blocker?: string | null;
+            /** Format: uint64 */
+            deadline_at_ms?: number | null;
+            normalized_scope?: string | null;
+            /** Format: uint64 */
+            policy_revision: number;
+            /** Format: uint64 */
+            queue_age_ms: number;
+            /** @default [] */
+            refs: string[];
+            request_id: string;
+            /** Format: uint8 */
+            requested_priority?: number | null;
+            requested_service_class: string;
+            resolved_service_class: string;
+            /** @default [] */
+            resource_demands: string[];
+            status: components["schemas"]["AdmissionProjectionStatus"];
+            wait_reason?: string | null;
+        };
+        /** @enum {string} */
+        AdmissionProjectionStatus: "accepted" | "queued" | "waiting_resource" | "waiting_scope" | "waiting_approval" | "materialized" | "running" | "terminal" | "blocked" | "cancelled";
         AuthVerifyResponse: {
             auth_required: boolean;
             entitlement?: components["schemas"]["HumanEntitlementProjection"];
@@ -11088,12 +11179,19 @@ export interface components {
         CancelSessionTurnRequest: {
             reason?: string | null;
         };
+        /**
+         * @description Summary of one direct or transitive child graph included in a root
+         *     execution projection. Its nodes remain in that graph's own projection;
+         *     this entity only exposes explicit, queryable lineage.
+         */
         ChildExecutionProjection: {
+            /** Format: uint64 */
             cursor: number;
             execution_id: string;
             objective: string;
             parent_execution_id: string;
             parent_node_id: string;
+            /** Format: uint64 */
             revision: number;
             status: string;
         };
@@ -11109,18 +11207,31 @@ export interface components {
         };
         ContextComponentUsage: {
             kind: string;
+            /** Format: uint64 */
             occurrences: number;
+            /** Format: uint64 */
             tokens: number;
         };
+        /**
+         * @description Typed context-window facts for the currently executing turn.  This is
+         *     deliberately separate from cumulative session token statistics: it is the
+         *     bounded prompt ledger used for the next provider request.
+         */
         ContextUsageProjection: {
+            /** @default [] */
             components: components["schemas"]["ContextComponentUsage"][];
             input_source?: string | null;
+            /** Format: uint64 */
             input_tokens?: number | null;
             model?: string | null;
+            /** Format: uint64 */
             remaining_tokens?: number | null;
+            /** Format: uint64 */
             request_sequence?: number | null;
+            /** Format: uint16 */
             usage_percent_bp?: number | null;
             window_source?: string | null;
+            /** Format: uint64 */
             window_tokens?: number | null;
         };
         CreateLiveSubscriptionRequest: {
@@ -11133,117 +11244,332 @@ export interface components {
                     id: string;
                     /** @enum {string} */
                     kind: "session" | "execution" | "mission";
+                    revision?: number;
                 }[];
             };
             surface_instance: string;
             ttl_seconds?: number;
         };
         Empty: Record<string, never>;
+        EvidenceAccessRef: {
+            /** Format: uint64 */
+            bytes: number;
+            durability: components["schemas"]["EvidenceDurability"];
+            evidence_ref: components["schemas"]["EvidenceRef"];
+            media_type: string;
+            retrieval_selector: string;
+            sha256: string;
+            visibility_scope: string;
+        };
+        /** @enum {string} */
+        EvidenceCompleteness: "none" | "partial" | "sufficient";
+        /** @enum {string} */
+        EvidenceDurability: "pending" | "durable" | "unavailable";
         /** @enum {string} */
         EvidenceFreshness: "live" | "durable" | "unavailable";
+        EvidenceProjection: {
+            completeness: components["schemas"]["EvidenceCompleteness"];
+            evidence_ref: components["schemas"]["EvidenceRef"];
+            /** Format: uint64 */
+            freshness_ms?: number | null;
+            /** Format: uint64 */
+            projector_lag_commits?: number | null;
+            support: string;
+        };
+        /**
+         * @description Stable evidence pointer shared by runtime, gateway, memory, matrix, and UI
+         *     projections.
+         */
         EvidenceRef: {
-            /** @enum {string} */
-            boundary: "observed" | "inferred" | "simulated" | "hypothetical" | "conflict";
+            boundary: components["schemas"]["RealityBoundary"];
+            /** Format: uint16 */
             confidence_bp?: number | null;
             id: string;
             ref_type: string;
             source?: string | null;
         };
+        /**
+         * @description Unit-preserving estimate for one strategy candidate.
+         *
+         *     Duration, token, quality, and risk fields are intentionally independent.
+         *     Selection applies hard gates and lexicographic/Pareto comparisons instead
+         *     of adding unlike units into a synthetic score.
+         */
+        ExecutionCandidateEstimate: {
+            candidate: components["schemas"]["ExecutionCandidateKind"];
+            /** Format: uint64 */
+            context_duplication_tokens: number;
+            duration_calibration_source: string;
+            duration_provenance: components["schemas"]["MeasureProvenance"];
+            /** Format: uint32 */
+            duration_sample_count: number;
+            eligible: boolean;
+            /** Format: uint64 */
+            estimated_critical_path_ms: number;
+            /** Format: uint64 */
+            estimated_serial_ms: number;
+            /** Format: uint16 */
+            evidence_overlap_penalty_bp: number;
+            /** Format: int32 */
+            expected_quality_lift_bp: number;
+            /** Format: uint64 */
+            merge_cost_ms: number;
+            /** Format: uint16 */
+            provider_concurrency_penalty_bp: number;
+            quality_calibration_source: string;
+            quality_provenance: components["schemas"]["MeasureProvenance"];
+            /** Format: uint32 */
+            quality_sample_count: number;
+            reasons: string[];
+            /** Format: uint16 */
+            risk_approval_penalty_bp: number;
+            risk_provenance: components["schemas"]["MeasureProvenance"];
+            /** Format: uint64 */
+            startup_overhead_ms: number;
+            token_provenance: components["schemas"]["MeasureProvenance"];
+        };
+        /**
+         * @description Runtime execution alternatives compared by the deterministic strategy
+         *     policy. These names describe ownership/topology, not a second execution
+         *     engine: each candidate still compiles into the canonical ExecutionGraph.
+         * @enum {string}
+         */
+        ExecutionCandidateKind: "direct" | "parallel_tools" | "team";
+        /** @enum {string} */
+        ExecutionCommandKind: "pause" | "resume" | "cancel" | "replan";
+        /** ExecutionCommandReceipt */
         ExecutionCommandReceipt: {
+            /** Format: uint64 */
             accepted_revision: number;
             command_id: string;
             reason?: string | null;
-            /** @enum {string} */
-            status: "accepted" | "rejected_stale_revision";
+            status: string;
         };
+        /** ExecutionCommandRequest */
         ExecutionCommandRequest: {
-            /** @enum {string} */
-            command: "pause" | "resume" | "cancel" | "replan";
+            command: components["schemas"]["ExecutionCommandKind"];
             command_id: string;
+            /** Format: uint64 */
             expected_revision: number;
+            /** @default null */
             payload: unknown;
         };
+        /** @enum {string} */
+        ExecutionEdgeKind: "depends_on" | "verifies" | "produces";
+        /**
+         * @description Read-only graph relation safe for surfaces. Execution payloads and private
+         *     prompts stay in Runtime; consumers only need stable topology to render and
+         *     control the durable graph.
+         */
         ExecutionEdgeProjection: {
             from: string;
-            /** @enum {string} */
-            kind: "depends_on" | "verifies" | "produces";
+            kind: components["schemas"]["ExecutionEdgeKind"];
             to: string;
         };
         ExecutionGraphProjection: {
+            /** Format: uint64 */
             commit_cursor: number;
             edges: components["schemas"]["ExecutionEdgeProjection"][];
             graph_id: string;
             nodes: components["schemas"]["ExecutionNodeProjection"][];
             objective: string;
             parent_execution?: components["schemas"]["ExecutionParentBinding"] | null;
+            /** Format: uint64 */
             revision: number;
+            /** @default interactive */
+            service_class: components["schemas"]["ExecutionServiceClass"];
             terminal_result_ref?: string | null;
         };
+        /**
+         * @description Runtime-owned, current-turn facts.  It is an additive field on the
+         *     existing execution projection so older surface clients remain compatible.
+         */
         ExecutionLiveState: {
             context_usage?: components["schemas"]["ContextUsageProjection"] | null;
             error?: string | null;
+            /** Format: uint64 */
             last_progress_at_ms: number;
+            /**
+             * @default {
+             *       "approvals": 0,
+             *       "context_items": 0,
+             *       "files_touched": 0,
+             *       "input_tokens": 0,
+             *       "memory_evidence": 0,
+             *       "memory_recalls": 0,
+             *       "output_tokens": 0,
+             *       "tool_calls": 0,
+             *       "total_tokens": 0
+             *     }
+             */
             metrics: components["schemas"]["RunMetricsProjection"];
+            /**
+             * Format: uint64
+             * @description Total UTF-8 bytes emitted for the current assistant part.
+             * @default 0
+             */
+            output_bytes: number;
             output_preview?: string | null;
+            /**
+             * Format: uint64
+             * @description Byte offset of `output_preview` within the current assistant part.
+             *     Older producers default to zero, meaning the preview is a complete
+             *     prefix/snapshot.
+             * @default 0
+             */
+            output_preview_start_bytes: number;
+            /**
+             * Format: uint64
+             * @description Monotonic within one in-process execution carrier.  The durable graph
+             *     revision remains on [`ExecutionProjection::revision`]; consumers use
+             *     this field to discard stale live snapshots without conflating cursors.
+             */
             revision: number;
+            /** Format: uint64 */
             started_at_ms: number;
-            /** @enum {string} */
-            status: "queued" | "preparing_context" | "calling_model" | "thinking" | "calling_tool" | "waiting_approval" | "finalizing" | "complete" | "cancelled" | "error";
+            status: components["schemas"]["ExecutionLiveStatus"];
             status_detail?: string | null;
             terminal_ref?: string | null;
             turn_id?: string | null;
+            /** Format: uint64 */
             updated_at_ms: number;
         };
+        /**
+         * @description Runtime-owned, current-turn facts.  It is an additive field on the
+         *     existing execution projection so older surface clients remain compatible.
+         * @enum {string}
+         */
+        ExecutionLiveStatus: "queued" | "preparing_context" | "calling_model" | "thinking" | "calling_tool" | "waiting_approval" | "finalizing" | "complete" | "cancelled" | "error";
+        /** @enum {string} */
+        ExecutionNodeKind: "inline_model" | "tool_batch" | "agent_task" | "verify" | "synthesize" | "approval" | "session_dispatch" | "timer";
         ExecutionNodeProjection: {
-            evidence_refs: string[];
+            evidence_refs: components["schemas"]["EvidenceAccessRef"][];
             executor_kind: string;
-            kind: string;
+            kind: components["schemas"]["ExecutionNodeKind"];
             node_id: string;
             result_ref?: string | null;
-            status: string;
+            status: components["schemas"]["ExecutionNodeStatus"];
+            /**
+             * @description Canonical node-level usage. Keeping it on the projection makes
+             *     execution metrics traceable across nested graphs without asking a
+             *     surface to infer cost from prose timeline events.
+             * @default {
+             *       "cached_tokens": 0,
+             *       "duplicate_tool_calls": 0,
+             *       "duration_ms": 0,
+             *       "input_tokens": 0,
+             *       "output_tokens": 0,
+             *       "tool_calls": 0
+             *     }
+             */
+            usage: components["schemas"]["ExecutionUsage"];
         };
+        /** @enum {string} */
+        ExecutionNodeStatus: "planned" | "ready" | "running" | "waiting_input" | "waiting_approval" | "waiting_external" | "paused" | "completed" | "blocked" | "failed" | "cancelled";
+        /**
+         * @description Durable lineage from a nested execution back to the graph node that
+         *     requested it. This is runtime-owned metadata: model tool JSON must never
+         *     be trusted to populate it.
+         */
         ExecutionParentBinding: {
             execution_id: string;
             node_id: string;
         };
+        /** @enum {string} */
+        ExecutionPattern: "direct" | "explore" | "execute" | "deliberate" | "collaborate" | "supervise";
+        /** ExecutionProjection */
         ExecutionProjection: {
-            agents: components["schemas"]["ExecutionProjectionEntity"][];
-            approvals: components["schemas"]["ExecutionProjectionEntity"][];
-            available_commands: {
-                available: boolean;
-                /** @enum {string} */
-                command: "pause" | "resume" | "cancel" | "replan";
-                reason?: string | null;
-            }[];
+            /** @default [] */
+            admissions: components["schemas"]["ProjectionEntity"][];
+            /** @default [] */
+            agents: components["schemas"]["ProjectionEntity"][];
+            /** @default [] */
+            approvals: components["schemas"]["ProjectionEntity"][];
+            /** Format: uint64 */
+            authorization_revision: number;
+            /** @default [] */
+            available_commands: components["schemas"]["ProjectionCommandAvailability"][];
+            /** @default [] */
             child_executions: components["schemas"]["ChildExecutionProjection"][];
-            context: components["schemas"]["ExecutionProjectionEntity"][];
+            /** @default [] */
+            context: components["schemas"]["ProjectionEntity"][];
+            /** Format: uint64 */
             cursor: number;
-            evidence: components["schemas"]["ExecutionProjectionEntity"][];
+            detail_scope: components["schemas"]["ProjectionDetailScope"];
+            /** @default [] */
+            evidence: components["schemas"]["ProjectionEntity"][];
             execution_id: string;
-            goals: components["schemas"]["ExecutionProjectionEntity"][];
+            /** @default [] */
+            goals: components["schemas"]["ProjectionEntity"][];
             graph: components["schemas"]["ExecutionGraphProjection"];
-            health: components["schemas"]["ExecutionProjectionEntity"][];
-            interventions: components["schemas"]["ExecutionProjectionEntity"][];
+            /** @default [] */
+            health: components["schemas"]["ProjectionEntity"][];
+            /** @default [] */
+            interventions: components["schemas"]["ProjectionEntity"][];
             live?: components["schemas"]["ExecutionLiveState"] | null;
             mission_id?: string | null;
-            recovery: components["schemas"]["ExecutionProjectionEntity"][];
-            relations: components["schemas"]["ExecutionProjectionEntity"][];
+            /** @default [] */
+            outcomes: components["schemas"]["ProjectionEntity"][];
+            /** @default [] */
+            recovery: components["schemas"]["ProjectionEntity"][];
+            redaction_revision: string;
+            /** @default [] */
+            relations: components["schemas"]["ProjectionEntity"][];
+            /** Format: uint64 */
             revision: number;
-            /** @constant */
-            schema_version: 1;
+            /** Format: uint32 */
+            schema_version: number;
             session_id?: string | null;
             strategy?: components["schemas"]["StrategyDecisionProjection"] | null;
-            teams: components["schemas"]["ExecutionProjectionEntity"][];
-            usage: components["schemas"]["ExecutionProjectionEntity"][];
+            /** @default [] */
+            teams: components["schemas"]["ProjectionEntity"][];
+            /** @default [] */
+            usage: components["schemas"]["ProjectionEntity"][];
         };
         ExecutionProjectionEntity: {
-            detail?: Record<string, never> | unknown[] | string | number | boolean | null;
+            detail?: unknown;
+            /** @default [] */
             evidence_refs: string[];
             id: string;
             kind: string;
+            payload?: components["schemas"]["ProjectionEntityPayload"] | null;
+            /** Format: uint64 */
             revision: number;
             status?: string | null;
             summary?: string | null;
+        };
+        /**
+         * @description Runtime-owned service class for one durable execution graph.
+         *
+         *     This is persisted with the graph so recovery cannot silently promote
+         *     background or maintenance work based on a process-local naming heuristic.
+         * @enum {string}
+         */
+        ExecutionServiceClass: "interactive" | "foreground" | "background" | "maintenance";
+        ExecutionUsage: {
+            /** Format: uint64 */
+            cached_tokens: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            duplicate_tool_calls: number;
+            /** Format: uint64 */
+            duration_ms: number;
+            /** Format: uint64 */
+            input_tokens: number;
+            /**
+             * @description The provider model that actually produced this node result. This is
+             *     distinct from a requested model because Runtime may use a configured
+             *     fallback before any provider output is emitted.
+             */
+            model?: string | null;
+            /** Format: uint64 */
+            output_tokens: number;
+            runtime_observed_resource_scopes?: string[];
+            runtime_write_attempt_paths?: string[];
+            /** Format: uint64 */
+            tool_calls: number;
         };
         GatewayError: {
             error: string;
@@ -11323,12 +11649,21 @@ export interface components {
                     id: string;
                     /** @enum {string} */
                     kind: "session" | "execution" | "mission";
+                    revision?: number;
                 }[];
             };
             selector_hash: string;
             stream_url: string;
             surface_instance: string;
         };
+        /**
+         * @description Evidence quality for a measured or estimated control signal.
+         *
+         *     Unknown values remain explicit so callers cannot accidentally treat a
+         *     missing observation as a zero-cost or zero-risk measurement.
+         * @enum {string}
+         */
+        MeasureProvenance: "observed" | "calibrated" | "assumed" | "unknown";
         /** MfgActionContract */
         MfgActionContract: {
             action_id: components["schemas"]["MfgActionContract"]["$defs"]["MfgActionId"];
@@ -14540,6 +14875,45 @@ export interface components {
             title: string;
             workspace_id: string;
         };
+        OutcomeProjection: {
+            agent_id?: string | null;
+            /** Format: uint64 */
+            cached_tokens?: number | null;
+            config_revision: string;
+            /** Format: uint64 */
+            duplicate_tool_calls: number;
+            /** Format: uint64 */
+            duration_ms: number;
+            evidence_completeness: components["schemas"]["EvidenceCompleteness"];
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            execution_graph_ref?: string | null;
+            execution_id: string;
+            /** Format: uint64 */
+            freshness_ms: number;
+            /** Format: uint64 */
+            input_tokens?: number | null;
+            mission_id?: string | null;
+            model?: string | null;
+            /** Format: uint64 */
+            output_tokens?: number | null;
+            profile?: string | null;
+            protocol?: string | null;
+            provider?: string | null;
+            quality: components["schemas"]["OutcomeQualityProjection"];
+            /** Format: uint64 */
+            retries: number;
+            session_id: string;
+            strategy_revision: string;
+            task_id?: string | null;
+            team_id?: string | null;
+            terminal_class: string;
+            /** Format: uint64 */
+            tool_calls: number;
+            turn_id: string;
+        };
+        /** @enum {string} */
+        OutcomeQualityProjection: "unknown" | "estimated";
         PatchLiveSubscriptionRequest: {
             expected_revision: number;
             idempotency_key: string;
@@ -14551,34 +14925,195 @@ export interface components {
                     id: string;
                     /** @enum {string} */
                     kind: "session" | "execution" | "mission";
+                    revision?: number;
                 }[];
             };
             ttl_seconds?: number;
         };
+        ProjectionCommandAvailability: {
+            available: boolean;
+            command: components["schemas"]["ExecutionCommandKind"];
+            reason?: string | null;
+        };
+        /** ProjectionDelta */
         ProjectionDelta: {
+            /** Format: uint64 */
+            authorization_revision: number;
+            /** Format: uint64 */
             base_cursor: number;
-            events: components["schemas"]["ProjectionEvent"][];
+            detail_scope: components["schemas"]["ProjectionDetailScope"];
+            execution_id: string;
+            /** Format: uint64 */
+            from_revision: number;
+            /** @default [] */
+            operations: components["schemas"]["ProjectionOperation"][];
+            redaction_revision: string;
+            /** Format: uint32 */
+            reducer_version: number;
+            resync_reason?: components["schemas"]["ProjectionResyncReason"] | null;
+            /** Format: uint32 */
+            schema_version: number;
+            source_health: components["schemas"]["ProjectionSourceHealth"];
+            /** Format: uint64 */
+            target_cursor: number;
+            /** Format: uint64 */
+            target_revision: number;
+        };
+        /** @enum {string} */
+        ProjectionDetailScope: "summary" | "full";
+        ProjectionEntity: {
+            detail?: unknown;
+            /** @default [] */
+            evidence_refs: string[];
+            id: string;
+            kind: string;
+            payload?: components["schemas"]["ProjectionEntityPayload"] | null;
+            /** Format: uint64 */
+            revision: number;
+            status?: string | null;
+            summary?: string | null;
+        };
+        /** @enum {string} */
+        ProjectionEntityCollection: "goals" | "agents" | "teams" | "relations" | "approvals" | "admissions" | "outcomes" | "interventions" | "usage" | "context" | "evidence" | "health" | "recovery";
+        ProjectionEntityPayload: {
+            /** @constant */
+            type: "admission";
+            value: components["schemas"]["AdmissionProjection"];
+        } | {
+            /** @constant */
+            type: "outcome";
+            value: components["schemas"]["OutcomeProjection"];
+        } | {
+            /** @constant */
+            type: "evidence";
+            value: components["schemas"]["EvidenceProjection"];
+        };
+        ProjectionOperation: {
+            mission_id?: string | null;
+            /** @constant */
+            op: "set_projection_header";
+            /** Format: uint64 */
+            revision: number;
+            session_id?: string | null;
+        } | {
+            /** Format: uint64 */
+            commit_cursor: number;
+            objective: string;
+            /** @constant */
+            op: "set_graph_metadata";
+            parent_execution?: components["schemas"]["ExecutionParentBinding"] | null;
+            /** Format: uint64 */
+            revision: number;
+            service_class: components["schemas"]["ExecutionServiceClass"];
+        } | {
+            edges: components["schemas"]["ExecutionEdgeProjection"][];
+            node_ids: string[];
+            /** @constant */
+            op: "replace_graph_topology";
+        } | {
+            node: components["schemas"]["ExecutionNodeProjection"];
+            /** @constant */
+            op: "upsert_graph_node";
+        } | {
+            node_id: string;
+            /** @constant */
+            op: "remove_graph_node";
+        } | {
+            child: components["schemas"]["ChildExecutionProjection"];
+            /** @constant */
+            op: "upsert_child_execution";
+        } | {
             execution_id: string;
             /** @constant */
-            schema_version: 1;
-            target_cursor: number;
+            op: "remove_child_execution";
+        } | {
+            /** @constant */
+            op: "replace_strategy";
+            strategy?: components["schemas"]["StrategyDecisionProjection"] | null;
+        } | {
+            collection: components["schemas"]["ProjectionEntityCollection"];
+            entity: components["schemas"]["ProjectionEntity"];
+            /** @constant */
+            op: "upsert_entity";
+        } | {
+            collection: components["schemas"]["ProjectionEntityCollection"];
+            entity_key: string;
+            /** @constant */
+            op: "remove_entity";
+        } | {
+            commands: components["schemas"]["ProjectionCommandAvailability"][];
+            /** @constant */
+            op: "replace_available_commands";
+        } | {
+            live?: components["schemas"]["ExecutionLiveState"] | null;
+            /** @constant */
+            op: "set_terminal";
+            terminal_result_ref?: string | null;
+        } | {
+            /** Format: uint64 */
+            cursor: number;
+            /** @constant */
+            op: "advance_cursor";
         };
-        ProjectionEvent: {
-            commit_cursor: number;
-            entity?: components["schemas"]["ExecutionProjectionEntity"] | null;
-            event_id: string;
-            kind: string;
-            transaction_index: number;
-        };
+        /** @enum {string} */
+        ProjectionResyncReason: "cursor_gap" | "schema_mismatch" | "authorization_changed" | "redaction_changed" | "detail_scope_changed" | "retention_gap" | "unsafe_materialization" | "explicit";
+        /** @enum {string} */
+        ProjectionSourceHealth: "fresh" | "lagged";
+        /**
+         * @description Boundary assigned to a fact, memory, or recall candidate before it can be
+         *     used as authoritative reality context.
+         * @enum {string}
+         */
+        RealityBoundary: "observed" | "inferred" | "simulated" | "hypothetical" | "conflict" | "unknown";
+        /**
+         * @description Stable, ID-deduplicated counters for a running execution.  A missing live
+         *     projection is intentionally distinct from zero-valued counters.
+         */
         RunMetricsProjection: {
+            /**
+             * Format: uint64
+             * @default 0
+             */
             approvals: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             context_items: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             files_touched: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             input_tokens: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             memory_evidence: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             memory_recalls: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             output_tokens: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             tool_calls: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             total_tokens: number;
         };
         SendMessageReceipt: {
@@ -14610,23 +15145,43 @@ export interface components {
             idempotency_key?: string | null;
             resource_ids?: string[];
         };
+        /**
+         * SessionEvidenceProjection
+         * @description Session-scoped evidence header data.  Per-message actions are enabled only
+         *     when a matching [`TurnEvidenceProjection`] is present.
+         */
         SessionEvidenceProjection: {
+            /** @default [] */
             evidence_refs: string[];
             freshness: components["schemas"]["EvidenceFreshness"];
             session_id: string;
+            /** @default [] */
             turns: components["schemas"]["TurnEvidenceProjection"][];
         };
+        /**
+         * @description A discovery-only session-to-execution relation.  Detailed facts always
+         *     remain in [`ExecutionProjection`].
+         */
         SessionExecutionIndexProjection: {
+            /** @default [] */
             active_execution_ids: string[];
+            /** Format: uint64 */
             last_progress_at_ms?: number | null;
             latest_execution_id?: string | null;
+            /** Format: uint64 */
             latest_live_revision?: number | null;
-            /** @enum {string|null} */
-            latest_status?: "queued" | "preparing_context" | "calling_model" | "thinking" | "calling_tool" | "waiting_approval" | "finalizing" | "complete" | "cancelled" | "error" | null;
+            latest_status?: components["schemas"]["ExecutionLiveStatus"] | null;
             session_id: string;
             terminal_ref?: string | null;
         };
+        /**
+         * SessionExecutionIndicesProjection
+         * @description Typed discovery response for all sessions that currently have a recoverable
+         *     active execution.  It avoids exposing an untyped JSON array at the
+         *     cross-surface bootstrap boundary.
+         */
         SessionExecutionIndicesProjection: {
+            /** @default [] */
             items: components["schemas"]["SessionExecutionIndexProjection"][];
         };
         SessionInputCancelRequest: {
@@ -14667,126 +15222,175 @@ export interface components {
             command: string;
         };
         StrategyActualProjection: {
+            /** Format: uint16 */
             actual_speedup_ratio_bp?: number | null;
+            /** Format: uint64 */
             cached_tokens: number;
+            /** Format: uint64 */
             duplicate_tool_calls: number;
+            /** Format: uint64 */
             duration_ms: number;
+            /** @default false */
             evaluation_budget_breached: boolean;
+            /** @default false */
             evaluation_budget_observed: boolean;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             evaluation_token_limit: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
             evaluation_tokens_consumed: number;
+            /** Format: uint16 */
             evidence_overlap_bp: number;
             evidence_overlap_observed: boolean;
+            /** Format: uint64 */
             input_tokens: number;
+            /** Format: uint64 */
             max_tool_concurrency_observed: number;
+            /** Format: uint64 */
             merge_cost_ms: number;
+            /** Format: uint64 */
             output_tokens: number;
+            /** Format: uint64 */
             parallel_tool_batches: number;
+            /** Format: uint8 */
             parent_merge_count: number;
+            /** Format: uint16 */
             quality_score_bp?: number | null;
             terminal_reason: string;
+            /** Format: uint64 */
             tool_calls: number;
             working_state_verified: boolean;
+            /** @default [] */
             write_attempt_refs: string[];
         };
-        StrategyCandidateEstimate: {
-            /** @enum {string} */
-            candidate: "direct" | "parallel_tools" | "team";
-            context_duplication_tokens: number;
-            duration_calibration_source: string;
-            /** @enum {string} */
-            duration_provenance: "observed" | "calibrated" | "assumed" | "unknown";
-            duration_sample_count: number;
-            eligible: boolean;
-            estimated_critical_path_ms: number;
-            estimated_serial_ms: number;
-            evidence_overlap_penalty_bp: number;
-            expected_quality_lift_bp: number;
-            merge_cost_ms: number;
-            provider_concurrency_penalty_bp: number;
-            quality_calibration_source: string;
-            /** @enum {string} */
-            quality_provenance: "observed" | "calibrated" | "assumed" | "unknown";
-            quality_sample_count: number;
-            reasons: string[];
-            risk_approval_penalty_bp: number;
-            /** @enum {string} */
-            risk_provenance: "observed" | "calibrated" | "assumed" | "unknown";
-            startup_overhead_ms: number;
-            /** @enum {string} */
-            token_provenance: "observed" | "calibrated" | "assumed" | "unknown";
-        };
+        /** @enum {string} */
+        StrategyActualStatus: "unknown" | "observed";
+        /**
+         * @description Backward-compatible typed strategy projection.
+         *
+         *     The legacy-named fields intentionally preserve the [`ProjectionEntity`]
+         *     JSON shape. An old reader ignores the additive schema and typed fields; a
+         *     new reader accepts an old generic entity and reports it as a legacy/unknown
+         *     decision because all typed fields use serde defaults.
+         */
         StrategyDecisionProjection: {
             actual?: components["schemas"]["StrategyActualProjection"] | null;
-            /** @enum {string|null} */
-            actual_status?: "unknown" | "observed" | null;
-            benefit_reason?: string[];
-            candidate_estimates?: components["schemas"]["StrategyCandidateEstimate"][];
+            actual_status?: components["schemas"]["StrategyActualStatus"] | null;
+            /** @default [] */
+            benefit_reason: string[];
+            /** @default [] */
+            candidate_estimates: components["schemas"]["ExecutionCandidateEstimate"][];
+            /** Format: uint8 */
             confidence?: number | null;
-            cost_reason?: string[];
+            /** @default [] */
+            cost_reason: string[];
             decision_id?: string | null;
-            detail?: Record<string, never> | unknown[] | string | number | boolean | null;
-            downgrade?: components["schemas"]["StrategyTransitionProjection"][];
-            early_stop?: components["schemas"]["StrategyTransitionProjection"][];
-            estimated?: components["schemas"]["StrategyCandidateEstimate"] | null;
+            detail?: unknown;
+            /** @default [] */
+            downgrade: components["schemas"]["StrategyTransitionProjection"][];
+            /** @default [] */
+            early_stop: components["schemas"]["StrategyTransitionProjection"][];
+            estimated?: components["schemas"]["ExecutionCandidateEstimate"] | null;
+            /** @default [] */
             evidence_refs: string[];
-            evidence_scopes?: components["schemas"]["StrategyEvidenceScopeProjection"][];
+            /** @default [] */
+            evidence_scopes: components["schemas"]["StrategyEvidenceScopeProjection"][];
             execution_id?: string | null;
             id: string;
             kind: string;
             policy_version?: string | null;
-            /** @enum {string|null} */
-            proof_status?: "not_proven" | "calibrated" | null;
+            proof_status?: components["schemas"]["StrategyProofStatus"] | null;
             resource_snapshot?: components["schemas"]["StrategyResourceSnapshot"] | null;
+            /** Format: uint64 */
             revision: number;
-            /** @constant */
-            schema_version?: 1;
-            /** @enum {string|null} */
-            selected_candidate?: "direct" | "parallel_tools" | "team" | null;
-            /** @enum {string|null} */
-            selected_pattern?: "direct" | "explore" | "execute" | "deliberate" | "collaborate" | "supervise" | null;
+            /**
+             * Format: uint32
+             * @default 1
+             */
+            schema_version: number;
+            selected_candidate?: components["schemas"]["ExecutionCandidateKind"] | null;
+            selected_pattern?: components["schemas"]["ExecutionPattern"] | null;
             session_id?: string | null;
-            /** @enum {string|null} */
-            source?: "deterministic" | "model_validated" | "experience_adapted" | "resource_adapted" | null;
+            source?: components["schemas"]["StrategyDecisionSource"] | null;
             status?: string | null;
             summary?: string | null;
             team_execution_id?: string | null;
             team_id?: string | null;
             turn_id?: string | null;
         };
+        /** @enum {string} */
+        StrategyDecisionSource: "deterministic" | "model_validated" | "experience_adapted" | "resource_adapted";
+        /**
+         * @description Public, capability-cropped responsibility assigned to one strategy lane.
+         *
+         *     Runtime deliberately omits workspace paths, prompts, hidden content and
+         *     internal reasoning. `capability_cropped_refs` contains only opaque public
+         *     evidence references admitted by the projection reducer.
+         */
         StrategyEvidenceScopeProjection: {
+            /** @default [] */
             capability_cropped_refs: string[];
             focus_id: string;
+            /** Format: uint16 */
             novelty_target_bp: number;
+            /** Format: uint16 */
             overlap_budget_bp: number;
             responsibility_summary: string;
             role_id: string;
             scope_hash: string;
         };
+        /** @enum {string} */
+        StrategyProofStatus: "not_proven" | "calibrated";
+        /**
+         * @description Versioned resource facts used by candidate scoring. Detached consumers get
+         *     the conservative assumed snapshot; an admitted Runtime turn replaces it
+         *     with observed provider/tool/team availability.
+         */
         StrategyResourceSnapshot: {
-            /** @enum {string} */
-            provenance: "observed" | "calibrated" | "assumed" | "unknown";
+            provenance: components["schemas"]["MeasureProvenance"];
             provider_available: boolean;
+            /** Format: uint16 */
             provider_concurrency: number;
+            /** Format: uint16 */
             provider_concurrency_penalty_bp: number;
+            /**
+             * @description SHA-256 of the effective provider/model profile. The raw provider or
+             *     model name is deliberately excluded from public strategy projections.
+             * @default
+             */
+            provider_profile_fingerprint: string;
+            /** Format: uint32 */
             sample_count: number;
             sample_source: string;
             team_available: boolean;
+            /** Format: uint16 */
             team_slots: number;
+            /** Format: uint16 */
             tool_concurrency: number;
             tools_available: boolean;
             version: string;
         };
         StrategyTransitionProjection: {
-            /** @enum {string} */
-            kind: "runtime.strategy.downgraded" | "runtime.strategy.early_stopped";
+            kind: string;
+            /** Format: uint64 */
             revision: number;
             status: string;
             summary: string;
         };
+        /**
+         * @description A stable, deterministic relation between one durable Session turn and its
+         *     Runtime execution.  This is a binding/capability record, not a second copy
+         *     of execution evidence: callers follow `execution_id` for details.
+         */
         TurnEvidenceProjection: {
             assistant_message_id?: string | null;
             context_report_id?: string | null;
+            /** @default [] */
             evidence_refs: string[];
             execution_id: string;
             freshness: components["schemas"]["EvidenceFreshness"];
@@ -32439,6 +33043,162 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_memory_get_api_memory_knowledge_candidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_memory_get_api_memory_knowledge_candidates_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_memory_post_api_memory_knowledge_candidates_by_id_rollback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {

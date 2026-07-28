@@ -11,7 +11,7 @@ describe('adaptStrategyDecision', () => {
     expect(view).not.toBeNull();
     expect(view?.selectedCandidate).toBe('team');
     expect(view?.pattern).toBe('collaborate');
-    expect(view?.estimateMode).toBe('calibrated');
+    expect(view?.estimateMode).toBe('assumed');
     expect(view?.proofMode).toBe('calibrated');
     expect(view?.degraded).toBe(true);
     expect(view?.actualStatus).toBe('observed');

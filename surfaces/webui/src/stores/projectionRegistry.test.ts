@@ -8,6 +8,10 @@ import {
   resetLongLivedConnectionBudgetForTests,
 } from '../utils/longLivedConnectionBudget';
 
+const { liveSelectorUpdates } = vi.hoisted(() => ({
+  liveSelectorUpdates: [] as any[],
+}));
+
 vi.mock('./liveTransport', () => ({
   openLiveSource: (selector: any, callbacks: any) => {
     const stream: any = typeof EventSource === 'undefined'
@@ -42,9 +46,10 @@ vi.mock('./liveTransport', () => ({
     forward('projection_live');
     forward('projection_snapshot');
     forward('projection_authorization_revoked', 'revoked');
+    forward('source_resync', 'resync_required');
     return {
       close: () => stream.close(),
-      update: () => undefined,
+      update: (next: any) => liveSelectorUpdates.push(next),
     };
   },
 }));
@@ -52,6 +57,7 @@ vi.mock('./liveTransport', () => ({
 describe('projectionRegistry contract gate', () => {
   beforeEach(() => {
     resetLongLivedConnectionBudgetForTests();
+    liveSelectorUpdates.length = 0;
     setActivePinia(createPinia());
     vi.restoreAllMocks();
   });
@@ -64,7 +70,7 @@ describe('projectionRegistry contract gate', () => {
 
   it('fails fast and retains no incompatible companion projection', async () => {
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'execution-mismatch',
       revision: 1,
       cursor: 1,
@@ -76,7 +82,7 @@ describe('projectionRegistry contract gate', () => {
     expect(projection).toBeNull();
     expect(registry.projectionFor('execution-mismatch')).toBeNull();
     expect(registry.stateFor('execution-mismatch')).toBe('error');
-    expect(registry.entries['execution-mismatch']?.lastError).toContain('unsupported execution projection schema_version 2');
+    expect(registry.entries['execution-mismatch']?.lastError).toContain('unsupported execution projection schema_version 3');
   });
 
   it('fails closed when a snapshot carries another execution identity', async () => {
@@ -96,47 +102,34 @@ describe('projectionRegistry contract gate', () => {
   });
 
   it('stops a live consumer when a delta contract version changes', async () => {
-    vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 1,
-      execution_id: 'execution-live',
-      revision: 1,
-      cursor: 4,
-      graph: {},
-      goals: [],
-      agents: [],
-      teams: [],
-      relations: [],
-      approvals: [],
-      interventions: [],
-      usage: [],
-      context: [],
-      evidence: [],
-      health: [],
-      recovery: [],
-      child_executions: [],
-      available_commands: [],
-    } as any);
+    vi.spyOn(api, 'executionProjection')
+      .mockResolvedValue(readyProjection('execution-live', 4) as any);
     const registry = useProjectionRegistryStore();
     await registry.load('execution-live', 'full');
 
     registry.applyDelta({
-      schema_version: 2,
+      schema_version: 3,
+      reducer_version: 1,
       execution_id: 'execution-live',
+      from_revision: 1,
+      target_revision: 1,
       base_cursor: 4,
       target_cursor: 5,
-      events: [],
+      detail_scope: 'full',
+      authorization_revision: 1,
+      redaction_revision: 'redaction-1',
+      source_health: 'fresh',
+      operations: [],
     } as any);
 
     expect(registry.stateFor('execution-live')).toBe('stale');
-    expect(registry.entries['execution-live']?.lastError).toContain('unsupported execution projection delta schema_version 2');
+    expect(registry.entries['execution-live']?.lastError).toContain('unsupported execution projection delta schema_version 3');
   });
 
   it('rejects a newer nested strategy contract without treating it as legacy', async () => {
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 1,
+      ...readyProjection('execution-strategy-mismatch'),
       execution_id: 'execution-strategy-mismatch',
-      revision: 1,
-      cursor: 1,
       strategy: {
         schema_version: 2,
         id: 'strategy-newer',
@@ -155,11 +148,8 @@ describe('projectionRegistry contract gate', () => {
   it('clears authorized full projection data when a later read is forbidden', async () => {
     vi.spyOn(api, 'executionProjection')
       .mockResolvedValueOnce({
-        schema_version: 1,
+        ...readyProjection('execution-recropped'),
         execution_id: 'execution-recropped',
-        revision: 1,
-        cursor: 1,
-        graph: {},
         agents: [{ id: 'private-agent', detail: { graph_id: 'private-graph' } }],
         strategy: {
           schema_version: 1,
@@ -186,12 +176,8 @@ describe('projectionRegistry contract gate', () => {
   it('clears an installed v1 projection when a newer nested strategy schema mismatches', async () => {
     vi.spyOn(api, 'executionProjection')
       .mockResolvedValueOnce({
-        schema_version: 1,
+        ...readyProjection('execution-upgrade'),
         execution_id: 'execution-upgrade',
-        revision: 1,
-        cursor: 1,
-        graph: {},
-        agents: [],
         strategy: {
           schema_version: 1,
           id: 'strategy-v1',
@@ -201,12 +187,9 @@ describe('projectionRegistry contract gate', () => {
         },
       } as any)
       .mockResolvedValueOnce({
-        schema_version: 1,
+        ...readyProjection('execution-upgrade', 2),
         execution_id: 'execution-upgrade',
         revision: 2,
-        cursor: 2,
-        graph: {},
-        agents: [],
         strategy: {
           schema_version: 2,
           id: 'strategy-v2',
@@ -444,11 +427,18 @@ describe('projectionRegistry contract gate', () => {
     registry.acquire('execution-owned', 'runtime-page', 'full');
     await vi.waitFor(() => expect(streams).toHaveLength(1));
     streams[0].emit('projection_delta', JSON.stringify({
-      schema_version: 1,
+      schema_version: 2,
+      reducer_version: 1,
       execution_id: 'execution-foreign',
+      from_revision: 1,
+      target_revision: 1,
       base_cursor: 1,
       target_cursor: 2,
-      events: [],
+      detail_scope: 'full',
+      authorization_revision: 1,
+      redaction_revision: 'redaction-1',
+      source_health: 'fresh',
+      operations: [{ op: 'advance_cursor', cursor: 2 }],
     }));
 
     expect(registry.projectionFor('execution-owned')).toBeNull();
@@ -484,6 +474,49 @@ describe('projectionRegistry contract gate', () => {
     expect(registry.activeSourceCount).toBe(1);
     expect(registry.stateFor('execution-flap')).toBe('reconnecting');
     expect(registry.entries['execution-flap']?.degradedReason).toContain('transport interrupted');
+    registry.release('runtime-page');
+  });
+
+  it('writes a recovered snapshot cursor and revision back to the live selector', async () => {
+    const streams: FakeProjectionEventSource[] = [];
+    vi.stubGlobal('EventSource', class extends FakeProjectionEventSource {
+      constructor(url: string) {
+        super(url);
+        streams.push(this);
+      }
+    });
+    const recovered = {
+      ...readyProjection('execution-resync', 8),
+      revision: 3,
+      graph: {
+        ...readyProjection('execution-resync', 8).graph,
+        revision: 3,
+      },
+    };
+    const projection = vi.spyOn(api, 'executionProjection')
+      .mockResolvedValueOnce(readyProjection('execution-resync', 4) as any)
+      .mockResolvedValueOnce(recovered as any);
+    const registry = useProjectionRegistryStore();
+
+    registry.acquire('execution-resync', 'runtime-page', 'full');
+    await vi.waitFor(() => expect(streams).toHaveLength(1));
+    streams[0].emit('source_resync', JSON.stringify({
+      reason: 'retention gap',
+      cursor: 4,
+    }));
+
+    await vi.waitFor(() => {
+      expect(projection).toHaveBeenCalledTimes(2);
+      expect(liveSelectorUpdates).toContainEqual({
+        kind: 'execution',
+        id: 'execution-resync',
+        cursor: 8,
+        revision: 3,
+        detail_scope: 'full',
+      });
+    });
+    expect(registry.projectionFor('execution-resync')?.revision).toBe(3);
+    expect(registry.entries['execution-resync']?.resyncCount).toBe(1);
     registry.release('runtime-page');
   });
 
@@ -571,13 +604,25 @@ class FakeProjectionEventSource {
   }
 }
 
-function readyProjection(executionId: string) {
+function readyProjection(executionId: string, cursor = 1) {
   return {
-    schema_version: 1,
+    schema_version: 2,
     execution_id: executionId,
     revision: 1,
-    cursor: 1,
-    graph: {},
+    cursor,
+    detail_scope: 'full',
+    authorization_revision: 1,
+    redaction_revision: 'redaction-1',
+    graph: {
+      graph_id: executionId,
+      revision: 1,
+      objective: 'test projection',
+      service_class: 'interactive',
+      nodes: [],
+      edges: [],
+      commit_cursor: cursor,
+      terminal_result_ref: null,
+    },
     goals: [],
     agents: [],
     teams: [],
