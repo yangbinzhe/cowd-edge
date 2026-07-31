@@ -1079,6 +1079,83 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('上下文选中详情');
   });
 
+  it('renders adaptive context coverage, conflicts, omissions, and source governance as structured data', async () => {
+    const fetchMock = vi.fn((request: RequestInfo | URL) => {
+      const path = String(request);
+      if (path.includes('/api/context/current')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          envelope_id: 'envelope-structured',
+          envelope: {
+            selected: [{
+              id: 'context-1',
+              role: 'rule',
+              source: 'session',
+              authority: 'user_explicit',
+              score: 0.99,
+              summary: 'Keep the canonical constraint.',
+            }],
+            budget: {
+              used_tokens: 5_000,
+              token_budget: 10_000,
+              coverage_basis_points: 8_700,
+              borrowed_budget_tokens: 1_024,
+            },
+            diagnostics: {
+              unresolved_conflict_count: 2,
+            },
+            omitted: [{
+              source: 'memory',
+              token_estimate: 320,
+              reason: 'lower marginal utility',
+            }],
+          },
+          budget_explanation: {
+            allocations: [{
+              source: 'session',
+              used_tokens: 3_000,
+              target_tokens: 2_500,
+              max_tokens: 5_000,
+              selected_count: 4,
+              omitted_count: 1,
+              exhausted: false,
+            }],
+          },
+          source_registry: [{
+            source: 'reality',
+            lifecycle: 'active',
+            authority: 'verified_external',
+            reason: 'current fact view',
+          }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      if (path.includes('/api/sessions/') && path.includes('/context/recommendations')) {
+        return Promise.resolve(new Response(JSON.stringify({ recommendations: [] }), { status: 200 }));
+      }
+      if (path.includes('/api/sessions/') && path.includes('/context')) {
+        return Promise.resolve(new Response(JSON.stringify({ summaries: [] }), { status: 200 }));
+      }
+      if (path.includes('/api/runtime/timeline')) {
+        return Promise.resolve(new Response(JSON.stringify({ events: [] }), { status: 200 }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = await mountApp('/context?section=budget');
+    await settleAsync();
+
+    const budget = wrapper.get('[data-section="budget"].context-panel');
+    expect(wrapper.text()).toContain('87%');
+    expect(wrapper.text()).toContain('1024');
+    expect(wrapper.text()).toContain('2');
+    expect(budget.text()).toContain('session');
+    expect(budget.text()).toContain('lower marginal utility');
+    expect(budget.text()).toContain('verified_external');
+    expect(wrapper.find('.raw-payload').exists()).toBe(false);
+    wrapper.unmount();
+    vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
+  });
+
   it('renders audit workbench evidence and selected detail surfaces', async () => {
     const wrapper = await mountApp('/audit');
     await settle();

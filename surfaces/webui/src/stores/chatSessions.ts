@@ -9,6 +9,7 @@ import type {
   ChatTurn,
   ExecutionLiveState,
   SessionExecutionIndexProjection,
+  SessionHistoryIndexProjection,
   SessionTurnProjection,
 } from '../types';
 import { mergeActivityEvent, normalizeTurnActivity } from '../utils/turnSettlement';
@@ -43,6 +44,7 @@ export type SessionChatState = {
   terminalId: string;
   live: LiveExecutionState | null;
   executionIndex: SessionExecutionIndexProjection | null;
+  historyIndex: SessionHistoryIndexProjection | null;
   turnProjection: SessionTurnProjection | null;
   streamState: 'connected' | 'connecting' | 'reconnecting' | 'degraded' | 'offline';
   loadEpoch: number;
@@ -66,6 +68,8 @@ export type SessionChatState = {
   historyHasOlder: boolean;
   historyHasNewer: boolean;
   historyLoading: boolean;
+  historyIndexLoading: boolean;
+  historyIndexLoaded: boolean;
   scrollInitialized: boolean;
   executionIndexLoading: boolean;
   executionIndexLoaded: boolean;
@@ -619,7 +623,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       states[sessionId] = {
         sessionId, turns: [], activity: [], executionId: '', executionGraphId: '', executionTurnId: '', executionGeneration: 0,
         streamGeneration: 0, runtimeCommitCursor: 0, reconnectBlocked: false,
-        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, turnProjection: null, streamState: 'offline',
+        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, historyIndex: null, turnProjection: null, streamState: 'offline',
         loadEpoch: 0, submissionEpoch: 0, attachmentEpoch: 0,
         pending: false, submitting: false, lastError: '', unread: 0,
         lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
@@ -629,7 +633,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         scrollInitialized: false,
         executionIndexLoading: false, executionIndexLoaded: false,
         turnProjectionLoading: false, turnProjectionLoaded: false,
-        historyLoading: false, detailsLoading: false, detailsLoaded: false,
+        historyLoading: false, historyIndexLoading: false, historyIndexLoaded: false,
+        detailsLoading: false, detailsLoaded: false,
       };
     }
     return states[sessionId];
@@ -1092,6 +1097,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.historyHasOlder = false;
     state.historyHasNewer = false;
     state.historyLoading = false;
+    state.historyIndex = null;
+    state.historyIndexLoading = false;
+    state.historyIndexLoaded = false;
     state.scrollInitialized = false;
     state.executionIndexLoading = false;
     state.executionIndexLoaded = false;
@@ -1196,6 +1204,41 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.turnProjectionLoading = false;
     state.turnProjectionLoaded = false;
     state.detailsLoaded = false;
+    state.historyIndexLoading = true;
+    state.historyIndexLoaded = false;
+    void api.sessionHistoryIndex(sessionId)
+      .then((projection) => {
+        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
+        const identityIssue = sessionEnvelopeIdentityIssue(projection, sessionId, 'history index');
+        if (identityIssue) {
+          state.lastError = identityIssue;
+          state.degradedReason = identityIssue;
+          return;
+        }
+        const issue = readIssue(projection, 'history index');
+        if (issue) {
+          state.lastError = issue;
+          state.degradedReason = issue;
+          return;
+        }
+        state.historyIndex = projection;
+        state.historyIndexLoaded = true;
+        state.historyTotal = Math.max(state.historyTotal, Number(projection.total_messages || 0));
+        state.historyHasOlder = state.historyOldestOffset > 0
+          || state.historyTotal > state.turns.length;
+        state.runtimeCommitCursor = Math.max(
+          state.runtimeCommitCursor,
+          Number(projection.durable_cursor || 0),
+        );
+      })
+      .catch((error) => {
+        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
+        state.lastError = String((error as any)?.message || error || 'history index request failed');
+        state.degradedReason = state.lastError;
+      })
+      .finally(() => {
+        if (state.loadEpoch === epoch) state.historyIndexLoading = false;
+      });
     let data: Awaited<ReturnType<typeof api.messages>>;
     try {
       data = await api.messages(sessionId, { limit: HISTORY_PAGE_SIZE, tail: true });
@@ -1253,7 +1296,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.turns = durableTurns;
     const total = Math.max(0, Number(data.total || 0));
     const offset = Math.max(0, Number(data.offset ?? total - (data.messages || []).length));
-    state.historyTotal = Math.max(total, Number(data.total || 0));
+    state.historyTotal = Math.max(
+      total,
+      Number(data.total || 0),
+      Number(state.historyIndex?.total_messages || 0),
+    );
     state.historyOldestOffset = Number(data.offset ?? offset);
     state.historyWindowEndOffset = state.historyOldestOffset + (data.messages || []).length;
     state.historyHasOlder = state.historyOldestOffset > 0;

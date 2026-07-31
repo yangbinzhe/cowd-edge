@@ -2,7 +2,7 @@
 
 `cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.615`。
+当前版本：`0.9.622`。
 
 ## 1. 定位
 
@@ -107,7 +107,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.615",
+  "version": "0.9.622",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -123,7 +123,7 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.615",
+  "version": "0.9.622",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
@@ -152,7 +152,7 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.615",
+  "version": "0.9.622",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",
@@ -207,6 +207,14 @@ Gateway API 分层：
 | `/api/surfaces/*` | UI surface 业务域 |
 | `/api/connectors/*` | Connector 合同、账户、资源、Source adapter |
 | `/api/matrix/source-packs/*/snapshots/*` | SourceSnapshot plan/run/list/get |
+
+WebUI 的 Session 加载遵守两阶段读取合同：
+
+1. 先读取 `/api/sessions/:id/history-index`，获得恢复代际、checkpoint、索引覆盖、近期元数据和导航卡片，不传输消息正文；
+2. 首屏只读取最近一页正文，向上滚动时再分页；执行图、Turn 活动和证据只在全景面板展开后按需加载。
+
+全景活动面板同时消费 Gateway 的连续输入归属、历史恢复状态、上下文覆盖和
+Harness/Provider 分段延迟。WebUI 不重建第二套 Session、Mission 或执行状态。
 
 ## 8. 当前能力状态
 

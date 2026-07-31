@@ -37,9 +37,45 @@ const actionResult = ref<any>(null);
 const recommendationText = ref('Context recommendation acknowledged from WebUI.');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const sessionId = computed(() => store.activeSessionId || 'api-context');
+const canonicalEnvelope = computed(() => envelope.value?.envelope || envelope.value || {});
 const contextItems = computed(() => {
   const direct = envelope.value?.envelope?.selected || envelope.value?.selected || envelope.value?.envelope?.items || envelope.value?.items || envelope.value?.context?.items;
   return Array.isArray(direct) ? direct : [];
+});
+const contextBudgetReport = computed(() => canonicalEnvelope.value?.budget || {});
+const contextDiagnostics = computed(() => canonicalEnvelope.value?.diagnostics || {});
+const contextCoverageLabel = computed(() => {
+  const basisPoints = Number(contextBudgetReport.value?.coverage_basis_points);
+  return Number.isFinite(basisPoints) ? `${Math.round(basisPoints / 100)}%` : t('status.unknown');
+});
+const budgetAllocationRows = computed(() => {
+  const allocations = envelope.value?.budget_explanation?.allocations || [];
+  return (Array.isArray(allocations) ? allocations : []).map((allocation: any) => ({
+    source: allocation.source || '-',
+    used: Number(allocation.used_tokens || 0),
+    target: Number(allocation.target_tokens || 0),
+    maximum: Number(allocation.max_tokens || 0),
+    selected: Number(allocation.selected_count || 0),
+    omitted: Number(allocation.omitted_count || 0),
+    status: allocation.exhausted ? 'exhausted' : 'available',
+  }));
+});
+const contextOmissionRows = computed(() => {
+  const omitted = canonicalEnvelope.value?.omitted || [];
+  return (Array.isArray(omitted) ? omitted : []).map((item: any) => ({
+    source: item.source || '-',
+    tokens: Number(item.token_estimate || 0),
+    reason: item.reason || '-',
+  }));
+});
+const contextSourceRows = computed(() => {
+  const sources = envelope.value?.source_registry || canonicalEnvelope.value?.source_registry || [];
+  return (Array.isArray(sources) ? sources : []).map((source: any) => ({
+    source: source.source || source.kind || '-',
+    lifecycle: source.lifecycle || '-',
+    authority: source.authority || '-',
+    reason: source.reason || '-',
+  }));
 });
 const itemRows = computed(() => contextItems.value.slice(0, 16).map((item: any) => ({
   role: item.role || item.kind || '-',
@@ -233,6 +269,14 @@ onUnmounted(() => projections.release('context'));
         <strong>{{ recommendationRows.length }}</strong>
         <small>{{ sessionId }}</small>
       </article>
+      <article class="metric-card" :data-tone="Number(contextDiagnostics.unresolved_conflict_count || 0) ? 'warn' : 'success'">
+        <span>{{ t('context.coverage') }}</span>
+        <strong>{{ contextCoverageLabel }}</strong>
+        <small>
+          {{ t('context.budget.borrowed', { count: Number(contextBudgetReport.borrowed_budget_tokens || 0) }) }}
+          · {{ t('context.conflicts', { count: Number(contextDiagnostics.unresolved_conflict_count || 0) }) }}
+        </small>
+      </article>
     </section>
 
     <section class="context-grid">
@@ -304,9 +348,30 @@ onUnmounted(() => projections.release('context'));
           {{ t('template.pages.contextpage.9beb96dac8') }}
         </button>
         <RequestReceipt :receipt="actionResult" :title="t('page.context.page.title.ea2c090ac6')" />
+        <DataTable
+          v-if="budgetAllocationRows.length"
+          searchable
+          :rows="budgetAllocationRows"
+          :columns="['source', 'used', 'target', 'maximum', 'selected', 'omitted', 'status']"
+          @row-click="selectedDetail = $event"
+        />
+        <DataTable
+          v-if="contextOmissionRows.length"
+          searchable
+          :rows="contextOmissionRows"
+          :columns="['source', 'tokens', 'reason']"
+          @row-click="selectedDetail = $event"
+        />
+        <DataTable
+          v-if="contextSourceRows.length"
+          searchable
+          :rows="contextSourceRows"
+          :columns="['source', 'lifecycle', 'authority', 'reason']"
+          @row-click="selectedDetail = $event"
+        />
         <DataTable v-if="projectionUsageRows.length" searchable copyable row-key="id" :rows="projectionUsageRows" :columns="['id', 'kind', 'status', 'summary']" @row-click="selectedDetail = $event" />
         <DataTable v-if="recommendationRows.length" searchable copyable :rows="recommendationRows" :columns="['id', 'action', 'count', 'status']" @row-click="selectedDetail = $event" />
-        <EmptyState v-else :title="t('page.context.page.title.e62d3fb566')" :detail="t('page.context.page.detail.dcd7576e63')" />
+        <EmptyState v-if="!budgetAllocationRows.length && !contextOmissionRows.length && !contextSourceRows.length && !projectionUsageRows.length && !recommendationRows.length" :title="t('page.context.page.title.e62d3fb566')" :detail="t('page.context.page.detail.dcd7576e63')" />
       </section>
 
       <section class="management-panel context-panel wide" v-show="isSectionActive('history')" data-section="history">

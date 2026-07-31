@@ -54,6 +54,7 @@ export type MissionControlProjection = GatewayComponents['schemas']['MissionCont
 export type MissionControlResponse = GatewayComponents['schemas']['MissionControlResponse'];
 export type MissionMaterializedSnapshot = GatewayComponents['schemas']['MissionMaterializedSnapshot'];
 export type MissionProjectionDelta = GatewayComponents['schemas']['MissionProjectionDelta'];
+export type SessionHistoryIndexProjection = GatewayComponents['schemas']['SessionHistoryIndexProjection'];
 
 export interface ChatTurn {
   id: string;
@@ -149,6 +150,14 @@ export interface RunMetricsProjection {
   total_tokens: number;
 }
 
+export interface ExecutionLatencyProjection {
+  total_elapsed_ms: number;
+  harness_elapsed_ms: number;
+  provider_wall_ms: number;
+  first_token_latency_ms?: number | null;
+  provider_active_stream_ms: number;
+}
+
 export interface ExecutionLiveState {
   revision: number;
   status: ExecutionLiveStatus;
@@ -159,6 +168,7 @@ export interface ExecutionLiveState {
   last_progress_at_ms: number;
   context_usage?: ContextUsageProjection | null;
   metrics: RunMetricsProjection;
+  latency: ExecutionLatencyProjection;
   output_preview?: string | null;
   output_preview_start_bytes?: number;
   output_bytes?: number;

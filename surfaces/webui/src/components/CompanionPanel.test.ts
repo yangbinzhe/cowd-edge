@@ -154,6 +154,15 @@ describe('Companion projection contract visibility', () => {
       selected: [{ id: 'context-1', summary: 'relevant context' }],
     };
     app.currentRealityFlow = { stage_count: 8, stages: [] };
+    app.turnInbox = {
+      items: [{
+        input_id: 'input-1',
+        turn_id: 'turn-1',
+        status: 'supplemented',
+        decision: 'supplement_current_turn',
+        content_preview: '检查最新执行链',
+      }],
+    } as any;
     app.activity = [{
       id: 'thought-1',
       kind: 'think',
@@ -205,6 +214,30 @@ describe('Companion projection contract visibility', () => {
           output_tokens: 20,
           total_tokens: 120,
         },
+        latency: {
+          total_elapsed_ms: 190,
+          harness_elapsed_ms: 40,
+          provider_wall_ms: 150,
+          first_token_latency_ms: 30,
+          provider_active_stream_ms: 120,
+        },
+      },
+      historyIndex: {
+        schema_version: 1,
+        session_id: 'activity-session',
+        projection_generation: 9,
+        durable_cursor: 12,
+        event_cursor: 11,
+        history_revision: 7,
+        total_messages: 100_000,
+        total_bytes: 8_000_000,
+        index_generation: 4,
+        indexed_through_sequence: 99_999,
+        index_card_count: 250,
+        index_complete: true,
+        recovery_state: 'ready',
+        recent_metadata: [],
+        cards: [],
       },
       streamState: 'offline',
       pending: false,
@@ -228,6 +261,11 @@ describe('Companion projection contract visibility', () => {
     expect(wrapper.find('.activity-metric-grid').text()).toContain('5');
     expect(wrapper.find('.activity-metric-grid').text()).toContain('8');
     expect(wrapper.find('.activity-metric-grid').text()).toContain('120');
+    expect(wrapper.find('.activity-metric-grid').text()).toContain('100%');
+    expect(wrapper.find('.activity-metric-grid').text()).toContain('40 ms');
+    expect(wrapper.find('.activity-metric-grid').text()).toContain('150 ms');
+    expect(wrapper.find('.activity-metric-grid').text()).toContain('9');
+    expect(wrapper.get('.turn-input-node').text()).toContain('当前回合');
     expect(wrapper.findAll('.companion-tabs button')).toHaveLength(3);
     expect(wrapper.text()).not.toContain('思考过程');
     expect(wrapper.text()).not.toContain('证据与状态');

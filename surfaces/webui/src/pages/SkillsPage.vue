@@ -335,7 +335,11 @@ onMounted(refresh);
       </aside>
 
       <main class="skills-detail">
-        <section class="management-panel" v-show="isSectionActive('projection')" data-section="projection">
+        <section
+          class="management-panel"
+          v-show="isSectionActive('catalog') || isSectionActive('projection')"
+          data-section="projection"
+        >
           <header>
             <h2>{{ t('page.skills.page.text.e8ec22f1d0') }}</h2>
             <div class="button-row">

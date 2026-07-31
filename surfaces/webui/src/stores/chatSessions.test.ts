@@ -53,6 +53,22 @@ function mockWriterAttachment() {
 
 describe('chatSessions', () => {
   beforeEach(() => {
+    vi.spyOn(api, 'sessionHistoryIndex').mockImplementation(async (sessionId) => ({
+      schema_version: 1,
+      session_id: sessionId,
+      projection_generation: 0,
+      durable_cursor: 0,
+      event_cursor: 0,
+      history_revision: 0,
+      total_messages: 0,
+      total_bytes: 0,
+      index_generation: 0,
+      index_card_count: 0,
+      index_complete: true,
+      recovery_state: 'ready',
+      recent_metadata: [],
+      cards: [],
+    }) as any);
     vi.spyOn(api, 'sessionTurnProjection').mockImplementation(async (sessionId) => ({
       kind: 'session.turn_projection',
       session_id: sessionId,
@@ -111,6 +127,76 @@ describe('chatSessions', () => {
     await hydration;
     expect(chat.states['history-fast'].detailsLoaded).toBe(true);
     expect(evidence).not.toHaveBeenCalled();
+  });
+
+  it('loads the body-free history index before transcript bodies and preserves canonical coverage', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    const historyIndex = vi.mocked(api.sessionHistoryIndex).mockResolvedValue({
+      schema_version: 1,
+      session_id: 'history-indexed',
+      projection_generation: 9,
+      durable_cursor: 42,
+      event_cursor: 41,
+      history_revision: 7,
+      total_messages: 100_000,
+      total_bytes: 8_000_000,
+      latest_checkpoint_event_id: 'event-checkpoint',
+      latest_checkpoint_sequence: 90_000,
+      index_generation: 4,
+      index_card_count: 250,
+      index_complete: true,
+      indexed_through_sequence: 99_999,
+      recovery_state: 'ready',
+      recent_metadata: [{
+        message_id: 'message-99999',
+        sequence: 99_999,
+        role: 'assistant',
+        created_at_ms: 100,
+        content_bytes: 32,
+        blocks_count: 1,
+      }],
+      cards: [{
+        card_id: 'card-latest',
+        scope: 'session',
+        summary: 'bounded navigation summary',
+        source_start_sequence: 99_000,
+        source_end_sequence: 99_999,
+        source_message_count: 1_000,
+        source_digest: 'sha256:card',
+        generation: 4,
+        updated_at_ms: 100,
+        authority: 'rebuildable_index',
+      }],
+    } as any);
+    const messages = vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'history-indexed',
+      messages: [{
+        id: 'message-99999',
+        session_id: 'history-indexed',
+        sequence: 99_999,
+        role: 'assistant',
+        blocks: [{ type: 'text', text: 'latest body only' }],
+      }],
+      total: 100_000,
+      offset: 99_999,
+    } as any);
+
+    await chat.load('history-indexed');
+    await vi.waitFor(() => expect(chat.states['history-indexed'].historyIndexLoaded).toBe(true));
+
+    const state = chat.states['history-indexed'];
+    expect(historyIndex.mock.invocationCallOrder[0]).toBeLessThan(messages.mock.invocationCallOrder[0]);
+    expect(state.historyIndex).toMatchObject({
+      projection_generation: 9,
+      total_messages: 100_000,
+      index_generation: 4,
+      recovery_state: 'ready',
+    });
+    expect(state.runtimeCommitCursor).toBe(42);
+    expect(state.historyTotal).toBe(100_000);
+    expect(state.turns).toHaveLength(1);
+    expect(JSON.stringify(state.historyIndex)).not.toContain('latest body only');
   });
 
   it('restores public reasoning summaries without exposing private provider transcript blocks', async () => {

@@ -9024,6 +9024,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/history-index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * session GET /api/sessions/:id/history-index
+         * @description Query Gateway session capability through `/api/sessions/:id/history-index` handled by `get_session_history_index`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["session_history_index_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/input-projection": {
         parameters: {
             query?: never;
@@ -11433,6 +11455,14 @@ export interface components {
             /** @default null */
             payload: unknown;
         };
+        ExecutionCompletionContract: {
+            /** @default false */
+            allow_unresolved_conflicts: boolean;
+            /** @default [] */
+            required_artifact_kinds: string[];
+            /** @default [] */
+            required_node_ids: string[];
+        };
         /** @enum {string} */
         ExecutionEdgeKind: "depends_on" | "verifies" | "produces";
         /**
@@ -11458,12 +11488,70 @@ export interface components {
             graph_id: string;
             nodes: components["schemas"]["ExecutionNodeProjection"][];
             objective: string;
+            orchestration?: components["schemas"]["ExecutionOrchestrationMetadata"] | null;
             parent_execution?: components["schemas"]["ExecutionParentBinding"] | null;
             /** Format: uint64 */
             revision: number;
             /** @default interactive */
             service_class: components["schemas"]["ExecutionServiceClass"];
             terminal_result_ref?: string | null;
+        };
+        /**
+         * @description Runtime-owned latency attribution for one execution.
+         *
+         *     Provider wall time is measured by the provider stream owner. Harness time
+         *     is the remaining execution wall time, so parallel child executions keep
+         *     their own attribution instead of being added into a misleading root total.
+         */
+        ExecutionLatencyProjection: {
+            /** Format: uint64 */
+            first_token_latency_ms?: number | null;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            harness_elapsed_ms: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            provider_active_stream_ms: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            provider_wall_ms: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            total_elapsed_ms: number;
+        };
+        /**
+         * @description One Runtime-owned assistant output segment.
+         *
+         *     Byte ranges and revisions are local to `part_id`; consumers concatenate
+         *     parts by `causal_sequence` and never infer a global assistant stream.
+         */
+        ExecutionLiveOutputPart: {
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            bytes: number;
+            /** Format: uint64 */
+            causal_sequence: number;
+            /** @default false */
+            completed: boolean;
+            item_id: string;
+            model_step_id: string;
+            part_id: string;
+            preview?: string | null;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            preview_start_bytes: number;
         };
         /**
          * @description Runtime-owned, current-turn facts.  It is an additive field on the
@@ -11474,6 +11562,15 @@ export interface components {
             error?: string | null;
             /** Format: uint64 */
             last_progress_at_ms: number;
+            /**
+             * @default {
+             *       "harness_elapsed_ms": 0,
+             *       "provider_active_stream_ms": 0,
+             *       "provider_wall_ms": 0,
+             *       "total_elapsed_ms": 0
+             *     }
+             */
+            latency: components["schemas"]["ExecutionLatencyProjection"];
             /**
              * @default {
              *       "approvals": 0,
@@ -11494,6 +11591,11 @@ export interface components {
              * @default 0
              */
             output_bytes: number;
+            /**
+             * @description Authoritative per-item output streams ordered by causal sequence.
+             * @default []
+             */
+            output_parts: components["schemas"]["ExecutionLiveOutputPart"][];
             output_preview?: string | null;
             /**
              * Format: uint64
@@ -11540,7 +11642,7 @@ export interface components {
             schema_version: number;
         };
         /** @enum {string} */
-        ExecutionNodeKind: "inline_model" | "tool_batch" | "agent_task" | "verify" | "synthesize" | "approval" | "session_dispatch" | "timer";
+        ExecutionNodeKind: "inline_model" | "tool_batch" | "agent_task" | "subgraph" | "verify" | "synthesize" | "approval" | "session_dispatch" | "timer";
         ExecutionNodeProjection: {
             /**
              * @default {
@@ -11585,6 +11687,19 @@ export interface components {
         };
         /** @enum {string} */
         ExecutionNodeStatus: "planned" | "ready" | "running" | "waiting_input" | "waiting_approval" | "waiting_external" | "paused" | "completed" | "blocked" | "failed" | "cancelled";
+        ExecutionOrchestrationMetadata: {
+            /** @default [] */
+            applied_mutation_ids: string[];
+            completion: components["schemas"]["ExecutionCompletionContract"];
+            mutation_id: string;
+            /** Format: uint64 */
+            semantic_revision: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            source_generation: number;
+        };
         /**
          * @description Durable lineage from a nested execution back to the graph node that
          *     requested it. This is runtime-owned metadata: model tool JSON must never
@@ -15277,13 +15392,35 @@ export interface components {
             /** @default [] */
             turns: components["schemas"]["TurnEvidenceProjection"][];
         };
+        SessionExecutionEntryProjection: {
+            /** @description Stable Session ingress/lifecycle execution identity. */
+            execution_id: string;
+            /** @description Queryable Runtime graph identity, once graph materialization completed. */
+            graph_id?: string | null;
+            /** Format: uint64 */
+            live_revision?: number | null;
+            /** Format: uint64 */
+            started_at_ms?: number | null;
+            status: components["schemas"]["ExecutionLiveStatus"];
+            terminal_ref?: string | null;
+            turn_id?: string | null;
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
         /**
-         * @description A discovery-only session-to-execution relation.  Detailed facts always
-         *     remain in [`ExecutionProjection`].
+         * @description A discovery-only session-to-execution relation. Detailed execution facts
+         *     remain in [`ExecutionProjection`] and are loaded on demand by graph ID.
          */
         SessionExecutionIndexProjection: {
             /** @default [] */
             active_execution_ids: string[];
+            /**
+             * @description Durable turn executions ordered from oldest to newest. This collection
+             *     is intentionally lightweight so Surfaces can render a turn index
+             *     without materializing every execution graph.
+             * @default []
+             */
+            executions: components["schemas"]["SessionExecutionEntryProjection"][];
             /** Format: uint64 */
             last_progress_at_ms?: number | null;
             latest_execution_id?: string | null;
@@ -15310,6 +15447,87 @@ export interface components {
             /** @default [] */
             items: components["schemas"]["SessionExecutionIndexProjection"][];
         };
+        /**
+         * @description Rebuildable navigation card. The card is never authoritative transcript
+         *     content; `source_start_sequence..=source_end_sequence` and `source_digest`
+         *     locate and verify the immutable source rows.
+         */
+        SessionHistoryCardProjection: {
+            authority: string;
+            card_id: string;
+            /** Format: uint64 */
+            generation: number;
+            parent_card_id?: string | null;
+            scope: string;
+            source_digest: string;
+            /** Format: uint64 */
+            source_end_sequence: number;
+            /** Format: uint64 */
+            source_message_count: number;
+            /** Format: uint64 */
+            source_start_sequence: number;
+            summary: string;
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
+        /**
+         * SessionHistoryIndexProjection
+         * @description Bounded, transport-neutral read model for Session activation and history
+         *     navigation. Surfaces render this first and fetch transcript bodies only
+         *     through the exact message/page APIs.
+         */
+        SessionHistoryIndexProjection: {
+            /** @default [] */
+            cards: components["schemas"]["SessionHistoryCardProjection"][];
+            /** Format: uint64 */
+            durable_cursor: number;
+            /** Format: uint64 */
+            event_cursor: number;
+            /** Format: uint64 */
+            history_revision: number;
+            /** Format: uint64 */
+            index_card_count: number;
+            index_complete: boolean;
+            /** Format: uint64 */
+            index_generation: number;
+            /** Format: uint64 */
+            indexed_through_sequence?: number | null;
+            latest_checkpoint_event_id?: string | null;
+            /** Format: uint64 */
+            latest_checkpoint_sequence?: number | null;
+            /** Format: uint64 */
+            projection_generation: number;
+            /** @default [] */
+            recent_metadata: components["schemas"]["SessionHistoryMessageMetadataProjection"][];
+            recovery_state: components["schemas"]["SessionHistoryRecoveryState"];
+            /** Format: uint32 */
+            schema_version: number;
+            session_id: string;
+            /** Format: uint64 */
+            total_bytes: number;
+            /** Format: uint64 */
+            total_messages: number;
+        };
+        /**
+         * @description Body-free message metadata used to navigate a long Session before loading
+         *     exact transcript rows.
+         */
+        SessionHistoryMessageMetadataProjection: {
+            /** Format: uint64 */
+            blocks_count: number;
+            /** Format: uint64 */
+            content_bytes: number;
+            /** Format: uint64 */
+            created_at_ms: number;
+            message_id: string;
+            role: string;
+            /** Format: uint64 */
+            sequence: number;
+            tool_name?: string | null;
+            tool_use_id?: string | null;
+        };
+        /** @enum {string} */
+        SessionHistoryRecoveryState: "ready" | "manifest_rebuilt" | "index_pending" | "checkpoint_missing" | "checkpoint_malformed";
         SessionInputCancelRequest: {
             reason?: string | null;
         };
@@ -41404,6 +41622,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExecutionLiveUpdate"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_history_index_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionHistoryIndexProjection"];
                 };
             };
             /** @description Bad request */

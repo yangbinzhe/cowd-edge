@@ -624,7 +624,6 @@ export const useAppStore = defineStore('app', () => {
     queueMicrotask(() => {
       if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
       chat.hydrateExecutionIndex(sessionId, false).catch(() => undefined);
-      chat.hydrateTurnProjection(sessionId).catch(() => undefined);
       Promise.allSettled([
         loadAttachments(sessionId, generation),
         refreshSessionInputs(sessionId, generation),

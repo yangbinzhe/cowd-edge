@@ -260,6 +260,32 @@ const activityFileCount = computed(() => Math.max(
   Number(liveMetrics.value?.files_touched || 0),
   store.currentRunFiles.length,
 ));
+const historyIndex = computed(() => chat.active?.historyIndex || null);
+const historyCoverage = computed(() => {
+  const index = historyIndex.value;
+  if (!index) return '—';
+  const indexed = Number(index.indexed_through_sequence ?? -1) + 1;
+  const total = Number(index.total_messages || 0);
+  if (!total) return index.index_complete ? '100%' : '0%';
+  return `${Math.min(100, Math.round((Math.max(0, indexed) / total) * 100))}%`;
+});
+const historyRecoveryLabel = computed(() => {
+  switch (historyIndex.value?.recovery_state) {
+    case 'ready':
+      return t('chat.history.index.ready');
+    case 'manifest_rebuilt':
+      return t('chat.history.index.manifest_rebuilt');
+    case 'index_pending':
+      return t('chat.history.index.index_pending');
+    case 'checkpoint_missing':
+      return t('chat.history.index.checkpoint_missing');
+    case 'checkpoint_malformed':
+      return t('chat.history.index.checkpoint_malformed');
+    default:
+      return t('chat.history.index.loading');
+  }
+});
+const executionLatency = computed(() => liveExecution.value?.latency || null);
 const selectedActivity = computed(() => store.selectedActivity as ActivityEvent | null);
 const selectedActivityEvidenceRefs = computed(() => {
   if (activityEvidenceOverride.value.length) return activityEvidenceOverride.value;
@@ -328,6 +354,30 @@ function runtimeInputPending(item: any) {
   return ['pending', 'accepted', 'queued', 'queued_next_step'].includes(
     String(item?.status || item?.state || '').toLowerCase(),
   );
+}
+
+function runtimeInputOwnership(item: any) {
+  const decision = String(item?.decision || '').toLowerCase();
+  switch (decision) {
+    case 'start_new_turn':
+      return t('chat.input.ownership.start_new_turn');
+    case 'supplement_current_turn':
+      return t('chat.input.ownership.supplement_current_turn');
+    case 'interrupt_and_replan':
+      return t('chat.input.ownership.interrupt_and_replan');
+    case 'enqueue_next_step':
+      return t('chat.input.ownership.enqueue_next_step');
+    case 'spawn_subtask':
+      return t('chat.input.ownership.spawn_subtask');
+    case 'route_cross_session':
+      return t('chat.input.ownership.route_cross_session');
+    case 'create_new_session':
+      return t('chat.input.ownership.create_new_session');
+    case 'control_or_approval':
+      return t('chat.input.ownership.control_or_approval');
+    default:
+      return t('chat.input.ownership.unknown');
+  }
 }
 
 async function cancelRuntimeInput(item: any) {
@@ -537,6 +587,10 @@ watch(activeTeamExecutionGraphId, (graphId) => {
         <span><FileText :size="13" />{{ t('component.companion.panel.text.727690de87') }} <strong>{{ activityFileCount }}</strong></span>
         <span><ShieldCheck :size="13" />{{ t('execution.kind.approval') }} <strong>{{ activityApprovalCount }}</strong></span>
         <span><Coins :size="13" />{{ t('chat.execution.totalTokens') }} <strong>{{ formatTokenQuantity(executionUsage.input + executionUsage.output) }}</strong></span>
+        <span :title="historyRecoveryLabel"><Clock3 :size="13" />{{ t('chat.history.index.coverage') }} <strong>{{ historyCoverage }}</strong></span>
+        <span :title="historyRecoveryLabel"><RotateCcw :size="13" />{{ t('chat.history.index.generation') }} <strong>{{ historyIndex?.projection_generation ?? '—' }}</strong></span>
+        <span><Clock3 :size="13" />{{ t('chat.execution.harnessLatency') }} <strong>{{ executionLatency ? `${executionLatency.harness_elapsed_ms} ms` : '—' }}</strong></span>
+        <span><Clock3 :size="13" />{{ t('chat.execution.providerLatency') }} <strong>{{ executionLatency ? `${executionLatency.provider_wall_ms} ms` : '—' }}</strong></span>
       </div>
       <p v-if="projectionContractError" class="companion-contract-alert" role="alert">
         {{ t('strategy.state.contractMismatch') }} · {{ projectionContractError }}
@@ -558,6 +612,7 @@ watch(activeTeamExecutionGraphId, (graphId) => {
           <article v-if="group.userPreview" class="turn-input-node">
             <div>
               <strong>{{ group.userPreview }}</strong>
+              <small v-if="group.runtimeInput">{{ runtimeInputOwnership(group.runtimeInput) }}</small>
               <button
                 v-if="group.evidenceCount"
                 class="turn-evidence-action"

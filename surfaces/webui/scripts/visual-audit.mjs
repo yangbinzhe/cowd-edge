@@ -12,6 +12,12 @@ const version = provenance.version;
 const full = process.argv.includes('--full');
 const baseUrl = process.env.COWD_VISUAL_BASE_URL || 'http://127.0.0.1:5195';
 const gatewayToken = process.env.COWD_VISUAL_GATEWAY_TOKEN || process.env.COWD_E2E_GATEWAY_TOKEN || '';
+const routeFilter = new Set(
+  String(process.env.COWD_VISUAL_ROUTE_IDS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
+);
 const layoutViewport = (viewport) => viewport.scenario === 'zoom-200'
   ? { width: Math.max(1, Math.floor(viewport.width / 2)), height: Math.max(1, Math.floor(viewport.height / 2)) }
   : { width: viewport.width, height: viewport.height };
@@ -59,7 +65,10 @@ const viewports = baseViewports.flatMap((viewport) => scenarios.map((scenario) =
   id: `${viewport.id}-${scenario}`,
   scenario,
 })));
-let routes = [...baseRoutes];
+let routes = routeFilter.size
+  ? baseRoutes.filter((route) => routeFilter.has(route.id))
+  : [...baseRoutes];
+const selectedBaseRoutes = [...routes];
 
 fs.mkdirSync(screenshotDir, { recursive: true });
 fs.mkdirSync(path.dirname(reportPath), { recursive: true });
@@ -221,7 +230,7 @@ try {
       }
     }
     await discoveryPage.close();
-    routes = discovered.length ? discovered : baseRoutes;
+    routes = discovered.length ? discovered : selectedBaseRoutes;
   }
   for (const viewport of viewports) {
     const page = await browser.newPage(pageOptions(viewport));
