@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Brain, ChevronLeft, ChevronRight, CircleDot, Code2, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
+import { Brain, ChevronLeft, ChevronRight, CircleDot, Clock3, Code2, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
@@ -10,16 +10,23 @@ import RawPayload from './workbench/RawPayload.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 import WorkspaceTree from './workspace/WorkspaceTree.vue';
+import TimelineList from './workbench/TimelineList.vue';
+import ExecutionGraphCanvas from './mission/ExecutionGraphCanvas.vue';
 import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/workspacePreview';
+import type { ActivityEvent } from '../types';
+import { activityIdentityKey, causalActivityTimeline } from '../utils/causalTimeline';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
 const fileInput = ref<HTMLInputElement | null>(null);
 const previewOpen = ref(false);
+const activityDetailOpen = ref(false);
+const selectedExecutionNode = ref<Record<string, any> | null>(null);
 const previewMode = ref<'render' | 'source'>('render');
 const imageZoom = ref(1);
 const resizing = ref(false);
+const executionHistoryLimit = ref(50);
 
 const previewKind = computed(() => store.selectedFile ? workspacePreviewKind(store.selectedFile) : 'binary');
 const rawFileUrl = computed(() => store.rawWorkspaceFileUrl(store.selectedFile));
@@ -33,8 +40,28 @@ const workspaceMetaEntries = computed(() => {
     value: typeof value === 'string' ? value : JSON.stringify(value),
   }));
 });
-const thinkingEvents = computed(() => store.activity.filter((event) => event.kind === 'think'));
-const inspectorEvents = computed(() => store.activity.filter((event) => event.kind === 'error' || event.status === 'error'));
+const activityEvents = computed(() => {
+  const sessionActivity = chat.active?.activity || [];
+  const rows = new Map<string, ActivityEvent>();
+  for (const item of [...store.activity, ...sessionActivity]) {
+    const event = item as ActivityEvent;
+    const identity = activityIdentityKey(event);
+    const previous = rows.get(identity);
+    rows.set(identity, previous ? {
+      ...previous,
+      ...event,
+      detail: event.detail || previous.detail,
+      status: event.status || previous.status,
+      duration_ms: event.duration_ms ?? previous.duration_ms,
+      input: event.input ?? previous.input,
+      output: event.output ?? previous.output,
+      raw: { ...(previous.raw || {}), ...(event.raw || {}) },
+    } : event);
+  }
+  return causalActivityTimeline([...rows.values()], 2_000);
+});
+const thinkingEvents = computed(() => activityEvents.value.filter((event) => event.kind === 'think'));
+const inspectorEvents = computed(() => activityEvents.value.filter((event) => event.kind === 'error' || event.status === 'error'));
 const contextItems = computed(() => {
   const envelope = store.currentContextEnvelope || {};
   return [
@@ -58,10 +85,102 @@ const runtimeInputItems = computed(() => {
     return true;
   }).slice(0, 12);
 });
-const activeProjection = computed(() => chat.active?.executionId ? projections.projectionFor(chat.active.executionId) : null);
-const activeProjectionEntry = computed(() => chat.active?.executionId
-  ? projections.entries[chat.active.executionId]
+const rootProjectionId = computed(() => (
+  chat.active?.executionGraphId || chat.active?.executionId || ''
+));
+const rootProjection = computed(() => rootProjectionId.value
+  ? projections.projectionFor(rootProjectionId.value)
   : null);
+const activeTeamExecutionGraphId = computed(() => {
+  const projection = rootProjection.value as any;
+  const strategyGraphId = String(projection?.strategy?.team_execution_id || '').trim();
+  if (strategyGraphId && strategyGraphId !== rootProjectionId.value) return strategyGraphId;
+  const linked = (Array.isArray(projection?.teams) ? projection.teams : [])
+    .map((team: any) => String(team?.detail?.graph_id || '').trim())
+    .find((graphId: string) => graphId && graphId !== rootProjectionId.value);
+  if (linked) return linked;
+  const childGraph = (Array.isArray(projection?.child_executions)
+    ? projection.child_executions
+    : [])
+    .map((child: any) => String(child?.execution_id || '').trim())
+    .find((graphId: string) => graphId && graphId !== rootProjectionId.value);
+  if (childGraph) return childGraph;
+  return [...activityEvents.value]
+    .reverse()
+    .filter((event) => event.parent_execution_id === rootProjectionId.value)
+    .map((event) => String(event.graph_id || '').trim())
+    .find((graphId) => graphId && graphId !== rootProjectionId.value) || '';
+});
+const displayedExecutionGraphId = computed(() => (
+  activeTeamExecutionGraphId.value || rootProjectionId.value
+));
+const activeProjection = computed(() => displayedExecutionGraphId.value
+  ? projections.projectionFor(displayedExecutionGraphId.value)
+  : null);
+const activeProjectionEntry = computed(() => displayedExecutionGraphId.value
+  ? projections.entries[displayedExecutionGraphId.value]
+  : null);
+const executionGraph = computed(() => activeProjection.value?.graph || null);
+const canonicalExecutionTurns = computed(() => {
+  const projectedTurns = chat.active?.turnProjection?.turns || [];
+  if (projectedTurns.length) {
+    return projectedTurns.map((projected) => ({
+      turnId: projected.turn_id,
+      projected,
+    }));
+  }
+  const transcript = chat.active?.turns || [];
+  const canonical = [];
+  for (let index = 0; index < transcript.length; index += 1) {
+    const userTurn = transcript[index];
+    if (userTurn.role !== 'user') continue;
+    let turnId = String(userTurn.turn_id || '');
+    for (let cursor = index + 1; !turnId && cursor < transcript.length; cursor += 1) {
+      if (transcript[cursor].role === 'user') break;
+      turnId = String(transcript[cursor].turn_id || '');
+    }
+    canonical.push({
+      turnId: turnId || `legacy-user:${userTurn.id}`,
+      projected: null,
+    });
+  }
+  return canonical;
+});
+const executionTurnGroups = computed(() => {
+  const entries = chat.active?.executionIndex?.executions || [];
+  const canonicalTurns = canonicalExecutionTurns.value;
+  const visibleTurns = canonicalTurns.slice(-executionHistoryLimit.value).reverse();
+  return visibleTurns.map(({ turnId, projected }, index) => {
+    const entry = entries.find((candidate) => candidate.turn_id === turnId);
+    const fallbackTimestamp = Number(
+      projected?.completed_at_ms
+      || projected?.started_at_ms
+      || projected?.submitted_at_ms
+      || 0,
+    );
+    return {
+      entry: entry || {
+        execution_id: '',
+        graph_id: null,
+        turn_id: turnId,
+        status: projected?.status || 'unknown',
+        updated_at_ms: fallbackTimestamp,
+      },
+      turnId,
+      label: t('chat.execution.turnNumber', {
+        number: Math.max(1, canonicalTurns.length - index),
+      }),
+      events: activityEvents.value.filter((event) => (
+        event.turn_id === turnId
+        || (!!entry?.execution_id && event.execution_id === entry.execution_id)
+        || (!!entry?.execution_id && event.parent_execution_id === entry.execution_id)
+      )),
+    };
+  });
+});
+const hasMoreExecutionTurns = computed(() => (
+  canonicalExecutionTurns.value.length > executionHistoryLimit.value
+));
 const projectionContractError = computed(() => {
   const message = activeProjectionEntry.value?.lastError || '';
   return message.startsWith('unsupported execution projection')
@@ -71,6 +190,55 @@ const projectionContractError = computed(() => {
 });
 const liveExecution = computed(() => activeProjection.value?.live || chat.active?.live || null);
 const liveMetrics = computed(() => liveExecution.value?.metrics || null);
+function decodedPayload(value: unknown) {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed || !['{', '['].includes(trimmed[0])) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+const executionUsage = computed(() => {
+  const metricInput = Number(liveMetrics.value?.input_tokens || 0);
+  const metricOutput = Number(liveMetrics.value?.output_tokens || 0);
+  if (metricInput || metricOutput) return { input: metricInput, output: metricOutput };
+  return (chat.active?.turns || []).reduce((total, turn) => {
+    const usage = turn.token_usage || {};
+    const input = Number(usage.input_tokens || usage.prompt_tokens || 0);
+    const output = Number(usage.output_tokens || usage.completion_tokens || 0);
+    return {
+      input: total.input + (Number.isFinite(input) ? input : 0),
+      output: total.output + (Number.isFinite(output) ? output : 0),
+    };
+  }, { input: 0, output: 0 });
+});
+const activityToolCount = computed(() => activityEvents.value.filter((event) => event.kind === 'tool').length);
+const selectedActivity = computed(() => store.selectedActivity as ActivityEvent | null);
+const selectedActivityInput = computed(() => {
+  const event = selectedActivity.value;
+  return decodedPayload(event?.input
+    ?? event?.raw?.input
+    ?? (event?.raw?.tool_use as Record<string, unknown> | undefined)?.input
+    ?? event?.raw?.arguments
+    ?? null);
+});
+const selectedActivityOutput = computed(() => {
+  const event = selectedActivity.value;
+  return decodedPayload(event?.output
+    ?? event?.raw?.output
+    ?? (event?.raw?.tool_result as Record<string, unknown> | undefined)?.output
+    ?? event?.raw?.result
+    ?? null);
+});
+const selectedActivityDuration = computed(() => {
+  const value = Number(selectedActivity.value?.duration_ms ?? selectedActivity.value?.raw?.duration_ms);
+  if (!Number.isFinite(value) || value < 0) return '—';
+  return value < 1_000
+    ? `${Math.round(value)} ms`
+    : `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1).replace(/\.0$/, '')} s`;
+});
 const liveContextLabel = computed(() => {
   const usage = liveExecution.value?.context_usage;
   if (!usage?.window_tokens) return '—';
@@ -137,6 +305,27 @@ function closePreview() {
   previewOpen.value = false;
 }
 
+function openActivityDetail(item: Record<string, unknown>) {
+  store.selectedActivity = item;
+  activityDetailOpen.value = true;
+}
+
+function closeActivityDetail() {
+  activityDetailOpen.value = false;
+}
+
+function openExecutionTurn(graphId: string | null | undefined) {
+  const normalized = String(graphId || '').trim();
+  if (normalized) store.openChatExecutionGraph(normalized);
+}
+
+function formatTokenQuantity(value: number) {
+  if (!Number.isFinite(value) || value < 0) return '—';
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 100_000_000 ? 0 : 1).replace(/\.0$/, '')}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1).replace(/\.0$/, '')}K`;
+  return Math.round(value).toString();
+}
+
 async function stepPreview(delta: number) {
   if (!previewableFiles.value.length) return;
   const current = selectedFileIndex.value >= 0 ? selectedFileIndex.value : 0;
@@ -153,6 +342,7 @@ watch(() => store.selectedFile, (path) => {
 });
 
 useEscapeKey(() => closePreview(), () => previewOpen.value);
+useEscapeKey(() => closeActivityDetail(), () => activityDetailOpen.value);
 
 onMounted(() => {
   const savedWidth = Number(localStorage.getItem('cowd-webui-companion-width') || 0);
@@ -162,9 +352,35 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  projections.release('chat:companion-root-execution');
+  projections.release('chat:companion-team-execution');
   window.removeEventListener('mousemove', dragResize);
   window.removeEventListener('mouseup', stopResize);
 });
+
+watch(rootProjectionId, (executionId) => {
+  projections.release('chat:companion-root-execution');
+  if (!executionId || !store.activeSessionId) return;
+  projections.acquire(
+    executionId,
+    'chat:companion-root-execution',
+    'full',
+    'bounded',
+    store.activeSessionId,
+  );
+}, { immediate: true });
+
+watch(activeTeamExecutionGraphId, (graphId) => {
+  projections.release('chat:companion-team-execution');
+  if (!graphId || !store.activeSessionId) return;
+  projections.acquire(
+    graphId,
+    'chat:companion-team-execution',
+    'full',
+    'bounded',
+    store.activeSessionId,
+  );
+}, { immediate: true });
 </script>
 
 <template>
@@ -196,20 +412,76 @@ onBeforeUnmount(() => {
     <section v-if="store.companionTab === 'activity'" class="companion-body">
       <div class="panel-title">
         <h2>{{ t('component.companion.panel.text.97ab0e4ebb') }}</h2>
-        <span>{{ formatCount('events', store.activity.length) }}</span>
+        <span>{{ formatCount('events', activityEvents.length) }}</span>
+      </div>
+      <section v-if="chat.active?.executionGraphId || chat.active?.executionId" class="companion-execution-graph">
+        <header>
+          <span>
+            <Workflow :size="14" />
+            {{ activeTeamExecutionGraphId ? t('chat.execution.teamGraph') : t('chat.execution.graph') }}
+          </span>
+          <small>{{ displayStatus(displayedExecutionGraphId ? projections.stateFor(displayedExecutionGraphId) : 'materializing') }}</small>
+        </header>
+        <ExecutionGraphCanvas
+          :graph="executionGraph"
+          :selected-node-id="String(selectedExecutionNode?.node_id || selectedExecutionNode?.id || '')"
+          :connection-state="displayedExecutionGraphId ? projections.stateFor(displayedExecutionGraphId) : 'materializing'"
+          :loading="!executionGraph"
+          :activity-events="activityEvents"
+          compact
+          @select="selectedExecutionNode = $event"
+          @expand="store.openChatExecutionGraph()"
+        />
+      </section>
+      <div class="execution-stream-summary">
+        <span><Wrench :size="13" />{{ t('chat.execution.tools') }} <strong>{{ activityToolCount }}</strong></span>
+        <span>{{ t('chat.execution.input') }} <strong>{{ formatTokenQuantity(executionUsage.input) }}</strong></span>
+        <span>{{ t('chat.execution.output') }} <strong>{{ formatTokenQuantity(executionUsage.output) }}</strong></span>
       </div>
       <p v-if="projectionContractError" class="companion-contract-alert" role="alert">
         {{ t('strategy.state.contractMismatch') }} · {{ projectionContractError }}
       </p>
-      <div class="activity-list">
-        <article v-for="event in store.activity" :key="event.id" class="activity-item" :data-kind="event.kind" @click="store.selectedActivity = event">
-          <div>
-            <strong>{{ event.title }}</strong>
-            <p>{{ event.detail || t('component.companion.panel.inline.f3fd2cb8bf') }}</p>
-          </div>
-          <span>{{ displayStatus(event.status || 'unknown') }}</span>
-        </article>
+      <div v-if="executionTurnGroups.length" class="execution-turn-groups">
+        <section v-for="group in executionTurnGroups" :key="group.turnId" class="execution-turn-group">
+          <header>
+            <button
+              type="button"
+              :disabled="!group.entry.graph_id"
+              @click="openExecutionTurn(group.entry.graph_id)"
+            >
+              <Workflow :size="13" />
+              <strong>{{ group.label }}</strong>
+              <small>{{ displayStatus(group.entry.status) }}</small>
+            </button>
+            <time v-if="group.entry.updated_at_ms">{{ new Date(group.entry.updated_at_ms).toLocaleString() }}</time>
+          </header>
+          <TimelineList
+            v-if="group.events.length"
+            :items="group.events"
+            :filterable="false"
+            :selected-id="String(store.selectedActivity?.id || '')"
+            @select="openActivityDetail"
+          />
+          <p v-else class="empty-note">{{ t('chat.execution.turnNoEvents') }}</p>
+        </section>
+        <button
+          v-if="hasMoreExecutionTurns"
+          class="ghost-action execution-history-more"
+          type="button"
+          @click="executionHistoryLimit += 50"
+        >
+          {{ t('chat.execution.loadMoreTurns') }}
+        </button>
       </div>
+      <TimelineList
+        v-else
+        class="companion-timeline"
+        :items="activityEvents"
+        :filterable="false"
+        live
+        :selected-id="String(store.selectedActivity?.id || '')"
+        @select="openActivityDetail"
+      />
     </section>
 
     <section v-else-if="store.companionTab === 'thinking'" class="companion-body">
@@ -479,6 +751,39 @@ onBeforeUnmount(() => {
               <Download :size="14" />{{ t('workspace.preview.action.download') }}
             </button>
           </div>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="activityDetailOpen && selectedActivity" class="modal-scrim activity-detail-scrim" @click.self="closeActivityDetail">
+      <section class="activity-detail-modal" tabindex="-1">
+        <header>
+          <div>
+            <strong>{{ selectedActivity.title }}</strong>
+            <span><Clock3 :size="13" />{{ selectedActivityDuration }}</span>
+          </div>
+          <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="closeActivityDetail"><X :size="16" /></button>
+        </header>
+        <div class="activity-detail-content">
+          <p v-if="selectedActivity.detail" class="activity-detail-summary">{{ selectedActivity.detail }}</p>
+          <RawPayload
+            :title="t('chat.activity.detail.input')"
+            :data="selectedActivityInput"
+            :max-chars="6000"
+            default-open
+          />
+          <RawPayload
+            :title="t('chat.activity.detail.output')"
+            :data="selectedActivityOutput"
+            :max-chars="6000"
+            default-open
+          />
+          <RawPayload
+            :title="t('chat.activity.detail.event')"
+            :data="selectedActivity.raw || selectedActivity"
+            :max-chars="6000"
+            default-open
+          />
         </div>
       </section>
     </div>

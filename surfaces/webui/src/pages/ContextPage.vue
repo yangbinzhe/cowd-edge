@@ -276,7 +276,7 @@ onUnmounted(() => projections.release('context'));
         <EvidenceTrace :items="contextEvidence" :title="t('page.context.page.title.97f9320e36')" />
       </section>
 
-      <section class="management-panel context-panel" v-show="isSectionActive('evidence')" data-section="evidence">
+      <section class="management-panel context-panel wide" v-show="isSectionActive('evidence')" data-section="evidence">
         <header>
           <h2>{{ t('page.context.page.text.a8dd41fa22') }}</h2>
           <span>{{ t('page.context.page.text.08cb9c66d5') }}</span>
@@ -290,7 +290,7 @@ onUnmounted(() => projections.release('context'));
         <ObjectInspectorDrawer :title="t('page.context.page.title.5f71074cfb')" :data="evidence" />
       </section>
 
-      <section class="management-panel context-panel" v-show="isSectionActive('budget')" data-section="budget">
+      <section class="management-panel context-panel wide" v-show="isSectionActive('budget')" data-section="budget">
         <header>
           <h2>{{ t('page.context.page.text.92f813f7b1') }}</h2>
           <span>{{ envelopeId || t('page.context.page.inline.46721d3741') }}</span>

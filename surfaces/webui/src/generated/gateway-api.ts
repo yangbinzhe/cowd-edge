@@ -8014,6 +8014,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runtime/managed-agents/definitions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * runtime DELETE /api/runtime/managed-agents/definitions/:id
+         * @description Delete Gateway runtime capability through `/api/runtime/managed-agents/definitions/:id` handled by `managed_agent_definition_delete_handler`.
+         *
+         *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        delete: operations["gateway_runtime_delete_api_runtime_managed_agents_definitions_by_id"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runtime/managed-agents/dispatch": {
         parameters: {
             query?: never;
@@ -8980,6 +9002,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/execution/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * session GET /api/sessions/:id/execution/live
+         * @description Query Gateway session capability through `/api/sessions/:id/execution/live` handled by `get_session_execution_live`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["session_execution_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/input-projection": {
         parameters: {
             query?: never;
@@ -9316,6 +9360,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * skill POST /api/skills
+         * @description Invoke or create Gateway skill capability through `/api/skills` handled by `skill_create_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_skill_post_api_skills"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/skills/catalog": {
         parameters: {
             query?: never;
@@ -9442,7 +9508,13 @@ export interface paths {
         get: operations["gateway_skill_get_api_skills_by_id"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * skill DELETE /api/skills/:id
+         * @description Delete Gateway skill capability through `/api/skills/:id` handled by `skill_delete_handler`.
+         *
+         *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state.
+         */
+        delete: operations["gateway_skill_delete_api_skills_by_id"];
         options?: never;
         head?: never;
         patch?: never;
@@ -11281,12 +11353,19 @@ export interface components {
          *     projections.
          */
         EvidenceRef: {
+            /** @default unknown */
             boundary: components["schemas"]["RealityBoundary"];
             /** Format: uint16 */
             confidence_bp?: number | null;
             id: string;
             ref_type: string;
             source?: string | null;
+        };
+        ExecutionAcceptance: {
+            criteria: string[];
+            /** Format: uint16 */
+            minimum_score_basis_points?: number | null;
+            required_evidence: string[];
         };
         /**
          * @description Unit-preserving estimate for one strategy candidate.
@@ -11366,6 +11445,12 @@ export interface components {
             kind: components["schemas"]["ExecutionEdgeKind"];
             to: string;
         };
+        ExecutionFailure: {
+            evidence_refs: components["schemas"]["EvidenceAccessRef"][];
+            kind: string;
+            message: string;
+            retryable: boolean;
+        };
         ExecutionGraphProjection: {
             /** Format: uint64 */
             commit_cursor: number;
@@ -11440,15 +11525,49 @@ export interface components {
          * @enum {string}
          */
         ExecutionLiveStatus: "queued" | "preparing_context" | "calling_model" | "thinking" | "calling_tool" | "waiting_approval" | "finalizing" | "complete" | "cancelled" | "error";
+        /**
+         * ExecutionLiveUpdate
+         * @description Lightweight same-connection update for Runtime-owned live facts.
+         *
+         *     Durable graph/entity changes continue to use [`ExecutionProjection`].
+         *     Streaming text and rapidly changing metrics use this envelope so a token
+         *     delta never forces storage scans or serialization of the full graph.
+         */
+        ExecutionLiveUpdate: {
+            execution_id: string;
+            live: components["schemas"]["ExecutionLiveState"];
+            /** Format: uint32 */
+            schema_version: number;
+        };
         /** @enum {string} */
         ExecutionNodeKind: "inline_model" | "tool_batch" | "agent_task" | "verify" | "synthesize" | "approval" | "session_dispatch" | "timer";
         ExecutionNodeProjection: {
+            /**
+             * @default {
+             *       "criteria": [],
+             *       "minimum_score_basis_points": null,
+             *       "required_evidence": []
+             *     }
+             */
+            acceptance: components["schemas"]["ExecutionAcceptance"];
             evidence_refs: components["schemas"]["EvidenceAccessRef"][];
             executor_kind: string;
+            failure?: components["schemas"]["ExecutionFailure"] | null;
             kind: components["schemas"]["ExecutionNodeKind"];
             node_id: string;
+            /**
+             * @description Safe input identity for surfaces. The referenced payload and private
+             *     prompt remain Runtime-owned and must be resolved through governed
+             *     evidence or activity projections.
+             * @default
+             */
+            payload_ref: string;
+            /** @default [] */
+            resource_scopes: string[];
             result_ref?: string | null;
             status: components["schemas"]["ExecutionNodeStatus"];
+            /** @description Bounded semantic output suitable for operator inspection. */
+            summary?: string | null;
             /**
              * @description Canonical node-level usage. Keeping it on the projection makes
              *     execution metrics traceable across nested graphs without asking a
@@ -15168,6 +15287,13 @@ export interface components {
             /** Format: uint64 */
             last_progress_at_ms?: number | null;
             latest_execution_id?: string | null;
+            /**
+             * @description Runtime graph compiled for `latest_execution_id`.
+             *
+             *     The execution ID is the stable Session ingress/lifecycle identity,
+             *     while this ID addresses the queryable execution graph projection.
+             */
+            latest_graph_id?: string | null;
             /** Format: uint64 */
             latest_live_revision?: number | null;
             latest_status?: components["schemas"]["ExecutionLiveStatus"] | null;
@@ -38592,6 +38718,51 @@ export interface operations {
             };
         };
     };
+    gateway_runtime_delete_api_runtime_managed_agents_definitions_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_runtime_post_api_runtime_managed_agents_dispatch: {
         parameters: {
             query?: never;
@@ -41215,6 +41386,49 @@ export interface operations {
             };
         };
     };
+    session_execution_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionLiveUpdate"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_session_message_get_api_sessions_by_id_input_projection: {
         parameters: {
             query?: never;
@@ -41998,6 +42212,64 @@ export interface operations {
             };
         };
     };
+    gateway_skill_post_api_skills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_skill_get_api_skills_catalog: {
         parameters: {
             query?: never;
@@ -42231,6 +42503,51 @@ export interface operations {
         };
     };
     gateway_skill_get_api_skills_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_delete_api_skills_by_id: {
         parameters: {
             query?: never;
             header?: never;

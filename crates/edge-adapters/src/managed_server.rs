@@ -4,7 +4,7 @@ use std::future::Future;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -26,6 +26,7 @@ const AUTH_HEADER: &str = "x-cowd-edge-token";
 const MAX_REQUEST_BODY: usize = 1024 * 1024;
 const MAX_IN_FLIGHT: usize = 256;
 const EVENT_REPLAY_CAPACITY: usize = 4096;
+static MANAGED_STATE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 type ResponseBody = UnsyncBoxBody<Bytes, Infallible>;
 type HandlerFuture = Pin<Box<dyn Future<Output = Result<SurfaceFrame, String>> + Send>>;
@@ -55,17 +56,20 @@ pub type ManagedHandlerFactory = Arc<
 struct ManagedServerArgs {
     socket: PathBuf,
     credential_file: PathBuf,
+    state_dir: PathBuf,
 }
 
 impl ManagedServerArgs {
     fn parse() -> Result<Self, String> {
         let mut socket = None;
         let mut credential_file = None;
+        let mut state_dir = None;
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--socket" => socket = args.next().map(PathBuf::from),
                 "--credential-file" => credential_file = args.next().map(PathBuf::from),
+                "--state-dir" => state_dir = args.next().map(PathBuf::from),
                 other => return Err(format!("unknown managed edge argument `{other}`")),
             }
         }
@@ -73,8 +77,14 @@ impl ManagedServerArgs {
             socket: socket.ok_or_else(|| "missing --socket".to_string())?,
             credential_file: credential_file
                 .ok_or_else(|| "missing --credential-file".to_string())?,
+            state_dir: state_dir.ok_or_else(|| "missing --state-dir".to_string())?,
         })
     }
+}
+
+#[must_use]
+pub fn managed_state_dir() -> Option<&'static Path> {
+    MANAGED_STATE_DIR.get().map(PathBuf::as_path)
 }
 
 #[derive(Debug)]
@@ -111,6 +121,16 @@ pub async fn run_managed_server(factory: ManagedHandlerFactory) -> std::io::Resu
     let args = ManagedServerArgs::parse().map_err(invalid_input)?;
     validate_runtime_path(&args.socket)?;
     validate_runtime_path(&args.credential_file)?;
+    validate_runtime_path(&args.state_dir)?;
+    if !args.state_dir.is_dir() {
+        return Err(invalid_input(format!(
+            "managed edge state directory does not exist: {}",
+            args.state_dir.display()
+        )));
+    }
+    MANAGED_STATE_DIR
+        .set(args.state_dir)
+        .map_err(|_| invalid_input("managed edge state directory was already initialized"))?;
     let token = tokio::fs::read_to_string(&args.credential_file)
         .await?
         .trim()

@@ -487,7 +487,7 @@ watch(
         <EmptyState v-else :title="t('page.reality.core.page.title.c2bff56680')" :detail="t('page.reality.core.page.detail.af5a795207')" />
       </section>
 
-      <section class="management-panel reality-panel" v-show="isSectionActive('overview')" data-section="overview">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('overview')" data-section="overview">
         <header>
           <h2>{{ t('page.reality.core.page.text.cb151a9a1c') }}</h2>
           <span>{{ status.generated_at || t('page.reality.core.page.inline.e049bd1422') }}</span>
@@ -587,7 +587,7 @@ watch(
         <EmptyState v-else :title="t('page.reality.core.page.title.df8254f898')" :detail="t('page.reality.core.page.detail.050f3da73d')" />
       </section>
 
-      <section class="management-panel reality-panel" v-show="isSectionActive('promotions')" data-section="promotions">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('promotions')" data-section="promotions">
         <header>
           <h2>{{ t('page.reality.core.page.text.e788169274') }}</h2>
           <span>{{ formatCount('receipts', promotionRows.length) }}</span>
@@ -596,7 +596,7 @@ watch(
         <EmptyState v-else :title="t('page.reality.core.page.title.af22a6d0ae')" :detail="t('page.reality.core.page.detail.b421d2b906')" />
       </section>
 
-      <section class="management-panel reality-panel" v-show="isSectionActive('boundaries')" data-section="boundaries">
+      <section class="management-panel reality-panel wide" v-show="isSectionActive('boundaries')" data-section="boundaries">
         <header>
           <h2>{{ t('page.reality.core.page.text.64c93e07da') }}</h2>
           <span>{{ t('page.reality.core.page.text.23dc486a98') }}</span>

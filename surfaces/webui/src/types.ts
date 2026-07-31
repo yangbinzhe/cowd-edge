@@ -27,7 +27,7 @@ export interface NavItem {
 
 export interface SessionSummary {
   id: string;
-  title: string;
+  title?: string;
   model?: string;
   status?: string;
   active_stream_id?: string | null;
@@ -42,6 +42,9 @@ export interface SessionSummary {
   summary?: string;
   first_message?: string;
   message_count?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  execution?: SessionExecutionIndexProjection;
 }
 
 export type BranchSessionReceipt = GatewayComponents['schemas']['BranchSessionReceipt'];
@@ -64,6 +67,8 @@ export interface ChatTurn {
   created_at_ms?: number;
   tool_use_id?: string;
   tool_name?: string;
+  tool_output?: string;
+  tool_error?: boolean;
   token_usage?: Record<string, unknown>;
   execution_id?: string;
   turn_id?: string;
@@ -83,7 +88,29 @@ export interface ActivityEvent {
   route?: string;
   correlation?: string;
   refs?: string[];
+  duration_ms?: number;
+  input?: unknown;
+  output?: unknown;
   raw?: Record<string, unknown>;
+  session_id?: string;
+  execution_id?: string;
+  parent_execution_id?: string;
+  graph_id?: string;
+  node_id?: string;
+  team_id?: string;
+  agent_id?: string;
+  turn_id?: string;
+  model_step_id?: string;
+  item_id?: string;
+  segment_id?: string;
+  tool_call_id?: string;
+  causal_sequence?: number;
+  delta_sequence?: number;
+  causal_parent_ids?: string[];
+  commit_cursor?: number;
+  wave?: number;
+  lane?: number;
+  lane_count?: number;
 }
 
 export type ExecutionProjectionEntity = GatewayComponents['schemas']['ExecutionProjectionEntity'];
@@ -135,17 +162,46 @@ export interface ExecutionLiveState {
   output_preview?: string | null;
   output_preview_start_bytes?: number;
   output_bytes?: number;
+  output_parts?: Array<{
+    model_step_id: string;
+    item_id: string;
+    part_id: string;
+    causal_sequence: number;
+    completed?: boolean;
+    preview?: string | null;
+    preview_start_bytes?: number;
+    bytes?: number;
+  }>;
   terminal_ref?: string | null;
   error?: string | null;
 }
 
+export interface ExecutionLiveUpdate {
+  schema_version: number;
+  execution_id: string;
+  live: ExecutionLiveState;
+}
+
 export interface SessionExecutionIndexProjection {
   session_id: string;
+  executions: SessionExecutionEntryProjection[];
   active_execution_ids: string[];
   latest_execution_id?: string | null;
+  latest_graph_id?: string | null;
   latest_status?: ExecutionLiveStatus | null;
   latest_live_revision?: number | null;
   last_progress_at_ms?: number | null;
+  terminal_ref?: string | null;
+}
+
+export interface SessionExecutionEntryProjection {
+  execution_id: string;
+  graph_id?: string | null;
+  turn_id?: string | null;
+  status: ExecutionLiveStatus;
+  live_revision?: number | null;
+  started_at_ms?: number | null;
+  updated_at_ms: number;
   terminal_ref?: string | null;
 }
 
@@ -212,6 +268,7 @@ export interface SessionTurnProjectionItem {
   usage: Array<Record<string, unknown>>;
   evidence_refs: string[];
   event_sequences: number[];
+  activity_events?: ActivityEvent[];
 }
 
 export interface SessionTurnProjection {

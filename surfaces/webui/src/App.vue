@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t, useI18n } from './i18n';
-import { computed, onBeforeUnmount, onMounted, provide, readonly, ref, watch } from 'vue';
+import { computed, onMounted, provide, readonly, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Activity, Brain, Boxes, CircleDot, ClipboardCheck, Crosshair, Layers, MessageSquare,
@@ -11,6 +11,7 @@ import type { NavId, NavItem } from './types';
 import { buildCapabilitySpecs } from './data/capabilities';
 import { appPluginForRoute, pluginCapabilitySpecs, pluginNavItems } from './plugins/registry';
 import CompanionPanel from './components/CompanionPanel.vue';
+import ApprovalInbox from './components/ApprovalInbox.vue';
 import CapabilitySidebar from './components/CapabilitySidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
 import CapabilitySectionNav from './components/layout/CapabilitySectionNav.vue';
@@ -40,6 +41,7 @@ const nav: NavItem[] = [
 ];
 const mobilePrimaryIds = new Set<NavId>(['chat', 'mission', 'runtime', 'reality']);
 const mobileNavOpen = ref(false);
+const mobileSessionsOpen = ref(false);
 const nextLocale = computed(() => locale.value === 'zh-CN' ? 'en-US' : 'zh-CN');
 const localeSwitchLabel = computed(() => locale.value === 'zh-CN' ? t('locale.switchToEnglish') : t('locale.switchToChinese'));
 
@@ -70,7 +72,17 @@ function navLabel(item: NavItem) {
 
 function go(item: NavItem) {
   mobileNavOpen.value = false;
+  mobileSessionsOpen.value = false;
   router.push(item.route);
+}
+
+function activateNav(item: NavItem) {
+  if (item.id === 'chat' && isChatRoute.value) {
+    mobileSessionsOpen.value = !mobileSessionsOpen.value;
+    mobileNavOpen.value = false;
+    return;
+  }
+  go(item);
 }
 
 function pageFromRoute(path: string): NavId {
@@ -103,20 +115,10 @@ const currentCapabilitySpec = computed(() => {
   return capabilitySpecs[currentPage.value] || null;
 });
 const currentSections = computed(() => currentCapabilitySpec.value?.sections || []);
-const isCompactViewport = ref(false);
-function updateViewportMode() {
-  if (typeof window === 'undefined') return;
-  isCompactViewport.value = window.matchMedia?.('(max-width: 820px)').matches ?? window.innerWidth < 820;
-}
 const canToggleCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
-  if (isChatRoute.value) return store.chatDisplayMode === 'clean' ? store.companionTab === 'workspace' : isCompactViewport.value;
+  if (isChatRoute.value) return true;
   return true;
-});
-const shellMode = computed(() => {
-  if (isChatRoute.value) return store.chatDisplayMode === 'clean' ? 'chat-clean' : 'chat-panorama';
-  if (isSettingsRoute.value) return 'settings';
-  return 'workbench';
 });
 const activeSection = computed(() => {
   const querySection = typeof route.query.section === 'string' ? route.query.section : '';
@@ -129,14 +131,30 @@ const activeSection = computed(() => {
 provide(activeCapabilitySectionKey, readonly(activeSection));
 const showCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
-  if (isChatRoute.value) {
-    if (store.chatDisplayMode === 'clean') return store.companionTab === 'workspace' && !store.companionCollapsed;
-    return !isCompactViewport.value || !store.companionCollapsed;
-  }
+  if (isChatRoute.value) return !store.companionCollapsed;
   return canToggleCompanion.value && !store.companionCollapsed;
 });
+const shellMode = computed(() => {
+  if (isChatRoute.value) return showCompanion.value ? 'chat-panorama' : 'chat-clean';
+  if (isSettingsRoute.value) return 'settings';
+  return 'workbench';
+});
 const companionState = computed(() => showCompanion.value ? 'open' : (canToggleCompanion.value ? 'collapsed' : 'hidden'));
-const companionToggleLabel = computed(() => store.companionCollapsed ? t('app.companion.open') : t('app.companion.close'));
+const companionToggleLabel = computed(() => showCompanion.value ? t('app.companion.close') : t('app.companion.open'));
+
+function toggleCompanionSurface() {
+  if (!isChatRoute.value) {
+    store.toggleCompanion();
+    return;
+  }
+  if (showCompanion.value) {
+    store.setChatDisplayMode('clean');
+    store.closeCompanion();
+    return;
+  }
+  store.setChatDisplayMode('panorama');
+  store.openCompanion('activity');
+}
 const configReloadStatus = computed(() => store.configReloadStatus || {});
 const configReloadFields = computed(() => {
   const fields = configReloadStatus.value?.restart_required?.fields;
@@ -178,13 +196,7 @@ function openGatewayAuthentication() {
 }
 
 onMounted(() => {
-  updateViewportMode();
-  if (typeof window !== 'undefined') window.addEventListener('resize', updateViewportMode);
   store.boot();
-});
-
-onBeforeUnmount(() => {
-  if (typeof window !== 'undefined') window.removeEventListener('resize', updateViewportMode);
 });
 </script>
 
@@ -201,8 +213,9 @@ onBeforeUnmount(() => {
         }"
         :title="navLabel(item)"
         :aria-label="navLabel(item)"
+        :aria-expanded="item.id === 'chat' && isChatRoute ? mobileSessionsOpen : undefined"
         type="button"
-        @click="go(item)"
+        @click="activateNav(item)"
       >
         <component :is="item.icon" :size="19" stroke-width="1.8" />
       </button>
@@ -228,8 +241,13 @@ onBeforeUnmount(() => {
           <component :is="item.icon" :size="18" stroke-width="1.8" />
           <span>{{ navLabel(item) }}</span>
         </button>
+        <button type="button" @click="toggleLocale">
+          <span>{{ localeSwitchLabel }}</span>
+        </button>
       </section>
     </nav>
+
+    <ApprovalInbox />
 
     <button
       class="global-locale-switch"
@@ -241,7 +259,19 @@ onBeforeUnmount(() => {
       {{ locale === 'zh-CN' ? 'EN' : '中' }}
     </button>
 
-    <SessionSidebar v-if="isChatRoute" />
+    <button
+      v-if="isChatRoute && mobileSessionsOpen"
+      class="mobile-session-backdrop"
+      type="button"
+      :aria-label="t('common.close')"
+      @click="mobileSessionsOpen = false"
+    />
+    <SessionSidebar
+      v-if="isChatRoute"
+      :class="{ 'mobile-open': mobileSessionsOpen }"
+      @close="mobileSessionsOpen = false"
+      @session-opened="mobileSessionsOpen = false"
+    />
     <CapabilitySidebar v-else-if="!isSettingsRoute" />
 
     <main class="main-surface" :data-page="currentPage" :data-active-section="activeSection">
@@ -279,12 +309,12 @@ onBeforeUnmount(() => {
     <button
       v-if="canToggleCompanion"
       class="companion-toggle"
-      :class="{ active: !store.companionCollapsed }"
+      :class="{ active: showCompanion }"
       type="button"
       :aria-label="companionToggleLabel"
       :title="companionToggleLabel"
-      :aria-pressed="!store.companionCollapsed"
-      @click="store.toggleCompanion"
+      :aria-pressed="showCompanion"
+      @click="toggleCompanionSurface"
     >
       <PanelsTopLeft :size="17" />
     </button>

@@ -26,9 +26,35 @@ export function normalizeTurnActivity(event: ActivityEvent): ActivityEvent {
   return {
     ...event,
     title: clean(event.title) || clean(event.kind) || 'event',
-    detail: clean(event.detail),
+    detail: event.kind === 'think'
+      ? String(event.detail || '').replace(/\r\n/g, '\n').trim()
+      : clean(event.detail),
     status: clean(event.status || 'observed'),
   };
+}
+
+export function mergeActivityEvent(
+  previous: ActivityEvent | undefined,
+  incoming: ActivityEvent,
+): ActivityEvent {
+  if (!previous) return normalizeTurnActivity(incoming);
+  const normalized = normalizeTurnActivity(incoming);
+  return normalizeTurnActivity({
+    ...previous,
+    ...normalized,
+    detail: normalized.detail || previous.detail,
+    status: normalized.status || previous.status,
+    duration_ms: normalized.duration_ms ?? previous.duration_ms,
+    input: normalized.input ?? previous.input,
+    output: normalized.output ?? previous.output,
+    sequence: previous.sequence ?? normalized.sequence,
+    commit_cursor: previous.commit_cursor ?? normalized.commit_cursor,
+    causal_sequence: previous.causal_sequence ?? normalized.causal_sequence,
+    raw: {
+      ...(previous.raw || {}),
+      ...(normalized.raw || {}),
+    },
+  });
 }
 
 export function mergeTurnActivity(existing: ActivityEvent[] = [], incoming: ActivityEvent | ActivityEvent[]) {
@@ -67,4 +93,3 @@ export function activitySummary(turn: Pick<ChatTurn, 'activity' | 'tool_name'>):
 export function hasTurnActivity(turn: Pick<ChatTurn, 'activity' | 'tool_name'>) {
   return activitySummary(turn).total > 0;
 }
-

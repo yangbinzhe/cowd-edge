@@ -21,11 +21,13 @@ use crate::platform::adapter::{
 use crate::platform::dedup::DedupStore;
 use crate::platform::types::{SendResult, SessionKey};
 use async_trait::async_trait;
+use base64::Engine as _;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
 /// Default iLink API base URL.
@@ -34,6 +36,11 @@ pub const ILINK_APP_ID: &str = "bot";
 pub const ILINK_APP_CLIENT_VERSION: &str = "131584";
 const QR_TIMEOUT_SECS: u64 = 8;
 const API_TIMEOUT_SECS: u64 = 15;
+const ILINK_SESSION_EXPIRED: i64 = -14;
+const ILINK_RATE_LIMITED: i64 = -2;
+const TRANSIENT_RETRY_DELAY_SECS: u64 = 2;
+const TRANSIENT_BACKOFF_SECS: u64 = 30;
+const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
 /// Default long-polling timeout in seconds.
 pub const DEFAULT_LONG_POLLING_TIMEOUT: u64 = 30;
@@ -111,6 +118,7 @@ pub struct WeChatQrCode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WeChatQrStatus {
     pub status: String,
+    pub base_url: String,
     pub redirect_host: Option<String>,
     pub credentials: Option<WeChatQrCredentials>,
 }
@@ -125,12 +133,14 @@ pub struct WeChatQrCredentials {
 }
 
 fn wechat_account_dir(base: Option<&Path>) -> PathBuf {
-    base.map(Path::to_path_buf).unwrap_or_else(|| {
-        crate::cowd_dirs::config_home_dir()
-            .join("messages")
-            .join("wechat-ilink")
-            .join("accounts")
-    })
+    base.map(Path::to_path_buf)
+        .or_else(|| crate::managed_server::managed_state_dir().map(|root| root.join("accounts")))
+        .unwrap_or_else(|| {
+            crate::cowd_dirs::config_home_dir()
+                .join("messages")
+                .join("wechat-ilink")
+                .join("accounts")
+        })
 }
 
 pub fn save_wechat_qr_account(
@@ -144,10 +154,17 @@ pub fn save_wechat_qr_account(
         "{}.json",
         sanitize_account_id(&credentials.account_id)
     ));
+    let credential_rotated = std::fs::read(&path)
+        .ok()
+        .and_then(|data| serde_json::from_slice::<WeChatQrCredentials>(&data).ok())
+        .is_some_and(|current| current.token != credentials.token);
     let data = serde_json::to_vec_pretty(credentials)
         .map_err(|e| PlatformError::ConfigError(format!("serialize wechat account: {e}")))?;
     std::fs::write(&path, data)
         .map_err(|e| PlatformError::ConfigError(format!("write wechat account: {e}")))?;
+    if credential_rotated {
+        let _ = std::fs::remove_file(wechat_sync_buf_path(&credentials.account_id, base));
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -206,6 +223,56 @@ fn sanitize_account_id(account_id: &str) -> String {
         .collect()
 }
 
+fn json_scalar_string(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(value) if !value.is_empty() => Some(value.clone()),
+        serde_json::Value::Number(value) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn wechat_sync_buf_path(account_id: &str, base: Option<&Path>) -> PathBuf {
+    wechat_account_dir(base).join(format!("{}.sync.json", sanitize_account_id(account_id)))
+}
+
+fn load_wechat_sync_buf(account_id: &str, base: Option<&Path>) -> String {
+    let path = wechat_sync_buf_path(account_id, base);
+    std::fs::read(&path)
+        .ok()
+        .and_then(|data| serde_json::from_slice::<serde_json::Value>(&data).ok())
+        .and_then(|value| {
+            value
+                .get("get_updates_buf")
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string)
+        })
+        .unwrap_or_default()
+}
+
+fn save_wechat_sync_buf(
+    account_id: &str,
+    sync_buf: &str,
+    base: Option<&Path>,
+) -> PlatformResult<()> {
+    let path = wechat_sync_buf_path(account_id, base);
+    let parent = path
+        .parent()
+        .ok_or_else(|| PlatformError::ConfigError("invalid WeChat sync path".to_string()))?;
+    std::fs::create_dir_all(parent)
+        .map_err(|error| PlatformError::ConfigError(format!("create sync dir: {error}")))?;
+    let temp = path.with_extension(format!("sync.{}.tmp", Uuid::new_v4().simple()));
+    let data = serde_json::to_vec(&serde_json::json!({
+        "get_updates_buf": sync_buf,
+        "updated_at": Utc::now().to_rfc3339(),
+    }))
+    .map_err(|error| PlatformError::ConfigError(format!("serialize sync cursor: {error}")))?;
+    std::fs::write(&temp, data)
+        .map_err(|error| PlatformError::ConfigError(format!("write sync cursor: {error}")))?;
+    std::fs::rename(&temp, &path)
+        .map_err(|error| PlatformError::ConfigError(format!("commit sync cursor: {error}")))?;
+    Ok(())
+}
+
 fn ilink_headers(token: Option<&str>, body_len: Option<usize>) -> reqwest::header::HeaderMap {
     use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE};
     let mut headers = HeaderMap::new();
@@ -214,6 +281,15 @@ fn ilink_headers(token: Option<&str>, body_len: Option<usize>) -> reqwest::heade
         "iLink-App-ClientVersion",
         HeaderValue::from_static(ILINK_APP_CLIENT_VERSION),
     );
+    headers.insert(
+        "AuthorizationType",
+        HeaderValue::from_static("ilink_bot_token"),
+    );
+    let random_uin = rand::random::<u32>().to_string();
+    let encoded_uin = base64::engine::general_purpose::STANDARD.encode(random_uin.as_bytes());
+    if let Ok(value) = HeaderValue::from_str(&encoded_uin) {
+        headers.insert("X-WECHAT-UIN", value);
+    }
     if let Some(len) = body_len {
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
         if let Ok(value) = HeaderValue::from_str(&len.to_string()) {
@@ -226,6 +302,41 @@ fn ilink_headers(token: Option<&str>, body_len: Option<usize>) -> reqwest::heade
         }
     }
     headers
+}
+
+fn ilink_protocol_error(value: &serde_json::Value, operation: &str) -> Option<PlatformError> {
+    let ret = value
+        .get("ret")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let errcode = value
+        .get("errcode")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    if ret == 0 && errcode == 0 {
+        return None;
+    }
+    let code = if errcode != 0 { errcode } else { ret };
+    let message = value
+        .get("errmsg")
+        .or_else(|| value.get("msg"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown iLink error");
+    let stale_rate_limit =
+        code == ILINK_RATE_LIMITED && message.eq_ignore_ascii_case("unknown error");
+    if code == ILINK_SESSION_EXPIRED || stale_rate_limit {
+        return Some(PlatformError::AuthenticationFailed(format!(
+            "reauth_required: {operation} rejected the saved WeChat session ({code}: {message})"
+        )));
+    }
+    if code == ILINK_RATE_LIMITED {
+        return Some(PlatformError::RateLimited(format!(
+            "{operation} rate limited ({code}: {message})"
+        )));
+    }
+    Some(PlatformError::ReceiveFailed(format!(
+        "{operation} failed ({code}: {message})"
+    )))
 }
 
 async fn ilink_get_json(
@@ -327,13 +438,14 @@ pub async fn poll_wechat_qr_login(
     base_url: Option<&str>,
 ) -> PlatformResult<WeChatQrStatus> {
     let client = reqwest::Client::new();
-    let base_url = base_url.unwrap_or(ILINK_BASE_URL);
+    let base_url = normalize_wechat_base_url(base_url.unwrap_or(ILINK_BASE_URL))?;
     let endpoint = format!("ilink/bot/get_qrcode_status?qrcode={qrcode}");
-    let value = match ilink_get_json(&client, base_url, &endpoint).await {
+    let value = match ilink_get_json(&client, &base_url, &endpoint).await {
         Ok(value) => value,
         Err(_) => {
             return Ok(WeChatQrStatus {
                 status: "wait".to_string(),
+                base_url,
                 redirect_host: None,
                 credentials: None,
             });
@@ -349,6 +461,12 @@ pub async fn poll_wechat_qr_login(
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .map(ToString::to_string);
+    let next_base_url = match redirect_host.as_deref() {
+        Some(host) if status == "scaned_but_redirect" => {
+            normalize_wechat_base_url(&format!("https://{host}"))?
+        }
+        _ => base_url.clone(),
+    };
     let credentials = if status == "confirmed" {
         let account_id = value
             .get("ilink_bot_id")
@@ -373,8 +491,9 @@ pub async fn poll_wechat_qr_login(
                 .get("baseurl")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
-                .unwrap_or(ILINK_BASE_URL)
-                .to_string(),
+                .map(normalize_wechat_base_url)
+                .transpose()?
+                .unwrap_or_else(|| next_base_url.clone()),
             user_id: value
                 .get("ilink_user_id")
                 .and_then(|v| v.as_str())
@@ -387,23 +506,50 @@ pub async fn poll_wechat_qr_login(
     };
     Ok(WeChatQrStatus {
         status,
+        base_url: next_base_url,
         redirect_host,
         credentials,
     })
+}
+
+fn normalize_wechat_base_url(value: &str) -> PlatformResult<String> {
+    let parsed = reqwest::Url::parse(value).map_err(|error| {
+        PlatformError::AuthenticationFailed(format!("invalid WeChat iLink base URL: {error}"))
+    })?;
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    let official_host = host == "weixin.qq.com" || host.ends_with(".weixin.qq.com");
+    if parsed.scheme() != "https"
+        || !official_host
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.port().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(PlatformError::AuthenticationFailed(
+            "WeChat iLink base URL must be an official HTTPS weixin.qq.com endpoint".to_string(),
+        ));
+    }
+    Ok(format!("https://{host}"))
 }
 
 /// WeChat iLink platform adapter.
 ///
 /// Uses HTTP long-polling (no WebSocket) to receive messages from WeChat
 /// users via Tencent's iLink Bot API. Simpler than Feishu — just token
-/// auth, long-poll getupdates with context_token echo, and sendmessage.
+/// auth, long-poll getupdates with a durable sync cursor, and sendmessage.
 pub struct WeChatLinkAdapter {
     config: WeChatLinkConfig,
     connected: Arc<RwLock<bool>>,
     /// Auth token obtained via `/ilink/bot/gettoken`.
     token: Arc<RwLock<Option<String>>>,
-    /// Latest context_token from getupdates response, echoed back in the next call.
-    context_token: Arc<RwLock<String>>,
+    /// Durable get_updates_buf cursor. This is not a conversation context token.
+    sync_buf: Arc<RwLock<String>>,
+    /// Per-user context tokens used only when replying to an inbound message.
+    reply_contexts: Arc<RwLock<HashMap<String, String>>>,
+    /// Parsed updates waiting to be emitted. A long-poll response may contain
+    /// several messages and advancing the sync cursor makes dropping any item permanent.
+    pending_messages: Arc<Mutex<VecDeque<InboundMessage>>>,
     /// Dedup store: message_id → timestamp.
     seen_ids: DedupStore,
     /// Timestamp of last successful connect, used for reconnect backoff.
@@ -420,11 +566,18 @@ impl WeChatLinkAdapter {
             if config.qr_token_mode { "qr" } else { "bot" },
             config.base_url
         );
+        let sync_buf = config
+            .account_id
+            .as_deref()
+            .map(|account_id| load_wechat_sync_buf(account_id, None))
+            .unwrap_or_default();
         Self {
             config,
             connected: Arc::new(RwLock::new(false)),
             token: Arc::new(RwLock::new(None)),
-            context_token: Arc::new(RwLock::new(String::new())),
+            sync_buf: Arc::new(RwLock::new(sync_buf)),
+            reply_contexts: Arc::new(RwLock::new(HashMap::new())),
+            pending_messages: Arc::new(Mutex::new(VecDeque::new())),
             seen_ids: DedupStore::new(10_000, 3600),
             last_connect_attempt: RwLock::new(None),
             consecutive_failures: RwLock::new(0),
@@ -560,36 +713,42 @@ impl WeChatLinkAdapter {
 
     /// Long-poll for incoming messages from iLink.
     ///
-    /// GET `/ilink/bot/getupdates` with params: token, context_token.
-    /// The response includes a context_token that must be echoed back in the
-    /// next call (context_token echo mechanism).
+    /// Poll `/ilink/bot/getupdates` with the durable `get_updates_buf` cursor.
+    ///
+    /// The QR-token protocol uses this cursor only for stream progress. Each
+    /// conversation's `context_token` is tracked separately for replies.
     ///
     /// Returns a list of message JSON objects, or an empty vec on timeout.
     pub async fn get_updates(&self) -> PlatformResult<Vec<serde_json::Value>> {
         let token = self.ensure_token().await?;
         let client = reqwest::Client::new();
 
-        // Read the current context_token to echo back
-        let ctx_token = self.context_token.read().await.clone();
+        let sync_buf = self.sync_buf.read().await.clone();
 
         if self.config.qr_token_mode {
             let json = ilink_post_json(
                 &client,
                 &self.config.base_url,
                 "ilink/bot/getupdates",
-                serde_json::json!({"get_updates_buf": ctx_token}),
+                serde_json::json!({"get_updates_buf": sync_buf}),
                 Some(&token),
                 DEFAULT_LONG_POLLING_TIMEOUT,
             )
             .await
             .map_err(|e| PlatformError::ReceiveFailed(e.to_string()))?;
+            if let Some(error) = ilink_protocol_error(&json, "get_updates") {
+                return Err(error);
+            }
 
             if let Some(new_ctx) = json
                 .get("get_updates_buf")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
             {
-                *self.context_token.write().await = new_ctx.to_string();
+                *self.sync_buf.write().await = new_ctx.to_string();
+                if let Some(account_id) = self.config.account_id.as_deref() {
+                    save_wechat_sync_buf(account_id, new_ctx, None)?;
+                }
             }
 
             return Ok(json
@@ -605,7 +764,7 @@ impl WeChatLinkAdapter {
             .get(&url)
             .query(&[
                 ("token", token.as_str()),
-                ("context_token", ctx_token.as_str()),
+                ("context_token", sync_buf.as_str()),
             ])
             .timeout(std::time::Duration::from_secs(DEFAULT_LONG_POLLING_TIMEOUT))
             .send()
@@ -653,7 +812,7 @@ impl WeChatLinkAdapter {
 
         // Update the context_token for the next long-poll cycle
         if let Some(new_ctx_token) = updates_resp.context_token {
-            *self.context_token.write().await = new_ctx_token;
+            *self.sync_buf.write().await = new_ctx_token;
         }
 
         Ok(updates_resp.data.unwrap_or_default())
@@ -661,40 +820,17 @@ impl WeChatLinkAdapter {
 
     /// Parse a raw iLink message JSON into an `InboundMessage`.
     fn parse_ilink_message(&self, msg: &serde_json::Value) -> Option<InboundMessage> {
-        let msg_type = msg
-            .get("msg_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("text");
-
-        let text = match msg_type {
-            "text" => msg
-                .get("text")
-                .and_then(|v| v.as_str())
-                .or_else(|| {
-                    msg.get("item_list")
-                        .and_then(|v| v.as_array())
-                        .and_then(|items| {
-                            items.iter().find_map(|item| {
-                                item.get("text_item")
-                                    .and_then(|v| v.get("text"))
-                                    .and_then(|v| v.as_str())
-                            })
-                        })
-                })
-                .map(|s| s.to_string())
-                .unwrap_or_default(),
-            "image" => "[Image]".to_string(),
-            "voice" => "[Voice message]".to_string(),
-            "video" => "[Video]".to_string(),
-            "file" => {
-                let name = msg
-                    .get("file_name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown");
-                format!("[File: {}]", name)
-            }
-            _ => format!("[{} message]", msg_type),
-        };
+        let numeric_type = msg.get("message_type").and_then(serde_json::Value::as_i64);
+        let legacy_type = msg.get("msg_type").and_then(serde_json::Value::as_str);
+        let is_user_message = numeric_type == Some(1)
+            || (numeric_type.is_none()
+                && matches!(
+                    legacy_type,
+                    Some("text" | "image" | "voice" | "video" | "file")
+                ));
+        if !is_user_message {
+            return None;
+        }
 
         let from_user = msg
             .get("from_user")
@@ -704,33 +840,89 @@ impl WeChatLinkAdapter {
         if from_user.is_empty() {
             return None;
         }
+        if self
+            .config
+            .account_id
+            .as_deref()
+            .is_some_and(|account_id| account_id == from_user)
+        {
+            return None;
+        }
 
         let message_id = msg
             .get("message_id")
-            .and_then(|v| v.as_str())
-            .or_else(|| msg.get("client_id").and_then(|v| v.as_str()))
-            .map(|s| s.to_string());
+            .and_then(json_scalar_string)
+            .or_else(|| msg.get("client_id").and_then(json_scalar_string));
+
+        let items = msg
+            .get("item_list")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let text = msg
+            .get("text")
+            .and_then(serde_json::Value::as_str)
+            .map(ToString::to_string)
+            .into_iter()
+            .chain(items.iter().filter_map(|item| {
+                item.get("text_item")
+                    .and_then(|value| value.get("text"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(ToString::to_string)
+            }))
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let item_types = items
+            .iter()
+            .filter_map(|item| item.get("type").and_then(serde_json::Value::as_i64))
+            .collect::<Vec<_>>();
+        let message_type = if item_types.contains(&2) || legacy_type == Some("image") {
+            MessageType::Photo
+        } else if item_types.contains(&5) || legacy_type == Some("video") {
+            MessageType::Video
+        } else if item_types.contains(&3) || legacy_type == Some("voice") {
+            MessageType::Voice
+        } else if item_types.contains(&4) || legacy_type == Some("file") {
+            MessageType::Document
+        } else {
+            MessageType::Text
+        };
+        let text = if text.is_empty() {
+            match message_type {
+                MessageType::Photo => "[Image]".to_string(),
+                MessageType::Voice => "[Voice message]".to_string(),
+                MessageType::Video => "[Video]".to_string(),
+                MessageType::Document => "[File]".to_string(),
+                _ => return None,
+            }
+        } else {
+            text
+        };
 
         let msg_timestamp = msg
             .get("timestamp")
+            .or_else(|| msg.get("create_time_ms"))
+            .or_else(|| msg.get("create_time"))
             .and_then(|v| v.as_i64())
             .map(|ts| {
-                chrono::TimeZone::timestamp_millis_opt(&Utc, ts)
+                let millis = if ts.abs() < 10_000_000_000 {
+                    ts.saturating_mul(1_000)
+                } else {
+                    ts
+                };
+                chrono::TimeZone::timestamp_millis_opt(&Utc, millis)
                     .single()
                     .unwrap_or_else(Utc::now)
             })
             .unwrap_or_else(Utc::now);
 
-        let session_key = SessionKey::new("wechat_ilink", from_user);
-
-        let message_type = match msg_type {
-            "text" => MessageType::Text,
-            "image" => MessageType::Photo,
-            "voice" => MessageType::Voice,
-            "video" => MessageType::Video,
-            "file" => MessageType::Document,
-            _ => MessageType::Text,
-        };
+        let session_key = SessionKey::new("wechat-ilink", from_user);
+        let context_token = msg
+            .get("context_token")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string);
 
         Some(InboundMessage {
             platform: Platform::WeChat,
@@ -741,7 +933,9 @@ impl WeChatLinkAdapter {
             metadata: serde_json::json!({
                 "message_id": message_id,
                 "from_user": from_user,
-                "msg_type": msg_type,
+                "message_type": numeric_type,
+                "item_types": item_types,
+                "context_token": context_token,
             }),
             message_type,
             message_id,
@@ -761,7 +955,13 @@ impl WeChatLinkAdapter {
 
         if self.config.qr_token_mode {
             let client_id = format!("cowd-weixin-{}", Uuid::new_v4().simple());
-            let ctx_token = self.context_token.read().await.clone();
+            let reply_context = self
+                .reply_contexts
+                .read()
+                .await
+                .get(to_user)
+                .cloned()
+                .unwrap_or_default();
             let mut msg = serde_json::json!({
                 "from_user_id": "",
                 "to_user_id": to_user,
@@ -773,10 +973,10 @@ impl WeChatLinkAdapter {
                     "text_item": {"text": text}
                 }]
             });
-            if !ctx_token.is_empty() {
-                msg["context_token"] = serde_json::Value::String(ctx_token);
+            if !reply_context.is_empty() {
+                msg["context_token"] = serde_json::Value::String(reply_context);
             }
-            ilink_post_json(
+            let response = ilink_post_json(
                 &client,
                 &self.config.base_url,
                 "ilink/bot/sendmessage",
@@ -786,6 +986,9 @@ impl WeChatLinkAdapter {
             )
             .await
             .map_err(|e| PlatformError::SendFailed(e.to_string()))?;
+            if let Some(error) = ilink_protocol_error(&response, "send_message") {
+                return Err(error);
+            }
             return Ok(client_id);
         }
 
@@ -837,7 +1040,7 @@ impl WeChatLinkAdapter {
         let client = reqwest::Client::new();
 
         if self.config.qr_token_mode {
-            let _ = ilink_post_json(
+            let response = ilink_post_json(
                 &client,
                 &self.config.base_url,
                 "ilink/bot/sendtyping",
@@ -847,6 +1050,9 @@ impl WeChatLinkAdapter {
             )
             .await
             .map_err(|e| PlatformError::SendFailed(e.to_string()))?;
+            if let Some(error) = ilink_protocol_error(&response, "send_typing") {
+                return Err(error);
+            }
             return Ok(());
         }
 
@@ -1021,7 +1227,8 @@ impl PlatformAdapter for WeChatLinkAdapter {
     async fn disconnect(&self) -> PlatformResult<()> {
         *self.connected.write().await = false;
         *self.token.write().await = None;
-        *self.context_token.write().await = String::new();
+        self.reply_contexts.write().await.clear();
+        self.pending_messages.lock().await.clear();
         *self.last_connect_attempt.write().await = None;
         *self.consecutive_failures.write().await = 0;
         tracing::info!("wechat_ilink adapter disconnected");
@@ -1034,6 +1241,9 @@ impl PlatformAdapter for WeChatLinkAdapter {
     }
 
     async fn receive(&self) -> PlatformResult<Option<InboundMessage>> {
+        if let Some(message) = self.pending_messages.lock().await.pop_front() {
+            return Ok(Some(message));
+        }
         let connected = *self.connected.read().await;
         if !connected {
             if let Err(e) = self.try_reconnect().await {
@@ -1043,30 +1253,47 @@ impl PlatformAdapter for WeChatLinkAdapter {
         }
 
         let updates = match self.get_updates().await {
-            Ok(updates) => updates,
-            Err(e) => {
-                let err_str = e.to_string();
-                tracing::warn!("wechat_ilink adapter: get_updates failed: {err_str}");
-                if err_str.contains("401")
-                    || err_str.contains("403")
-                    || err_str.contains("unauthorized")
-                    || err_str.contains("auth")
-                    || err_str.contains("token")
-                {
-                    tracing::info!("wechat_ilink adapter: auth failure detected, marking disconnected for reconnect");
-                    *self.connected.write().await = false;
-                    *self.token.write().await = None;
+            Ok(updates) => {
+                *self.consecutive_failures.write().await = 0;
+                updates
+            }
+            Err(error @ PlatformError::AuthenticationFailed(_)) => {
+                *self.connected.write().await = false;
+                *self.token.write().await = None;
+                tracing::error!("wechat_ilink adapter requires a new QR authorization: {error}");
+                return Err(error);
+            }
+            Err(PlatformError::RateLimited(message)) => {
+                tracing::warn!("wechat_ilink adapter rate limited: {message}");
+                tokio::time::sleep(std::time::Duration::from_secs(TRANSIENT_BACKOFF_SECS)).await;
+                return Ok(None);
+            }
+            Err(error) => {
+                let message = error.to_string();
+                if message.contains("timed out") || message.contains("timeout") {
+                    tracing::debug!("wechat_ilink long-poll timeout");
+                    return Ok(None);
                 }
+                let mut failures = self.consecutive_failures.write().await;
+                *failures = failures.saturating_add(1);
+                let delay = if *failures >= MAX_CONSECUTIVE_FAILURES {
+                    *failures = 0;
+                    TRANSIENT_BACKOFF_SECS
+                } else {
+                    TRANSIENT_RETRY_DELAY_SECS
+                };
+                tracing::warn!(delay, "wechat_ilink transient receive failure: {message}");
+                drop(failures);
+                tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
                 return Ok(None);
             }
         };
 
         for msg in updates {
-            // Extract message_id for dedup
             let msg_id = msg
                 .get("message_id")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .and_then(json_scalar_string)
+                .or_else(|| msg.get("client_id").and_then(json_scalar_string));
 
             if let Some(ref mid) = msg_id {
                 if self.is_duplicate(mid).await {
@@ -1076,11 +1303,21 @@ impl PlatformAdapter for WeChatLinkAdapter {
             }
 
             if let Some(inbound) = self.parse_ilink_message(&msg) {
-                return Ok(Some(inbound));
+                if let Some(context_token) = msg
+                    .get("context_token")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|value| !value.is_empty())
+                {
+                    self.reply_contexts.write().await.insert(
+                        inbound.session_key.user_id.clone(),
+                        context_token.to_string(),
+                    );
+                }
+                self.pending_messages.lock().await.push_back(inbound);
             }
         }
 
-        Ok(None)
+        Ok(self.pending_messages.lock().await.pop_front())
     }
 
     async fn send(&self, msg: &OutboundMessage) -> PlatformResult<SendResult> {
@@ -1382,39 +1619,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_context_token_echo_mechanism() {
+    async fn test_sync_cursor_is_independent_from_reply_contexts() {
         let config = WeChatLinkConfig::new("test_bot", "test_secret");
         let adapter = WeChatLinkAdapter::new(config);
 
-        // Initially empty
         {
-            let ctx = adapter.context_token.read().await;
-            assert!(ctx.is_empty());
-        }
-
-        // Set a context token
-        {
-            let mut ctx = adapter.context_token.write().await;
-            *ctx = "ctx_token_abc123".to_string();
-        }
-
-        // Verify it was stored
-        {
-            let ctx = adapter.context_token.read().await;
-            assert_eq!(*ctx, "ctx_token_abc123");
-        }
-
-        // Clear via disconnect
-        // We simulate the disconnect behavior
-        {
-            let mut ctx = adapter.context_token.write().await;
-            *ctx = String::new();
+            let cursor = adapter.sync_buf.read().await;
+            assert!(cursor.is_empty());
         }
 
         {
-            let ctx = adapter.context_token.read().await;
-            assert!(ctx.is_empty());
+            let mut cursor = adapter.sync_buf.write().await;
+            *cursor = "sync_cursor_abc123".to_string();
         }
+        adapter
+            .reply_contexts
+            .write()
+            .await
+            .insert("user_1".to_string(), "reply_context_xyz".to_string());
+        {
+            let cursor = adapter.sync_buf.read().await;
+            assert_eq!(*cursor, "sync_cursor_abc123");
+        }
+        {
+            let contexts = adapter.reply_contexts.read().await;
+            assert_eq!(
+                contexts.get("user_1").map(String::as_str),
+                Some("reply_context_xyz")
+            );
+        }
+
+        adapter.disconnect().await.unwrap();
+        {
+            let cursor = adapter.sync_buf.read().await;
+            assert_eq!(*cursor, "sync_cursor_abc123");
+        }
+        assert!(adapter.reply_contexts.read().await.is_empty());
     }
 
     #[tokio::test]
@@ -1429,16 +1669,12 @@ mod tests {
             *token = Some("dummy_token_xyz".to_string());
         }
 
-        // Set a context token
         {
-            let mut ctx = adapter.context_token.write().await;
-            *ctx = "prev_ctx_token".to_string();
+            let mut cursor = adapter.sync_buf.write().await;
+            *cursor = "prev_sync_cursor".to_string();
         }
 
-        // get_updates should fail (no real server), but the request format
-        // is correct: it uses the token and context_token as query params
         let result = adapter.get_updates().await;
-        // Expected to fail because localhost:1 is unreachable
         assert!(result.is_err());
     }
 
@@ -1552,6 +1788,164 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_official_numeric_text_message() {
+        let config = WeChatLinkConfig::new("bot", "secret");
+        let adapter = WeChatLinkAdapter::new(config);
+        let msg = serde_json::json!({
+            "message_id": 18273645,
+            "from_user_id": "user_numeric",
+            "message_type": 1,
+            "context_token": "reply_context",
+            "item_list": [{
+                "type": 1,
+                "text_item": {"text": "来自微信的真实协议消息"}
+            }],
+            "create_time_ms": 1700000000000_i64,
+        });
+
+        let inbound = adapter.parse_ilink_message(&msg).unwrap();
+        assert_eq!(inbound.text, "来自微信的真实协议消息");
+        assert_eq!(inbound.message_id.as_deref(), Some("18273645"));
+        assert_eq!(inbound.session_key.platform, "wechat-ilink");
+        assert_eq!(inbound.session_key.user_id, "user_numeric");
+    }
+
+    #[test]
+    fn qr_login_user_id_is_an_inbound_sender_not_the_bot_identity() {
+        let config = WeChatLinkConfig::from_qr_account(
+            "4826e57d2c1e@im.bot",
+            "test-token",
+            ILINK_BASE_URL,
+            Some("ilink-user-who-scanned-the-qr".to_string()),
+        );
+        let adapter = WeChatLinkAdapter::new(config);
+        let msg = serde_json::json!({
+            "message_id": 18273646,
+            "from_user_id": "ilink-user-who-scanned-the-qr",
+            "message_type": 1,
+            "context_token": "reply-context",
+            "item_list": [{
+                "type": 1,
+                "text_item": {"text": "扫码用户发给机器人的消息"}
+            }]
+        });
+
+        let inbound = adapter
+            .parse_ilink_message(&msg)
+            .expect("the QR user's message must reach Gateway");
+        assert_eq!(inbound.text, "扫码用户发给机器人的消息");
+        assert_eq!(inbound.session_key.user_id, "ilink-user-who-scanned-the-qr");
+    }
+
+    #[test]
+    fn qr_login_bot_id_is_still_rejected_as_an_echo() {
+        let config = WeChatLinkConfig::from_qr_account(
+            "4826e57d2c1e@im.bot",
+            "test-token",
+            ILINK_BASE_URL,
+            Some("ilink-user-who-scanned-the-qr".to_string()),
+        );
+        let adapter = WeChatLinkAdapter::new(config);
+        let msg = serde_json::json!({
+            "message_id": 18273647,
+            "from_user_id": "4826e57d2c1e@im.bot",
+            "message_type": 1,
+            "item_list": [{
+                "type": 1,
+                "text_item": {"text": "bot echo"}
+            }]
+        });
+
+        assert!(adapter.parse_ilink_message(&msg).is_none());
+    }
+
+    #[test]
+    fn test_parse_rejects_bot_messages() {
+        let config = WeChatLinkConfig::new("bot", "secret");
+        let adapter = WeChatLinkAdapter::new(config);
+        let msg = serde_json::json!({
+            "message_id": 99,
+            "from_user_id": "bot_sender",
+            "message_type": 2,
+            "item_list": [{
+                "type": 1,
+                "text_item": {"text": "bot echo"}
+            }]
+        });
+
+        assert!(adapter.parse_ilink_message(&msg).is_none());
+    }
+
+    #[test]
+    fn test_ilink_protocol_errors_require_reauthorization() {
+        let expired = ilink_protocol_error(
+            &serde_json::json!({"errcode": -14, "errmsg": "session timeout"}),
+            "get_updates",
+        );
+        assert!(matches!(
+            expired,
+            Some(PlatformError::AuthenticationFailed(message))
+                if message.contains("reauth_required")
+        ));
+
+        let stale = ilink_protocol_error(
+            &serde_json::json!({"errcode": -2, "errmsg": "unknown error"}),
+            "get_updates",
+        );
+        assert!(matches!(
+            stale,
+            Some(PlatformError::AuthenticationFailed(message))
+                if message.contains("reauth_required")
+        ));
+
+        assert!(ilink_protocol_error(&serde_json::json!({"ret": 0}), "get_updates").is_none());
+    }
+
+    #[test]
+    fn test_ilink_headers_include_official_auth_contract() {
+        let headers = ilink_headers(Some("token"), Some(2));
+        assert_eq!(
+            headers
+                .get("AuthorizationType")
+                .and_then(|value| value.to_str().ok()),
+            Some("ilink_bot_token")
+        );
+        assert!(headers.get("X-WECHAT-UIN").is_some());
+        assert_eq!(
+            headers
+                .get(reqwest::header::AUTHORIZATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("Bearer token")
+        );
+    }
+
+    #[test]
+    fn test_sync_cursor_persists_and_resets_when_credentials_rotate() {
+        let root =
+            std::env::temp_dir().join(format!("cowd-wechat-sync-test-{}", Uuid::new_v4().simple()));
+        let account = WeChatQrCredentials {
+            account_id: "account-1".to_string(),
+            token: "token-v1".to_string(),
+            base_url: ILINK_BASE_URL.to_string(),
+            user_id: Some("bot-user".to_string()),
+            saved_at: Utc::now().to_rfc3339(),
+        };
+        save_wechat_qr_account(&account, Some(&root)).unwrap();
+        save_wechat_sync_buf(&account.account_id, "cursor-v1", Some(&root)).unwrap();
+        assert_eq!(
+            load_wechat_sync_buf(&account.account_id, Some(&root)),
+            "cursor-v1"
+        );
+
+        let mut refreshed = account;
+        refreshed.token = "token-v2".to_string();
+        save_wechat_qr_account(&refreshed, Some(&root)).unwrap();
+        assert!(load_wechat_sync_buf(&refreshed.account_id, Some(&root)).is_empty());
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn test_parse_ilink_image_message() {
         let config = WeChatLinkConfig::new("bot", "secret");
         let adapter = WeChatLinkAdapter::new(config);
@@ -1610,6 +2004,19 @@ mod tests {
     #[test]
     fn test_ilink_base_url_constant() {
         assert_eq!(ILINK_BASE_URL, "https://ilinkai.weixin.qq.com");
+    }
+
+    #[test]
+    fn qr_poll_accepts_only_official_https_hosts() {
+        assert_eq!(
+            normalize_wechat_base_url("https://redirect.weixin.qq.com/").unwrap(),
+            "https://redirect.weixin.qq.com"
+        );
+        assert!(normalize_wechat_base_url("http://ilinkai.weixin.qq.com").is_err());
+        assert!(normalize_wechat_base_url("https://attacker.example").is_err());
+        assert!(
+            normalize_wechat_base_url("https://ilinkai.weixin.qq.com@attacker.example").is_err()
+        );
     }
 
     #[test]

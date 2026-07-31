@@ -715,7 +715,7 @@ onMounted(refresh);
         <EvidenceTrace :items="auditEvidence" :title="t('page.audit.page.title.69b367b2b4')" />
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('usage')" data-section="usage">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('usage')" data-section="usage">
         <header>
           <h2>{{ t('page.audit.page.text.c3d8bf1440') }}</h2>
           <span>{{ displayStatus(state.usage?.status || 'usage') }}</span>
@@ -732,7 +732,7 @@ onMounted(refresh);
         </dl>
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('release')" data-section="release">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('release')" data-section="release">
         <header>
           <h2>{{ t('page.audit.page.text.052c0ae46a') }}</h2>
           <span>{{ releaseSurface }}</span>
@@ -835,7 +835,7 @@ onMounted(refresh);
         </section>
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('harness-eval-runs')" data-section="harness-eval-runs">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('harness-eval-runs')" data-section="harness-eval-runs">
         <header>
           <h2>{{ t('page.audit.page.text.4444545e37') }}</h2>
           <span>{{ formatCount('runs', harnessEvalRuns.length) }}</span>
@@ -847,7 +847,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.audit.page.title.2029dfea2e')" :detail="t('page.audit.page.detail.d6935f4575')" />
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('harness-eval-scenarios')" data-section="harness-eval-scenarios">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('harness-eval-scenarios')" data-section="harness-eval-scenarios">
         <header>
           <h2>{{ t('page.audit.page.text.171edf1adf') }}</h2>
           <span>{{ formatCount('scenarios', harnessEvalScenarios.length) }}</span>
@@ -959,7 +959,7 @@ onMounted(refresh);
           </div>
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('approvals')" data-section="approvals">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('approvals')" data-section="approvals">
         <header>
           <h2>{{ t('page.audit.page.text.c9312c41ba') }}</h2>
           <span>{{ t('common.shownCount', { count: approvalRows.length, unit: t('unit.records') }) }}</span>

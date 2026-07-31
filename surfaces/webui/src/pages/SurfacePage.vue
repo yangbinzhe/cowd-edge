@@ -554,7 +554,7 @@ onMounted(refresh);
         </label>
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('health')" data-section="health">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('health')" data-section="health">
         <header>
           <h2>{{ t('page.surface.page.text.0a8f2a8cc3') }}</h2>
           <span>{{ selectedSurface }}</span>

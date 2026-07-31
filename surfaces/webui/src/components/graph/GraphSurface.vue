@@ -2,11 +2,24 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { Panel, VueFlow } from '@vue-flow/core';
-import { Download, Expand, List, Search } from 'lucide-vue-next';
+import {
+  ArrowDown,
+  ArrowRight,
+  Download,
+  Filter,
+  List,
+  Maximize2,
+  Minimize2,
+  Scan,
+  Search,
+  ZoomIn,
+  ZoomOut,
+} from 'lucide-vue-next';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import type { GraphDirection, GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/graph';
 import { t } from '../../i18n';
+import { displayStatus } from '../../i18n/domain/status';
 import DataTable from '../workbench/DataTable.vue';
 import StatusPill from '../workbench/StatusPill.vue';
 import EvidenceInspector from '../evidence/EvidenceInspector.vue';
@@ -19,12 +32,29 @@ const props = withDefaults(defineProps<{
   loading?: boolean;
   searchQuery?: string;
   statusQuery?: string;
-}>(), { selectedNodeId: '', connectionState: 'ready', loading: false, searchQuery: '', statusQuery: 'all' });
+  activeNodeId?: string;
+  compact?: boolean;
+  embeddedInspector?: boolean;
+  delegateFullscreen?: boolean;
+  fullscreen?: boolean;
+}>(), {
+  selectedNodeId: '',
+  connectionState: 'ready',
+  loading: false,
+  searchQuery: '',
+  statusQuery: 'all',
+  activeNodeId: '',
+  compact: false,
+  embeddedInspector: true,
+  delegateFullscreen: false,
+  fullscreen: false,
+});
 
 const emit = defineEmits<{
   selectNode: [node: GraphNodeView];
   selectEdge: [edge: GraphEdgeView];
   viewStateChange: [state: { filter: string; status: string }];
+  toggleFullscreen: [];
 }>();
 
 const elk = new ELK();
@@ -34,6 +64,7 @@ const search = ref(props.searchQuery);
 const statusFilter = ref(props.statusQuery);
 const direction = ref<GraphDirection>('RIGHT');
 const listMode = ref(false);
+const compactSearchOpen = ref(false);
 const inspectorOpen = ref(false);
 const internalSelectedNodeId = ref('');
 const laidOutNodes = ref<any[]>([]);
@@ -41,6 +72,50 @@ let layoutEpoch = 0;
 const graphNodeLimit = 220;
 const layoutCache = new Map<string, Array<{ id: string; x: number; y: number }>>();
 let lastLayoutIdentity = '';
+
+const nodeDescriptionKeys: Record<string, string> = {
+  'agent': 'graph.nodeType.agent',
+  'agent-task': 'graph.nodeType.agentTask',
+  'approval': 'graph.nodeType.approval',
+  'checkpoint': 'graph.nodeType.checkpoint',
+  'child-execution': 'graph.nodeType.childExecution',
+  'command': 'graph.nodeType.command',
+  'context-source': 'graph.nodeType.contextSource',
+  'decision': 'graph.nodeType.decision',
+  'entity': 'graph.nodeType.entity',
+  'evidence': 'graph.nodeType.evidence',
+  'execution': 'graph.nodeType.execution',
+  'fact-stage': 'graph.nodeType.factStage',
+  'inline-model': 'graph.nodeType.model',
+  'knowledge': 'graph.nodeType.knowledge',
+  'metric': 'graph.nodeType.metric',
+  'mission': 'graph.nodeType.mission',
+  'mutation': 'graph.nodeType.mutation',
+  'recovery': 'graph.nodeType.recovery',
+  'relation': 'graph.nodeType.relation',
+  'session': 'graph.nodeType.session',
+  'stage': 'graph.nodeType.stage',
+  'synthesize': 'graph.nodeType.synthesize',
+  'task': 'graph.nodeType.task',
+  'team': 'graph.nodeType.team',
+  'team-role': 'graph.nodeType.teamRole',
+  'tool-batch': 'graph.nodeType.toolBatch',
+  'tool-call': 'graph.nodeType.toolCall',
+  'tool-operation': 'graph.nodeType.toolOperation',
+  'verify': 'graph.nodeType.verify',
+};
+
+function nodeDescription(node: GraphNodeView) {
+  const normalized = String(node.type || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s.]+/g, '-');
+  const key = nodeDescriptionKeys[normalized];
+  if (key) return t(key);
+  const group = String(node.group || '').trim().toLowerCase();
+  const groupKey = nodeDescriptionKeys[group];
+  return groupKey ? t(groupKey) : t('graph.nodeType.generic');
+}
 
 const statuses = computed(() => Array.from(new Set(props.model.nodes.map((node) => node.status))).filter(Boolean));
 const visibleNodes = computed(() => {
@@ -58,6 +133,10 @@ const canvasNodes = computed(() => graphIsAggregated.value ? [] : visibleNodes.v
 const canvasNodeIds = computed(() => new Set(canvasNodes.value.map((node) => node.id)));
 const canvasEdges = computed(() => visibleEdges.value.filter((edge) => canvasNodeIds.value.has(edge.source) && canvasNodeIds.value.has(edge.target)));
 const showList = computed(() => listMode.value || graphIsAggregated.value);
+const nextDirection = computed<GraphDirection>(() => direction.value === 'RIGHT' ? 'DOWN' : 'RIGHT');
+const nextDirectionLabel = computed(() => (
+  nextDirection.value === 'DOWN' ? t('graph.direction.down') : t('graph.direction.right')
+));
 const diagnostics = computed(() => graphDiagnostics(props.model.nodes, props.model.edges));
 const diagnosticCount = computed(() => diagnostics.value.duplicateNodeIds.length + diagnostics.value.duplicateEdgeIds.length + diagnostics.value.danglingEdgeIds.length);
 const summaryId = computed(() => `graph-summary-${String(props.model.id || 'default').replace(/[^a-z0-9_-]/gi, '-')}`);
@@ -65,8 +144,8 @@ const selectedNode = computed(() => props.model.nodes.find((node) => node.id ===
 const selectedEvidenceRefs = computed(() => selectedNode.value?.evidenceRefs || []);
 const listRows = computed(() => visibleNodes.value.map((node) => ({
   id: node.id,
-  type: node.type,
-  status: node.status,
+  type: node.badges?.[0] || node.type,
+  status: displayStatus(node.status),
   group: node.group || '-',
   evidence: node.evidenceRefs?.length || 0,
   summary: node.summary || node.label,
@@ -138,8 +217,13 @@ async function layout() {
     return {
       id: node.id,
       position: { x: position.x || 0, y: position.y || 0 },
-      data: { label: node.label, node, status: node.status },
-      class: `graph-node graph-node-${node.type} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}`,
+      data: {
+        label: node.label,
+        description: nodeDescription(node),
+        node,
+        status: node.status,
+      },
+      class: `graph-node graph-node-${node.type} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}${props.activeNodeId === node.id ? ' active-runtime-node' : ''}`,
       draggable: false,
       connectable: false,
     };
@@ -167,11 +251,15 @@ function emitViewState() {
   emit('viewStateChange', { filter: search.value, status: statusFilter.value });
 }
 
+function toggleDirection() {
+  direction.value = nextDirection.value;
+}
+
 function selectNode(event: any) {
   const node = event?.node?.data?.node as GraphNodeView | undefined;
   if (node) {
     internalSelectedNodeId.value = node.id;
-    inspectorOpen.value = true;
+    inspectorOpen.value = props.embeddedInspector;
     emit('selectNode', node);
   }
 }
@@ -185,12 +273,16 @@ function selectListRow(row: Record<string, unknown>) {
   const node = props.model.nodes.find((item) => item.id === row.id);
   if (node) {
     internalSelectedNodeId.value = node.id;
-    inspectorOpen.value = true;
+    inspectorOpen.value = props.embeddedInspector;
     emit('selectNode', node);
   }
 }
 
 async function toggleFullscreen() {
+  if (props.delegateFullscreen) {
+    emit('toggleFullscreen');
+    return;
+  }
   if (!root.value) return;
   if (document.fullscreenElement) await document.exitFullscreen();
   else await root.value.requestFullscreen();
@@ -209,7 +301,7 @@ function onKeydown(event: KeyboardEvent) {
     const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
     const next = nodes[(current + delta + nodes.length) % nodes.length]!;
     internalSelectedNodeId.value = next.id;
-    inspectorOpen.value = true;
+    inspectorOpen.value = props.embeddedInspector;
     emit('selectNode', next);
   }
 }
@@ -220,8 +312,8 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
 </script>
 
 <template>
-  <section ref="root" class="graph-surface" role="region" tabindex="0" :aria-describedby="summaryId" @keydown="onKeydown">
-    <header class="graph-surface-header">
+  <section ref="root" class="graph-surface" :data-density="compact ? 'compact' : 'full'" role="region" tabindex="0" :aria-describedby="summaryId" @keydown="onKeydown">
+    <header v-if="!compact" class="graph-surface-header">
       <div>
         <h3>{{ model.title || t('graph.title.default') }}</h3>
         <small :id="summaryId">{{ t('graph.summary', { nodes: visibleNodes.length, edges: visibleEdges.length }) }}</small>
@@ -234,19 +326,54 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
       </div>
     </header>
     <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
-    <div class="graph-toolbar">
-      <label class="search-field"><Search :size="14" /><input v-model="search" :placeholder="t('graph.action.search')" @input="emitViewState" /></label>
-      <select v-model="statusFilter" :aria-label="t('graph.action.filterStatus')" @change="emitViewState">
-        <option value="all">{{ t('graph.filter.all') }}</option>
-        <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
-      </select>
-      <select v-model="direction" :aria-label="t('graph.action.direction')">
-        <option value="RIGHT">{{ t('graph.direction.right') }}</option>
-        <option value="DOWN">{{ t('graph.direction.down') }}</option>
-      </select>
-      <button class="ghost-action" type="button" :aria-pressed="listMode" @click="listMode = !listMode"><List :size="14" />{{ t('graph.action.list') }}</button>
-      <button class="ghost-action" type="button" @click="exportGraph"><Download :size="14" />{{ t('graph.action.export') }}</button>
-      <button class="ghost-action" type="button" @click="toggleFullscreen"><Expand :size="14" />{{ t('graph.action.fullscreen') }}</button>
+    <div class="graph-toolbar" :data-density="compact ? 'compact' : 'full'">
+      <button
+        v-if="compact"
+        class="graph-icon-action"
+        type="button"
+        :class="{ active: compactSearchOpen || Boolean(search) }"
+        :title="t('graph.action.search')"
+        :aria-label="t('graph.action.search')"
+        :aria-expanded="compactSearchOpen"
+        @click="compactSearchOpen = !compactSearchOpen"
+      >
+        <Search :size="15" />
+      </button>
+      <label v-if="!compact || compactSearchOpen" class="search-field">
+        <Search :size="14" />
+        <input v-model="search" :placeholder="t('graph.action.search')" @input="emitViewState" />
+      </label>
+      <label
+        class="graph-icon-select"
+        :class="{ active: statusFilter !== 'all' }"
+        :title="t('graph.action.filterStatus')"
+      >
+        <Filter :size="15" />
+        <select v-model="statusFilter" :aria-label="t('graph.action.filterStatus')" @change="emitViewState">
+          <option value="all">{{ t('graph.filter.all') }}</option>
+          <option v-for="status in statuses" :key="status" :value="status">{{ displayStatus(status) }}</option>
+        </select>
+      </label>
+      <button
+        class="graph-icon-action"
+        type="button"
+        :title="nextDirectionLabel"
+        :aria-label="nextDirectionLabel"
+        @click="toggleDirection"
+      >
+        <ArrowDown v-if="nextDirection === 'DOWN'" :size="15" />
+        <ArrowRight v-else :size="15" />
+      </button>
+      <button class="graph-icon-action" type="button" :title="t('graph.action.list')" :aria-label="t('graph.action.list')" :aria-pressed="listMode" @click="listMode = !listMode">
+        <List :size="15" />
+      </button>
+      <button class="graph-icon-action" type="button" :title="t('graph.action.export')" :aria-label="t('graph.action.export')" @click="exportGraph">
+        <Download :size="15" />
+      </button>
+      <button class="graph-icon-action" type="button" :title="t('graph.action.fullscreen')" :aria-label="t('graph.action.fullscreen')" @click="toggleFullscreen">
+        <Minimize2 v-if="fullscreen" :size="15" />
+        <Maximize2 v-else :size="15" />
+      </button>
     </div>
     <p v-if="graphIsAggregated" class="empty-note">{{ t('graph.state.aggregated', { limit: graphNodeLimit, total: visibleNodes.length }) }}</p>
     <p v-if="loading" class="empty-note">{{ t('graph.state.loading') }}</p>
@@ -266,12 +393,18 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
       @node-click="selectNode"
       @edge-click="selectEdge"
     >
+      <template #node-default="{ data }">
+        <div class="graph-node-content">
+          <strong>{{ data.label }}</strong>
+          <small>{{ data.description }}</small>
+        </div>
+      </template>
       <Panel position="top-right" class="execution-graph-controls">
-        <button type="button" :aria-label="t('runtime.execution.canvas.zoomIn')" @click="flow?.zoomIn()">+</button>
-        <button type="button" :aria-label="t('runtime.execution.canvas.zoomOut')" @click="flow?.zoomOut()">−</button>
-        <button type="button" :aria-label="t('runtime.execution.canvas.fit')" @click="flow?.fitView({ padding: 0.2 })">⤢</button>
+        <button type="button" :title="t('runtime.execution.canvas.zoomIn')" :aria-label="t('runtime.execution.canvas.zoomIn')" @click="flow?.zoomIn()"><ZoomIn :size="15" /></button>
+        <button type="button" :title="t('runtime.execution.canvas.zoomOut')" :aria-label="t('runtime.execution.canvas.zoomOut')" @click="flow?.zoomOut()"><ZoomOut :size="15" /></button>
+        <button type="button" :title="t('runtime.execution.canvas.fit')" :aria-label="t('runtime.execution.canvas.fit')" @click="flow?.fitView({ padding: 0.2 })"><Scan :size="15" /></button>
       </Panel>
-      <Panel position="bottom-right" class="graph-minimap" :aria-label="t('graph.minimap.label')">
+      <Panel v-if="!compact" position="bottom-right" class="graph-minimap" :aria-label="t('graph.minimap.label')">
         <svg viewBox="0 0 160 100" role="img">
           <rect class="graph-minimap-frame" x="0.5" y="0.5" width="159" height="99" rx="5" />
           <rect
@@ -288,7 +421,7 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
       </Panel>
     </VueFlow>
     <EvidenceInspector
-      v-if="selectedNode && inspectorOpen"
+      v-if="embeddedInspector && selectedNode && inspectorOpen"
       :title="selectedNode.label"
       :refs="selectedEvidenceRefs"
       :subject="selectedNode.raw || selectedNode"

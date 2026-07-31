@@ -3,7 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, ref, watch } from 'vue';
-import { FileText, Languages, RefreshCw, Search } from 'lucide-vue-next';
+import { FileText, Languages, Plus, RefreshCw, Search, Trash2, X } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import { api } from '../api/client';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
@@ -40,6 +40,11 @@ const actionResult = ref<any>(null);
 const translateResult = ref<any>(null);
 const translating = ref(false);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
+const createOpen = ref(false);
+const createName = ref('');
+const createDescription = ref('');
+const createContent = ref('');
+const deleteArmedId = ref('');
 
 const items = computed(() => Array.isArray(catalog.value?.items) ? catalog.value.items : []);
 const filteredItems = computed(() => items.value.filter((skill: any) => {
@@ -56,6 +61,7 @@ const filteredItems = computed(() => items.value.filter((skill: any) => {
 const facets = computed(() => projection.value?.facets || {});
 const sourceFacet = computed(() => Array.from(new Set(items.value.map((skill: any) => skill.source).filter(Boolean))));
 const skill = computed(() => detail.value?.skill || filteredItems.value.find((item: any) => item.id === selectedSkillId.value) || {});
+const skillManagement = computed(() => detail.value?.management || {});
 const fileItems = computed(() => Array.isArray(files.value?.files) ? files.value.files : []);
 const runItems = computed(() => Array.isArray(runs.value?.items) ? runs.value.items : []);
 const markdownHtml = computed(() => markdown.render(rawFile.value?.content || ''));
@@ -181,6 +187,41 @@ async function translateSkill() {
   }
 }
 
+async function createSkill() {
+  const name = createName.value.trim();
+  const description = createDescription.value.trim();
+  if (!name || !description) {
+    error.value = t('page.skills.management.required');
+    return;
+  }
+  actionResult.value = await api.createSkill({
+    name,
+    description,
+    content: createContent.value.trim() || undefined,
+  });
+  createOpen.value = false;
+  createName.value = '';
+  createDescription.value = '';
+  createContent.value = '';
+  selectedSkillId.value = `local:${name}`;
+  await refresh();
+}
+
+async function deleteSelectedSkill() {
+  if (!selectedSkillId.value || !skillManagement.value.can_delete) return;
+  if (deleteArmedId.value !== selectedSkillId.value) {
+    deleteArmedId.value = selectedSkillId.value;
+    return;
+  }
+  actionResult.value = await api.deleteSkill(selectedSkillId.value);
+  deleteArmedId.value = '';
+  selectedSkillId.value = '';
+  detail.value = {};
+  files.value = {};
+  rawFile.value = {};
+  await refresh();
+}
+
 async function loadRunDetail(run: any) {
   const id = run.run_id || run.skill_run_id || run.id;
   if (!id) return;
@@ -212,10 +253,16 @@ onMounted(refresh);
     <section class="skills-console">
       <aside class="skills-catalog" v-show="isSectionActive('catalog')" data-section="catalog">
         <header class="skills-toolbar">
-          <label class="search-field">
-            <Search :size="15" />
-            <input v-model="query" type="search" :placeholder="t('page.skills.page.placeholder.1cb5c73cbd')" />
-          </label>
+          <div class="skills-toolbar-head">
+            <label class="search-field">
+              <Search :size="15" />
+              <input v-model="query" type="search" :placeholder="t('page.skills.page.placeholder.1cb5c73cbd')" />
+            </label>
+            <button class="icon-action" type="button" :title="t('page.skills.management.create')" :aria-label="t('page.skills.management.create')" @click="createOpen = !createOpen">
+              <X v-if="createOpen" :size="15" />
+              <Plus v-else :size="15" />
+            </button>
+          </div>
           <div class="filter-row">
             <select v-model="scope">
               <option value="all">{{ t('page.skills.page.text.36f7b52cfe') }}</option>
@@ -244,6 +291,30 @@ onMounted(refresh);
           </div>
         </header>
 
+        <section v-if="createOpen" class="management-panel skill-create-panel">
+          <header>
+            <h2>{{ t('page.skills.management.create') }}</h2>
+          </header>
+          <label class="field-line">
+            {{ t('page.skills.management.name') }}
+            <input v-model="createName" type="text" maxlength="64" :placeholder="t('page.skills.management.namePlaceholder')" />
+          </label>
+          <label class="field-line">
+            {{ t('page.skills.management.description') }}
+            <input v-model="createDescription" type="text" :placeholder="t('page.skills.management.descriptionPlaceholder')" />
+          </label>
+          <label class="field-line">
+            {{ t('page.skills.management.content') }}
+            <textarea v-model="createContent" rows="6" :placeholder="t('page.skills.management.contentPlaceholder')" />
+          </label>
+          <div class="button-row">
+            <button class="primary-action" type="button" @click="createSkill">
+              <Plus :size="15" />
+              {{ t('page.skills.management.create') }}
+            </button>
+          </div>
+        </section>
+
         <button
           v-for="item in filteredItems"
           :key="item.id"
@@ -267,7 +338,19 @@ onMounted(refresh);
         <section class="management-panel" v-show="isSectionActive('projection')" data-section="projection">
           <header>
             <h2>{{ t('page.skills.page.text.e8ec22f1d0') }}</h2>
-            <span>{{ skill.scope || t('page.skills.page.inline.12c70558ba') }}</span>
+            <div class="button-row">
+              <span>{{ skill.scope || t('page.skills.page.inline.12c70558ba') }}</span>
+              <button
+                v-if="skillManagement.can_delete"
+                class="danger-action"
+                type="button"
+                :title="t('page.skills.management.delete')"
+                @click="deleteSelectedSkill"
+              >
+                <Trash2 :size="14" />
+                {{ deleteArmedId === selectedSkillId ? t('page.skills.management.confirmDelete') : t('page.skills.management.delete') }}
+              </button>
+            </div>
           </header>
           <dl class="detail-list">
             <dt>{{ t('page.skills.page.text.6ec338f842') }}</dt>

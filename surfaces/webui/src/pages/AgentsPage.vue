@@ -3,7 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { Play, RefreshCw, Search, Users } from 'lucide-vue-next';
+import { Archive, Play, RefreshCw, Search, Users } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
@@ -572,7 +572,7 @@ async function createManagedAgent() {
     return;
   }
   const existing = managedDefinitionItems.value.find((definition: any) => definition.managed_agent_id === id);
-    managedActionResult.value = await api.createManagedAgentDefinition({
+  managedActionResult.value = await api.createManagedAgentDefinition({
     managed_agent_id: id,
     revision: Number(existing?.revision || 0) + 1,
     target: managedTargetKind.value === 'team'
@@ -592,9 +592,16 @@ async function createManagedAgent() {
     retry_policy: { max_attempts: 1, initial_backoff_ms: 1000, max_backoff_ms: 60000 },
     health_policy: { max_consecutive_failures: 3, max_run_age_ms: null },
     enabled: managedEnabled.value,
-    });
-    selectedManagedDefinitionId.value = id;
-    await refresh();
+  });
+  selectedManagedDefinitionId.value = id;
+  await refresh();
+}
+
+async function deactivateSelectedManagedAgent() {
+  const id = selectedManagedDefinitionId.value;
+  if (!id || selectedManagedDefinition.value?.enabled === false) return;
+  managedActionResult.value = await api.deactivateManagedAgentDefinition(id);
+  await refresh();
 }
 
 async function triggerManagedAgent(id: string) {
@@ -665,7 +672,7 @@ onUnmounted(() => projections.release('agents'));
     </section>
 
     <section class="agents-workbench-grid">
-      <section class="management-panel agents-panel" v-show="isSectionActive('catalog')" data-section="catalog">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('catalog')" data-section="catalog">
         <header>
           <h2>{{ t('page.agents.page.text.c1a824a193') }}</h2>
           <span>{{ t('page.agents.summary.definitionCount', { count: agentRows.length }) }}</span>
@@ -674,7 +681,7 @@ onUnmounted(() => projections.release('agents'));
         <EmptyState v-else :title="t('page.agents.page.title.5eba27eab7')" :detail="t('page.agents.page.detail.c7ca371a29')" />
       </section>
 
-      <section class="management-panel agents-panel" v-show="isSectionActive('discovery')" data-section="discovery">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('discovery')" data-section="discovery">
         <header>
           <h2>{{ t('page.agents.page.text.74f4319c57') }}</h2>
           <span>{{ formatCount('matches', discovery.count || 0) }}</span>
@@ -883,6 +890,10 @@ onUnmounted(() => projections.release('agents'));
             </label>
             <div class="button-row">
               <button class="primary-action" type="button" @click="createManagedAgent">{{ managedDefinitionItems.some((definition: any) => definition.managed_agent_id === managedDefinitionId.trim()) ? t('page.agents.managed.saveRevision') : t('page.agents.managed.create') }}</button>
+              <button class="danger-action" type="button" :disabled="!selectedManagedDefinition || selectedManagedDefinition.enabled === false" @click="deactivateSelectedManagedAgent">
+                <Archive :size="15" />
+                {{ t('page.agents.managed.deactivate') }}
+              </button>
               <button class="ghost-action" type="button" :disabled="!managedDefinitionRows.length" @click="dispatchManagedAgents">{{ t('page.agents.managed.dispatch') }}</button>
             </div>
             <RequestReceipt :receipt="managedActionResult" :title="t('page.agents.managed.title')" />
@@ -928,7 +939,7 @@ onUnmounted(() => projections.release('agents'));
         <DataTable v-if="managedEffectRows.length" searchable copyable row-key="id" :rows="managedEffectRows" :columns="['id', 'invocation', 'kind', 'status', 'receipt', 'error']" @row-click="selectedDetail = $event" />
       </section>
 
-      <section class="management-panel agents-panel" v-show="isSectionActive('tasks')" data-section="tasks">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('tasks')" data-section="tasks">
         <header>
           <h2>{{ t('page.agents.page.text.278a33d389') }}</h2>
           <span>{{ formatCount('phases', phaseItems.length) }}</span>
@@ -950,7 +961,7 @@ onUnmounted(() => projections.release('agents'));
         <EmptyState v-else :title="t('page.agents.page.title.e026c4dcdc')" :detail="t('page.agents.page.detail.113c5f31fe')" />
       </section>
 
-      <section class="management-panel agents-panel" v-show="isSectionActive('reviews')" data-section="reviews">
+      <section class="management-panel agents-panel wide" v-show="isSectionActive('reviews')" data-section="reviews">
         <header>
           <h2>{{ t('page.agents.page.text.1b944ea5ee') }}</h2>
           <span>{{ currentPhase?.id || t('page.agents.page.inline.5e18e610e8') }}</span>

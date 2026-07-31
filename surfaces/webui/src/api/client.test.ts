@@ -78,6 +78,26 @@ describe('API authorization epoch', () => {
     window.removeEventListener('cowd:session-authorization-invalidated', invalidated);
   });
 
+  it('keeps browser authentication when one session write loses authorization', async () => {
+    const globalInvalidated = vi.fn();
+    const sessionInvalidated = vi.fn();
+    window.addEventListener('cowd:authorization-invalidated', globalInvalidated);
+    window.addEventListener('cowd:session-authorization-invalidated', sessionInvalidated);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response('reader session attachment cannot execute mutations', { status: 403 }),
+    ));
+
+    await expect(api.sendMessage('session-A', 'continue')).rejects.toMatchObject({
+      status: 403,
+    });
+
+    expect(globalInvalidated).not.toHaveBeenCalled();
+    expect(sessionInvalidated).toHaveBeenCalledTimes(1);
+    expect((sessionInvalidated.mock.calls[0][0] as CustomEvent).detail.sessionId).toBe('session-A');
+    window.removeEventListener('cowd:authorization-invalidated', globalInvalidated);
+    window.removeEventListener('cowd:session-authorization-invalidated', sessionInvalidated);
+  });
+
   it('evicts aggregate cache entries that reference a revoked session', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({

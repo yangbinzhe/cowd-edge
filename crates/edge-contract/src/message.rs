@@ -71,6 +71,35 @@ pub enum MessageActionKind {
     ProcessingFailed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MessageAccountActionKind {
+    List,
+    LoginQrStart,
+    LoginQrPoll,
+}
+
+impl MessageAccountActionKind {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::List => "account.list",
+            Self::LoginQrStart => "account.login_qr.start",
+            Self::LoginQrPoll => "account.login_qr.poll",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(action: &str) -> Option<Self> {
+        match action {
+            "account.list" => Some(Self::List),
+            "account.login_qr.start" => Some(Self::LoginQrStart),
+            "account.login_qr.poll" => Some(Self::LoginQrPoll),
+            _ => None,
+        }
+    }
+}
+
 impl MessageActionKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {
@@ -221,7 +250,8 @@ pub fn message_connector_required_fields(connector: &str) -> Vec<&'static str> {
     match normalize_message_connector(connector).as_str() {
         "feishu" => vec!["app_id", "app_secret"],
         "wecom" => vec!["corp_id", "corp_secret", "agent_id"],
-        "wechat-ilink" => vec!["bot_id", "bot_secret"],
+        // iLink can create and persist its account through the QR control plane.
+        "wechat-ilink" => Vec::new(),
         // Email supports outbound-only SMTP and inbound-only IMAP. The
         // adapter validates the selected mode atomically at connect time.
         "email" => Vec::new(),
@@ -250,6 +280,9 @@ pub fn message_connector_capabilities(connector: &str) -> Vec<&'static str> {
             "message.send.text",
             "message.send.image",
             "message.chat.info",
+            "message.qr_login",
+            "message.long_poll",
+            "account.list",
         ],
         "wecom" => vec!["message.ingress", "message.send.text", "message.callback"],
         "email" => vec![
@@ -341,10 +374,13 @@ mod tests {
         let contract = MessageConnectorContract::for_connector("wechat_ilink");
 
         assert_eq!(contract.connector, "wechat-ilink");
-        assert_eq!(contract.required_fields, vec!["bot_id", "bot_secret"]);
+        assert!(contract.required_fields.is_empty());
         assert!(contract
             .capability_names()
             .contains(&"message.send.text".to_string()));
+        assert!(contract
+            .capability_names()
+            .contains(&"message.qr_login".to_string()));
         assert_eq!(
             contract.capabilities[0].id,
             "message.wechat-ilink.message.ingress"
@@ -407,5 +443,18 @@ mod tests {
             Some(MessageActionKind::ProcessingComplete)
         );
         assert_eq!(MessageActionKind::parse("callback.dispatch"), None);
+    }
+
+    #[test]
+    fn message_account_action_kind_parses_qr_lifecycle() {
+        assert_eq!(
+            MessageAccountActionKind::parse("account.login_qr.start"),
+            Some(MessageAccountActionKind::LoginQrStart)
+        );
+        assert_eq!(
+            MessageAccountActionKind::LoginQrPoll.as_str(),
+            "account.login_qr.poll"
+        );
+        assert_eq!(MessageAccountActionKind::parse("message.send.text"), None);
     }
 }

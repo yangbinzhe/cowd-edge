@@ -5,10 +5,20 @@ import {
   invalidateSessionAuthorization,
 } from '../api/client';
 import type {
+  ActivityEvent,
   ChatTurn,
   ExecutionLiveState,
   SessionEvidenceProjection,
+  SessionExecutionIndexProjection,
+  SessionTurnProjection,
 } from '../types';
+import { mergeActivityEvent, normalizeTurnActivity } from '../utils/turnSettlement';
+import {
+  activityIdentityKey,
+  appendReasoningSummary,
+  causalActivityTimeline,
+} from '../utils/causalTimeline';
+import { t } from '../i18n';
 import { useProjectionRegistryStore } from './projectionRegistry';
 import { openSessionLiveSource } from './liveTransport';
 import type { SessionLiveSource } from './liveTransport';
@@ -21,7 +31,9 @@ type LiveExecutionState = Omit<ExecutionLiveState, 'status'>
 export type SessionChatState = {
   sessionId: string;
   turns: ChatTurn[];
+  activity: ActivityEvent[];
   executionId: string;
+  executionGraphId: string;
   executionTurnId: string;
   executionGeneration: number;
   streamGeneration: number;
@@ -31,6 +43,8 @@ export type SessionChatState = {
   streamTurnId: string;
   terminalId: string;
   live: LiveExecutionState | null;
+  executionIndex: SessionExecutionIndexProjection | null;
+  turnProjection: SessionTurnProjection | null;
   evidence: SessionEvidenceProjection | null;
   streamState: 'connected' | 'connecting' | 'reconnecting' | 'degraded' | 'offline';
   loadEpoch: number;
@@ -54,18 +68,47 @@ export type SessionChatState = {
   historyHasOlder: boolean;
   historyHasNewer: boolean;
   historyLoading: boolean;
+  scrollInitialized: boolean;
+  executionIndexLoading: boolean;
+  executionIndexLoaded: boolean;
+  turnProjectionLoading: boolean;
+  turnProjectionLoaded: boolean;
+  evidenceLoading: boolean;
+  evidenceLoaded: boolean;
+  detailsLoading: boolean;
+  detailsLoaded: boolean;
 };
 
-const states = reactive<Record<string, SessionChatState>>({});
-const sourceLeases = new Map<string, SessionLiveSource>();
-const deltaBuffers = new Map<string, string>();
-const flushFrames = new Map<string, number>();
-const streamByteEnds = new Map<string, number>();
-const openFlights = new Map<string, Promise<void>>();
-const attachmentFlights = new Map<string, Promise<unknown>>();
-const canonicalResyncFlights = new Map<string, Promise<void>>();
-const HISTORY_PAGE_SIZE = 100;
+const SESSION_DRAFT_KEY_PREFIX = 'cowd.webui.sessionDraft.v1:';
+
+function sessionDraftStorageKey(sessionId: string) {
+  return `${SESSION_DRAFT_KEY_PREFIX}${encodeURIComponent(sessionId)}`;
+}
+
+function readSessionDraft(sessionId: string) {
+  try {
+    return globalThis.localStorage?.getItem(sessionDraftStorageKey(sessionId)) || '';
+  } catch {
+    return '';
+  }
+}
+
+function writeSessionDraft(sessionId: string, value: string) {
+  try {
+    const storage = globalThis.localStorage;
+    if (!storage) return;
+    if (value) storage.setItem(sessionDraftStorageKey(sessionId), value);
+    else storage.removeItem(sessionDraftStorageKey(sessionId));
+  } catch {
+    // Browser privacy and quota policies must not block chat input.
+  }
+}
+const HISTORY_PAGE_SIZE = 50;
 const HISTORY_WINDOW_CAP = 1_000;
+const SESSION_ACTIVITY_CAP = 2_000;
+const TURN_ACTIVITY_CAP = 500;
+const LIVE_RECOVERY_INTERVAL_MS = 1_500;
+const LIVE_RECOVERY_SILENCE_MS = 2_000;
 const DURABLE_MESSAGE_ROLES = new Set(['user', 'assistant', 'system', 'tool']);
 const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'Connected',
@@ -75,41 +118,216 @@ const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'UserMessageCommitted',
   'ExecutionGraphSummary',
   'TextDelta',
+  'ModelStepStarted',
+  'ModelStepCompleted',
+  'ItemStarted',
+  'ItemCompleted',
+  'ReasoningSummaryDelta',
+  'ToolStart',
+  'ToolProgress',
+  'ToolComplete',
+  'ToolExecuted',
   'ExecutionPhase',
+  'ProviderAttempt',
+  'ContextEnvelope',
+  'RuntimePolicyDecision',
+  'ApprovalRequested',
+  'ApprovalResolved',
   'TurnError',
   'TerminalCommitted',
 ]);
 
-function scheduleFlush(sessionId: string) {
-  if (flushFrames.has(sessionId)) return;
-  let flushedSynchronously = false;
-  const frame = requestAnimationFrame(() => {
-    flushedSynchronously = true;
-    flush(sessionId);
-  });
-  if (!flushedSynchronously) flushFrames.set(sessionId, frame);
-}
-
-function stateFor(sessionId: string) {
-  if (!states[sessionId]) {
-    states[sessionId] = {
-      sessionId, turns: [], executionId: '', executionTurnId: '', executionGeneration: 0,
-      streamGeneration: 0, runtimeCommitCursor: 0, reconnectBlocked: false,
-      latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, evidence: null, streamState: 'offline',
-      loadEpoch: 0, submissionEpoch: 0, attachmentEpoch: 0,
-      pending: false, submitting: false, lastError: '', unread: 0,
-      lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
-      attachmentRole: 'detached', writable: false,
-      draft: '', scrollTop: 0, historyTotal: 0, historyOldestOffset: 0,
-      historyWindowEndOffset: 0, historyHasOlder: false, historyHasNewer: false,
-      historyLoading: false,
-    };
-  }
-  return states[sessionId];
-}
-
 function textFromBlocks(blocks: any[]) {
-  return (blocks || []).map((block) => block?.text || block?.content || block?.output || block?.thinking || '').join('');
+  return (blocks || [])
+    .filter((block) => block?.type === 'text')
+    .map((block) => block?.text || block?.content || '')
+    .join('');
+}
+
+function toolResultBlock(blocks: any[]) {
+  return (blocks || []).find((block) => block?.type === 'tool_result') || null;
+}
+
+function compactToolOutput(value: unknown) {
+  if (value && typeof value === 'object') {
+    const object = value as Record<string, unknown>;
+    for (const key of ['summary', 'message', 'error', 'status', 'result', 'decision']) {
+      if (typeof object[key] === 'string' && object[key].trim()) {
+        return object[key].trim().slice(0, 260);
+      }
+    }
+    return `${Object.keys(object).length} fields`;
+  }
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  const completed = text.match(
+    /^Tool `[^`]+` completed\.(?: Evidence: \S+\.)?(?: JSON object with (\d+) keys[^.]*\.)?/,
+  );
+  if (completed) {
+    return completed[1]
+      ? t('chat.activity.toolCompletedFields', { count: completed[1] })
+      : t('chat.activity.toolCompleted');
+  }
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return `${parsed.length} items`;
+      for (const key of ['summary', 'message', 'error', 'status', 'result']) {
+        if (typeof parsed?.[key] === 'string' && parsed[key].trim()) {
+          return parsed[key].trim().slice(0, 260);
+        }
+      }
+      return `${Object.keys(parsed || {}).length} fields`;
+    } catch {
+      // Fall through to the bounded textual summary.
+    }
+  }
+  const marker = text.search(/\s[\[{]\s*["']/);
+  const summary = marker > 0 ? text.slice(0, marker) : text;
+  return summary.length > 260 ? `${summary.slice(0, 257)}...` : summary;
+}
+
+const STRUCTURED_ASSISTANT_KEYS = new Set([
+  'analysis',
+  'conclusion',
+  'details',
+  'evidence',
+  'evidence_summary',
+  'findings',
+  'grounding',
+  'memory_contents',
+  'next_steps',
+  'objective',
+  'recommendations',
+  'risks',
+  'source_title',
+  'source_url',
+  'status',
+  'summary',
+  'unresolved',
+  'version',
+]);
+
+function assistantFieldLabel(value: string) {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function structuredAssistantValue(value: unknown, depth = 0): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value !== 'object') return String(value);
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => {
+        const rendered = structuredAssistantValue(item, depth + 1);
+        return typeof item === 'object' && item !== null
+          ? `${index + 1}. ${rendered.replace(/\n/g, '\n   ')}`
+          : `- ${rendered}`;
+      })
+      .join('\n');
+  }
+  return Object.entries(value as Record<string, unknown>)
+    .map(([key, item]) => {
+      const label = assistantFieldLabel(key);
+      if (item !== null && typeof item === 'object') {
+        const heading = '#'.repeat(Math.min(4, depth + 2));
+        return `${heading} ${label}\n\n${structuredAssistantValue(item, depth + 1)}`;
+      }
+      return `- **${label}:** ${structuredAssistantValue(item, depth + 1)}`;
+    })
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function unwrapAssistantEnvelope(value: string) {
+  const text = String(value || '').trim();
+  const fenced = text.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
+  const candidate = fenced?.[1]?.trim() || text;
+  if (!candidate.startsWith('{') || !candidate.endsWith('}')) return value;
+  try {
+    const parsed = JSON.parse(candidate);
+    const entries = Object.entries(parsed || {});
+    for (const key of ['answer', 'response', 'message', 'content', 'text', 'final', 'output']) {
+      if (
+        typeof parsed?.[key] === 'string'
+        && parsed[key].trim()
+        && entries.length === 1
+      ) {
+        return parsed[key];
+      }
+    }
+    const choice = parsed?.choices?.[0]?.message?.content;
+    if (typeof choice === 'string' && choice.trim()) return choice;
+    const hasReadableValue = entries.some(([, item]) => (
+      (typeof item === 'string' && item.trim())
+      || (Array.isArray(item) && item.length > 0)
+      || (item !== null && typeof item === 'object' && Object.keys(item).length > 0)
+    ));
+    if (
+      entries.some(([key]) => STRUCTURED_ASSISTANT_KEYS.has(key))
+      || (entries.length >= 2 && hasReadableValue)
+    ) {
+      return structuredAssistantValue(parsed);
+    }
+  } catch {
+    // Ordinary prose and code blocks that are not complete JSON reports stay verbatim.
+  }
+  return value;
+}
+
+function durableActivity(message: any): ActivityEvent[] {
+  const sequence = Number(message?.sequence);
+  const executionId = blockMetadata(message?.blocks, 'cowd_execution_id');
+  const turnId = blockMetadata(message?.blocks, 'cowd_turn_id');
+  return (message?.blocks || []).flatMap((block: any, index: number) => {
+    if (block?.type === 'thinking' || block?.type === 'reasoning_summary') {
+      return [normalizeTurnActivity({
+        id: String(block.id || `${message.id}:thinking:${index}`),
+        kind: 'think',
+        title: t('chat.activity.thinking'),
+        detail: block.text || block.thinking || block.content || '',
+        status: 'complete',
+        sequence: Number.isFinite(sequence) ? `${sequence}.${index}` : index,
+        execution_id: executionId,
+        turn_id: turnId,
+        raw: { thinking: block },
+      })];
+    }
+    if (block?.type === 'tool_use') {
+      const name = String(block.name || 'tool');
+      return [normalizeTurnActivity({
+        id: String(block.cowd_tool_instance_id || block.id || `${message.id}:tool:${index}`),
+        kind: 'tool',
+        title: name,
+        detail: block.input ? compactToolOutput(JSON.stringify(block.input)) : '',
+        status: 'started',
+        sequence: Number.isFinite(sequence) ? `${sequence}.${index}` : index,
+        execution_id: executionId,
+        turn_id: turnId,
+        tool_call_id: String(block.id || ''),
+        input: block.input,
+        raw: { tool_use: block, input: block.input },
+      })];
+    }
+    if (block?.type === 'tool_result') {
+      const name = String(block.tool_name || 'tool');
+      return [normalizeTurnActivity({
+        id: String(block.cowd_tool_instance_id || block.tool_use_id || `${message.id}:result:${index}`),
+        kind: block.is_error ? 'error' : 'tool',
+        title: name,
+        detail: compactToolOutput(block.output),
+        status: block.is_error ? 'error' : 'complete',
+        sequence: Number.isFinite(sequence) ? `${sequence}.${index}` : index,
+        execution_id: executionId,
+        turn_id: turnId,
+        tool_call_id: String(block.tool_use_id || ''),
+        output: block.output,
+        raw: { tool_result: block, output: block.output },
+      })];
+    }
+    return [];
+  });
 }
 
 function sortTurnsCausally(turns: ChatTurn[]) {
@@ -178,22 +396,104 @@ function evidenceIdentityIssue(value: any, sessionId: string) {
 }
 
 function normalizeTurns(messages: any[]): ChatTurn[] {
-  const normalized = (messages || []).map((message: any) => ({
-    raw: message,
-    id: String(message.id || message.message_id),
-    role: message.role,
-    content: typeof message.content === 'string' ? message.content : textFromBlocks(message.blocks),
-    status: 'complete',
-    sequence: message.sequence,
-    blocks: message.blocks,
-    token_usage: message.token_usage ?? message.usage,
-    execution_id: blockMetadata(message.blocks, 'cowd_execution_id'),
-    turn_id: blockMetadata(message.blocks, 'cowd_turn_id'),
-    ingress_message_id: blockMetadata(message.blocks, 'cowd_turn_ingress_message_id'),
-  }));
-  return sortTurnsCausally(
-    normalized.map(({ raw: _raw, ...message }: any) => message as ChatTurn),
-  );
+  const normalized = (messages || []).map((message: any) => {
+    const role = message.role as ChatTurn['role'];
+    const result = role === 'tool' ? toolResultBlock(message.blocks) : null;
+    const blockText = textFromBlocks(message.blocks);
+    const rawContent = typeof message.content === 'string' ? message.content : blockText;
+    const toolOutput = result ? String(result.output || '') : '';
+    const activity = durableActivity(message);
+    return {
+      id: String(message.id || message.message_id),
+      role,
+      content: role === 'assistant'
+        ? unwrapAssistantEnvelope(rawContent)
+        : role === 'tool'
+          ? compactToolOutput(toolOutput)
+          : rawContent,
+      status: result?.is_error ? 'error' : 'complete',
+      sequence: message.sequence,
+      blocks: message.blocks,
+      activity,
+      tool_use_id: result?.tool_use_id,
+      tool_name: result?.tool_name,
+      tool_output: toolOutput,
+      tool_error: !!result?.is_error,
+      token_usage: message.token_usage ?? message.usage,
+      execution_id: blockMetadata(message.blocks, 'cowd_execution_id'),
+      turn_id: blockMetadata(message.blocks, 'cowd_turn_id'),
+      ingress_message_id: blockMetadata(message.blocks, 'cowd_turn_ingress_message_id'),
+    } as ChatTurn;
+  });
+  return sortTurnsCausally(normalized);
+}
+
+function projectedActivity(value: unknown): ActivityEvent | null {
+  if (!value || typeof value !== 'object') return null;
+  const event = value as ActivityEvent;
+  const kind = String(event.kind || '');
+  if (!['tool', 'think', 'runtime', 'context', 'approval', 'error'].includes(kind)) return null;
+  const detail = typeof event.detail === 'string'
+    ? event.detail
+    : event.detail == null
+      ? ''
+      : JSON.stringify(event.detail);
+  return normalizeTurnActivity({
+    ...event,
+    id: String(event.id || `${kind}:${event.commit_cursor || event.sequence || Date.now()}`),
+    kind: kind as ActivityEvent['kind'],
+    title: String(event.title || kind),
+    detail,
+    turn_id: String(event.turn_id || ''),
+  });
+}
+
+function mergeProjectedActivity(existing: ActivityEvent[], incoming: ActivityEvent[]) {
+  const rows = [...existing];
+  for (const event of incoming) {
+    const identity = activityIdentityKey(event);
+    const index = rows.findIndex((candidate) => (
+      activityIdentityKey(candidate) === identity
+      || (
+        !!event.tool_call_id
+        && candidate.tool_call_id === event.tool_call_id
+      )
+    ));
+    if (index >= 0) rows.splice(index, 1, mergeActivityEvent(rows[index], event));
+    else rows.push(event);
+  }
+  return causalActivityTimeline(rows, TURN_ACTIVITY_CAP);
+}
+
+function applyTurnProjectionHistory(state: SessionChatState, projection: SessionTurnProjection) {
+  const sessionActivity = [...state.activity];
+  for (const projectedTurn of projection.turns || []) {
+    const activities = (projectedTurn.activity_events || [])
+      .map(projectedActivity)
+      .filter((event): event is ActivityEvent => !!event);
+    if (!activities.length) continue;
+    const candidates = state.turns.filter((turn) => turn.turn_id === projectedTurn.turn_id);
+    const target = [...candidates].reverse().find((turn) => turn.role === 'assistant')
+      || [...candidates].reverse().find((turn) => turn.role === 'tool')
+      || candidates.at(-1);
+    if (target) target.activity = mergeProjectedActivity(target.activity || [], activities);
+    for (const event of activities) {
+      const identity = activityIdentityKey(event);
+      const index = sessionActivity.findIndex((candidate) => (
+        activityIdentityKey(candidate) === identity
+        || (
+          !!event.tool_call_id
+          && candidate.tool_call_id === event.tool_call_id
+        )
+      ));
+      if (index >= 0) {
+        sessionActivity.splice(index, 1, mergeActivityEvent(sessionActivity[index], event));
+      } else {
+        sessionActivity.push(event);
+      }
+    }
+  }
+  state.activity = causalActivityTimeline(sessionActivity, SESSION_ACTIVITY_CAP);
 }
 
 function blockMetadata(blocks: any[], key: string) {
@@ -204,40 +504,6 @@ function blockMetadata(blocks: any[], key: string) {
   return '';
 }
 
-function flush(sessionId: string) {
-  flushFrames.delete(sessionId);
-  const delta = deltaBuffers.get(sessionId);
-  if (!delta) return;
-  const state = stateFor(sessionId);
-  const turn = state.turns.find((item) => item.id === state.streamTurnId);
-  const batch = delta.slice(0, 12_000);
-  const remaining = delta.slice(batch.length);
-  if (remaining) {
-    deltaBuffers.set(sessionId, remaining);
-    scheduleFlush(sessionId);
-  } else {
-    deltaBuffers.delete(sessionId);
-  }
-  if (turn) turn.content += batch;
-}
-
-function drainPendingDelta(sessionId: string) {
-  const frame = flushFrames.get(sessionId);
-  if (frame) cancelAnimationFrame(frame);
-  flushFrames.delete(sessionId);
-  const delta = deltaBuffers.get(sessionId);
-  deltaBuffers.delete(sessionId);
-  if (!delta) return;
-  const state = stateFor(sessionId);
-  const turn = state.turns.find((item) => item.id === state.streamTurnId);
-  if (turn) turn.content += delta;
-}
-
-function queueDelta(sessionId: string, content: string) {
-  deltaBuffers.set(sessionId, `${deltaBuffers.get(sessionId) || ''}${content}`);
-  scheduleFlush(sessionId);
-}
-
 function streamIdentityKey(sessionId: string, state: SessionChatState, payload: any) {
   const executionId = String(payload.execution_id || '');
   const turnId = String(payload.turn_id || '');
@@ -246,42 +512,6 @@ function streamIdentityKey(sessionId: string, state: SessionChatState, payload: 
   if (executionId !== state.executionId) return '';
   if (state.executionTurnId && turnId !== state.executionTurnId) return '';
   return `${sessionId}\u0000${executionId}\u0000${turnId}\u0000${partId}`;
-}
-
-function clearStreamByteEnds(sessionId: string) {
-  const prefix = `${sessionId}\u0000`;
-  for (const key of streamByteEnds.keys()) {
-    if (key.startsWith(prefix)) streamByteEnds.delete(key);
-  }
-}
-
-function acceptCanonicalDelta(
-  sessionId: string,
-  state: SessionChatState,
-  payload: any,
-): { delta: string; error: string } {
-  const streamKey = streamIdentityKey(sessionId, state, payload);
-  if (!streamKey) {
-    return { delta: '', error: 'assistant stream identity does not match the active execution/turn/part' };
-  }
-  const text = String(payload.text || payload.content || '');
-  const start = Number(payload.start_bytes);
-  const end = Number(payload.end_bytes);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) {
-    return { delta: '', error: 'assistant stream has an invalid or missing canonical byte range' };
-  }
-  const encoded = new TextEncoder().encode(text);
-  if (end - start !== encoded.byteLength) {
-    return { delta: '', error: 'assistant stream byte range does not match its UTF-8 payload' };
-  }
-  const consumed = streamByteEnds.get(streamKey) || 0;
-  if (start > consumed) {
-    return { delta: '', error: 'assistant stream byte range gap' };
-  }
-  if (end <= consumed) return { delta: '', error: '' };
-  const overlap = Math.max(0, consumed - start);
-  streamByteEnds.set(streamKey, end);
-  return { delta: new TextDecoder().decode(encoded.slice(overlap)), error: '' };
 }
 
 function readIssue(value: any, label: string) {
@@ -298,13 +528,20 @@ function mergeTurns(current: ChatTurn[], incoming: ChatTurn[]) {
   return sortTurnsCausally([...merged.values()]);
 }
 
-function serializeAttachment<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
-  const previous = attachmentFlights.get(sessionId) || Promise.resolve();
-  const flight = previous.catch(() => undefined).then(operation);
-  attachmentFlights.set(sessionId, flight);
-  return flight.finally(() => {
-    if (attachmentFlights.get(sessionId) === flight) attachmentFlights.delete(sessionId);
-  });
+function hasDurableAssistantForExecution(
+  state: SessionChatState,
+  executionId: string,
+  turnId = '',
+) {
+  return state.turns.some((turn) => (
+    turn.id !== state.streamTurnId
+    && turn.role === 'assistant'
+    && !!turn.content.trim()
+    && (
+      (!!executionId && turn.execution_id === executionId)
+      || (!!turnId && turn.turn_id === turnId)
+    )
+  ));
 }
 
 function uniqueSubmissionKey(sessionId: string) {
@@ -313,24 +550,196 @@ function uniqueSubmissionKey(sessionId: string) {
   return `webui:${sessionId}:${suffix}`;
 }
 
+function hasActivePrimaryTurn(state: SessionChatState) {
+  return state.pending || [
+    'queued',
+    'preparing_context',
+    'calling_model',
+    'thinking',
+    'calling_tool',
+    'waiting_approval',
+    'finalizing',
+    'running',
+    'accepted_pending_materialization',
+  ].includes(String(state.live?.status || ''));
+}
+
+function reconcileOptimisticUserTurn(
+  state: SessionChatState,
+  canonical: {
+    messageId: string;
+    content: string;
+    sequence?: number;
+    executionId?: string;
+    turnId?: string;
+  },
+) {
+  if (!canonical.messageId) return;
+  const existing = state.turns.find((turn) => turn.id === canonical.messageId);
+  const optimistic = [...state.turns]
+    .reverse()
+    .find((turn) => (
+      turn.role === 'user'
+      && turn.id.startsWith('local:')
+      && turn.content === canonical.content
+    ));
+  if (existing) {
+    if (optimistic) {
+      state.turns = state.turns.filter((turn) => turn !== optimistic);
+    }
+    return;
+  }
+  if (optimistic) {
+    optimistic.id = canonical.messageId;
+    optimistic.status = 'complete';
+    optimistic.sequence = canonical.sequence;
+    optimistic.execution_id = canonical.executionId;
+    optimistic.turn_id = canonical.turnId;
+    optimistic.ingress_message_id = canonical.messageId;
+    return;
+  }
+  state.turns.push({
+    id: canonical.messageId,
+    role: 'user',
+    content: canonical.content,
+    status: 'complete',
+    sequence: canonical.sequence,
+    execution_id: canonical.executionId,
+    turn_id: canonical.turnId,
+    ingress_message_id: canonical.messageId,
+  });
+}
+
 export const useChatSessionsStore = defineStore('chatSessions', () => {
-  // The transport registry belongs to this Pinia store instance. A recreated
-  // application shell (tests, HMR, sign-out bootstrap) must not inherit live
-  // observers or per-session state from the disposed shell.
-  for (const stream of sourceLeases.values()) stream.close();
-  sourceLeases.clear();
-  deltaBuffers.clear();
-  flushFrames.clear();
-  streamByteEnds.clear();
-  openFlights.clear();
-  attachmentFlights.clear();
-  canonicalResyncFlights.clear();
-  for (const sessionId of Object.keys(states)) delete states[sessionId];
+  const states = reactive<Record<string, SessionChatState>>({});
+  const sourceLeases = new Map<string, SessionLiveSource>();
+  const deltaBuffers = new Map<string, string>();
+  const flushFrames = new Map<string, number>();
+  const streamByteEnds = new Map<string, number>();
+  const openFlights = new Map<string, Promise<void>>();
+  const attachmentFlights = new Map<string, Promise<unknown>>();
+  const canonicalResyncFlights = new Map<string, Promise<void>>();
+  const executionIndexFlights = new Map<string, Promise<void>>();
+  const turnProjectionFlights = new Map<string, Promise<void>>();
+  const evidenceFlights = new Map<string, Promise<void>>();
+  const progressRecoveryTimers = new Map<string, ReturnType<typeof setInterval>>();
+  const progressRecoveryFlights = new Map<string, Promise<void>>();
 
   const projections = useProjectionRegistryStore();
   const activeSessionId = ref('');
   const active = computed(() => activeSessionId.value ? stateFor(activeSessionId.value) : null);
   const activeSourceCount = ref(0);
+
+  function stateFor(sessionId: string) {
+    if (!states[sessionId]) {
+      states[sessionId] = {
+        sessionId, turns: [], activity: [], executionId: '', executionGraphId: '', executionTurnId: '', executionGeneration: 0,
+        streamGeneration: 0, runtimeCommitCursor: 0, reconnectBlocked: false,
+        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, turnProjection: null, evidence: null, streamState: 'offline',
+        loadEpoch: 0, submissionEpoch: 0, attachmentEpoch: 0,
+        pending: false, submitting: false, lastError: '', unread: 0,
+        lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
+        attachmentRole: 'detached', writable: false,
+        draft: readSessionDraft(sessionId), scrollTop: 0, historyTotal: 0, historyOldestOffset: 0,
+        historyWindowEndOffset: 0, historyHasOlder: false, historyHasNewer: false,
+        scrollInitialized: false,
+        executionIndexLoading: false, executionIndexLoaded: false,
+        turnProjectionLoading: false, turnProjectionLoaded: false,
+        evidenceLoading: false, evidenceLoaded: false,
+        historyLoading: false, detailsLoading: false, detailsLoaded: false,
+      };
+    }
+    return states[sessionId];
+  }
+
+  function scheduleFlush(sessionId: string) {
+    if (flushFrames.has(sessionId)) return;
+    let flushedSynchronously = false;
+    const frame = requestAnimationFrame(() => {
+      flushedSynchronously = true;
+      flush(sessionId);
+    });
+    if (!flushedSynchronously) flushFrames.set(sessionId, frame);
+  }
+
+  function flush(sessionId: string) {
+    flushFrames.delete(sessionId);
+    const delta = deltaBuffers.get(sessionId);
+    if (!delta) return;
+    const state = stateFor(sessionId);
+    const turn = state.turns.find((item) => item.id === state.streamTurnId);
+    const batch = delta.slice(0, 12_000);
+    const remaining = delta.slice(batch.length);
+    if (remaining) {
+      deltaBuffers.set(sessionId, remaining);
+      scheduleFlush(sessionId);
+    } else {
+      deltaBuffers.delete(sessionId);
+    }
+    if (turn) turn.content += batch;
+  }
+
+  function drainPendingDelta(sessionId: string) {
+    const frame = flushFrames.get(sessionId);
+    if (frame) cancelAnimationFrame(frame);
+    flushFrames.delete(sessionId);
+    const delta = deltaBuffers.get(sessionId);
+    deltaBuffers.delete(sessionId);
+    if (!delta) return;
+    const state = stateFor(sessionId);
+    const turn = state.turns.find((item) => item.id === state.streamTurnId);
+    if (turn) turn.content += delta;
+  }
+
+  function queueDelta(sessionId: string, content: string) {
+    deltaBuffers.set(sessionId, `${deltaBuffers.get(sessionId) || ''}${content}`);
+    scheduleFlush(sessionId);
+  }
+
+  function clearStreamByteEnds(sessionId: string) {
+    const prefix = `${sessionId}\u0000`;
+    for (const key of streamByteEnds.keys()) {
+      if (key.startsWith(prefix)) streamByteEnds.delete(key);
+    }
+  }
+
+  function acceptCanonicalDelta(
+    sessionId: string,
+    state: SessionChatState,
+    payload: any,
+  ): { delta: string; error: string } {
+    const streamKey = streamIdentityKey(sessionId, state, payload);
+    if (!streamKey) {
+      return { delta: '', error: 'assistant stream identity does not match the active execution/turn/part' };
+    }
+    const text = String(payload.text || payload.content || '');
+    const start = Number(payload.start_bytes);
+    const end = Number(payload.end_bytes);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start) {
+      return { delta: '', error: 'assistant stream has an invalid or missing canonical byte range' };
+    }
+    const encoded = new TextEncoder().encode(text);
+    if (end - start !== encoded.byteLength) {
+      return { delta: '', error: 'assistant stream byte range does not match its UTF-8 payload' };
+    }
+    const consumed = streamByteEnds.get(streamKey) || 0;
+    if (start > consumed) {
+      return { delta: '', error: 'assistant stream byte range gap' };
+    }
+    if (end <= consumed) return { delta: '', error: '' };
+    const overlap = Math.max(0, consumed - start);
+    streamByteEnds.set(streamKey, end);
+    return { delta: new TextDecoder().decode(encoded.slice(overlap)), error: '' };
+  }
+
+  function serializeAttachment<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = attachmentFlights.get(sessionId) || Promise.resolve();
+    const flight = previous.catch(() => undefined).then(operation);
+    attachmentFlights.set(sessionId, flight);
+    return flight.finally(() => {
+      if (attachmentFlights.get(sessionId) === flight) attachmentFlights.delete(sessionId);
+    });
+  }
 
   function recordProgress(sessionId: string) {
     const state = stateFor(sessionId);
@@ -344,6 +753,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     return !!state.executionId
       && typeof payload?.execution_id === 'string'
       && payload.execution_id === state.executionId;
+  }
+
+  function belongsToActiveExecution(state: SessionChatState, payload: any) {
+    if (!state.executionId) return false;
+    return payload?.execution_id === state.executionId
+      || payload?.parent_execution_id === state.executionId;
   }
 
   function ensureStreamTurn(state: SessionChatState) {
@@ -360,6 +775,243 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
   }
 
+  function upsertSessionActivity(sessionId: string, event: ActivityEvent) {
+    const state = stateFor(sessionId);
+    const normalized = normalizeTurnActivity(event);
+    const identity = activityIdentityKey(normalized);
+    const index = state.activity.findIndex((item) => activityIdentityKey(item) === identity);
+    if (index >= 0) {
+      state.activity.splice(index, 1, mergeActivityEvent(state.activity[index], normalized));
+    }
+    else state.activity.push(normalized);
+    state.activity = causalActivityTimeline(state.activity, SESSION_ACTIVITY_CAP);
+    ensureStreamTurn(state);
+    const turn = state.turns.find((item) => item.id === state.streamTurnId);
+    if (turn) {
+      const activity = [...(turn.activity || [])];
+      const turnIndex = activity.findIndex((item) => activityIdentityKey(item) === identity);
+      if (turnIndex >= 0) {
+        activity.splice(turnIndex, 1, mergeActivityEvent(activity[turnIndex], normalized));
+      }
+      else activity.push(normalized);
+      turn.activity = causalActivityTimeline(activity, TURN_ACTIVITY_CAP);
+    }
+  }
+
+  function projectLiveActivity(sessionId: string, payload: any) {
+    const state = stateFor(sessionId);
+    const type = String(payload.type || '');
+    const payloadExecutionId = String(payload.execution_id || '');
+    if (
+      payloadExecutionId
+      && state.executionId
+      && !belongsToActiveExecution(state, payload)
+      && type !== 'UserMessageCommitted'
+    ) {
+      return;
+    }
+    const executionId = String(payloadExecutionId || state.executionId || 'pending');
+    const nestedExecution = !!payload.parent_execution_id
+      && payload.parent_execution_id === state.executionId
+      && executionId !== state.executionId;
+    const modelStepId = String(payload.model_step_id || '');
+    const itemId = String(payload.item_id || '');
+    const segmentId = String(payload.segment_id || '');
+    const toolId = String(payload.tool_call_id || payload.tool_instance_id || payload.id || '');
+    const causalItemKey = segmentId || itemId || modelStepId;
+    const scopedActivityId = (activityId: string) => (
+      nestedExecution ? `${executionId}:${activityId}` : activityId
+    );
+    const base = {
+      at: Date.now(),
+      sequence: payload.causal_sequence ?? payload.runtime_commit_cursor,
+      session_id: String(payload.session_id || sessionId),
+      execution_id: String(payload.execution_id || ''),
+      parent_execution_id: String(payload.parent_execution_id || ''),
+      graph_id: String(payload.graph_id || ''),
+      node_id: String(payload.node_id || ''),
+      team_id: String(payload.team_id || ''),
+      agent_id: String(payload.agent_id || ''),
+      turn_id: String(payload.turn_id || ''),
+      model_step_id: modelStepId,
+      item_id: itemId,
+      segment_id: segmentId,
+      tool_call_id: toolId,
+      causal_sequence: Number(payload.causal_sequence),
+      delta_sequence: Number(payload.delta_sequence),
+      causal_parent_ids: Array.isArray(payload.causal_parent_ids)
+        ? payload.causal_parent_ids.map(String)
+        : [],
+      commit_cursor: Number(payload.runtime_commit_cursor),
+      event_kind: type,
+      raw: payload,
+    };
+    if (type === 'ToolStart' || type === 'ToolProgress' || type === 'ToolComplete') {
+      const failed = type === 'ToolComplete' && Number(payload.exit_code || 0) !== 0;
+      const activityId = toolId || causalItemKey || `tool:${executionId}:${payload.name || 'unknown'}`;
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: scopedActivityId(activityId),
+        kind: failed ? 'error' : 'tool',
+        title: String(payload.name || 'tool'),
+        detail: compactToolOutput(payload.preview || payload.progress || payload.summary),
+        status: failed ? 'error' : type === 'ToolComplete' ? 'complete' : 'running',
+        input: type === 'ToolStart' ? payload.input : undefined,
+        output: type === 'ToolComplete' ? (payload.output ?? payload.summary) : undefined,
+      });
+      return;
+    }
+    if (type === 'ModelStepStarted' || type === 'ModelStepCompleted') {
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: modelStepId || `model-step:${executionId}`,
+        kind: 'runtime',
+        title: t('chat.activity.executionPhase'),
+        detail: '',
+        status: type === 'ModelStepCompleted' ? String(payload.status || 'complete') : 'running',
+      });
+      return;
+    }
+    if (type === 'ItemStarted' || type === 'ItemCompleted') {
+      const kind = String(payload.kind || '');
+      if (kind === 'public_reasoning') {
+        if (!causalItemKey) return;
+        upsertSessionActivity(sessionId, {
+          ...base,
+          id: causalItemKey,
+          kind: 'think',
+          title: t('chat.activity.thinking'),
+          detail: '',
+          status: type === 'ItemCompleted' ? 'complete' : 'running',
+        });
+      } else if (kind === 'tool_call' && type === 'ItemCompleted' && toolId) {
+        let input: unknown = payload.tool_input;
+        if (typeof input === 'string') {
+          try {
+            input = JSON.parse(input);
+          } catch {
+            // Plain-text tool inputs remain displayable without inventing structure.
+          }
+        }
+        upsertSessionActivity(sessionId, {
+          ...base,
+          id: scopedActivityId(toolId),
+          kind: 'tool',
+          title: String(payload.tool_name || 'tool'),
+          detail: '',
+          status: 'queued',
+          input,
+        });
+      }
+      return;
+    }
+    if (type === 'ToolExecuted') {
+      const state = stateFor(sessionId);
+      const matching = [...state.activity]
+        .reverse()
+        .find((event) => (
+          (event.kind === 'tool' || event.kind === 'error')
+          && event.title === String(payload.name || 'tool')
+          && event.execution_id === String(payload.execution_id || '')
+          && event.duration_ms === undefined
+        ));
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: matching?.id || scopedActivityId(`tool-executed:${executionId}:${payload.name || toolId}`),
+        kind: 'tool',
+        title: String(payload.name || 'tool'),
+        detail: matching?.detail || '',
+        status: 'complete',
+        duration_ms: Number.isFinite(Number(payload.duration_ms))
+          ? Number(payload.duration_ms)
+          : undefined,
+      });
+      return;
+    }
+    if (type === 'ReasoningSummaryDelta') {
+      if (!causalItemKey) return;
+      const id = causalItemKey;
+      const previous = stateFor(sessionId).activity.find((event) => event.id === id);
+      const delta = String(payload.summary || '');
+      const incomingDeltaSequence = Number(payload.delta_sequence);
+      if (
+        previous
+        && Number.isFinite(Number(previous.delta_sequence))
+        && incomingDeltaSequence <= Number(previous.delta_sequence)
+      ) return;
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id,
+        kind: 'think',
+        title: t('chat.activity.thinking'),
+        detail: appendReasoningSummary(previous?.detail || '', delta),
+        status: 'running',
+      });
+      return;
+    }
+    if (type === 'ExecutionPhase') {
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `phase:${executionId}:${String(payload.status || 'running')}`,
+        kind: 'runtime',
+        title: t('chat.activity.executionPhase'),
+        detail: compactToolOutput(payload.detail),
+        status: String(payload.status || 'running'),
+      });
+      return;
+    }
+    if (type === 'ProviderAttempt') {
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `provider:${executionId}:${payload.model || 'model'}`,
+        kind: 'context',
+        title: String(payload.model || 'Provider'),
+        detail: payload.context_window_tokens
+          ? `${Number(payload.packed_input_tokens || 0).toLocaleString()} / ${Number(payload.context_window_tokens).toLocaleString()} tokens`
+          : '',
+        status: 'running',
+      });
+      return;
+    }
+    if (type === 'ContextEnvelope') {
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `context:${executionId}`,
+        kind: 'context',
+        title: t('chat.activity.contextPrepared'),
+        detail: compactToolOutput(payload.envelope?.summary || payload.summary),
+        status: 'complete',
+      });
+      return;
+    }
+    if (type === 'RuntimePolicyDecision') {
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `policy:${executionId}`,
+        kind: 'runtime',
+        title: t('chat.activity.runtimePolicy'),
+        detail: compactToolOutput(payload.summary || payload.decision),
+        status: String(payload.status || 'observed'),
+      });
+      return;
+    }
+    if (type === 'ApprovalRequested' || type === 'ApprovalResolved') {
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `approval:${String(payload.approval_id || payload.id || executionId)}`,
+        kind: 'approval',
+        title: String(payload.action || t('chat.approval.title')),
+        detail: compactToolOutput(payload.summary),
+        status: type === 'ApprovalRequested' ? 'pending' : String(payload.status || 'resolved'),
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cowd:approval-changed', {
+          detail: { sessionId, type },
+        }));
+      }
+    }
+  }
+
   function requestCanonicalResync(sessionId: string, reason: string) {
     const state = stateFor(sessionId);
     const frame = flushFrames.get(sessionId);
@@ -372,10 +1024,33 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.lastError = reason;
     if (canonicalResyncFlights.has(sessionId)) return;
     let flight!: Promise<void>;
-    flight = Promise.all([
-      load(sessionId),
-      refreshProjection(sessionId),
-    ]).then(() => undefined).finally(() => {
+    flight = (async () => {
+      // Recover from the cheapest canonical source first. A transient preview
+      // gap should not immediately fan out into history, live and graph loads.
+      try {
+        if (await refreshLiveExecution(sessionId)) return;
+      } catch {
+        // Escalate to the next canonical layer.
+      }
+      try {
+        if (await refreshProjection(sessionId)) return;
+      } catch {
+        // Durable history is the final recovery boundary.
+      }
+      await load(sessionId);
+      const current = stateFor(sessionId);
+      if (
+        hasDurableAssistantForExecution(
+          current,
+          current.executionId,
+          current.executionTurnId,
+        )
+      ) {
+        current.streamState = 'connected';
+        current.degradedReason = '';
+        if (current.lastError === reason) current.lastError = '';
+      }
+    })().finally(() => {
       if (canonicalResyncFlights.get(sessionId) === flight) {
         canonicalResyncFlights.delete(sessionId);
       }
@@ -419,21 +1094,29 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.writable = false;
     state.attachmentRole = 'detached';
     state.turns = [];
+    state.activity = [];
     state.evidence = null;
     state.live = null;
     state.executionId = '';
+    state.executionGraphId = '';
     state.executionTurnId = '';
     state.streamTurnId = '';
     state.terminalId = '';
     state.latestIngressSequence = -1;
     state.runtimeCommitCursor = 0;
-    state.draft = '';
     state.historyTotal = 0;
     state.historyOldestOffset = 0;
     state.historyWindowEndOffset = 0;
     state.historyHasOlder = false;
     state.historyHasNewer = false;
     state.historyLoading = false;
+    state.scrollInitialized = false;
+    state.executionIndexLoading = false;
+    state.executionIndexLoaded = false;
+    state.evidenceLoading = false;
+    state.evidenceLoaded = false;
+    state.detailsLoading = false;
+    state.detailsLoaded = false;
     projections.revokeSessionAuthorization(sessionId, reason);
     projections.release(`chat:${sessionId}`);
     const frame = flushFrames.get(sessionId);
@@ -441,6 +1124,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
     clearStreamByteEnds(sessionId);
+    stopProgressRecovery(sessionId);
   }
 
   function failClosedSessionAuthorization(sessionId: string, stream: SessionLiveSource | undefined, reason: string) {
@@ -463,6 +1147,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     executionId: string,
     turnId = '',
     markPending = true,
+    initialStatus?: SurfaceExecutionStatus,
   ) {
     const state = stateFor(sessionId);
     const next = executionId.trim();
@@ -471,6 +1156,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       if (turnId) state.executionTurnId = turnId;
       if (markPending) state.pending = true;
       if (state.pending) ensureStreamTurn(state);
+      if (state.pending) ensureProgressRecovery(sessionId);
       return false;
     }
     projections.release(`chat:${sessionId}`);
@@ -483,70 +1169,80 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       state.turns = state.turns.filter((turn) => turn.id !== state.streamTurnId || !!turn.content);
     }
     state.executionId = next;
+    state.executionGraphId = '';
     state.executionTurnId = turnId;
     state.executionGeneration += 1;
     state.terminalId = '';
     state.streamTurnId = `stream:${sessionId}:${next}`;
     state.pending = markPending;
     state.live = {
-      status: 'queued',
+      status: initialStatus || (markPending ? 'queued' : 'complete'),
       status_detail: 'execution adopted from canonical session stream',
       last_progress_at_ms: Date.now(),
     };
     if (markPending) ensureStreamTurn(state);
-    projections.acquire(next, `chat:${sessionId}`, 'full', 'bounded', sessionId);
-    refreshProjection(sessionId).catch(() => undefined);
+    if (markPending) ensureProgressRecovery(sessionId);
+    return true;
+  }
+
+  function adoptExecutionGraph(sessionId: string, graphId: string, hydrateProjection = true) {
+    const state = stateFor(sessionId);
+    const next = graphId.trim();
+    if (!next) return false;
+    if (state.executionGraphId === next) {
+      if (hydrateProjection) {
+        projections.acquire(next, `chat:${sessionId}`, 'full', 'bounded', sessionId);
+        refreshProjection(sessionId).catch(() => undefined);
+      }
+      return false;
+    }
+    projections.release(`chat:${sessionId}`);
+    state.executionGraphId = next;
+    if (hydrateProjection) {
+      projections.acquire(next, `chat:${sessionId}`, 'full', 'bounded', sessionId);
+      refreshProjection(sessionId).catch(() => undefined);
+    }
     return true;
   }
 
   async function load(sessionId: string) {
     const state = stateFor(sessionId);
     const epoch = ++state.loadEpoch;
+    executionIndexFlights.delete(sessionId);
+    turnProjectionFlights.delete(sessionId);
+    evidenceFlights.delete(sessionId);
     state.historyLoading = true;
-    const probePromise = api.messages(sessionId, { offset: 0, limit: 1 });
-    const evidencePromise = api.sessionEvidence(sessionId);
-    const executionPromise = api.sessionExecution(sessionId);
-    const probe = await probePromise;
-    if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
-    const probeIssue = readIssue(probe, 'history')
-      || messagesIdentityIssue(probe, sessionId, 'history probe');
-    if (probeIssue) {
-      state.historyLoading = false;
-      state.streamState = 'degraded';
-      state.lastError = probeIssue;
-      state.degradedReason = probeIssue;
+    state.executionIndexLoading = false;
+    state.executionIndexLoaded = false;
+    state.turnProjectionLoading = false;
+    state.turnProjectionLoaded = false;
+    state.evidenceLoading = false;
+    state.evidenceLoaded = false;
+    state.detailsLoaded = false;
+    let data: Awaited<ReturnType<typeof api.messages>>;
+    try {
+      data = await api.messages(sessionId, { limit: HISTORY_PAGE_SIZE, tail: true });
+    } catch (error) {
+      if (state.loadEpoch === epoch && !state.reconnectBlocked) {
+        state.lastError = String((error as any)?.message || error || 'history request failed');
+        state.degradedReason = state.lastError;
+        state.streamState = 'degraded';
+      }
       return;
+    } finally {
+      if (state.loadEpoch === epoch) state.historyLoading = false;
     }
-    const total = Math.max(0, Number(probe.total || 0));
-    const offset = Math.max(0, total - HISTORY_PAGE_SIZE);
-    const data = total <= 1 && offset === 0
-      ? probe
-      : await api.messages(sessionId, { offset, limit: HISTORY_PAGE_SIZE });
-    const [evidence, execution] = await Promise.all([
-      evidencePromise,
-      executionPromise,
-    ]);
     if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
-    state.historyLoading = false;
-    const identityIssues = [
-      messagesIdentityIssue(data, sessionId, 'history'),
-      evidenceIdentityIssue(evidence, sessionId),
-      sessionEnvelopeIdentityIssue(execution, sessionId, 'execution'),
-    ].filter(Boolean);
-    if (identityIssues.length) {
+    const identityIssue = messagesIdentityIssue(data, sessionId, 'history');
+    if (identityIssue) {
       state.streamState = 'degraded';
-      state.lastError = identityIssues.join(' · ');
+      state.lastError = identityIssue;
       state.degradedReason = state.lastError;
       return;
     }
-    const issues = [...new Set([
-      probeIssue,
-      readIssue(data, 'history'),
-      readIssue(evidence, 'evidence'),
-      readIssue(execution, 'execution'),
-    ].filter(Boolean))];
-    if (issues.length) {
-      state.lastError = issues.join(' · ');
+    const issue = readIssue(data, 'history');
+    if (issue) {
+      state.lastError = issue;
       state.degradedReason = state.lastError;
       if (!data.messages?.length && String(data.__state || '') !== 'stale') {
         state.streamState = 'degraded';
@@ -558,14 +1254,28 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     drainPendingDelta(sessionId);
     const streaming = state.turns.find((turn) => turn.id === state.streamTurnId && turn.content);
     const durableTurns = normalizeTurns(data.messages);
+    const durableActivity = durableTurns.flatMap((turn) => turn.activity || []);
+    const liveById = new Map(state.activity.map((event) => [activityIdentityKey(event), event]));
+    durableActivity.forEach((event) => {
+      const identity = activityIdentityKey(event);
+      liveById.set(identity, mergeActivityEvent(liveById.get(identity), event));
+    });
+    state.activity = causalActivityTimeline([...liveById.values()], SESSION_ACTIVITY_CAP);
     const durableOwnsStreamingIdentity = !!streaming && durableTurns.some((turn) => (
       turn.role === 'assistant'
       && (
         (!!streaming.execution_id && turn.execution_id === streaming.execution_id)
         || (!!streaming.turn_id && turn.turn_id === streaming.turn_id)
+        || (
+          !state.pending
+          && !!streaming.content.trim()
+          && turn.content.trim() === streaming.content.trim()
+        )
       )
     ));
     state.turns = durableTurns;
+    const total = Math.max(0, Number(data.total || 0));
+    const offset = Math.max(0, Number(data.offset ?? total - (data.messages || []).length));
     state.historyTotal = Math.max(total, Number(data.total || 0));
     state.historyOldestOffset = Number(data.offset ?? offset);
     state.historyWindowEndOffset = state.historyOldestOffset + (data.messages || []).length;
@@ -578,20 +1288,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         .map((message: any) => Number(message.sequence))
         .filter(Number.isFinite),
     );
-    state.evidence = evidence;
-    const recoveredExecutionId = String(execution.latest_execution_id || '');
-    const recoveredActive = (execution.active_execution_ids || []).includes(recoveredExecutionId);
-    const currentStillMaterializing = state.pending
-      && !!state.executionId
-      && state.executionId !== recoveredExecutionId;
-    if (recoveredExecutionId && (!currentStillMaterializing || recoveredActive)) {
-      adoptExecution(
-        sessionId,
-        recoveredExecutionId,
-        String((execution as any).turn_id || state.executionTurnId || ''),
-        recoveredActive || !['complete', 'error', 'cancelled'].includes(String(execution.latest_status || '')),
-      );
-    }
     if (streaming) {
       const streamingStillCurrent = (
         (!streaming.execution_id || streaming.execution_id === state.executionId)
@@ -609,15 +1305,204 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
     if (state.executionId) {
       if (state.pending && !durableOwnsStreamingIdentity) ensureStreamTurn(state);
-      projections.acquire(
-        state.executionId,
-        `chat:${sessionId}`,
-        'full',
-        'bounded',
-        sessionId,
-      );
-      refreshProjection(sessionId).catch(() => undefined);
+      refreshLiveExecution(sessionId).catch(() => undefined);
     }
+  }
+
+  function refreshDetailState(state: SessionChatState) {
+    state.detailsLoading = state.executionIndexLoading
+      || state.turnProjectionLoading
+      || state.evidenceLoading;
+    state.detailsLoaded = state.executionIndexLoaded
+      && state.turnProjectionLoaded
+      && state.evidenceLoaded;
+  }
+
+  async function hydrateTurnProjection(sessionId: string) {
+    const state = stateFor(sessionId);
+    const epoch = state.loadEpoch;
+    const existing = turnProjectionFlights.get(sessionId);
+    if (existing) return existing;
+    if (state.turnProjectionLoaded) {
+      if (state.turnProjection) applyTurnProjectionHistory(state, state.turnProjection);
+      return;
+    }
+
+    state.turnProjectionLoading = true;
+    refreshDetailState(state);
+    let flight!: Promise<void>;
+    flight = api.sessionTurnProjection(sessionId)
+      .then((projection) => {
+        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
+        const identityIssue = sessionEnvelopeIdentityIssue(projection, sessionId, 'turn projection');
+        if (identityIssue) {
+          state.lastError = identityIssue;
+          state.degradedReason = identityIssue;
+          return;
+        }
+        const issue = readIssue(projection, 'turn projection');
+        if (issue) {
+          state.lastError = issue;
+          state.degradedReason = issue;
+          return;
+        }
+        state.turnProjection = projection;
+        state.turnProjectionLoaded = true;
+        applyTurnProjectionHistory(state, projection);
+      })
+      .finally(() => {
+        if (state.loadEpoch === epoch) {
+          state.turnProjectionLoading = false;
+          refreshDetailState(state);
+        }
+        if (turnProjectionFlights.get(sessionId) === flight) {
+          turnProjectionFlights.delete(sessionId);
+        }
+      });
+    turnProjectionFlights.set(sessionId, flight);
+    await flight;
+  }
+
+  async function hydrateExecutionIndex(sessionId: string, includeProjection = false) {
+    const state = stateFor(sessionId);
+    const epoch = state.loadEpoch;
+    const existing = executionIndexFlights.get(sessionId);
+    if (existing) {
+      await existing;
+      if (includeProjection && state.executionGraphId && state.loadEpoch === epoch) {
+        projections.acquire(
+          state.executionGraphId,
+          `chat:${sessionId}`,
+          'full',
+          'bounded',
+          sessionId,
+        );
+        await refreshProjection(sessionId);
+      }
+      return;
+    }
+    if (state.executionIndexLoaded) {
+      if (includeProjection && state.executionGraphId) {
+        projections.acquire(
+          state.executionGraphId,
+          `chat:${sessionId}`,
+          'full',
+          'bounded',
+          sessionId,
+        );
+        await refreshProjection(sessionId);
+      }
+      return;
+    }
+
+    state.executionIndexLoading = true;
+    refreshDetailState(state);
+    let flight!: Promise<void>;
+    flight = api.sessionExecution(sessionId)
+      .then(async (execution) => {
+        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
+        const identityIssue = sessionEnvelopeIdentityIssue(execution, sessionId, 'execution');
+        if (identityIssue) {
+          state.streamState = 'degraded';
+          state.lastError = identityIssue;
+          state.degradedReason = state.lastError;
+          return;
+        }
+        const issue = readIssue(execution, 'execution');
+        if (issue) {
+          state.lastError = issue;
+          state.degradedReason = state.lastError;
+          return;
+        }
+
+        state.executionIndex = execution;
+        const recoveredExecutionId = String(execution.latest_execution_id || '');
+        const recoveredGraphId = String(execution.latest_graph_id || '');
+        const recoveredActive = (execution.active_execution_ids || []).includes(recoveredExecutionId);
+        const recoveredStatus = String(execution.latest_status || '');
+        const currentStillMaterializing = state.pending
+          && !!state.executionId
+          && state.executionId !== recoveredExecutionId;
+        if (recoveredExecutionId && (!currentStillMaterializing || recoveredActive)) {
+          adoptExecution(
+            sessionId,
+            recoveredExecutionId,
+            String((execution as any).turn_id || state.executionTurnId || ''),
+            recoveredActive || !['complete', 'error', 'cancelled'].includes(recoveredStatus),
+            recoveredStatus as SurfaceExecutionStatus || undefined,
+          );
+        }
+        if (recoveredGraphId) adoptExecutionGraph(sessionId, recoveredGraphId, includeProjection);
+        if (includeProjection && state.executionGraphId) {
+          projections.acquire(
+            state.executionGraphId,
+            `chat:${sessionId}`,
+            'full',
+            'bounded',
+            sessionId,
+          );
+          await refreshProjection(sessionId);
+        }
+        if (state.executionId) refreshLiveExecution(sessionId).catch(() => undefined);
+        state.executionIndexLoaded = true;
+      })
+      .finally(() => {
+        if (state.loadEpoch === epoch) {
+          state.executionIndexLoading = false;
+          refreshDetailState(state);
+        }
+        if (executionIndexFlights.get(sessionId) === flight) executionIndexFlights.delete(sessionId);
+      });
+    executionIndexFlights.set(sessionId, flight);
+    await flight;
+  }
+
+  async function hydrateEvidence(sessionId: string) {
+    const state = stateFor(sessionId);
+    const epoch = state.loadEpoch;
+    const existing = evidenceFlights.get(sessionId);
+    if (existing) return existing;
+    if (state.evidenceLoaded) return;
+
+    state.evidenceLoading = true;
+    refreshDetailState(state);
+    let flight!: Promise<void>;
+    flight = api.sessionEvidence(sessionId)
+      .then((evidence) => {
+        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
+        const identityIssue = evidenceIdentityIssue(evidence, sessionId);
+        if (identityIssue) {
+          state.streamState = 'degraded';
+          state.lastError = identityIssue;
+          state.degradedReason = identityIssue;
+          return;
+        }
+        const issue = readIssue(evidence, 'evidence');
+        if (issue) {
+          state.lastError = issue;
+          state.degradedReason = issue;
+          return;
+        }
+        state.evidence = evidence;
+        state.evidenceLoaded = true;
+      })
+      .finally(() => {
+        if (state.loadEpoch === epoch) {
+          state.evidenceLoading = false;
+          refreshDetailState(state);
+        }
+        if (evidenceFlights.get(sessionId) === flight) evidenceFlights.delete(sessionId);
+      });
+    evidenceFlights.set(sessionId, flight);
+    await flight;
+  }
+
+  async function hydrateRuntimeDetails(sessionId: string, includeProjection = false) {
+    await Promise.all([
+      hydrateExecutionIndex(sessionId, includeProjection),
+      hydrateTurnProjection(sessionId),
+      hydrateEvidence(sessionId),
+    ]);
   }
 
   async function loadOlder(sessionId: string) {
@@ -626,94 +1511,171 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const epoch = state.loadEpoch;
     state.historyLoading = true;
     const nextOffset = Math.max(0, state.historyOldestOffset - HISTORY_PAGE_SIZE);
-    const page = await api.messages(sessionId, {
-      offset: nextOffset,
-      limit: state.historyOldestOffset - nextOffset,
-    });
-    if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
-    state.historyLoading = false;
-    const issue = readIssue(page, 'older history')
-      || messagesIdentityIssue(page, sessionId, 'older history');
-    if (issue) {
-      state.lastError = issue;
-      state.degradedReason = issue;
-      return;
+    try {
+      const page = await api.messages(sessionId, {
+        offset: nextOffset,
+        limit: state.historyOldestOffset - nextOffset,
+      });
+      if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
+      const issue = readIssue(page, 'older history')
+        || messagesIdentityIssue(page, sessionId, 'older history');
+      if (issue) {
+        state.lastError = issue;
+        state.degradedReason = issue;
+        return;
+      }
+      const merged = mergeTurns(normalizeTurns(page.messages), state.turns);
+      state.turns = merged.length > HISTORY_WINDOW_CAP
+        ? merged.slice(0, HISTORY_WINDOW_CAP)
+        : merged;
+      if (state.turnProjection) applyTurnProjectionHistory(state, state.turnProjection);
+      state.historyTotal = Math.max(state.historyTotal, Number(page.total || 0));
+      state.historyOldestOffset = nextOffset;
+      state.historyWindowEndOffset = Math.min(state.historyTotal, nextOffset + state.turns.length);
+      state.historyHasOlder = nextOffset > 0;
+      state.historyHasNewer = state.historyWindowEndOffset < state.historyTotal;
+    } catch (error) {
+      if (state.loadEpoch === epoch && !state.reconnectBlocked) {
+        state.lastError = String((error as any)?.message || error || 'older history request failed');
+        state.degradedReason = state.lastError;
+      }
+    } finally {
+      if (state.loadEpoch === epoch) state.historyLoading = false;
     }
-    const merged = mergeTurns(normalizeTurns(page.messages), state.turns);
-    state.turns = merged.length > HISTORY_WINDOW_CAP
-      ? merged.slice(0, HISTORY_WINDOW_CAP)
-      : merged;
-    state.historyTotal = Math.max(state.historyTotal, Number(page.total || 0));
-    state.historyOldestOffset = nextOffset;
-    state.historyWindowEndOffset = Math.min(state.historyTotal, nextOffset + state.turns.length);
-    state.historyHasOlder = nextOffset > 0;
-    state.historyHasNewer = state.historyWindowEndOffset < state.historyTotal;
   }
 
   async function loadLatest(sessionId: string) {
     await load(sessionId);
   }
 
-  async function refreshProjection(sessionId: string) {
+  async function applyRecoveredLive(
+    sessionId: string,
+    executionId: string,
+    recoveredLive: LiveExecutionState,
+  ): Promise<boolean> {
     const state = stateFor(sessionId);
-    if (!state.executionId) return;
-    const projection = await projections.load(state.executionId, 'full', sessionId);
-    if (projection?.execution_id === state.executionId) {
-      let streamRecovered = state.streamState !== 'degraded';
-      if (projection.live) {
-        state.live = projection.live;
-        const outputBytes = Number(projection.live.output_bytes);
-        const previewStart = Number(projection.live.output_preview_start_bytes || 0);
-        const preview = projection.live.output_preview;
+    if (!state.executionId || executionId !== state.executionId) return false;
+    let streamRecovered = state.streamState !== 'degraded';
+    state.live = recoveredLive;
+    const projectionStatus = String(recoveredLive.status || '');
+    const terminalProjection = ['complete', 'error', 'cancelled'].includes(projectionStatus);
+    const durableAssistantPresent = hasDurableAssistantForExecution(
+      state,
+      state.executionId,
+      state.executionTurnId || String(recoveredLive.turn_id || ''),
+    );
+    const outputBytes = Number(recoveredLive.output_bytes);
+    const outputParts = [...(recoveredLive.output_parts || [])]
+      .sort((left, right) => Number(left.causal_sequence) - Number(right.causal_sequence));
+    if (outputParts.length > 0) {
+      const recoveredText: string[] = [];
+      let recoveredBytes = 0;
+      let valid = true;
+      for (const part of outputParts) {
+        const partId = String(part.part_id || '').trim();
+        const partBytes = Number(part.bytes || 0);
+        const previewStart = Number(part.preview_start_bytes || 0);
+        const preview = typeof part.preview === 'string'
+          ? part.preview
+          : (partBytes === 0 && previewStart === 0 ? '' : null);
+        const previewBytes = preview === null
+          ? -1
+          : new TextEncoder().encode(preview).byteLength;
         if (
-          Number.isFinite(outputBytes)
-          && outputBytes >= 0
-          && Number.isFinite(previewStart)
-          && previewStart >= 0
-          && previewStart <= outputBytes
+          !partId
+          || !Number.isFinite(partBytes)
+          || partBytes < 0
+          || !Number.isFinite(previewStart)
+          || previewStart < 0
+          || previewStart > partBytes
+          || previewBytes !== partBytes - previewStart
         ) {
-          const canonicalPreview = typeof preview === 'string'
-            ? preview
-            : (outputBytes === 0 && previewStart === 0 ? '' : null);
-          const previewBytes = canonicalPreview === null
-            ? -1
-            : new TextEncoder().encode(canonicalPreview).byteLength;
-          if (previewBytes === outputBytes - previewStart) {
-            const streamKey = streamIdentityKey(sessionId, state, {
-              execution_id: state.executionId,
-              turn_id: state.executionTurnId || projection.live.turn_id,
-              part_id: 'assistant_text',
-            });
-            if (streamKey) streamByteEnds.set(streamKey, outputBytes);
-            ensureStreamTurn(state);
-            const turn = state.turns.find((item) => item.id === state.streamTurnId);
-            if (turn) {
-              turn.content = previewStart > 0
-                ? `[${previewStart} earlier output bytes omitted during recovery]\n${canonicalPreview}`
-                : canonicalPreview || '';
-            }
-            streamRecovered = true;
-          } else {
-            state.streamState = 'degraded';
-            state.degradedReason = 'canonical output preview does not cover its declared UTF-8 byte range';
-            state.lastError = state.degradedReason;
-            streamRecovered = false;
-          }
+          valid = false;
+          break;
         }
+        const streamKey = streamIdentityKey(sessionId, state, {
+          execution_id: state.executionId,
+          turn_id: state.executionTurnId || recoveredLive.turn_id,
+          part_id: partId,
+        });
+        if (streamKey) streamByteEnds.set(streamKey, partBytes);
+        recoveredBytes += partBytes;
+        recoveredText.push(previewStart > 0
+          ? `[${previewStart} earlier output bytes omitted during recovery]\n${preview}`
+          : preview || '');
       }
-      if (streamRecovered) {
-        state.degradedReason = '';
-        if (state.streamState === 'degraded') state.streamState = 'connected';
+      if (valid && (!Number.isFinite(outputBytes) || outputBytes === recoveredBytes)) {
+        if (terminalProjection && durableAssistantPresent) {
+          state.turns = state.turns.filter((turn) => turn.id !== state.streamTurnId);
+        } else {
+          ensureStreamTurn(state);
+          const turn = state.turns.find((item) => item.id === state.streamTurnId);
+          if (turn) turn.content = recoveredText.join('');
+        }
+        streamRecovered = true;
+      } else {
+        state.streamState = 'degraded';
+        state.degradedReason = 'canonical output parts do not cover their declared UTF-8 byte ranges';
+        state.lastError = state.degradedReason;
+        streamRecovered = false;
       }
-      const status = String(projection.live?.status || state.live?.status || '');
-      if (['complete', 'error', 'cancelled'].includes(status)) {
-        const wasPending = state.pending;
-        state.pending = false;
-        if (wasPending) await load(sessionId);
-        await releaseWriter(sessionId);
+    } else if (Number.isFinite(outputBytes) && outputBytes > 0) {
+      state.streamState = 'degraded';
+      state.degradedReason = 'canonical output projection is missing Runtime-owned output parts';
+      state.lastError = state.degradedReason;
+      streamRecovered = false;
+    }
+    if (streamRecovered) {
+      state.degradedReason = '';
+      if (
+        state.lastError.includes('assistant stream')
+        || state.lastError.includes('canonical output')
+      ) {
+        state.lastError = '';
+      }
+      if (state.streamState === 'degraded') state.streamState = 'connected';
+    }
+    if (terminalProjection) {
+      const wasPending = state.pending;
+      state.pending = false;
+      stopProgressRecovery(sessionId);
+      if (wasPending) await load(sessionId);
+      await releaseWriter(sessionId);
+    }
+    return streamRecovered;
+  }
+
+  async function refreshLiveExecution(sessionId: string): Promise<boolean> {
+    const state = stateFor(sessionId);
+    if (!state.executionId) return false;
+    const update = await api.sessionExecutionLive(sessionId);
+    if (
+      String(update?.execution_id || '') === state.executionId
+      && update?.live
+    ) {
+      return applyRecoveredLive(
+        sessionId,
+        state.executionId,
+        update.live as LiveExecutionState,
+      );
+    }
+    return false;
+  }
+
+  async function refreshProjection(sessionId: string): Promise<boolean> {
+    const state = stateFor(sessionId);
+    if (!state.executionGraphId) return false;
+    const projection = await projections.load(state.executionGraphId, 'full', sessionId);
+    if (projection?.execution_id === state.executionGraphId) {
+      if (projection.live && projection.execution_id === state.executionId) {
+        return applyRecoveredLive(
+          sessionId,
+          state.executionId,
+          projection.live as LiveExecutionState,
+        );
       }
     } else {
-      const entry = projections.entries[state.executionId];
+      const entry = projections.entries[state.executionGraphId];
       if (entry?.reconnectBlocked) {
         state.live = null;
         state.lastError = entry.lastError || 'execution projection authorization was revoked';
@@ -723,6 +1685,58 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         state.degradedReason = entry.degradedReason || entry.lastError;
       }
     }
+    return false;
+  }
+
+  function stopProgressRecovery(sessionId: string) {
+    const timer = progressRecoveryTimers.get(sessionId);
+    if (timer) clearInterval(timer);
+    progressRecoveryTimers.delete(sessionId);
+    progressRecoveryFlights.delete(sessionId);
+  }
+
+  function ensureProgressRecovery(sessionId: string) {
+    if (progressRecoveryTimers.has(sessionId)) return;
+    const timer = setInterval(() => {
+      const state = states[sessionId];
+      if (
+        !state
+        || !state.pending
+        || ['complete', 'cancelled', 'error', 'terminal'].includes(String(state.live?.status || ''))
+      ) {
+        stopProgressRecovery(sessionId);
+        return;
+      }
+      const lastProgress = Math.max(
+        state.lastProgressAtMs,
+        state.lastEventAtMs,
+        Number(state.live?.last_progress_at_ms || 0),
+      );
+      if (Date.now() - lastProgress < LIVE_RECOVERY_SILENCE_MS) return;
+      if (progressRecoveryFlights.has(sessionId)) return;
+      let flight!: Promise<void>;
+      flight = (async () => {
+        let recovered = false;
+        try {
+          recovered = await refreshLiveExecution(sessionId);
+        } catch {
+          // The execution projection is the next authoritative recovery source.
+        }
+        if (!recovered && state.executionGraphId) {
+          try {
+            await refreshProjection(sessionId);
+          } catch {
+            // Keep the Session stream primary and retry only after another silence window.
+          }
+        }
+      })().finally(() => {
+        if (progressRecoveryFlights.get(sessionId) === flight) {
+          progressRecoveryFlights.delete(sessionId);
+        }
+      });
+      progressRecoveryFlights.set(sessionId, flight);
+    }, LIVE_RECOVERY_INTERVAL_MS);
+    progressRecoveryTimers.set(sessionId, timer);
   }
 
   function connect(sessionId: string) {
@@ -753,6 +1767,26 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         payload = JSON.parse(event.data);
       } catch {
         requestCanonicalResync(sessionId, 'session stream emitted invalid JSON');
+        return;
+      }
+      if (
+        ['TextDelta', 'ReasoningSummaryDelta', 'ItemStarted', 'ItemCompleted', 'ToolStart', 'ToolProgress', 'ToolComplete']
+          .includes(String(payload.type || ''))
+        && (
+          typeof payload.model_step_id !== 'string'
+          || !payload.model_step_id
+          || typeof payload.item_id !== 'string'
+          || !payload.item_id
+          || typeof payload.segment_id !== 'string'
+          || !payload.segment_id
+          || !Number.isFinite(Number(payload.causal_sequence))
+          || !Number.isFinite(Number(payload.delta_sequence))
+        )
+      ) {
+        requestCanonicalResync(
+          sessionId,
+          `${String(payload.type || 'causal event')} is missing its Runtime causal item identity`,
+        );
         return;
       }
       const eventType = String(payload.type || '');
@@ -816,35 +1850,68 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         );
         return;
       }
+      if (
+        payload.type === 'TextDelta'
+        && (
+          typeof payload.part_id !== 'string'
+          || payload.part_id !== payload.segment_id
+        )
+      ) {
+        requestCanonicalResync(
+          sessionId,
+          'TextDelta projection part does not match its Runtime segment identity',
+        );
+        return;
+      }
+      if (
+        ['ToolStart', 'ToolProgress', 'ToolComplete'].includes(String(payload.type || ''))
+        && (typeof payload.tool_call_id !== 'string' || !payload.tool_call_id)
+      ) {
+        requestCanonicalResync(
+          sessionId,
+          `${String(payload.type)} is missing its Runtime tool call identity`,
+        );
+        return;
+      }
+      projectLiveActivity(sessionId, payload);
       if (payload.type === 'UserMessageCommitted') {
         const sequence = Number(payload.sequence);
-        const executionId = String(payload.execution_id || '');
+        const supplemental = payload.supplemental === true;
+        const executionId = supplemental
+          ? (state.executionId || String(payload.execution_id || ''))
+          : String(payload.execution_id || '');
+        const turnId = supplemental
+          ? (state.executionTurnId || String(payload.turn_id || ''))
+          : String(payload.turn_id || '');
         if (executionId && (!Number.isFinite(sequence) || sequence >= state.latestIngressSequence)) {
           if (Number.isFinite(sequence)) state.latestIngressSequence = sequence;
-          adoptExecution(sessionId, executionId, String(payload.turn_id || ''), true);
-          const messageId = String(payload.message_id || '');
-          if (messageId && !state.turns.some((turn) => turn.id === messageId)) {
-            state.turns.push({
-              id: messageId,
-              role: 'user',
-              content: String(payload.content || ''),
-              status: 'complete',
-              sequence: Number.isFinite(sequence) ? sequence : undefined,
-            });
+          if (!supplemental) {
+            adoptExecution(sessionId, executionId, turnId, true);
           }
-          state.live = {
-            ...(state.live || {}),
-            status: 'queued',
-            status_detail: 'durable input committed; awaiting runtime progress',
-            last_progress_at_ms: Date.now(),
-          };
+          const messageId = String(payload.message_id || '');
+          reconcileOptimisticUserTurn(state, {
+            messageId,
+            content: String(payload.content || ''),
+            sequence: Number.isFinite(sequence) ? sequence : undefined,
+            executionId,
+            turnId,
+          });
+          if (!supplemental) {
+            state.live = {
+              ...(state.live || {}),
+              status: 'queued',
+              status_detail: 'durable input committed; awaiting runtime progress',
+              last_progress_at_ms: Date.now(),
+            };
+          }
           recordProgress(sessionId);
         }
       }
       if (payload.type === 'ExecutionGraphSummary') {
-        const executionId = String(payload.execution_id || payload.summary?.graph_id || '');
-        if (executionId && (!state.executionId || state.executionId === executionId)) {
-          adoptExecution(sessionId, executionId, String(payload.turn_id || ''), true);
+        const executionId = String(payload.execution_id || '');
+        const graphId = String(payload.summary?.graph_id || '');
+        if (graphId && (!state.executionId || state.executionId === executionId)) {
+          adoptExecutionGraph(sessionId, graphId);
         }
       }
       if (payload.type === 'TextDelta' && matchesActiveExecution(state, payload)) {
@@ -884,6 +1951,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       if (payload.type === 'TurnError' && matchesActiveExecution(state, payload)) {
         recordProgress(sessionId);
         state.pending = false;
+        stopProgressRecovery(sessionId);
         state.lastError = String(payload.error || 'execution failed');
         state.live = {
           ...(state.live || {}),
@@ -894,6 +1962,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         };
         const turn = state.turns.find((item) => item.id === state.streamTurnId);
         if (turn) turn.status = 'error';
+        refreshLiveExecution(sessionId).catch(() => undefined);
         refreshProjection(sessionId).catch(() => undefined);
         void releaseWriter(sessionId);
       }
@@ -904,6 +1973,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         if (settlesCurrentTurn) {
           recordProgress(sessionId);
           state.pending = false;
+          stopProgressRecovery(sessionId);
           // TerminalCommitted proves durable transcript materialization, not
           // lifecycle outcome. Only canonical ExecutionLive/TurnError may
           // classify the execution as complete, error, or cancelled.
@@ -912,7 +1982,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         }
         // Replayed and unrelated terminals are durable transcript facts, not
         // lifecycle transitions for the currently selected execution.
-        load(sessionId).catch(() => undefined);
+        // The initial bounded history load already contains replayed terminal
+        // materialization. Reloading for every replayed terminal multiplies
+        // the history/evidence requests and can keep the transcript blank
+        // until the whole replay finishes.
+        if (!payload.replayed) load(sessionId).catch(() => undefined);
+        if (settlesCurrentTurn) refreshLiveExecution(sessionId).catch(() => undefined);
         if (settlesCurrentTurn) refreshProjection(sessionId).catch(() => undefined);
         if (settlesCurrentTurn) void releaseWriter(sessionId);
       }
@@ -1073,9 +2148,13 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     connect(sessionId);
     const existing = openFlights.get(sessionId);
     if (existing) return existing;
+    attachReader(sessionId).catch((error) => {
+      if (!state.reconnectBlocked) {
+        state.lastError = String((error as any)?.message || error || 'reader attachment failed');
+      }
+    });
     let flight!: Promise<void>;
-    flight = Promise.all([attachReader(sessionId), load(sessionId)])
-      .then(() => undefined)
+    flight = load(sessionId)
       .finally(() => {
         if (openFlights.get(sessionId) === flight) openFlights.delete(sessionId);
       });
@@ -1089,39 +2168,46 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     options: { transportContent?: string; resourceIds?: string[] } = {},
   ) {
     const state = stateFor(sessionId);
-    if (state.pending || state.submitting) {
-      state.lastError = 'a primary turn is already running for this session';
+    if (state.submitting) {
+      state.lastError = 'a session input is already being submitted';
       return false;
     }
+    const supplementing = hasActivePrimaryTurn(state);
     state.submitting = true;
     activeSessionId.value = sessionId;
     connect(sessionId);
     const epoch = ++state.submissionEpoch;
     const idempotencyKey = uniqueSubmissionKey(sessionId);
     state.lastError = '';
-    state.live = {
-      ...(state.live || {}),
-      status: 'queued',
-      status_detail: 'acquiring writer attachment',
-      last_progress_at_ms: Date.now(),
-    };
+    if (!supplementing) {
+      state.live = {
+        ...(state.live || {}),
+        status: 'queued',
+        status_detail: 'acquiring writer attachment',
+        last_progress_at_ms: Date.now(),
+      };
+    }
     const localId = `local:${idempotencyKey}`;
+    state.turns.push({ id: localId, role: 'user', content, status: 'streaming' });
+    if (!supplementing) {
+      state.pending = true;
+      state.streamTurnId = `stream:${sessionId}:${idempotencyKey}`;
+      clearStreamByteEnds(sessionId);
+      ensureStreamTurn(state);
+    }
     try {
       if (!state.writable && !(await attachSurface(sessionId))) {
         throw new Error(state.degradedReason || 'this WebUI tab is attached read-only');
       }
       if (state.submissionEpoch !== epoch || state.reconnectBlocked) return false;
-      state.pending = true;
-      state.turns.push({ id: localId, role: 'user', content, status: 'streaming' });
-      state.streamTurnId = `stream:${sessionId}:${idempotencyKey}`;
-      clearStreamByteEnds(sessionId);
-      ensureStreamTurn(state);
-      state.live = {
-        ...(state.live || {}),
-        status: 'queued',
-        status_detail: 'submitting durable session input',
-        last_progress_at_ms: Date.now(),
-      };
+      if (!supplementing) {
+        state.live = {
+          ...(state.live || {}),
+          status: 'queued',
+          status_detail: 'submitting durable session input',
+          last_progress_at_ms: Date.now(),
+        };
+      }
       const receipt: any = await api.sendMessage(
         sessionId,
         options.transportContent || content,
@@ -1129,8 +2215,30 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         idempotencyKey,
       );
       if (state.submissionEpoch !== epoch || state.reconnectBlocked) return false;
+      const canonicalMessageId = String(receipt?.message?.message_id || '');
+      const canonicalSequence = Number(receipt?.message?.sequence);
+      reconcileOptimisticUserTurn(state, {
+        messageId: canonicalMessageId,
+        content,
+        sequence: Number.isFinite(canonicalSequence) ? canonicalSequence : undefined,
+        executionId: String(receipt?.execution?.graph_id || receipt?.execution_id || ''),
+        turnId: String(receipt?.message?.turn_id || receipt?.execution?.turn_id || ''),
+      });
       const localTurn = state.turns.find((turn) => turn.id === localId);
       if (localTurn) localTurn.status = 'complete';
+      if (supplementing) {
+        const inputReceipt = receipt?.input || {};
+        upsertSessionActivity(sessionId, {
+          id: String(inputReceipt.input_id || `session-input:${idempotencyKey}`),
+          kind: 'runtime',
+          title: t('chat.input.supplemented'),
+          detail: String(inputReceipt.decision || receipt?.mode || 'accepted'),
+          status: 'complete',
+          raw: receipt,
+        });
+        recordProgress(sessionId);
+        return true;
+      }
       const executionId = String(receipt?.execution?.graph_id || receipt?.execution_id || '');
       adoptExecution(sessionId, executionId, String(receipt?.execution?.turn_id || ''), true);
       state.terminalId = String(receipt?.execution?.terminal_id || `turn-terminal:${idempotencyKey}`);
@@ -1140,21 +2248,23 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         status_detail: String(receipt?.execution?.materialization?.state || 'accepted_pending_graph'),
         last_progress_at_ms: Date.now(),
       };
-      if (state.executionId) {
-        projections.acquire(
-          state.executionId,
-          `chat:${sessionId}`,
-          'full',
-          'bounded',
-          sessionId,
-        );
-        await refreshProjection(sessionId);
-      }
       return true;
     } catch (error: any) {
       if (state.submissionEpoch !== epoch || state.reconnectBlocked) return false;
-      state.pending = false;
       state.lastError = String(error?.message || error || 'send failed');
+      if (supplementing) {
+        state.turns = state.turns.filter((turn) => turn.id !== localId);
+        upsertSessionActivity(sessionId, {
+          id: `session-input:${idempotencyKey}:error`,
+          kind: 'error',
+          title: t('chat.input.supplementFailed'),
+          detail: state.lastError,
+          status: 'error',
+        });
+        return false;
+      }
+      state.pending = false;
+      stopProgressRecovery(sessionId);
       state.live = { ...(state.live || {}), status: 'error', status_detail: state.lastError, error: state.lastError };
       state.turns = state.turns.filter((turn) => turn.id !== localId && turn.id !== state.streamTurnId);
       state.streamTurnId = '';
@@ -1195,6 +2305,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       status_detail: 'cancel requested; waiting for canonical terminal state',
       last_progress_at_ms: Date.now(),
     };
+    await refreshLiveExecution(sessionId);
     await refreshProjection(sessionId);
     return true;
   }
@@ -1251,6 +2362,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
     clearStreamByteEnds(sessionId);
+    stopProgressRecovery(sessionId);
     state.streamState = 'offline';
     state.degradedReason = '';
     state.writable = false;
@@ -1288,14 +2400,34 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   if (typeof window !== 'undefined') {
     window.addEventListener('cowd:authorization-invalidated', authorizationInvalidated);
     window.addEventListener('cowd:session-authorization-invalidated', sessionAuthorizationInvalidated);
-    onScopeDispose(() => {
+  }
+  onScopeDispose(() => {
+    if (typeof window !== 'undefined') {
       window.removeEventListener('cowd:authorization-invalidated', authorizationInvalidated);
       window.removeEventListener('cowd:session-authorization-invalidated', sessionAuthorizationInvalidated);
-    });
-  }
+    }
+    for (const stream of sourceLeases.values()) stream.close();
+    for (const frame of flushFrames.values()) cancelAnimationFrame(frame);
+    for (const timer of progressRecoveryTimers.values()) clearInterval(timer);
+    sourceLeases.clear();
+    deltaBuffers.clear();
+    flushFrames.clear();
+    streamByteEnds.clear();
+    openFlights.clear();
+    attachmentFlights.clear();
+    canonicalResyncFlights.clear();
+    executionIndexFlights.clear();
+    turnProjectionFlights.clear();
+    evidenceFlights.clear();
+    progressRecoveryTimers.clear();
+    progressRecoveryFlights.clear();
+    for (const sessionId of Object.keys(states)) delete states[sessionId];
+    activeSourceCount.value = 0;
+  });
 
   function setDraft(sessionId: string, value: string) {
     stateFor(sessionId).draft = value;
+    writeSessionDraft(sessionId, value);
   }
 
   function setScrollTop(sessionId: string, value: number) {
@@ -1309,6 +2441,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     activeSourceCount,
     open,
     load,
+    hydrateExecutionIndex,
+    hydrateTurnProjection,
+    hydrateEvidence,
+    hydrateRuntimeDetails,
     loadOlder,
     loadLatest,
     send,

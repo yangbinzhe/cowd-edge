@@ -222,7 +222,7 @@ describe('WebUI multiplex live transport', () => {
     lease.close();
   });
 
-  it('allows native EventSource recovery before recreating the logical subscription', async () => {
+  it('keeps a natively recovered EventSource instead of closing it with a stale timer', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('EventSource', FakeEventSource);
     const subscriptionApi = mockSubscriptionApi();
@@ -242,7 +242,29 @@ describe('WebUI multiplex live transport', () => {
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(first.closed).toBe(false);
 
-    await vi.advanceTimersByTimeAsync(1);
+    first.onopen?.();
+    expect(liveTransportHealth().physical.state).toBe('connected');
+
+    await vi.advanceTimersByTimeAsync(5_001);
+    expect(subscriptionApi.remove).not.toHaveBeenCalled();
+    expect(FakeEventSource.instances).toHaveLength(1);
+    expect(first.closed).toBe(false);
+    lease.close();
+  });
+
+  it('rebuilds a physical subscription when native EventSource recovery times out', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const subscriptionApi = mockSubscriptionApi();
+    const lease = openLiveSource(
+      { kind: 'session', id: 'session-reconnect-timeout' },
+      { envelope: vi.fn() },
+    );
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    const first = FakeEventSource.instances[0];
+
+    first.onerror?.();
+    await vi.advanceTimersByTimeAsync(5_000);
     await vi.waitFor(() => expect(subscriptionApi.remove).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(2));
     expect(first.closed).toBe(true);

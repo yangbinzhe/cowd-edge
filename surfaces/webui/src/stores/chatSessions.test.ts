@@ -1,8 +1,9 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { resetLongLivedConnectionBudgetForTests } from '../utils/longLivedConnectionBudget';
 import { useChatSessionsStore } from './chatSessions';
+import causalTimelineFixture from '../testFixtures/causal-surface-timeline-v1.json';
 
 vi.mock('./liveTransport', () => ({
   openSessionLiveSource: (sessionId: string) => {
@@ -19,6 +20,16 @@ vi.mock('./liveTransport', () => ({
 
 const emptyEvidence = { session_id: '', evidence_refs: [], turns: [], freshness: 'unavailable' };
 
+function causalFields(itemId: string, segmentKind: string, deltaSequence = 1) {
+  return {
+    model_step_id: 'model-step-test',
+    item_id: itemId,
+    segment_id: `${itemId}:${segmentKind}:0`,
+    causal_sequence: 1,
+    delta_sequence: deltaSequence,
+  };
+}
+
 function mockEmptySessionReads() {
   vi.spyOn(api, 'messages').mockImplementation(async (sessionId) => ({
     session_id: sessionId,
@@ -33,6 +44,10 @@ function mockEmptySessionReads() {
     session_id: sessionId,
     active_execution_ids: [],
   }) as any);
+  vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({
+    __state: 'not_found',
+    execution_id: '',
+  } as any);
 }
 
 function mockWriterAttachment() {
@@ -43,11 +58,165 @@ function mockWriterAttachment() {
 }
 
 describe('chatSessions', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'sessionTurnProjection').mockImplementation(async (sessionId) => ({
+      kind: 'session.turn_projection',
+      session_id: sessionId,
+      turn_count: 0,
+      turns: [],
+    }) as any);
+  });
+
   afterEach(() => {
     resetLongLivedConnectionBudgetForTests();
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  it('renders the latest transcript before evidence and execution hydration finish', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    let resolveEvidence!: (value: unknown) => void;
+    let resolveExecution!: (value: unknown) => void;
+    const messages = vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'history-fast',
+      messages: [{
+        id: 'message-1',
+        session_id: 'history-fast',
+        sequence: 41,
+        role: 'user',
+        blocks: [{ type: 'text', text: 'visible before details' }],
+      }],
+      total: 42,
+      offset: 41,
+    } as any);
+    vi.spyOn(api, 'sessionEvidence').mockImplementation(() => new Promise((resolve) => {
+      resolveEvidence = resolve;
+    }) as any);
+    vi.spyOn(api, 'sessionExecution').mockImplementation(() => new Promise((resolve) => {
+      resolveExecution = resolve;
+    }) as any);
+
+    await chat.load('history-fast');
+
+    expect(messages).toHaveBeenCalledTimes(1);
+    expect(messages).toHaveBeenCalledWith('history-fast', {
+      limit: 50,
+      tail: true,
+    });
+    expect(chat.states['history-fast'].turns[0].content).toBe('visible before details');
+    expect(chat.states['history-fast'].historyLoading).toBe(false);
+    expect(chat.states['history-fast'].detailsLoading).toBe(false);
+    expect(api.sessionEvidence).not.toHaveBeenCalled();
+    expect(api.sessionExecution).not.toHaveBeenCalled();
+
+    const hydration = chat.hydrateRuntimeDetails('history-fast');
+    expect(chat.states['history-fast'].detailsLoading).toBe(true);
+    resolveEvidence({ ...emptyEvidence, session_id: 'history-fast' });
+    resolveExecution({ session_id: 'history-fast', active_execution_ids: [] });
+    await hydration;
+    expect(chat.states['history-fast'].detailsLoaded).toBe(true);
+  });
+
+  it('restores public reasoning summaries without exposing private provider transcript blocks', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'history-reasoning',
+      messages: [{
+        id: 'message-reasoning',
+        session_id: 'history-reasoning',
+        sequence: 1,
+        role: 'assistant',
+        blocks: [
+          { type: 'reasoning_summary', text: 'checked durable evidence' },
+          { type: 'text', text: 'final answer' },
+        ],
+      }],
+      total: 1,
+    } as any);
+
+    await chat.load('history-reasoning');
+
+    const state = chat.states['history-reasoning'];
+    expect(state.turns[0].content).toBe('final answer');
+    expect(JSON.stringify(state.turns[0].activity)).toContain('checked durable evidence');
+    expect(JSON.stringify(state.turns[0])).not.toContain('provider-transcript');
+  });
+
+  it('hydrates durable execution history into exactly the canonical user turns', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    const messages = [1, 2, 3].flatMap((number) => ([
+      {
+        id: `user-${number}`,
+        session_id: 'turn-history',
+        sequence: (number - 1) * 2,
+        role: 'user',
+        blocks: [{
+          type: 'text',
+          text: `request ${number}`,
+          cowd_turn_id: `turn-${number}`,
+          cowd_turn_ingress_message_id: `user-${number}`,
+        }],
+      },
+      {
+        id: `assistant-${number}`,
+        session_id: 'turn-history',
+        sequence: (number - 1) * 2 + 1,
+        role: 'assistant',
+        blocks: [{
+          type: 'text',
+          text: `answer ${number}`,
+          cowd_turn_id: `turn-${number}`,
+          cowd_turn_ingress_message_id: `user-${number}`,
+        }],
+      },
+    ]));
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'turn-history',
+      messages,
+      total: messages.length,
+    } as any);
+    vi.mocked(api.sessionTurnProjection).mockResolvedValue({
+      kind: 'session.turn_projection',
+      session_id: 'turn-history',
+      turn_count: 3,
+      turns: [1, 2, 3].map((number) => ({
+        turn_id: `turn-${number}`,
+        status: 'completed',
+        tool_calls: [],
+        approvals: [],
+        context_events: [],
+        usage: [],
+        evidence_refs: [],
+        event_sequences: [],
+        activity_events: [{
+          id: `tool-${number}`,
+          kind: 'tool',
+          title: 'read_file',
+          status: 'complete',
+          turn_id: `turn-${number}`,
+          execution_id: number === 1 ? 'runtime-team:researcher:1' : `root-${number}`,
+          parent_execution_id: number === 1 ? 'root-1' : '',
+          tool_call_id: `tool-${number}`,
+          output: `result ${number}`,
+        }],
+      })),
+    } as any);
+
+    await chat.load('turn-history');
+    await chat.hydrateTurnProjection('turn-history');
+
+    const state = chat.states['turn-history'];
+    expect(state.turns.filter((turn) => turn.role === 'user')).toHaveLength(3);
+    expect(state.turnProjection?.turn_count).toBe(3);
+    expect(state.turns.filter((turn) => turn.role === 'assistant').map((turn) => (
+      turn.activity?.map((event) => event.tool_call_id)
+    ))).toEqual([['tool-1'], ['tool-2'], ['tool-3']]);
+    expect(state.turns.some((turn) => turn.turn_id === 'runtime-team:researcher:1')).toBe(false);
   });
 
   it('keeps concurrent session receipts and turns isolated after out-of-order completion', async () => {
@@ -80,6 +249,29 @@ describe('chatSessions', () => {
     expect(chat.states['session-B'].turns[0].content).toBe('message B');
   });
 
+  it('reconciles the optimistic user row with the canonical Gateway message identity', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({} as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'execution-1', turn_id: 'turn-1' },
+      message: { message_id: 'message-1', sequence: 7, turn_id: 'turn-1' },
+    } as any);
+
+    await chat.send('session-1', 'only once');
+
+    const userTurns = chat.states['session-1'].turns.filter((turn) => turn.role === 'user');
+    expect(userTurns).toHaveLength(1);
+    expect(userTurns[0]).toMatchObject({
+      id: 'message-1',
+      content: 'only once',
+      sequence: 7,
+      execution_id: 'execution-1',
+      turn_id: 'turn-1',
+    });
+  });
+
   it('batches one session stream without allowing transport resync to alter another session', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();
@@ -110,6 +302,8 @@ describe('chatSessions', () => {
     await chat.send('stream-A', 'A');
     const streamA = streams.find((stream) => stream.url.includes('stream-A'));
     const streamB = streams.find((stream) => stream.url.includes('stream-B'));
+    const approvalChanged = vi.fn();
+    window.addEventListener('cowd:approval-changed', approvalChanged);
     streamA?.onmessage?.({ data: JSON.stringify({
       type: 'ExecutionPhase',
       session_id: 'stream-A',
@@ -118,15 +312,132 @@ describe('chatSessions', () => {
       status: 'calling_tool',
       detail: 'workspace.read',
     }) } as MessageEvent);
+    for (const [itemId, summary] of [
+      ['reasoning-a', 'inspect '],
+      ['reasoning-b', 'decide'],
+    ]) {
+      streamA?.onmessage?.({ data: JSON.stringify({
+        type: 'ItemStarted',
+        ...causalFields(itemId, 'reasoning-summary', 0),
+        session_id: 'stream-A',
+        execution_id: 'execution-stream-A',
+        turn_id: 'turn-stream-A',
+        kind: 'public_reasoning',
+      }) } as MessageEvent);
+      streamA?.onmessage?.({ data: JSON.stringify({
+        type: 'ReasoningSummaryDelta',
+        ...causalFields(itemId, 'reasoning-summary', 1),
+        session_id: 'stream-A',
+        execution_id: 'execution-stream-A',
+        turn_id: 'turn-stream-A',
+        summary,
+      }) } as MessageEvent);
+      streamA?.onmessage?.({ data: JSON.stringify({
+        type: 'ItemCompleted',
+        ...causalFields(itemId, 'reasoning-summary', 2),
+        session_id: 'stream-A',
+        execution_id: 'execution-stream-A',
+        turn_id: 'turn-stream-A',
+        kind: 'public_reasoning',
+      }) } as MessageEvent);
+    }
     streamA?.onmessage?.({ data: JSON.stringify({
-      type: 'TextDelta',
+      type: 'ItemCompleted',
+      ...causalFields('call-read', 'tool-call', 1),
+      tool_call_id: 'call-read',
       session_id: 'stream-A',
       execution_id: 'execution-stream-A',
       turn_id: 'turn-stream-A',
-      part_id: 'assistant_text',
+      kind: 'tool_call',
+      tool_name: 'read_file',
+      tool_input: JSON.stringify({ path: 'README.md' }),
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ToolStart',
+      ...causalFields('call-read', 'tool-execution', 1),
+      tool_call_id: 'call-read',
+      session_id: 'stream-A',
+      execution_id: 'execution-stream-A',
+      turn_id: 'turn-stream-A',
+      id: 'call-read',
+      name: 'read_file',
+      preview: 'README.md',
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ToolComplete',
+      ...causalFields('call-read', 'tool-execution', 2),
+      tool_call_id: 'call-read',
+      session_id: 'stream-A',
+      execution_id: 'execution-stream-A',
+      turn_id: 'turn-stream-A',
+      id: 'call-read',
+      name: 'read_file',
+      summary: 'read 42 lines',
+      exit_code: 0,
+    }) } as MessageEvent);
+    const childLineage = {
+      session_id: 'stream-A',
+      execution_id: 'agent-run-1',
+      parent_execution_id: 'execution-stream-A',
+      graph_id: 'team-graph-1',
+      node_id: 'researcher:1',
+      team_id: 'team-run-1',
+      agent_id: 'researcher',
+      turn_id: 'turn-stream-A',
+    };
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ToolStart',
+      ...causalFields('call-child-search', 'tool-execution', 1),
+      ...childLineage,
+      tool_call_id: 'call-child-search',
+      id: 'call-child-search',
+      name: 'web_search',
+      preview: '{"query":"WAIC"}',
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ToolComplete',
+      ...causalFields('call-child-search', 'tool-execution', 2),
+      ...childLineage,
+      tool_call_id: 'call-child-search',
+      id: 'call-child-search',
+      name: 'web_search',
+      summary: 'found 12 sources',
+      exit_code: 0,
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'TextDelta',
+      ...causalFields('child-private-answer', 'text', 1),
+      ...childLineage,
+      part_id: 'child-private-answer:text:0',
+      text: 'child draft must not enter the parent answer',
+      start_bytes: 0,
+      end_bytes: 42,
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'TextDelta',
+      ...causalFields('text-stream-a', 'text', 1),
+      session_id: 'stream-A',
+      execution_id: 'execution-stream-A',
+      turn_id: 'turn-stream-A',
+      part_id: 'text-stream-a:text:0',
       text: 'one',
       start_bytes: 0,
       end_bytes: 3,
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ApprovalRequested',
+      session_id: 'stream-A',
+      execution_id: 'execution-stream-A',
+      approval_id: 'approval-stream-A',
+      action: 'network.external_research',
+      summary: 'Allow external research',
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'RuntimePolicyDecision',
+      session_id: 'stream-A',
+      execution_id: 'execution-stream-A',
+      status: 'observed',
+      summary: { mode: 'balanced', source: 'runtime' },
     }) } as MessageEvent);
     streamB?.onmessage?.({ data: JSON.stringify({ type: 'session_stream_resync', session_id: 'stream-B' }) } as MessageEvent);
 
@@ -134,11 +445,116 @@ describe('chatSessions', () => {
     expect(chat.states['stream-A'].live?.status).toBe('calling_tool');
     expect(chat.states['stream-A'].unread).toBe(0);
     expect(chat.states['stream-A'].lastProgressAtMs).toBeGreaterThan(0);
+    expect(chat.states['stream-A'].activity).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'call-read',
+        title: 'read_file',
+        status: 'complete',
+        detail: 'read 42 lines',
+        input: { path: 'README.md' },
+      }),
+      expect.objectContaining({
+        id: 'agent-run-1:call-child-search',
+        title: 'web_search',
+        status: 'complete',
+        output: 'found 12 sources',
+        parent_execution_id: 'execution-stream-A',
+        graph_id: 'team-graph-1',
+        node_id: 'researcher:1',
+        agent_id: 'researcher',
+      }),
+      expect.objectContaining({
+        id: 'approval:approval-stream-A',
+        title: 'network.external_research',
+        status: 'pending',
+      }),
+      expect.objectContaining({
+        id: 'policy:execution-stream-A',
+        kind: 'runtime',
+        title: '运行策略',
+      }),
+      expect.objectContaining({
+        id: 'reasoning-a:reasoning-summary:0',
+        detail: 'inspect',
+        status: 'complete',
+      }),
+      expect.objectContaining({
+        id: 'reasoning-b:reasoning-summary:0',
+        detail: 'decide',
+        status: 'complete',
+      }),
+    ]));
+    expect(approvalChanged).toHaveBeenCalledWith(expect.objectContaining({
+      detail: { sessionId: 'stream-A', type: 'ApprovalRequested' },
+    }));
+    expect(
+      chat.states['stream-A'].turns
+        .find((turn) => turn.id === chat.states['stream-A'].streamTurnId)
+        ?.activity,
+    ).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'read_file', status: 'complete' }),
+    ]));
     expect(chat.states['stream-B'].turns).toEqual([]);
     expect(chat.states['stream-B'].resyncCount).toBe(1);
 
     chat.close('stream-A');
     chat.close('stream-B');
+    window.removeEventListener('cowd:approval-changed', approvalChanged);
+  });
+
+  it('projects the canonical cross-Surface causal fixture without serializing parallel tools', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor() { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    mockEmptySessionReads();
+
+    await chat.open(causalTimelineFixture.session_id);
+    const stream = streams[0];
+    for (const payload of causalTimelineFixture.events) {
+      stream?.onmessage?.({ data: JSON.stringify(payload) } as MessageEvent);
+    }
+
+    const state = chat.states[causalTimelineFixture.session_id];
+    const causalRows = state.activity.filter((event) => event.kind === 'think' || event.kind === 'tool');
+    expect(causalRows.map((event) => event.item_id || event.tool_call_id)).toEqual(
+      causalTimelineFixture.expected_activity,
+    );
+    expect(causalRows.find((event) => event.tool_call_id === 'tool-a')).toMatchObject({
+      status: 'complete',
+      wave: 0,
+      lane: 0,
+      lane_count: 2,
+    });
+    expect(causalRows.find((event) => event.tool_call_id === 'tool-b')).toMatchObject({
+      status: 'complete',
+      wave: 0,
+      lane: 1,
+      lane_count: 2,
+    });
+    expect(causalRows.find((event) => event.tool_call_id === 'tool-c')).toMatchObject({
+      wave: 1,
+      lane: 0,
+      lane_count: 1,
+    });
+    expect(causalRows.find((event) => event.item_id === 'reasoning-1')?.detail)
+      .toBe('inspect inputs');
+    expect(state.turns.find((turn) => turn.id === state.streamTurnId)?.content).toBe('完成');
+
+    await chat.close(causalTimelineFixture.session_id);
   });
 
   it('keeps eight logical Session sources live without the former per-topic cap', async () => {
@@ -200,6 +616,7 @@ describe('chatSessions', () => {
     await chat.open('terminal-session');
     await chat.send('terminal-session', 'hello');
     const stream = streams.find((item) => item.url.includes('terminal-session'));
+    const historyReadsBeforeReplay = vi.mocked(api.messages).mock.calls.length;
     stream?.onmessage?.({ data: JSON.stringify({
       type: 'TerminalCommitted', replayed: true, execution_id: 'execution-current',
       session_id: 'terminal-session',
@@ -207,6 +624,7 @@ describe('chatSessions', () => {
     }) } as MessageEvent);
     expect(chat.states['terminal-session'].pending).toBe(true);
     expect(chat.states['terminal-session'].live?.status).toBe('accepted_pending_materialization');
+    expect(vi.mocked(api.messages).mock.calls).toHaveLength(historyReadsBeforeReplay);
 
     stream?.onmessage?.({ data: JSON.stringify({
       type: 'TerminalCommitted', execution_id: 'execution-other', terminal_id: 'turn-terminal:other',
@@ -224,17 +642,34 @@ describe('chatSessions', () => {
     chat.close('terminal-session');
   });
 
-  it('does not overwrite a session execution with a second primary submission', async () => {
+  it('routes a second submission into the active Session Input stream without replacing the execution', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();
     const chat = useChatSessionsStore();
     vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found', __error: 'pending' } as any);
-    vi.spyOn(api, 'sendMessage').mockResolvedValue({ execution: { graph_id: 'execution-one' } } as any);
+    vi.spyOn(api, 'sendMessage')
+      .mockResolvedValueOnce({ execution: { graph_id: 'execution-one' } } as any)
+      .mockResolvedValueOnce({
+        mode: 'attached_to_active_turn',
+        execution: { graph_id: 'execution-one' },
+        input: {
+          input_id: 'supplement-one',
+          decision: 'supplement_current_turn',
+        },
+      } as any);
 
     expect(await chat.send('single-session', 'first')).toBe(true);
-    expect(await chat.send('single-session', 'second')).toBe(false);
+    expect(await chat.send('single-session', 'second')).toBe(true);
     expect(chat.states['single-session'].executionId).toBe('execution-one');
-    expect(api.sendMessage).toHaveBeenCalledTimes(1);
+    expect(chat.states['single-session'].pending).toBe(true);
+    expect(chat.states['single-session'].activity).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'supplement-one',
+        detail: 'supplement_current_turn',
+        status: 'complete',
+      }),
+    ]));
+    expect(api.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('adopts an execution started by another surface and follows it through terminal state', async () => {
@@ -291,11 +726,12 @@ describe('chatSessions', () => {
     }) } as MessageEvent);
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TextDelta',
+      ...causalFields('text-cross-surface', 'text', 1),
       session_id: 'cross-surface',
       execution_id: 'execution-new',
       turn_id: 'turn-new',
       text: 'visible',
-      part_id: 'assistant_text',
+      part_id: 'text-cross-surface:text:0',
       start_bytes: 0,
       end_bytes: 7,
       stream_revision: 7,
@@ -307,6 +743,30 @@ describe('chatSessions', () => {
     expect(chat.states['cross-surface'].turns.find(
       (turn) => turn.id === chat.states['cross-surface'].streamTurnId,
     )?.content).toBe('visible');
+
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'UserMessageCommitted',
+      session_id: 'cross-surface',
+      execution_id: 'execution-new',
+      turn_id: 'turn-new',
+      input_turn_id: 'turn-supplement',
+      supplemental: true,
+      message_id: 'webui:supplement-1',
+      sequence: 5,
+      content: 'additional constraint',
+    }) } as MessageEvent);
+
+    expect(chat.states['cross-surface'].executionId).toBe('execution-new');
+    expect(chat.states['cross-surface'].executionTurnId).toBe('turn-new');
+    expect(chat.states['cross-surface'].live?.status).toBe('calling_model');
+    expect(chat.states['cross-surface'].turns).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: 'user',
+        content: 'additional constraint',
+        execution_id: 'execution-new',
+        turn_id: 'turn-new',
+      }),
+    ]));
 
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TerminalCommitted',
@@ -356,6 +816,133 @@ describe('chatSessions', () => {
     expect(chat.states.causal.turns.map((turn) => turn.sequence)).toEqual([0, 2, 1]);
   });
 
+  it('renders structured assistant reports as readable Markdown without losing fields', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'structured-report',
+      messages: [{
+        id: 'assistant-report',
+        session_id: 'structured-report',
+        sequence: 1,
+        role: 'assistant',
+        blocks: [{
+          type: 'text',
+          text: JSON.stringify({
+            objective: 'inspect the runtime',
+            summary: 'the execution completed',
+            findings: {
+              stream: 'connected',
+              tools: ['read_file', 'grep_search'],
+            },
+          }),
+        }],
+        total: 1,
+      }],
+      total: 1,
+    } as any);
+    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
+      ...emptyEvidence,
+      session_id: 'structured-report',
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'structured-report',
+      active_execution_ids: [],
+    } as any);
+
+    const chat = useChatSessionsStore();
+    await chat.load('structured-report');
+    const content = chat.states['structured-report'].turns[0].content;
+    expect(content).not.toMatch(/^\s*\{/);
+    expect(content).toContain('**Objective:** inspect the runtime');
+    expect(content).toContain('## Findings');
+    expect(content).toContain('read_file');
+    expect(content).toContain('grep_search');
+  });
+
+  it('renders a complete fenced JSON terminal report as readable Markdown', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'fenced-structured-report',
+      messages: [{
+        id: 'assistant-fenced-report',
+        session_id: 'fenced-structured-report',
+        sequence: 1,
+        role: 'assistant',
+        blocks: [{
+          type: 'text',
+          text: `\`\`\`json
+{"summary":"外部研究被策略租约阻断","findings":["WebSearch 未执行"],"unresolved":["需要重新规划"],"risks":["证据不足"],"evidence_receipts":[]}
+\`\`\``,
+        }],
+        total: 1,
+      }],
+      total: 1,
+    } as any);
+    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
+      ...emptyEvidence,
+      session_id: 'fenced-structured-report',
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'fenced-structured-report',
+      active_execution_ids: [],
+    } as any);
+
+    const chat = useChatSessionsStore();
+    await chat.load('fenced-structured-report');
+    const content = chat.states['fenced-structured-report'].turns[0].content;
+    expect(content).not.toContain('```json');
+    expect(content).toContain('**Summary:** 外部研究被策略租约阻断');
+    expect(content).toContain('WebSearch 未执行');
+    expect(content).toContain('需要重新规划');
+  });
+
+  it('renders arbitrary multi-field assistant JSON as readable Markdown', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'provider-report',
+      messages: [{
+        id: 'assistant-provider-report',
+        session_id: 'provider-report',
+        sequence: 1,
+        role: 'assistant',
+        blocks: [{
+          type: 'text',
+          text: JSON.stringify({
+            version: '1.99.0',
+            source_title: 'Rust releases',
+            source_url: 'https://releases.rs/',
+            grounding: 'The release index reports the version.',
+            unresolved: ['The official release page was unavailable.'],
+            risks: ['Treat the version as provisional.'],
+          }),
+        }],
+        total: 1,
+      }],
+      total: 1,
+    } as any);
+    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
+      ...emptyEvidence,
+      session_id: 'provider-report',
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'provider-report',
+      active_execution_ids: [],
+    } as any);
+
+    const chat = useChatSessionsStore();
+    await chat.load('provider-report');
+    const content = chat.states['provider-report'].turns[0].content;
+    expect(content).not.toMatch(/^\s*\{/);
+    expect(content).toContain('**Version:** 1.99.0');
+    expect(content).toContain('**Source Title:** Rust releases');
+    expect(content).toContain('## Unresolved');
+    expect(content).toContain('The official release page was unavailable.');
+    expect(content).toContain('## Risks');
+  });
+
   it('deduplicates UTF-8 byte-range replay and requests recovery on a gap', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();
@@ -378,12 +965,16 @@ describe('chatSessions', () => {
     mockEmptySessionReads();
     const projectionSpy = vi.spyOn(api, 'executionProjection')
       .mockResolvedValue({ __state: 'not_found' } as any);
+    const liveSpy = vi.spyOn(api, 'sessionExecutionLive')
+      .mockResolvedValue({ __state: 'not_found', execution_id: '' } as any);
     vi.spyOn(api, 'sendMessage').mockResolvedValue({
       execution: { graph_id: 'utf8-execution', turn_id: 'utf8-turn' },
     } as any);
 
     await chat.open('utf8-session');
     await chat.send('utf8-session', 'go');
+    vi.mocked(api.messages).mockClear();
+    projectionSpy.mockClear();
     const stream = streams[0];
     for (const payload of [
       { text: '你', start_bytes: 0, end_bytes: 3, stream_revision: 3 },
@@ -392,10 +983,11 @@ describe('chatSessions', () => {
     ]) {
       stream.onmessage?.({ data: JSON.stringify({
         type: 'TextDelta',
+        ...causalFields('text-utf8', 'text', Number(payload.stream_revision)),
         session_id: 'utf8-session',
         execution_id: 'utf8-execution',
         turn_id: 'utf8-turn',
-        part_id: 'assistant_text',
+        part_id: 'text-utf8:text:0',
         ...payload,
       }) } as MessageEvent);
     }
@@ -403,25 +995,33 @@ describe('chatSessions', () => {
       (turn) => turn.id === chat.states['utf8-session'].streamTurnId,
     )?.content).toBe('你好');
 
-    projectionSpy.mockResolvedValue({
+    liveSpy.mockResolvedValue({
       schema_version: 2,
       execution_id: 'utf8-execution',
-      revision: 4,
-      cursor: 4,
       live: {
         status: 'calling_model',
         revision: 4,
         output_preview: '你好',
         output_preview_start_bytes: 0,
         output_bytes: 6,
+        output_parts: [{
+          model_step_id: 'step-utf8',
+          item_id: 'text-utf8',
+          part_id: 'text-utf8:text:0',
+          causal_sequence: 1,
+          preview: '你好',
+          preview_start_bytes: 0,
+          bytes: 6,
+        }],
       },
     } as any);
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TextDelta',
+      ...causalFields('text-utf8', 'text', 4),
       session_id: 'utf8-session',
       execution_id: 'utf8-execution',
       turn_id: 'utf8-turn',
-      part_id: 'assistant_text',
+      part_id: 'text-utf8:text:0',
       text: '断',
       start_bytes: 9,
       end_bytes: 12,
@@ -430,12 +1030,17 @@ describe('chatSessions', () => {
     expect(chat.states['utf8-session'].resyncCount).toBe(1);
     expect(chat.states['utf8-session'].degradedReason).toContain('byte range gap');
     await vi.waitFor(() => expect(chat.states['utf8-session'].streamState).toBe('connected'));
+    expect(chat.states['utf8-session'].degradedReason).toBe('');
+    expect(chat.states['utf8-session'].lastError).toBe('');
+    expect(projectionSpy).not.toHaveBeenCalled();
+    expect(api.messages).not.toHaveBeenCalled();
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TextDelta',
+      ...causalFields('text-utf8', 'text', 3),
       session_id: 'utf8-session',
       execution_id: 'utf8-execution',
       turn_id: 'utf8-turn',
-      part_id: 'assistant_text',
+      part_id: 'text-utf8:text:0',
       text: '啊',
       start_bytes: 6,
       end_bytes: 9,
@@ -444,6 +1049,115 @@ describe('chatSessions', () => {
     expect(chat.states['utf8-session'].turns.find(
       (turn) => turn.id === chat.states['utf8-session'].streamTurnId,
     )?.content).toBe('你好啊');
+  });
+
+  it('recovers an active turn from the canonical live snapshot when the stream is silent', async () => {
+    vi.useFakeTimers();
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found' } as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: {
+        graph_id: 'silent-execution',
+        turn_id: 'silent-turn',
+        status: 'calling_model',
+      },
+    } as any);
+    const live = vi.mocked(api.sessionExecutionLive);
+    const chat = useChatSessionsStore();
+
+    await chat.open('silent-session');
+    await chat.send('silent-session', 'recover me');
+    live.mockClear();
+    live.mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'silent-execution',
+      live: {
+        revision: 4,
+        status: 'complete',
+        started_at_ms: 1,
+        updated_at_ms: 2,
+        last_progress_at_ms: 2,
+        output_preview: '',
+        output_preview_start_bytes: 0,
+        output_bytes: 0,
+        output_parts: [],
+        terminal_ref: 'terminal:silent',
+        metrics: {},
+      },
+    } as any);
+
+    await vi.advanceTimersByTimeAsync(3_100);
+
+    expect(live).toHaveBeenCalledWith('silent-session');
+    expect(chat.states['silent-session'].pending).toBe(false);
+    await chat.close('silent-session');
+  });
+
+  it('keeps ingress lifecycle identity separate from the queryable execution graph', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'dual-identity',
+      messages: [],
+      total: 0,
+    } as any);
+    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
+      ...emptyEvidence,
+      session_id: 'dual-identity',
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'dual-identity',
+      executions: [{
+        execution_id: 'session-ingress-graph:turn-1',
+        graph_id: 'execution-graph:turn-1',
+        turn_id: 'turn-1',
+        status: 'calling_model',
+        updated_at_ms: 2,
+      }],
+      active_execution_ids: ['session-ingress-graph:turn-1'],
+      latest_execution_id: 'session-ingress-graph:turn-1',
+      latest_graph_id: 'execution-graph:turn-1',
+      latest_status: 'calling_model',
+    } as any);
+    vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'session-ingress-graph:turn-1',
+      live: {
+        revision: 3,
+        status: 'calling_model',
+        started_at_ms: 1,
+        updated_at_ms: 2,
+        last_progress_at_ms: 2,
+        output_preview: '',
+        output_preview_start_bytes: 0,
+        output_bytes: 0,
+        metrics: {},
+      },
+    } as any);
+    const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'execution-graph:turn-1',
+      revision: 1,
+      cursor: 1,
+      graph: {
+        graph_id: 'execution-graph:turn-1',
+        objective: 'dual identity',
+        status: 'running',
+        nodes: [],
+        edges: [],
+      },
+    } as any);
+
+    await chat.load('dual-identity');
+    await chat.hydrateRuntimeDetails('dual-identity', true);
+    expect(projection).toHaveBeenCalled();
+
+    expect(chat.states['dual-identity'].executionId).toBe('session-ingress-graph:turn-1');
+    expect(chat.states['dual-identity'].executionGraphId).toBe('execution-graph:turn-1');
+    expect(chat.states['dual-identity'].executionIndex?.executions[0].turn_id).toBe('turn-1');
+    expect(projection.mock.calls.every(([executionId]) => executionId === 'execution-graph:turn-1')).toBe(true);
   });
 
   it('merges history and live output by causal identity rather than equal text', async () => {
@@ -516,6 +1230,73 @@ describe('chatSessions', () => {
     expect(chat.states['identity-session'].turns.find(
       (turn) => turn.id === 'assistant-current',
     )?.token_usage).toEqual({ input_tokens: 20, output_tokens: 4 });
+  });
+
+  it('does not recreate a streaming placeholder after the durable final answer exists', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'terminal-dedupe',
+      messages: [{
+        id: 'assistant-final',
+        session_id: 'terminal-dedupe',
+        sequence: 3,
+        role: 'assistant',
+        blocks: [{
+          type: 'text',
+          text: 'durable answer',
+          cowd_execution_id: 'execution-final',
+          cowd_turn_id: 'turn-final',
+        }],
+      }],
+      total: 1,
+    } as any);
+    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
+      ...emptyEvidence,
+      session_id: 'terminal-dedupe',
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'terminal-dedupe',
+      active_execution_ids: [],
+      latest_execution_id: 'execution-final',
+      latest_status: 'complete',
+      turn_id: 'turn-final',
+    } as any);
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'execution-final',
+      revision: 8,
+      cursor: 8,
+      live: {
+        status: 'complete',
+        turn_id: 'turn-final',
+        output_preview: 'durable answer',
+        output_preview_start_bytes: 0,
+        output_bytes: 14,
+        output_parts: [{
+          model_step_id: 'step-final',
+          item_id: 'text-final',
+          part_id: 'text-final:text:0',
+          causal_sequence: 1,
+          completed: true,
+          preview: 'durable answer',
+          preview_start_bytes: 0,
+          bytes: 14,
+        }],
+      },
+    } as any);
+
+    await chat.load('terminal-dedupe');
+    await chat.hydrateRuntimeDetails('terminal-dedupe', true);
+    await chat.refreshProjection('terminal-dedupe');
+
+    expect(chat.states['terminal-dedupe'].turns.filter(
+      (turn) => turn.role === 'assistant' && turn.content === 'durable answer',
+    )).toHaveLength(1);
+    expect(chat.states['terminal-dedupe'].turns.some(
+      (turn) => turn.id === chat.states['terminal-dedupe'].streamTurnId,
+    )).toBe(false);
+    expect(chat.states['terminal-dedupe'].live?.status).toBe('complete');
   });
 
   it('does not let transcript terminal materialization overwrite canonical error outcome', async () => {
@@ -598,10 +1379,11 @@ describe('chatSessions', () => {
 
     streams[0].onmessage?.({ data: JSON.stringify({
       type: 'TextDelta',
+      ...causalFields('text-contract', 'text', 1),
       session_id: 'contract-session',
       execution_id: 'execution-contract',
       turn_id: 'turn-contract',
-      part_id: 'assistant_text',
+      part_id: 'text-contract:text:0',
       text: 'missing range',
     }) } as MessageEvent);
     expect(chat.states['contract-session'].resyncCount).toBe(2);
@@ -646,8 +1428,10 @@ describe('chatSessions', () => {
     mockWriterAttachment();
     const chat = useChatSessionsStore();
     vi.spyOn(api, 'messages').mockImplementation(async (sessionId, options = {}) => {
-      const offset = Number(options.offset || 0);
       const limit = Number(options.limit || 100);
+      const offset = options.tail
+        ? Math.max(0, 205 - limit)
+        : Number(options.offset || 0);
       const messages = Array.from(
         { length: Math.min(limit, Math.max(0, 205 - offset)) },
         (_, index) => ({
@@ -676,14 +1460,14 @@ describe('chatSessions', () => {
     }) as any);
 
     await chat.load('history-window');
-    expect(chat.states['history-window'].turns[0].sequence).toBe(105);
+    expect(chat.states['history-window'].turns[0].sequence).toBe(155);
     expect(chat.states['history-window'].turns.at(-1)?.sequence).toBe(204);
     expect(chat.states['history-window'].historyHasOlder).toBe(true);
     expect(chat.states['history-window'].historyHasNewer).toBe(false);
 
     await chat.loadOlder('history-window');
-    expect(chat.states['history-window'].turns[0].sequence).toBe(5);
-    expect(chat.states['history-window'].historyOldestOffset).toBe(5);
+    expect(chat.states['history-window'].turns[0].sequence).toBe(105);
+    expect(chat.states['history-window'].historyOldestOffset).toBe(105);
     expect(chat.states['history-window'].historyTotal).toBe(205);
   });
 
@@ -785,6 +1569,28 @@ describe('chatSessions', () => {
     expect(chat.states['session-b'].draft).toBe('draft B');
     expect(chat.states['session-a'].scrollTop).toBe(120);
     expect(chat.states['session-b'].scrollTop).toBe(940);
+  });
+
+  it('restores browser drafts independently after the chat store is recreated', () => {
+    setActivePinia(createPinia());
+    let chat = useChatSessionsStore();
+    chat.setDraft('session-a', 'draft A');
+    chat.setDraft('session-b', 'draft B');
+
+    setActivePinia(createPinia());
+    chat = useChatSessionsStore();
+    chat.setScrollTop('session-a', 0);
+    chat.setScrollTop('session-b', 0);
+    expect(chat.states['session-a'].draft).toBe('draft A');
+    expect(chat.states['session-b'].draft).toBe('draft B');
+
+    chat.setDraft('session-a', '');
+    setActivePinia(createPinia());
+    chat = useChatSessionsStore();
+    chat.setScrollTop('session-a', 0);
+    chat.setScrollTop('session-b', 0);
+    expect(chat.states['session-a'].draft).toBe('');
+    expect(chat.states['session-b'].draft).toBe('draft B');
   });
 
   it('does not create a phantom user turn when writer attachment is rejected', async () => {
@@ -975,6 +1781,7 @@ describe('chatSessions', () => {
     const chat = useChatSessionsStore();
 
     await chat.load('session-A');
+    await chat.hydrateRuntimeDetails('session-A');
 
     expect(chat.states['session-A'].turns).toEqual([]);
     expect(chat.states['session-A'].streamState).toBe('degraded');

@@ -2,13 +2,14 @@
   "schema": "cowd.surface.v1",
   "id": "wechat-ilink",
   "name": "WeChat iLink Message Connector",
-  "version": "0.9.614",
+  "version": "0.9.615",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
     "artifact": "cowd-edge-wechat-ilink-message",
     "driver_profile": "wechat-ilink-message",
-    "transport": "uds-http2"
+    "transport": "uds-http2",
+    "state": "persistent"
   },
   "capabilities": [
     "message.ingress",
@@ -35,10 +36,7 @@
     "timeout_ms": 5000
   },
   "config_schema": {
-    "required": [
-      "bot_id",
-      "bot_secret"
-    ]
+    "required": []
   },
-  "default_enabled": false
+  "default_enabled": true
 }

@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createWebHistory } from 'vue-router';
+import { nextTick } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { useAppStore } from '../stores/app';
@@ -11,6 +12,57 @@ import CompanionPanel from './CompanionPanel.vue';
 describe('Companion projection contract visibility', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('shows the live execution graph materializing before the active turn completes', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', component: { template: '<div />' } }],
+    });
+    await router.push('/');
+    await router.isReady();
+    const app = useAppStore();
+    const chat = useChatSessionsStore();
+    app.companionTab = 'activity';
+    chat.states['live-graph-session'] = {
+      sessionId: 'live-graph-session',
+      turns: [],
+      executionId: 'live-execution',
+      executionGraphId: '',
+      live: {
+        status: 'calling_model',
+        status_detail: 'waiting for the first graph projection',
+      },
+      evidence: null,
+      streamState: 'connected',
+      requestEpoch: 0,
+      pending: true,
+      lastError: '',
+      unread: 0,
+      lastEventAtMs: Date.now(),
+      lastProgressAtMs: Date.now(),
+      degradedReason: '',
+      resyncCount: 0,
+    };
+    chat.activeSessionId = 'live-graph-session';
+
+    const wrapper = mount(CompanionPanel, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          MarkdownBlock: { template: '<div />' },
+          WorkspaceTree: { template: '<div />' },
+        },
+      },
+    });
+    await nextTick();
+
+    expect(wrapper.find('.companion-execution-graph').exists()).toBe(true);
+    expect(wrapper.find('.execution-graph-surface .empty-note').exists()).toBe(true);
+    expect(wrapper.text()).toContain('正在加载运行图');
+    wrapper.unmount();
   });
 
   it('shows nested strategy schema mismatch in Companion', async () => {
@@ -30,6 +82,7 @@ describe('Companion projection contract visibility', () => {
       sessionId: 'companion-contract-session',
       turns: [],
       executionId: 'companion-contract-execution',
+      executionGraphId: 'companion-contract-execution',
       live: null,
       evidence: null,
       streamState: 'offline',
@@ -148,6 +201,45 @@ describe('Companion projection contract visibility', () => {
     (toolEvidence.element as HTMLDetailsElement).open = true;
     await toolEvidence.trigger('toggle');
     expect(toolEvidence.text()).toContain('"tool_name": "glob_search"');
+    wrapper.unmount();
+  });
+
+  it('opens execution input, output, and raw event details by default', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const router = createRouter({
+      history: createWebHistory(),
+      routes: [{ path: '/', component: { template: '<div />' } }],
+    });
+    await router.push('/');
+    await router.isReady();
+    const app = useAppStore();
+    app.companionTab = 'activity';
+    app.activity = [{
+      id: 'tool-detail-1',
+      kind: 'tool',
+      title: 'read_file',
+      detail: 'Read the requested file',
+      status: 'complete',
+      input: { path: 'README.md' },
+      output: { bytes: 128 },
+      raw: { tool_call_id: 'call-1' },
+    }];
+
+    const wrapper = mount(CompanionPanel, {
+      global: {
+        plugins: [pinia, router],
+        stubs: {
+          MarkdownBlock: { template: '<div />' },
+          WorkspaceTree: { template: '<div />' },
+        },
+      },
+    });
+
+    await wrapper.get('.companion-timeline li').trigger('click');
+    const details = wrapper.findAll('.activity-detail-content .raw-payload');
+    expect(details).toHaveLength(3);
+    expect(details.every((item) => item.attributes('open') !== undefined)).toBe(true);
     wrapper.unmount();
   });
 });

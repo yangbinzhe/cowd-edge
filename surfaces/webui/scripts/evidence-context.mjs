@@ -6,7 +6,11 @@ const scriptDir = path.dirname(new URL(import.meta.url).pathname);
 export const webuiRoot = path.resolve(scriptDir, '..');
 export const frontendRoot = path.resolve(webuiRoot, '../..');
 export const workspaceRoot = path.resolve(frontendRoot, '..');
-export const backendRoot = process.env.COWD_BACKEND_REPO || path.join(workspaceRoot, 'cowd-develop');
+const siblingBackend = path.join(workspaceRoot, 'cowd');
+export const backendRoot = process.env.COWD_BACKEND_REPO
+  || (fs.existsSync(path.join(siblingBackend, 'Cargo.toml'))
+    ? siblingBackend
+    : path.join(workspaceRoot, 'cowd-develop'));
 export const manifestPath = path.join(webuiRoot, 'evaluation/acceptance-manifest.json');
 
 function git(root, ...args) {

@@ -57,6 +57,30 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
     expect(graphDiagnostics(model.nodes, model.edges).danglingEdgeIds).toEqual([]);
   });
 
+  it('renders Team role slots as explicit parallel dependency waves', () => {
+    const graphId = 'team-graph:review-team';
+    const model = adaptExecutionGraph({
+      graph_id: graphId,
+      nodes: [
+        { node_id: `${graphId}:researcher:1`, kind: 'agent_task', status: 'running' },
+        { node_id: `${graphId}:researcher:2`, kind: 'agent_task', status: 'running' },
+        { node_id: `${graphId}:verify`, kind: 'verify', status: 'planned' },
+      ],
+      edges: [
+        { from: `${graphId}:researcher:1`, to: `${graphId}:verify`, kind: 'depends_on' },
+        { from: `${graphId}:researcher:2`, to: `${graphId}:verify`, kind: 'depends_on' },
+      ],
+    });
+
+    expect(model.nodes[0]).toMatchObject({
+      label: 'researcher #1',
+      group: 'researcher',
+    });
+    expect(model.nodes[0].badges).toContain('2 路并行');
+    expect(model.nodes[1].badges).toContain('第 1 波');
+    expect(model.nodes[2].badges).toContain('第 2 波');
+  });
+
   it('keeps runtime turn, task, tool, approval, recovery, terminal and typed refs correlated', () => {
     const rows = adaptRuntimeTimeline([
       {

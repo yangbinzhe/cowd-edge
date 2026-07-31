@@ -125,6 +125,8 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/chat');
     const rail = wrapper.get('.rail').text();
     expect(rail).not.toContain('工作区');
+    await wrapper.get('.companion-toggle').trigger('click');
+    await settle();
     expect(wrapper.get('.companion-tabs').text()).toContain('活动');
     expect(wrapper.get('.companion-tabs').text()).toContain('思考');
     expect(wrapper.get('.companion-tabs').text()).toContain('工作区');
@@ -132,24 +134,534 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.companion-tabs').text()).toContain('检查器');
   });
 
-  it('renders chat, composer, mode controls, markdown body, and bottom context stats', async () => {
+  it('renders compact Chat facts and keeps display mode on the companion toggle', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
     expect(wrapper.get('.transcript').exists()).toBe(true);
     expect(wrapper.get('.composer textarea').exists()).toBe(true);
     expect(wrapper.get('.context-ring').exists()).toBe(true);
-    expect(wrapper.get('.mode-switch').text()).toContain('全景');
+    expect(wrapper.find('.mode-switch').exists()).toBe(false);
+    expect(wrapper.find('.chat-top-actions').exists()).toBe(false);
     expect(wrapper.find('.run-panorama').exists()).toBe(false);
-    expect(wrapper.get('.composer-stats').text()).toContain('工具调用');
-    expect(wrapper.get('.companion-panel').exists()).toBe(true);
-    expect(wrapper.text()).toContain('上下文');
-    expect(wrapper.text()).toContain('上下文 —');
-    const composerActions = wrapper.get('.composer-actions').findAll('button');
-    const commandButton = composerActions.find((button) => button.attributes('aria-label') === '命令');
-    const sendButton = composerActions.find((button) => button.attributes('aria-label') === '发送');
-    expect(commandButton?.text()).toBe('');
+    expect(wrapper.find('.companion-panel').exists()).toBe(false);
+    expect(wrapper.get('.companion-toggle').exists()).toBe(true);
+    expect(wrapper.get('.chat-session-facts').exists()).toBe(true);
+    expect(wrapper.find('.chat-fact.model').exists()).toBe(false);
+    expect(wrapper.find('.chat-fact.context').exists()).toBe(false);
+    expect(wrapper.get('.chat-fact.observer').exists()).toBe(true);
+    expect(wrapper.get('.session-evidence-head').exists()).toBe(true);
+    expect(wrapper.get('.composer-runtime-summary').exists()).toBe(true);
+    expect(wrapper.get('.composer-runtime-chip.model').exists()).toBe(true);
+    expect(wrapper.get('.composer-runtime-chip.context').text()).toContain('—');
+    expect(wrapper.find('.composer-actions').exists()).toBe(false);
+    expect(wrapper.find('[aria-label="命令"]').exists()).toBe(false);
+    expect(wrapper.get('.composer-runtime-summary .workspace').exists()).toBe(true);
+    expect(wrapper.get('.composer-input-shell [aria-label="添加文件"]').exists()).toBe(true);
+    const sendButton = wrapper.get('.composer-input-actions').findAll('button')
+      .find((button) => button.attributes('aria-label') === '发送');
     expect(sendButton?.text()).toBe('');
     expect(wrapper.get('.chat-page').exists()).toBe(true);
+  });
+
+  it('opens the unified command palette from slash and fills the selected command without executing it', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.commands = [{
+      name: '/status',
+      description: '查看运行状态',
+    }] as any;
+    const execute = vi.spyOn(store, 'executeCommand');
+    const composer = wrapper.get('.composer textarea');
+
+    await composer.trigger('keydown', { key: '/' });
+    await settle();
+
+    expect(store.activeModal).toBe('commands');
+    expect(wrapper.find('.composer-command-popover').exists()).toBe(false);
+    const search = wrapper.get('.command-search input');
+    await search.setValue('状态');
+    expect(wrapper.get('.command-row').text()).toContain('/status');
+    await search.trigger('keydown', { key: 'Enter' });
+    await settle();
+
+    expect(store.activeModal).toBeNull();
+    expect((wrapper.get('.composer textarea').element as HTMLTextAreaElement).value).toBe('/status ');
+    expect(execute).not.toHaveBeenCalled();
+    execute.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('opens and closes the complete session list from the active Chat navigation control', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+
+    expect(wrapper.find('.mobile-sessions-button').exists()).toBe(false);
+    const trigger = wrapper.get('.rail-button[aria-label="对话"]');
+    await trigger.trigger('click');
+    await nextTick();
+    expect(wrapper.get('.session-sidebar').classes()).toContain('mobile-open');
+    expect(wrapper.get('.mobile-session-backdrop').exists()).toBe(true);
+
+    await wrapper.get('.mobile-session-close').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.session-sidebar').classes()).not.toContain('mobile-open');
+    expect(wrapper.find('.mobile-session-backdrop').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('closes the mobile session drawer immediately while the selected session loads', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.sessions = [{ id: 'slow-session', title: 'Slow session' }] as any;
+    let resolveLoad!: () => void;
+    const load = vi.spyOn(store, 'loadMessages').mockImplementation(() => new Promise<void>((resolve) => {
+      resolveLoad = resolve;
+    }));
+    await nextTick();
+
+    await wrapper.get('.rail-button[aria-label="对话"]').trigger('click');
+    expect(wrapper.get('.session-sidebar').classes()).toContain('mobile-open');
+    const selection = wrapper.get('.session-open').trigger('click');
+    await nextTick();
+
+    expect(load).toHaveBeenCalledWith('slow-session');
+    expect(wrapper.get('.session-sidebar').classes()).not.toContain('mobile-open');
+    expect(wrapper.find('.mobile-session-backdrop').exists()).toBe(false);
+
+    resolveLoad();
+    await selection;
+    wrapper.unmount();
+  });
+
+  it('presents current-session approvals in Chat and resolves them through the unified approval API', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    let resolved = false;
+    const pending = vi.spyOn(api, 'approvalPending')
+      .mockImplementation(async () => ({
+        kind: 'gateway.unified_approval_pending',
+        pending: resolved ? [] : [{
+          approval_id: 'approval-chat-1',
+          status: 'pending',
+          action: 'knowledge.promote_l4',
+          summary: 'Promote verified knowledge',
+          risk: 'medium',
+          timeout_policy: 'pending',
+          source: { session_id: 'approval-session' },
+        }],
+      } as any));
+    const respond = vi.spyOn(api, 'approvalRespond').mockImplementation(async () => {
+      resolved = true;
+      return { ok: true } as any;
+    });
+    const store = useAppStore();
+    store.activeSessionId = 'approval-session';
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
+    await settleAsync();
+
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('Promote verified knowledge');
+    expect(wrapper.get('.global-approval-button').text()).toContain('1');
+    await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
+    await settleAsync();
+
+    expect(respond).toHaveBeenCalledWith('approval-chat-1', true, 'approved from WebUI');
+    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
+    wrapper.unmount();
+    pending.mockRestore();
+    respond.mockRestore();
+  });
+
+  it('keeps pending approvals available from the global top status outside Chat', async () => {
+    const wrapper = await mountApp('/runtime');
+    await settleAsync();
+    const pending = vi.spyOn(api, 'approvalPending').mockResolvedValue({
+      kind: 'gateway.unified_approval_pending',
+      pending: [{
+        approval_id: 'approval-global-1',
+        status: 'pending',
+        action: 'runtime.release',
+        summary: 'Release the candidate runtime',
+        risk: 'high',
+        timeout_policy: 'pending',
+        source: { session_id: 'another-session' },
+      }],
+    } as any);
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
+    await settleAsync();
+
+    expect(wrapper.get('.global-approval-button').text()).toContain('1');
+    await wrapper.get('.global-approval-button').trigger('click');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('Release the candidate runtime');
+    wrapper.unmount();
+    pending.mockRestore();
+  });
+
+  it('routes typed evolution approvals to their owning review workspace', async () => {
+    const wrapper = await mountApp('/runtime');
+    await settleAsync();
+    const pending = vi.spyOn(api, 'approvalPending').mockResolvedValue({
+      kind: 'gateway.unified_approval_pending',
+      pending: [{
+        approval_id: 'approval-evolution-1',
+        status: 'pending',
+        action: 'evolution.release',
+        summary: 'Review the candidate release',
+        risk: 'high',
+        timeout_policy: 'pending',
+        source: { kind: 'Evolution', review_ref: 'release-review-1' },
+      }],
+    } as any);
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
+    await settleAsync();
+
+    await wrapper.get('.global-approval-button').trigger('click');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('打开审批工作台');
+    expect(wrapper.find('.chat-approval-modal .ghost-action').exists()).toBe(false);
+    await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
+    await settleAsync();
+    expect(wrapper.get('.main-surface').attributes('data-page')).toBe('audit');
+    wrapper.unmount();
+    pending.mockRestore();
+  });
+
+  it('opens the current execution graph from the Chat status control', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    const projections = useProjectionRegistryStore();
+    store.activeSessionId = 'graph-session';
+    chat.activeSessionId = 'graph-session';
+    chat.active!.executionId = 'execution-graph-1';
+    chat.active!.executionGraphId = 'execution-graph-1';
+    projections.entries['execution-graph-1'] = {
+      executionId: 'execution-graph-1',
+      projection: {
+        schema_version: 1,
+        kind: 'runtime.execution_projection',
+        execution_id: 'execution-graph-1',
+        revision: 1,
+        cursor: 1,
+        live: { status: 'running' },
+        graph: {
+          graph_id: 'execution-graph-1',
+          objective: 'Inspect WAIC evidence',
+          status: 'running',
+          nodes: [{
+            node_id: 'research',
+            kind: 'tool_batch',
+            executor_kind: 'WebSearch',
+            status: 'running',
+            payload_ref: 'payload://waic-research',
+            acceptance: {
+              criteria: ['current sources'],
+              required_evidence: ['web'],
+            },
+            resource_scopes: ['network:read'],
+            summary: 'WAIC evidence is being collected',
+            result_ref: 'result://waic-research',
+            evidence_refs: [],
+            usage: {},
+          }],
+          edges: [],
+        },
+      } as any,
+      cursor: 1,
+      detailScope: 'full',
+      connectionState: 'live',
+      lastUpdatedAt: Date.now(),
+      lastEventAt: Date.now(),
+      lastError: '',
+      degradedReason: '',
+      resyncCount: 0,
+      requestEpoch: 1,
+      reconnectBlocked: false,
+      authorizationSessionId: 'graph-session',
+      consumers: {},
+      materializingConsumers: {},
+    };
+    await nextTick();
+
+    await wrapper.get('.chat-execution-status').trigger('click');
+    await settle();
+
+    expect(store.chatExecutionGraphExpanded).toBe(true);
+    expect(wrapper.get('.chat-execution-overlay').text()).toContain('实时执行图');
+    await wrapper
+      .get('.chat-execution-overlay .graph-toolbar [aria-label="列表视图"]')
+      .trigger('click');
+    await nextTick();
+    await wrapper.get('.chat-execution-overlay .data-table tbody tr').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.execution-node-detail').text()).toContain('WebSearch');
+    expect(wrapper.get('.execution-node-detail').text()).toContain('WAIC evidence is being collected');
+
+    await wrapper.get('.chat-execution-status').trigger('click');
+    await settle();
+    expect(wrapper.find('.chat-execution-overlay').exists()).toBe(false);
+
+    store.openCompanion('activity');
+    await nextTick();
+    expect(wrapper.get('.companion-execution-graph').exists()).toBe(true);
+    await wrapper
+      .get('.companion-execution-graph .graph-toolbar [aria-label="全屏"]')
+      .trigger('click');
+    await settle();
+    expect(wrapper.get('.chat-execution-overlay').exists()).toBe(true);
+    await wrapper.get('.chat-execution-overlay > header .icon-action').trigger('click');
+    expect(store.chatExecutionGraphExpanded).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('shows Stop for a running turn and keeps supplemental Send available when input is present', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'supplement-session';
+    chat.activeSessionId = 'supplement-session';
+    chat.active!.pending = true;
+    await nextTick();
+
+    expect(wrapper.get('.composer-input-actions [aria-label="停止"]').exists()).toBe(true);
+    expect(wrapper.find('.composer-input-actions [aria-label="补充当前执行"]').exists()).toBe(false);
+
+    chat.active!.draft = '补充一条约束';
+    await nextTick();
+
+    const send = wrapper.get('.composer-input-actions [aria-label="补充当前执行"]');
+    expect(send.attributes('disabled')).toBeUndefined();
+    expect(send.attributes('title')).toBe('补充当前执行');
+    expect(wrapper.get('.composer-input-actions [aria-label="停止"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('renders one final answer with a compact execution timeline and aggregate token usage', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'timeline-session';
+    store.selectedModel = 'deepseek-v4';
+    store.providers = {
+      catalog: {
+        models: [{ id: 'deepseek-v4', context_window_tokens: 1_000_000 }],
+      },
+    } as any;
+    chat.activeSessionId = 'timeline-session';
+    chat.active!.turns = [
+      { id: 'u1', role: 'user', content: '分析 README' },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        token_usage: { input_tokens: 2_000, output_tokens: 40 },
+        activity: [{
+          id: 'tool-1',
+          kind: 'tool',
+          title: 'workspace.read',
+          status: 'complete',
+          duration_ms: 125,
+          input: { path: 'README.md' },
+        }],
+      },
+      {
+        id: 'tool-result',
+        role: 'tool',
+        content: 'FULL TOOL OUTPUT SHOULD NOT BE IN TRANSCRIPT',
+        activity: [{
+          id: 'tool-1',
+          kind: 'tool',
+          title: 'workspace.read',
+          status: 'complete',
+          output: { lines: 42 },
+        }],
+      },
+      {
+        id: 'progress',
+        role: 'assistant',
+        content: '正在比对现有说明。',
+        token_usage: { input_tokens: 1_000, output_tokens: 20 },
+      },
+      {
+        id: 'answer',
+        role: 'assistant',
+        content: '最终分析结果。',
+        token_usage: { input_tokens: 500, output_tokens: 80 },
+        execution_id: 'execution-turn-1',
+        turn_id: 'turn-1',
+      },
+    ] as any;
+    chat.active!.executionIndex = {
+      session_id: 'timeline-session',
+      active_execution_ids: [],
+      latest_execution_id: 'execution-turn-1',
+      latest_graph_id: 'graph-turn-1',
+      latest_status: 'complete',
+      executions: [{
+        execution_id: 'execution-turn-1',
+        graph_id: 'graph-turn-1',
+        turn_id: 'turn-1',
+        status: 'complete',
+        updated_at_ms: Date.now(),
+      }],
+    };
+    chat.active!.activity = [
+      {
+        id: 'tool-1',
+        kind: 'tool',
+        title: 'workspace.read',
+        status: 'complete',
+        turn_id: 'turn-1',
+        duration_ms: 125,
+        input: { path: 'README.md' },
+        output: { lines: 42 },
+      },
+      {
+        id: 'memory-1',
+        kind: 'context',
+        title: 'memory recall',
+        status: 'complete',
+        turn_id: 'turn-1',
+      },
+    ];
+    await nextTick();
+
+    expect(wrapper.get('.composer-runtime-chip.model').text()).toContain('deepseek-v4');
+    expect(wrapper.get('.composer-runtime-chip.context').text()).toContain('500 / 1M');
+    expect(wrapper.get('.composer-runtime-summary').text()).toContain('工具调用1');
+    expect(wrapper.get('.composer-runtime-summary').text()).toContain('记忆召回1');
+    expect(wrapper.get('.composer-runtime-summary').text()).toContain('总 Token3.6K');
+    expect(wrapper.findAll('.turn[data-role="assistant"]')).toHaveLength(3);
+    expect(wrapper.findAll('.conversation-answer')).toHaveLength(1);
+    expect(wrapper.findAll('.conversation-timeline li')).toHaveLength(2);
+    expect(wrapper.get('.conversation-answer').text()).toContain('最终分析结果');
+    const timelineText = wrapper.findAll('.conversation-timeline')
+      .map((timeline) => timeline.text())
+      .join(' ');
+    expect(timelineText).toContain('workspace.read');
+    expect(timelineText).toContain('README.md');
+    expect(timelineText).toContain('正在比对现有说明');
+    expect(wrapper.get('.answer-usage').text()).toContain('3.5K');
+    expect(wrapper.get('.answer-usage').text()).toContain('140');
+    expect(wrapper.get('.answer-execution-link').attributes('title')).toBe('查看本次执行图');
+    await wrapper.get('.answer-execution-link').trigger('click');
+    expect(store.chatExecutionGraphExpanded).toBe(true);
+    expect(store.chatExecutionGraphId).toBe('graph-turn-1');
+    store.closeChatExecutionGraph();
+    expect(wrapper.text()).not.toContain('FULL TOOL OUTPUT SHOULD NOT BE IN TRANSCRIPT');
+
+    store.openCompanion('activity');
+    await nextTick();
+    await wrapper.get('.execution-turn-group .timeline-list li').trigger('click');
+    expect(wrapper.get('.activity-detail-modal').text()).toContain('workspace.read');
+    expect(wrapper.get('.activity-detail-modal').text()).toContain('125 ms');
+    expect(wrapper.findAll('.activity-detail-modal .raw-payload')).toHaveLength(3);
+  });
+
+  it('shows a rolling live action before the causal thought and tool timeline', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'live-now-session';
+    store.chatDisplayMode = 'panorama';
+    chat.activeSessionId = 'live-now-session';
+    chat.active!.pending = true;
+    chat.active!.streamTurnId = 'stream:live-now-session:1';
+    chat.active!.live = {
+      status: 'preparing_context',
+      status_detail: 'durable input committed',
+    } as any;
+    chat.active!.turns = [
+      { id: 'u-live', role: 'user', content: '检查 README' },
+      {
+        id: 'stream:live-now-session:1',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        activity: [],
+      },
+    ] as any;
+    await nextTick();
+
+    expect(wrapper.get('.conversation-live-now').text()).toContain('正在整理上下文');
+    expect(wrapper.findAll('.conversation-timeline li')).toHaveLength(0);
+
+    chat.active!.live = {
+      ...chat.active!.live,
+      status: 'calling_tool',
+    } as any;
+    chat.active!.turns[1].activity = [
+      {
+        id: 'runtime-1',
+        kind: 'runtime',
+        title: '执行阶段',
+        status: 'running',
+      },
+      {
+        id: 'context-1',
+        kind: 'context',
+        title: 'memory recall',
+        status: 'complete',
+      },
+      {
+        id: 'think-1',
+        kind: 'think',
+        title: '思考',
+        detail: '先读取项目说明，再核对目标。',
+        status: 'running',
+      },
+      {
+        id: 'tool-live',
+        kind: 'tool',
+        title: 'workspace.read',
+        input: '{"path":"README.md","offset":0,"limit":200}',
+        status: 'running',
+      },
+    ] as any;
+    await nextTick();
+
+    const liveNow = wrapper.get('.conversation-live-now');
+    expect(liveNow.text()).toContain('正在调用 workspace.read');
+    expect(liveNow.text()).toContain('README.md');
+    const timeline = wrapper.get('.conversation-timeline');
+    expect(timeline.text()).toContain('先读取项目说明');
+    expect(timeline.text()).toContain('workspace.read');
+    expect(timeline.text()).toContain('README.md');
+    expect(timeline.text()).not.toContain('{"path"');
+    expect(timeline.text()).not.toContain('执行阶段');
+    expect(timeline.text()).not.toContain('memory recall');
+    wrapper.unmount();
+  });
+
+  it('exposes fork and delete controls on every session row and derives generated titles from the first prompt', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.sessions = [{
+      id: 'abcdefgh-session',
+      title: 'webui abcdefgh',
+      updated_at: Date.now(),
+    }];
+    const update = vi.spyOn(api, 'updateSession').mockResolvedValue({ ok: true } as any);
+    await store.ensureSessionTitleFromFirstMessage(
+      'abcdefgh-session',
+      '这是第一次发出的完整需求，需要作为会话名称并在长度过长时被安全截断，不展示随机会话编号。',
+    );
+    await nextTick();
+
+    const row = wrapper.get('.session-row');
+    expect(row.get('[aria-label="分支会话"]').exists()).toBe(true);
+    expect(row.get('[aria-label="删除会话"]').exists()).toBe(true);
+    expect(row.get('.session-title').text()).toContain('这是第一次发出的完整需求');
+    expect(store.sessions[0].title?.endsWith('…')).toBe(true);
+    expect(update).toHaveBeenCalledWith('abcdefgh-session', expect.objectContaining({
+      title: expect.stringContaining('这是第一次发出的完整需求'),
+    }));
+    update.mockRestore();
   });
 
   it('keeps mobile Chat panorama usable by collapsing companion until requested', async () => {
@@ -163,6 +675,11 @@ describe('Cowd Vue WebUI shell', () => {
     await wrapper.get('.companion-toggle').trigger('click');
     await settle();
     expect(wrapper.find('.companion-panel').exists()).toBe(true);
+    expect(useAppStore().chatDisplayMode).toBe('panorama');
+    await wrapper.get('.companion-toggle').trigger('click');
+    await settle();
+    expect(wrapper.find('.companion-panel').exists()).toBe(false);
+    expect(useAppStore().chatDisplayMode).toBe('clean');
     wrapper.unmount();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
   });
@@ -194,21 +711,22 @@ describe('Cowd Vue WebUI shell', () => {
     expect(collapseRepeatedText([repeated, repeated, repeated].join('\n\n'))).toBe(repeated);
   });
 
-  it('switches Chat into clean mode and keeps stats in the composer footer', async () => {
+  it('switches Chat into clean mode without duplicating execution stats in the composer', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
     const store = useAppStore();
     store.currentTimeline = { events: [{ kind: 'ToolStart' }, { kind: 'ToolComplete' }, { kind: 'memory_recall' }] };
     store.currentRealityFlow = { stages: [{ kind: 'memory.promoted' }, { kind: 'memory.held' }, { kind: 'context.fact' }] };
-    await wrapper.findAll('.mode-switch button').find((button) => button.text() === '纯净')?.trigger('click');
+    await wrapper.get('.companion-toggle').trigger('click');
+    await settle();
+    await wrapper.get('.companion-toggle').trigger('click');
     await settle();
     expect(store.chatDisplayMode).toBe('clean');
     expect(wrapper.find('.run-panorama').exists()).toBe(false);
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
     expect(wrapper.find('.clean-counts').exists()).toBe(false);
-    expect(wrapper.get('.composer-stats').text()).toContain('工具调用');
-    expect(wrapper.get('.composer-stats').text()).toContain('记忆唤起');
-    expect(wrapper.get('.composer-stats').text()).toContain('记忆证据');
+    expect(wrapper.get('.composer-runtime-summary').exists()).toBe(true);
+    expect(wrapper.get('.chat-session-facts').exists()).toBe(true);
   });
 
   it('renders Surface operations without the obsolete generic workflow strip', async () => {
@@ -250,7 +768,12 @@ describe('Cowd Vue WebUI shell', () => {
     store.sessions = Array.from({ length: 105 }, (_, index) => ({
       id: `session-${index}`,
       title: `Session ${index}`,
-      status: index === 0 ? 'running' : 'complete',
+      status: 'active',
+      execution: {
+        session_id: `session-${index}`,
+        active_execution_ids: index === 0 ? ['execution-0'] : [],
+        latest_status: index === 0 ? 'calling_model' : 'complete',
+      },
       message_count: index + 1,
       updated_at: Date.now() - index * 1000,
     }));
@@ -262,8 +785,50 @@ describe('Cowd Vue WebUI shell', () => {
     expect(store.isSessionPinned(store.sessions[90])).toBe(true);
     expect(store.groupedSessions[0].items[0].id).toBe('session-90');
     expect(store.isSessionRunning(store.sessions[0])).toBe(true);
+    expect(store.isSessionRunning({ id: 'idle-session', status: 'active' })).toBe(false);
     store.markSessionViewed('session-0');
     expect(store.isSessionUnread(store.sessions[0])).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('filters deleted tombstones and renders canonical execution outcomes in the session list', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    vi.spyOn(api, 'searchSessions').mockResolvedValue({
+      sessions: [
+        { id: 'deleted-session', status: 'deleted', title: 'Deleted' },
+        {
+          id: 'complete-session',
+          status: 'active',
+          title: 'Complete',
+          execution: {
+            session_id: 'complete-session',
+            active_execution_ids: [],
+            latest_status: 'complete',
+          },
+        },
+        {
+          id: 'error-session',
+          status: 'active',
+          title: 'Error',
+          execution: {
+            session_id: 'error-session',
+            active_execution_ids: [],
+            latest_status: 'error',
+          },
+        },
+      ],
+    } as any);
+
+    await store.refreshSessions();
+    await nextTick();
+
+    expect(store.sessions.map((session) => session.id)).toEqual(['complete-session', 'error-session']);
+    const statuses = wrapper.findAll('.session-execution-status').map((node) => node.text());
+    expect(statuses).toContain('完成');
+    expect(statuses).toContain('错误');
+    expect(wrapper.text()).not.toContain('Deleted');
     wrapper.unmount();
   });
 

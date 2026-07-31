@@ -87,6 +87,8 @@ let syncGeneration = 0;
 let syncedGeneration = 0;
 let syncFlight: Promise<void> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectTimerGeneration = 0;
+let physicalGeneration = 0;
 let pendingDelete: LiveSubscription | null = null;
 
 export function parseLiveEnvelope(data: string): LiveEnvelope {
@@ -151,9 +153,20 @@ function surfaceInstance() {
 }
 
 function closePhysical() {
+  physicalGeneration += 1;
   stream?.close();
   stream = null;
   physicalConnectionCount.value = 0;
+}
+
+function cancelReconnectTimer(generation?: number) {
+  if (
+    !reconnectTimer
+    || (generation !== undefined && reconnectTimerGeneration !== generation)
+  ) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  reconnectTimerGeneration = 0;
 }
 
 function notifyError(reason: string) {
@@ -190,7 +203,9 @@ function deliverEnvelope(envelope: LiveEnvelope) {
 }
 
 function openPhysical(expected: LiveSubscription) {
+  cancelReconnectTimer();
   closePhysical();
+  const generation = physicalGeneration;
   if (typeof EventSource === 'undefined') {
     physical.state = 'offline';
     return;
@@ -200,7 +215,10 @@ function openPhysical(expected: LiveSubscription) {
   stream = next;
   physicalConnectionCount.value = 1;
   next.onopen = () => {
-    if (stream !== next) return;
+    if (stream !== next || generation !== physicalGeneration) return;
+    // EventSource owns transient network recovery. Once the same physical
+    // connection reopens, its pending application-level rebuild is stale.
+    cancelReconnectTimer(generation);
     physical.state = 'connected';
     physical.error = '';
     for (const owner of sources.values()) {
@@ -208,7 +226,7 @@ function openPhysical(expected: LiveSubscription) {
     }
   };
   const handleLiveEvent = (event: MessageEvent) => {
-    if (stream !== next) return;
+    if (stream !== next || generation !== physicalGeneration) return;
     let envelope: LiveEnvelope;
     try {
       envelope = parseLiveEnvelope(event.data);
@@ -270,19 +288,23 @@ function openPhysical(expected: LiveSubscription) {
   };
   next.addEventListener('live', handleLiveEvent as EventListener);
   next.onerror = () => {
-    if (stream !== next) return;
+    if (stream !== next || generation !== physicalGeneration) return;
     physical.state = 'reconnecting';
     physical.reconnectCount += 1;
     // A physical transport interruption is owned and recovered here. Logical
     // source consumers remain attached and must not start competing reconnects.
-    scheduleRecreate();
+    scheduleRecreate(generation);
   };
 }
 
-function scheduleRecreate() {
-  if (reconnectTimer) return;
+function scheduleRecreate(generation = physicalGeneration) {
+  if (reconnectTimer && reconnectTimerGeneration === generation) return;
+  cancelReconnectTimer();
+  reconnectTimerGeneration = generation;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
+    reconnectTimerGeneration = 0;
+    if (generation !== physicalGeneration) return;
     closePhysical();
     pendingDelete = subscription;
     subscription = null;
@@ -477,8 +499,7 @@ export function liveTransportHealth() {
 
 export function resetLiveTransportForTests() {
   if (import.meta.env.MODE !== 'test') return;
-  if (reconnectTimer) clearTimeout(reconnectTimer);
-  reconnectTimer = null;
+  cancelReconnectTimer();
   closePhysical();
   sources.clear();
   subscription = null;
@@ -488,6 +509,7 @@ export function resetLiveTransportForTests() {
   pendingDelete = null;
   readyRevision = 0;
   pendingRevisionEnvelopes = [];
+  physicalGeneration = 0;
   physical.state = 'offline';
   physical.subscriptionId = '';
   physical.revision = 0;

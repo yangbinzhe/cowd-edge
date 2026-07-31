@@ -19,10 +19,16 @@ async function evaluate(profile) {
   const runtime = fs.mkdtempSync(path.join(os.tmpdir(), `cowd-edge-${profile.id}-`));
   const socket = path.join(runtime, "edge.sock");
   const credential = path.join(runtime, "credential");
+  const state = path.join(runtime, "state");
+  fs.mkdirSync(state, { mode: 0o700 });
   const token = "eval-token-" + crypto.randomUUID() + crypto.randomUUID();
   fs.writeFileSync(credential, token, { mode: 0o600 });
   const binary = path.join(binaryRoot, profile.artifact);
-  const child = spawn(binary, ["--socket", socket, "--credential-file", credential], {
+  const child = spawn(binary, [
+    "--socket", socket,
+    "--credential-file", credential,
+    "--state-dir", state,
+  ], {
     stdio: ["ignore", "pipe", "pipe"],
   });
   let stderr = "";

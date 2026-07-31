@@ -362,7 +362,7 @@ onUnmounted(() => projections.release('runtime-page'));
         :projection="executionProjection"
         :connection-state="projections.stateFor(activeExecutionId)"
       />
-      <section class="management-panel runtime-panel" v-show="isSectionActive('overview')" data-section="overview">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('overview')" data-section="overview">
         <header>
           <h2>{{ t('page.runtime.page.text.895180bcc2') }}</h2>
           <StatusPill :status="configReloadStatusLabel" />
@@ -417,7 +417,7 @@ onUnmounted(() => projections.release('runtime-page'));
         <a class="primary-action" href="#/mission">{{ t('runtime.missionLink.action') }}</a>
       </section>
 
-      <section class="management-panel runtime-panel" v-show="isSectionActive('runs')" data-section="runs">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('runs')" data-section="runs">
         <header>
           <h2>{{ t('page.runtime.page.text.f81fa83905') }}</h2>
           <span>{{ formatCount('leases', leases.leases?.length || leases.count || 0) }}</span>
@@ -437,7 +437,7 @@ onUnmounted(() => projections.release('runtime-page'));
         <ObjectInspectorDrawer :title="t('page.runtime.page.title.e86490ec1d')" :data="leases" />
       </section>
 
-      <section class="management-panel runtime-panel" v-show="isSectionActive('policy')" data-section="policy">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('policy')" data-section="policy">
         <header>
           <h2>{{ t('page.runtime.page.text.93f65d3d63') }}</h2>
           <span>{{ formatCount('pending', approvalItems.length) }}</span>
@@ -459,7 +459,7 @@ onUnmounted(() => projections.release('runtime-page'));
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.a09bbcf3ae')" />
       </section>
 
-      <section class="management-panel runtime-panel" v-show="isSectionActive('timeline')" data-section="timeline">
+      <section class="management-panel runtime-panel wide" v-show="isSectionActive('timeline')" data-section="timeline">
         <header>
           <h2>{{ t('page.runtime.page.text.f3558aafc0') }}</h2>
           <StatusPill :status="timeline.__state || 'ready'" />

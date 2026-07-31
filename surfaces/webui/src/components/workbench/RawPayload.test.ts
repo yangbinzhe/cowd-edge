@@ -11,12 +11,22 @@ describe('RawPayload', () => {
 
     expect(toJSON).not.toHaveBeenCalled();
     const details = wrapper.get('details');
-    Object.defineProperty(details.element, 'open', {
-      configurable: true,
-      value: true,
-    });
+    (details.element as HTMLDetailsElement).open = true;
     await details.trigger('toggle');
     expect(toJSON).toHaveBeenCalledTimes(1);
     expect(wrapper.get('pre').text()).toContain('payload');
+  });
+
+  it('supports an explicitly open detail surface without changing the global default', () => {
+    const wrapper = mount(RawPayload, {
+      props: {
+        data: { input: 'query', output: 'result' },
+        defaultOpen: true,
+      },
+    });
+
+    expect(wrapper.get('details').attributes('open')).toBeDefined();
+    expect(wrapper.get('pre').text()).toContain('query');
+    expect(wrapper.get('pre').text()).toContain('result');
   });
 });

@@ -10,6 +10,7 @@ import type {
   MissionControlResponse,
   MissionProjectionDelta,
   NavId,
+  ExecutionLiveUpdate,
   ExecutionProjection,
   SessionEvidenceProjection,
   SessionExecutionIndexProjection,
@@ -917,8 +918,18 @@ export const api = {
     entitlement?: Record<string, unknown>;
   }>('/api/auth/verify', { valid: false, auth_required: true }),
   authLogout: () => write('/api/auth/logout', { method: 'POST' }),
-  sessions: (limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(`/api/sessions?limit=${limit}&offset=${offset}`, { sessions: [] }),
-  searchSessions: (query: string, limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(`/api/sessions?limit=${limit}&offset=${offset}${query ? `&q=${encodeURIComponent(query)}` : ''}`, { sessions: [] }),
+  sessions: (limit = 50, offset = 0, includeExecution = false) => read<{ sessions: SessionSummary[] }>(
+    `/api/sessions?limit=${limit}&offset=${offset}&include_execution=${includeExecution}`,
+    { sessions: [] },
+  ),
+  runningSessionExecutions: () => read<{ items: SessionExecutionIndexProjection[] }>(
+    '/api/sessions/executions',
+    { items: [] },
+  ),
+  searchSessions: (query: string, limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(
+    `/api/sessions?limit=${limit}&offset=${offset}&include_execution=false${query ? `&q=${encodeURIComponent(query)}` : ''}`,
+    { sessions: [] },
+  ),
   searchMessages: (query: string) => read(`/api/sessions/search?q=${encodeURIComponent(query)}`, { matches: [] }),
   createSession: (model?: string) => write<SessionSummary>('/api/sessions', {
     method: 'POST',
@@ -937,7 +948,30 @@ export const api = {
   sessionStats: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/stats`, {}),
   sessionExecution: (sessionId: string) => read<SessionExecutionIndexProjection>(`/api/sessions/${encodeURIComponent(sessionId)}/execution`, {
     session_id: sessionId,
+    executions: [],
     active_execution_ids: [],
+  }),
+  sessionExecutionLive: (sessionId: string) => read<ExecutionLiveUpdate>(`/api/sessions/${encodeURIComponent(sessionId)}/execution/live`, {
+    schema_version: 2,
+    execution_id: '',
+    live: {
+      revision: 0,
+      status: 'queued',
+      started_at_ms: 0,
+      updated_at_ms: 0,
+      last_progress_at_ms: 0,
+      metrics: {
+        tool_calls: 0,
+        approvals: 0,
+        files_touched: 0,
+        context_items: 0,
+        memory_recalls: 0,
+        memory_evidence: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        total_tokens: 0,
+      },
+    },
   }),
   sessionEvidence: (sessionId: string) => read<SessionEvidenceProjection>(`/api/sessions/${encodeURIComponent(sessionId)}/evidence`, {
     session_id: sessionId,
@@ -964,12 +998,13 @@ export const api = {
   }),
   messages: (
     sessionId: string,
-    options: { offset?: number; fromSeq?: number; limit?: number } = {},
+    options: { offset?: number; fromSeq?: number; limit?: number; tail?: boolean } = {},
   ) => {
     const params = new URLSearchParams();
     params.set('limit', String(Math.max(1, Math.min(500, options.limit || 100))));
     if (options.fromSeq !== undefined) params.set('from_seq', String(Math.max(0, options.fromSeq)));
     else params.set('offset', String(Math.max(0, options.offset || 0)));
+    if (options.tail) params.set('tail', 'true');
     return read<SessionMessagesPage>(
       `/api/sessions/${encodeURIComponent(sessionId)}/messages?${params.toString()}`,
       {
@@ -1308,9 +1343,16 @@ export const api = {
   }),
   skillCatalog: () => read('/api/skills/catalog', {}),
   skillProjection: () => read('/api/skills/projection?surface=webui', {}),
+  createSkill: (body: Record<string, unknown>) => writeWithReceipt('/api/skills', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
   skillRuns: () => read('/api/skills/runs', {}),
   skillRunDetail: (id: string) => read(`/api/skills/runs/${encodeURIComponent(id)}`, {}),
   skillDetail: (id: string) => read(`/api/skills/${encodeURIComponent(id)}`, {}),
+  deleteSkill: (id: string) => writeWithReceipt(`/api/skills/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  }),
   skillFiles: (id: string) => read(`/api/skills/${encodeURIComponent(id)}/files`, {}),
   skillFileRaw: (id: string, path = 'SKILL.md') => read(`/api/skills/${encodeURIComponent(id)}/files/raw?path=${encodeURIComponent(path)}`, {}),
   skillTranslate: (id: string, content: string, path = 'SKILL.md', locale = 'zh-CN') => write(`/api/skills/${encodeURIComponent(id)}/translate`, {
@@ -1500,6 +1542,12 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ qrcode, base_url: baseUrl }),
   }),
+  wechatIlinkAccounts: () => read('/api/message-connectors/wechat-ilink/accounts', {
+    kind: 'wechat_ilink_accounts',
+    surface_available: false,
+    usable: false,
+    accounts: [],
+  }),
   connectorsSummary: () => read('/api/connectors/summary', {}),
   connectorAccounts: () => read('/api/connectors/accounts', {}),
   connectorCapabilities: () => read('/api/connectors/capabilities', {}),
@@ -1661,6 +1709,9 @@ export const api = {
   createManagedAgentDefinition: (body: Record<string, unknown>) => writeWithReceipt('/api/runtime/managed-agents/definitions', {
     method: 'POST',
     body: JSON.stringify(body),
+  }),
+  deactivateManagedAgentDefinition: (id: string) => writeWithReceipt(`/api/runtime/managed-agents/definitions/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
   }),
   triggerManagedAgent: (id: string, request_id: string) => writeWithReceipt(`/api/runtime/managed-agents/${encodeURIComponent(id)}/trigger`, {
     method: 'POST',

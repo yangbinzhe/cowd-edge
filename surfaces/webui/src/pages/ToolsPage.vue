@@ -420,7 +420,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.tools.page.title.141f116987')" :data="expectedHashes" />
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('checkpoints')" data-section="checkpoints">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('checkpoints')" data-section="checkpoints">
         <header>
           <h2>{{ t('page.tools.page.text.111e726ea3') }}</h2>
           <span>{{ checkpointRows.length }} available</span>
@@ -473,7 +473,7 @@ onMounted(refresh);
         <EmptyState v-else :title="t('page.tools.page.title.a19a3515e0')" :detail="t('page.tools.page.detail.f539f4ce24')" />
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('cache')" data-section="cache">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('cache')" data-section="cache">
         <header>
           <h2>{{ t('page.tools.page.text.54a5a2e2a7') }}</h2>
           <span>{{ formatCount('metrics', cacheRows.length) }}</span>

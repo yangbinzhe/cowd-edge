@@ -1,20 +1,26 @@
 <script setup lang="ts">
 import { formatCount, t } from '../../i18n';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Download } from 'lucide-vue-next';
 
 const props = withDefaults(defineProps<{
   data: unknown;
   title?: string;
   maxChars?: number;
+  defaultOpen?: boolean;
 }>(), {
   title: t('script.components.workbench.rawpayload.title.1c51272120'),
   maxChars: 2400,
+  defaultOpen: false,
 });
 
 const expanded = ref(false);
 const copied = ref(false);
-const opened = ref(false);
+const opened = ref(props.defaultOpen);
+
+watch(() => props.data, () => {
+  if (props.defaultOpen) opened.value = true;
+});
 
 const json = computed(() => {
   if (!opened.value) return '';
@@ -55,7 +61,7 @@ function handleToggle(event: Event) {
 </script>
 
 <template>
-  <details class="raw-payload" @toggle="handleToggle">
+  <details class="raw-payload" :open="opened" @toggle="handleToggle">
     <summary>
       <span>{{ title || t('rawPayload.title') }}</span>
       <small>{{ summary }}</small>

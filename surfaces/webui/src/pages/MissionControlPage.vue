@@ -705,7 +705,7 @@ onUnmounted(() => {
         <RequestReceipt v-if="actionResult" :receipt="actionResult" :title="t('runtime.execution.commandReceipt')" />
       </section>
 
-      <section class="mission-panel" v-show="isSectionActive('sessions')" data-section="sessions">
+      <section class="mission-panel wide" v-show="isSectionActive('sessions')" data-section="sessions">
         <header>
           <h2>{{ t('page.mission.control.page.text.3ca3f069de') }}</h2>
           <span>{{ activeSession || t('page.mission.control.page.inline.54b8982e68') }}</span>
@@ -764,7 +764,7 @@ onUnmounted(() => {
         <ObjectInspectorDrawer v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
       </section>
 
-      <section class="mission-panel" v-show="isSectionActive('agents')" data-section="agents">
+      <section class="mission-panel wide" v-show="isSectionActive('agents')" data-section="agents">
         <header>
           <h2>{{ t('capability.section.mission.agents.label') }}</h2>
           <span>{{ formatCount('agents', agentRows.length) }}</span>
@@ -787,7 +787,7 @@ onUnmounted(() => {
         <p v-else class="empty-note">{{ t('capability.section.mission.agents.description') }}</p>
       </section>
 
-      <section class="mission-panel" v-show="isSectionActive('routes')" data-section="routes">
+      <section class="mission-panel wide" v-show="isSectionActive('routes')" data-section="routes">
         <header>
           <h2>{{ t('page.mission.control.page.text.eb5e456863') }}</h2>
           <StatusPill :status="routeTarget ? 'ready' : 'idle'" />
@@ -869,7 +869,7 @@ onUnmounted(() => {
         <p v-else class="empty-note">{{ t('page.mission.control.runtimeV2.empty') }}</p>
       </section>
 
-      <section class="mission-panel" v-show="isSectionActive('approvals')" data-section="approvals">
+      <section class="mission-panel wide" v-show="isSectionActive('approvals')" data-section="approvals">
         <header>
           <h2>{{ t('page.mission.control.page.text.ba7c90b793') }}</h2>
           <StatusPill :status="pendingApprovals.length ? 'blocked' : 'ready'" />

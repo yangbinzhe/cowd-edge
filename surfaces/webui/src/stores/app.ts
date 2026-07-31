@@ -146,10 +146,35 @@ function updatedAtMs(session: SessionSummary) {
 
 function sessionTitle(session: SessionSummary) {
   const title = String(session.title || '').trim();
-  if (title && title !== session.id) return title;
   const snippet = String(session.snippet || session.first_message || session.summary || '').replace(/\s+/g, ' ').trim();
+  if (title && title !== session.id && !isGeneratedSessionTitle(session, title)) return title;
   if (snippet) return snippet.slice(0, 40);
+  if (title) return title;
   return session.id ? session.id.slice(0, 12) : 'session';
+}
+
+function isGeneratedSessionTitle(session: SessionSummary, value = String(session.title || '').trim()) {
+  const title = value.toLowerCase();
+  const idPrefix = String(session.id || '').slice(0, 8).toLowerCase();
+  if (!title || title === String(session.id || '').toLowerCase()) return true;
+  return [
+    `webui ${idPrefix}`,
+    `tui ${idPrefix}`,
+    `session ${idPrefix}`,
+    `api_server ${idPrefix}`,
+    `socket ${idPrefix}`,
+    `cli ${idPrefix}`,
+    `internal ${idPrefix}`,
+  ].includes(title);
+}
+
+function firstMessageTitle(value: string) {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  const characters = Array.from(normalized);
+  return characters.length > 40
+    ? `${characters.slice(0, 40).join('')}…`
+    : normalized;
 }
 
 function sessionSnippet(session: SessionSummary) {
@@ -177,7 +202,34 @@ function compactTime(session: SessionSummary) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function visibleSessionRows(rows: unknown): SessionSummary[] {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((session): session is SessionSummary => (
+      !!session
+      && typeof session === 'object'
+      && String((session as SessionSummary).status || '').toLowerCase() !== 'deleted'
+    ));
+}
+
+function withRunningExecutions(
+  rows: SessionSummary[],
+  aggregate: { items?: SessionSummary['execution'][] } | null | undefined,
+) {
+  const active = new Map(
+    (Array.isArray(aggregate?.items) ? aggregate.items : [])
+      .filter((execution): execution is NonNullable<SessionSummary['execution']> => (
+        !!execution?.session_id
+      ))
+      .map((execution) => [execution.session_id, execution]),
+  );
+  return rows.map((session) => {
+    const execution = active.get(session.id);
+    return execution ? { ...session, execution } : session;
+  });
+}
+
 export const useAppStore = defineStore('app', () => {
+  const chatSessions = useChatSessionsStore();
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   let bootPromise: Promise<void> | null = null;
   let activeSessionLoadGeneration = 0;
@@ -216,6 +268,8 @@ export const useAppStore = defineStore('app', () => {
   const sessionInputProjection = ref<any>(null);
   const turnInbox = ref<any>(null);
   const selectedActivity = ref<Record<string, unknown> | null>(null);
+  const chatExecutionGraphExpanded = ref(false);
+  const chatExecutionGraphId = ref('');
   const workspaceRoot = ref('');
   const workspaceDir = ref('');
   const workspaceFiles = ref<WorkspaceFile[]>([]);
@@ -287,6 +341,7 @@ export const useAppStore = defineStore('app', () => {
     sessionInputProjection.value = null;
     turnInbox.value = null;
     selectedActivity.value = null;
+    chatExecutionGraphExpanded.value = false;
     openTurnActivity.value = {};
   }
 
@@ -415,6 +470,8 @@ export const useAppStore = defineStore('app', () => {
       busy.value = true;
       authorizationState.value = 'checking';
       try {
+        const bootActiveSessionId = activeSessionId.value;
+        const bootSessionsWereEmpty = sessions.value.length === 0;
         const authState = await api.authVerify();
         if (!isCurrent()) return;
         authEntitlement.value = authState.entitlement || null;
@@ -433,6 +490,7 @@ export const useAppStore = defineStore('app', () => {
         const [
           manifest,
           sessionData,
+          runningExecutions,
           config,
           runtime,
           providerData,
@@ -446,7 +504,8 @@ export const useAppStore = defineStore('app', () => {
           openAiTools,
         ] = await Promise.all([
           api.health(),
-          api.sessions(),
+          api.sessions(sessionPageLimit.value, 0, false),
+          api.runningSessionExecutions(),
           api.settings(),
           api.runtimeControlPlane(),
           api.providers(),
@@ -467,23 +526,36 @@ export const useAppStore = defineStore('app', () => {
         configReloadStatus.value = reloadStatus;
         profiles.value = profileData.profiles || [];
         commands.value = commandData.commands || [];
+        workspaceRoot.value = workspace.workspace_canonical || workspace.workspace_root || '';
         approvalConfig.value = approvals;
         gatewayCapabilityContract.value = capabilityContract;
         gatewayOpenApi.value = openApi;
         gatewayOpenAiTools.value = openAiTools;
-        gatewayContractError.value = [capabilityContract.__error, openApi.__error, openAiTools.__error].filter(Boolean).join(' · ');
+        gatewayContractError.value = [
+          capabilityContract.__error,
+          openApi.__error,
+          openAiTools.__error,
+        ].filter(Boolean).join(' · ');
         const reportedModel = runtime.configured_model || config.model || '';
         selectedModel.value = reportedModel && reportedModel !== 'unknown' ? reportedModel : selectedModel.value;
         selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
-        sessions.value = Array.isArray(sessionData.sessions) ? sessionData.sessions : [];
+        const bootSessions = withRunningExecutions(
+          visibleSessionRows(sessionData.sessions),
+          runningExecutions,
+        );
+        if (bootSessionsWereEmpty && sessions.value.length === 0) {
+          sessions.value = bootSessions;
+        }
         sessionOffset.value = sessions.value.length;
         sessionHasMore.value = sessions.value.length >= sessionPageLimit.value;
-        if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
-        workspaceRoot.value = workspace.workspace_canonical || workspace.workspace_root || '';
-        await Promise.all([
-          activeSessionId.value ? loadMessages(activeSessionId.value) : Promise.resolve(),
-          loadWorkspace(''),
-        ]);
+        let initialSessionId = '';
+        if (bootActiveSessionId && activeSessionId.value === bootActiveSessionId) {
+          initialSessionId = bootActiveSessionId;
+        } else if (!activeSessionId.value && sessions.value[0]) {
+          activeSessionId.value = sessions.value[0].id;
+          initialSessionId = activeSessionId.value;
+        }
+        await (initialSessionId ? loadMessages(initialSessionId) : Promise.resolve());
         if (!isCurrent()) return;
         booted.value = true;
         startConfigReloadPolling();
@@ -525,11 +597,38 @@ export const useAppStore = defineStore('app', () => {
     // own requests are still in flight.
     clearActiveSessionDerivedState();
     openTurnActivity.value = loadTurnActivityState(sessionId);
-    const chat = useChatSessionsStore();
+    const chat = chatSessions;
     await chat.open(sessionId);
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     markSessionViewed(sessionId);
-    await Promise.all([
+    ensureSessionTitleFromFirstMessage(sessionId).catch(() => undefined);
+    // Attachments and queued inputs enrich the composer but must not delay the
+    // transcript. Runtime timeline/reality/context are loaded only when the
+    // panorama surface is actually visible.
+    queueMicrotask(() => {
+      if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
+      chat.hydrateExecutionIndex(sessionId, false).catch(() => undefined);
+      chat.hydrateTurnProjection(sessionId).catch(() => undefined);
+      Promise.allSettled([
+        loadAttachments(sessionId, generation),
+        refreshSessionInputs(sessionId, generation),
+      ]).catch(() => undefined);
+      if (chatDisplayMode.value === 'panorama' && !companionCollapsed.value) {
+        hydrateActiveSessionPanels(true).catch(() => undefined);
+      }
+    });
+  }
+
+  async function hydrateActiveSessionPanels(includeProjection = false) {
+    const sessionId = activeSessionId.value;
+    if (!sessionId) return;
+    const generation = activeSessionLoadGeneration;
+    const chat = chatSessions;
+    const detailHydration = companionTab.value === 'evidence'
+      ? chat.hydrateRuntimeDetails(sessionId, includeProjection)
+      : chat.hydrateExecutionIndex(sessionId, includeProjection);
+    await Promise.allSettled([
+      detailHydration,
       loadAttachments(sessionId, generation),
       loadActivity(sessionId, generation),
       refreshSessionInputs(sessionId, generation),
@@ -544,12 +643,49 @@ export const useAppStore = defineStore('app', () => {
     const offset = reset ? 0 : sessionOffset.value;
     const data = await api.searchSessions(query.trim(), sessionPageLimit.value, offset);
     if (generation !== authorizationGeneration) return data;
-    const nextSessions = (Array.isArray(data.sessions) ? data.sessions : [])
+    const nextSessions = visibleSessionRows(data.sessions)
       .filter((session) => !revokedSessionIds.has(session.id));
     sessions.value = reset ? nextSessions : [...sessions.value, ...nextSessions.filter((session) => !sessions.value.some((item) => item.id === session.id))];
     sessionOffset.value = sessions.value.length;
     sessionHasMore.value = nextSessions.length >= sessionPageLimit.value;
     if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
+    return data;
+  }
+
+  async function refreshSessionStatuses() {
+    const generation = authorizationGeneration;
+    const limit = Math.max(sessionPageLimit.value, Math.min(200, sessions.value.length));
+    const [data, runningExecutions] = await Promise.all([
+      api.sessions(limit, 0, false),
+      api.runningSessionExecutions(),
+    ]);
+    if (generation !== authorizationGeneration) return data;
+    const updates = new Map(
+      withRunningExecutions(visibleSessionRows(data.sessions), runningExecutions)
+        .filter((session) => !revokedSessionIds.has(session.id))
+        .map((session) => [session.id, session]),
+    );
+    sessions.value = sessions.value
+      .filter((session) => String(session.status || '').toLowerCase() !== 'deleted')
+      .map((session) => {
+        const update = updates.get(session.id);
+        if (!update) return session;
+        const previousStatus = String(session.execution?.latest_status || '').toLowerCase();
+        const previousWasRunning = [
+          'queued',
+          'preparing_context',
+          'calling_model',
+          'thinking',
+          'calling_tool',
+          'waiting_approval',
+          'finalizing',
+        ].includes(previousStatus);
+        return {
+          ...session,
+          ...update,
+          execution: update.execution || (previousWasRunning ? undefined : session.execution),
+        };
+      });
     return data;
   }
 
@@ -572,13 +708,30 @@ export const useAppStore = defineStore('app', () => {
 
   async function deleteSession(sessionId: string) {
     await api.deleteSession(sessionId);
-    useChatSessionsStore().close(sessionId);
+    const chat = chatSessions;
+    chat.setDraft(sessionId, '');
+    chat.close(sessionId);
     sessions.value = sessions.value.filter((session) => session.id !== sessionId);
     selectedSessionIds.value = selectedSessionIds.value.filter((id) => id !== sessionId);
     if (activeSessionId.value === sessionId) {
       activeSessionId.value = sessions.value[0]?.id || '';
       if (activeSessionId.value) await loadMessages(activeSessionId.value);
     }
+  }
+
+  async function ensureSessionTitleFromFirstMessage(sessionId: string, content = '') {
+    const session = sessions.value.find((item) => item.id === sessionId);
+    if (!session || !isGeneratedSessionTitle(session)) return false;
+    const chat = chatSessions;
+    const firstUserMessage = content || chat.states[sessionId]?.turns.find((turn) => (
+      turn.role === 'user' && turn.content.trim()
+    ))?.content || '';
+    const title = firstMessageTitle(firstUserMessage);
+    if (!title || title === session.title) return false;
+    await api.updateSession(sessionId, { title });
+    session.title = title;
+    session.first_message = firstUserMessage;
+    return true;
   }
 
   function toggleSessionSelected(sessionId: string) {
@@ -605,8 +758,11 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function isSessionRunning(session: SessionSummary) {
-    const status = String(session.status || '').toLowerCase();
-    return !!session.is_streaming || !!session.active_stream_id || !!session.pending_user_message || ['running', 'active', 'queued', 'processing', 'replying'].some((item) => status.includes(item));
+    const status = String(session.execution?.latest_status || '').toLowerCase();
+    return !!session.is_streaming
+      || !!session.active_stream_id
+      || !!session.pending_user_message
+      || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(status);
   }
 
   function sessionAttention(session: SessionSummary) {
@@ -1233,6 +1389,7 @@ export const useAppStore = defineStore('app', () => {
   function openCompanion(tab: CompanionTab) {
     companionTab.value = tab;
     companionCollapsed.value = false;
+    hydrateActiveSessionPanels(tab === 'activity' || tab === 'evidence').catch(() => undefined);
   }
 
   function closeCompanion() {
@@ -1241,6 +1398,29 @@ export const useAppStore = defineStore('app', () => {
 
   function toggleCompanion() {
     companionCollapsed.value = !companionCollapsed.value;
+    if (!companionCollapsed.value) {
+      hydrateActiveSessionPanels(companionTab.value === 'activity' || companionTab.value === 'evidence')
+        .catch(() => undefined);
+    }
+  }
+
+  function openChatExecutionGraph(executionGraphId = '') {
+    chatExecutionGraphId.value = executionGraphId.trim();
+    chatExecutionGraphExpanded.value = true;
+    hydrateActiveSessionPanels(true).catch(() => undefined);
+  }
+
+  function closeChatExecutionGraph() {
+    chatExecutionGraphExpanded.value = false;
+    chatExecutionGraphId.value = '';
+  }
+
+  function toggleChatExecutionGraph() {
+    if (chatExecutionGraphExpanded.value) {
+      closeChatExecutionGraph();
+      return;
+    }
+    openChatExecutionGraph();
   }
 
   function selectSection(page: string, sectionId: string) {
@@ -1355,12 +1535,12 @@ export const useAppStore = defineStore('app', () => {
     invalidateApiReadCache();
     failClosedAuthorization();
     useProjectionRegistryStore().failClosedAuthorization('authorization transition started');
-    useChatSessionsStore().failClosedAllSessionAuthorization('authorization transition started');
+    chatSessions.failClosedAllSessionAuthorization('authorization transition started');
     const result = await api.authLogin(credential);
     invalidateApiReadCache();
     authEntitlement.value = result.entitlement || null;
     useProjectionRegistryStore().refreshAuthorization();
-    useChatSessionsStore().refreshAuthorization();
+    chatSessions.refreshAuthorization();
     await boot();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('cowd:auth-session-refreshed', {
@@ -1631,6 +1811,8 @@ export const useAppStore = defineStore('app', () => {
     sessionInputProjection,
     turnInbox,
     selectedActivity,
+    chatExecutionGraphExpanded,
+    chatExecutionGraphId,
     runStageSummary,
     currentRunFiles,
     workspaceRoot,
@@ -1682,10 +1864,12 @@ export const useAppStore = defineStore('app', () => {
     activeSession,
     boot,
     refreshSessions,
+    refreshSessionStatuses,
     loadMoreSessions,
     loadMessages,
     createSession,
     deleteSession,
+    ensureSessionTitleFromFirstMessage,
     toggleSessionSelected,
     clearSessionSelection,
     deleteSelectedSessions,
@@ -1733,6 +1917,9 @@ export const useAppStore = defineStore('app', () => {
     openCompanion,
     closeCompanion,
     toggleCompanion,
+    openChatExecutionGraph,
+    closeChatExecutionGraph,
+    toggleChatExecutionGraph,
     cancelSessionInput,
     reclassifySessionInput,
     setChatDisplayMode,

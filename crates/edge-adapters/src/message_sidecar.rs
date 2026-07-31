@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex as StdMutex, Weak};
 
 use chrono::Utc;
 use edge_contract::{
-    message::{MessageActionKind, MessageConnectorDescriptor},
+    message::{MessageAccountActionKind, MessageActionKind, MessageConnectorDescriptor},
     SurfaceFrame,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -18,6 +18,27 @@ use crate::platform::{
 };
 
 pub type AdapterFactory = fn(&serde_json::Value) -> PlatformResult<Box<dyn PlatformAdapter>>;
+
+#[derive(Debug)]
+pub struct MessageAccountControlResult {
+    pub payload: serde_json::Value,
+    pub activate_config: Option<serde_json::Value>,
+}
+
+#[async_trait::async_trait]
+pub trait MessageAccountControl: Send + Sync + 'static {
+    async fn handle(
+        &self,
+        action: MessageAccountActionKind,
+        payload: serde_json::Value,
+    ) -> PlatformResult<MessageAccountControlResult>;
+
+    async fn restore_config(&self) -> PlatformResult<Option<serde_json::Value>> {
+        Ok(None)
+    }
+}
+
+pub type MessageAccountControlFactory = fn() -> Arc<dyn MessageAccountControl>;
 
 #[derive(Default)]
 struct SessionLaneRegistry {
@@ -97,6 +118,7 @@ pub struct MessageManagedHandler {
     surface_id: &'static str,
     capabilities: &'static [&'static str],
     factory: AdapterFactory,
+    account_control: Option<Arc<dyn MessageAccountControl>>,
     runtime: Arc<MessageConnectorRuntime>,
 }
 
@@ -106,12 +128,14 @@ impl MessageManagedHandler {
         surface_id: &'static str,
         capabilities: &'static [&'static str],
         factory: AdapterFactory,
+        account_control: Option<Arc<dyn MessageAccountControl>>,
         events: mpsc::Sender<SurfaceFrame>,
     ) -> Self {
         Self {
             surface_id,
             capabilities,
             factory,
+            account_control,
             runtime: Arc::new(MessageConnectorRuntime::new(surface_id, events)),
         }
     }
@@ -124,6 +148,7 @@ impl ManagedEdgeHandler for MessageManagedHandler {
             self.surface_id,
             self.capabilities,
             self.factory,
+            self.account_control.clone(),
             frame,
             self.runtime.clone(),
         )
@@ -135,6 +160,15 @@ impl ManagedEdgeHandler for MessageManagedHandler {
 pub fn managed_message_factory(
     expected_profile: &'static str,
     factory: AdapterFactory,
+) -> ManagedHandlerFactory {
+    managed_message_factory_with_account_control(expected_profile, factory, None)
+}
+
+#[must_use]
+pub fn managed_message_factory_with_account_control(
+    expected_profile: &'static str,
+    factory: AdapterFactory,
+    account_control_factory: Option<MessageAccountControlFactory>,
 ) -> ManagedHandlerFactory {
     Arc::new(move |bootstrap, events| {
         let profile = crate::driver_profiles::driver_profile(expected_profile)
@@ -157,6 +191,7 @@ pub fn managed_message_factory(
                 profile.surface_id,
                 profile.capabilities,
                 factory,
+                account_control_factory.map(|factory| factory()),
                 events,
             )),
             profile
@@ -193,7 +228,15 @@ pub async fn run_stdio_platform_message_connector(
         }
         let response = match SurfaceFrame::decode_jsonl(&line) {
             Ok(frame) => {
-                handle_frame(surface_id, capabilities, factory, frame, runtime.clone()).await
+                handle_frame(
+                    surface_id,
+                    capabilities,
+                    factory,
+                    None,
+                    frame,
+                    runtime.clone(),
+                )
+                .await
             }
             Err(error) => SurfaceFrame::Error {
                 id: None,
@@ -211,6 +254,7 @@ async fn handle_frame(
     surface_id: &'static str,
     capabilities: &'static [&'static str],
     factory: AdapterFactory,
+    account_control: Option<Arc<dyn MessageAccountControl>>,
     frame: SurfaceFrame,
     runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
@@ -234,7 +278,16 @@ async fn handle_frame(
         } => configure_adapter(surface_id, id, config, factory, runtime).await,
         SurfaceFrame::Connect { id, .. } => connect_adapter(surface_id, id, runtime).await,
         SurfaceFrame::Disconnect { id, .. } => disconnect_adapter(surface_id, id, runtime).await,
-        SurfaceFrame::Health { id, .. } => health_frame(surface_id, id, runtime).await,
+        SurfaceFrame::Health { id, .. } => {
+            restore_account_adapter(
+                surface_id,
+                factory,
+                account_control.as_deref(),
+                runtime.clone(),
+            )
+            .await;
+            health_frame(surface_id, id, runtime).await
+        }
         SurfaceFrame::Send {
             id,
             recipient,
@@ -248,7 +301,18 @@ async fn handle_frame(
             action,
             payload,
             ..
-        } => action_frame(surface_id, id, action, payload, runtime).await,
+        } => {
+            action_frame(
+                surface_id,
+                id,
+                action,
+                payload,
+                factory,
+                account_control.as_deref(),
+                runtime,
+            )
+            .await
+        }
         SurfaceFrame::Handshake { id, .. } => SurfaceFrame::Error {
             id: Some(id),
             code: "surface_protocol_mismatch".to_string(),
@@ -275,46 +339,35 @@ async fn configure_adapter(
     factory: AdapterFactory,
     runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
-    match factory(&config) {
-        Ok(adapter) => match adapter.connect().await {
-            Ok(()) => {
-                let adapter: Arc<dyn PlatformAdapter> = Arc::from(adapter);
-                runtime.stop_receive().await;
-                let previous = runtime.adapter.write().await.replace(adapter.clone());
-                if let Some(previous) = previous {
-                    let _ = previous.disconnect().await;
-                }
-                runtime.configured.store(true, Ordering::Release);
-                runtime.connected.store(true, Ordering::Release);
-                runtime.set_error(None).await;
-                runtime.start_receive(adapter).await;
-                SurfaceFrame::Ok {
-                    id,
-                    payload: serde_json::json!({
-                        "status": "ready",
-                        "surface": surface_id,
-                        "transport": "edge-message-sidecar",
-                        "descriptor": message_descriptor_payload(surface_id, "ready", None, false),
-                    }),
-                }
-            }
-            Err(error) => {
-                let message = error.to_string();
-                runtime.stop_receive().await;
-                let previous = runtime.adapter.write().await.take();
-                if let Some(previous) = previous {
-                    let _ = previous.disconnect().await;
-                }
-                runtime.configured.store(true, Ordering::Release);
-                runtime.connected.store(false, Ordering::Release);
-                runtime.set_error(Some(message.clone())).await;
-                SurfaceFrame::Error {
-                    id: Some(id),
-                    code: format!("{surface_id}_connect_failed"),
-                    message,
-                }
-            }
+    match install_adapter(factory, &config, runtime).await {
+        Ok(()) => SurfaceFrame::Ok {
+            id,
+            payload: serde_json::json!({
+                "status": "ready",
+                "surface": surface_id,
+                "transport": "edge-message-sidecar",
+                "descriptor": message_descriptor_payload(surface_id, "ready", None, false),
+            }),
         },
+        Err((configured, message)) => SurfaceFrame::Error {
+            id: Some(id),
+            code: if configured {
+                format!("{surface_id}_connect_failed")
+            } else {
+                format!("{surface_id}_config_invalid")
+            },
+            message,
+        },
+    }
+}
+
+async fn install_adapter(
+    factory: AdapterFactory,
+    config: &serde_json::Value,
+    runtime: Arc<MessageConnectorRuntime>,
+) -> Result<(), (bool, String)> {
+    let adapter = match factory(config) {
+        Ok(adapter) => adapter,
         Err(error) => {
             let message = error.to_string();
             runtime.stop_receive().await;
@@ -325,11 +378,64 @@ async fn configure_adapter(
             runtime.configured.store(false, Ordering::Release);
             runtime.connected.store(false, Ordering::Release);
             runtime.set_error(Some(message.clone())).await;
-            SurfaceFrame::Error {
-                id: Some(id),
-                code: format!("{surface_id}_config_invalid"),
-                message,
+            return Err((false, message));
+        }
+    };
+    if let Err(error) = adapter.connect().await {
+        let message = error.to_string();
+        runtime.stop_receive().await;
+        let previous = runtime.adapter.write().await.take();
+        if let Some(previous) = previous {
+            let _ = previous.disconnect().await;
+        }
+        runtime.configured.store(true, Ordering::Release);
+        runtime.connected.store(false, Ordering::Release);
+        runtime.set_error(Some(message.clone())).await;
+        return Err((true, message));
+    }
+
+    let adapter: Arc<dyn PlatformAdapter> = Arc::from(adapter);
+    runtime.stop_receive().await;
+    let previous = runtime.adapter.write().await.replace(adapter.clone());
+    if let Some(previous) = previous {
+        let _ = previous.disconnect().await;
+    }
+    runtime.configured.store(true, Ordering::Release);
+    runtime.connected.store(true, Ordering::Release);
+    runtime.set_error(None).await;
+    runtime.start_receive(adapter).await;
+    Ok(())
+}
+
+async fn restore_account_adapter(
+    surface_id: &'static str,
+    factory: AdapterFactory,
+    account_control: Option<&dyn MessageAccountControl>,
+    runtime: Arc<MessageConnectorRuntime>,
+) {
+    if runtime.adapter().await.is_some() {
+        return;
+    }
+    let Some(account_control) = account_control else {
+        return;
+    };
+    match account_control.restore_config().await {
+        Ok(Some(config)) => {
+            if let Err((_, message)) = install_adapter(factory, &config, runtime.clone()).await {
+                runtime
+                    .set_error(Some(format!(
+                        "restore {surface_id} account failed: {message}"
+                    )))
+                    .await;
             }
+        }
+        Ok(None) => {}
+        Err(error) => {
+            runtime
+                .set_error(Some(format!(
+                    "restore {surface_id} account failed: {error}"
+                )))
+                .await;
         }
     }
 }
@@ -502,8 +608,22 @@ async fn action_frame(
     id: String,
     action: String,
     payload: serde_json::Value,
+    factory: AdapterFactory,
+    account_control: Option<&dyn MessageAccountControl>,
     runtime: Arc<MessageConnectorRuntime>,
 ) -> SurfaceFrame {
+    if let Some(account_action) = MessageAccountActionKind::parse(&action) {
+        return dispatch_account_action(
+            surface_id,
+            id,
+            account_action,
+            payload,
+            factory,
+            account_control,
+            runtime,
+        )
+        .await;
+    }
     let Some(kind) = MessageActionKind::parse(&action) else {
         return SurfaceFrame::Error {
             id: Some(id),
@@ -540,6 +660,58 @@ async fn action_frame(
         runtime.lanes.clone(),
     )
     .await
+}
+
+async fn dispatch_account_action(
+    surface_id: &'static str,
+    id: String,
+    action: MessageAccountActionKind,
+    payload: serde_json::Value,
+    factory: AdapterFactory,
+    account_control: Option<&dyn MessageAccountControl>,
+    runtime: Arc<MessageConnectorRuntime>,
+) -> SurfaceFrame {
+    let Some(account_control) = account_control else {
+        return SurfaceFrame::Error {
+            id: Some(id),
+            code: format!("{surface_id}_action_unsupported"),
+            message: format!(
+                "{surface_id} does not provide account action `{}`",
+                action.as_str()
+            ),
+        };
+    };
+
+    let result = match account_control.handle(action, payload).await {
+        Ok(result) => result,
+        Err(error) => {
+            return SurfaceFrame::Error {
+                id: Some(id),
+                code: format!("{surface_id}_account_action_failed"),
+                message: error.to_string(),
+            };
+        }
+    };
+
+    if let Some(config) = result.activate_config.as_ref() {
+        if let Err((configured, message)) = install_adapter(factory, config, runtime.clone()).await
+        {
+            return SurfaceFrame::Error {
+                id: Some(id),
+                code: if configured {
+                    format!("{surface_id}_connect_failed")
+                } else {
+                    format!("{surface_id}_config_invalid")
+                },
+                message,
+            };
+        }
+    }
+
+    SurfaceFrame::Ok {
+        id,
+        payload: result.payload,
+    }
 }
 
 async fn dispatch_lifecycle_action(
@@ -1002,6 +1174,125 @@ pub fn wechat_ilink_adapter(
     ))
 }
 
+#[derive(Debug, Default)]
+pub struct WechatIlinkAccountControl;
+
+#[async_trait::async_trait]
+impl MessageAccountControl for WechatIlinkAccountControl {
+    async fn handle(
+        &self,
+        action: MessageAccountActionKind,
+        payload: serde_json::Value,
+    ) -> PlatformResult<MessageAccountControlResult> {
+        use crate::platform::wechat_ilink::{
+            list_wechat_qr_accounts, poll_wechat_qr_login, request_wechat_qr_login,
+            save_wechat_qr_account,
+        };
+
+        match action {
+            MessageAccountActionKind::List => {
+                let accounts = list_wechat_qr_accounts(None)?
+                    .iter()
+                    .map(public_wechat_account)
+                    .collect::<Vec<_>>();
+                Ok(MessageAccountControlResult {
+                    payload: serde_json::json!({
+                        "status": "ok",
+                        "accounts": accounts,
+                    }),
+                    activate_config: None,
+                })
+            }
+            MessageAccountActionKind::LoginQrStart => {
+                let bot_type = payload
+                    .get("bot_type")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or("3");
+                let qr = request_wechat_qr_login(bot_type).await?;
+                Ok(MessageAccountControlResult {
+                    payload: serde_json::json!({
+                        "status": "waiting_for_scan",
+                        "qrcode": qr.qrcode,
+                        "scan_data": qr.scan_data,
+                        "qrcode_img_content": qr.qrcode_img_content,
+                        "base_url": qr.base_url,
+                    }),
+                    activate_config: None,
+                })
+            }
+            MessageAccountActionKind::LoginQrPoll => {
+                let qrcode = payload
+                    .get("qrcode")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| {
+                        config_error("account.login_qr.poll requires a non-empty qrcode")
+                    })?;
+                let base_url = payload
+                    .get("base_url")
+                    .and_then(serde_json::Value::as_str)
+                    .filter(|value| !value.trim().is_empty());
+                let status = poll_wechat_qr_login(qrcode, base_url).await?;
+                let Some(credentials) = status.credentials else {
+                    return Ok(MessageAccountControlResult {
+                        payload: serde_json::json!({
+                            "status": status.status,
+                            "base_url": status.base_url,
+                            "redirect_host": status.redirect_host,
+                        }),
+                        activate_config: None,
+                    });
+                };
+
+                save_wechat_qr_account(&credentials, None)?;
+                let account = public_wechat_account(&credentials);
+                Ok(MessageAccountControlResult {
+                    payload: serde_json::json!({
+                        "status": "connected",
+                        "login_status": status.status,
+                        "base_url": status.base_url,
+                        "redirect_host": status.redirect_host,
+                        "account": account,
+                    }),
+                    activate_config: Some(serde_json::json!({
+                        "credential_source": "qr_account",
+                        "account_id": credentials.account_id,
+                    })),
+                })
+            }
+        }
+    }
+
+    async fn restore_config(&self) -> PlatformResult<Option<serde_json::Value>> {
+        let latest = crate::platform::wechat_ilink::list_wechat_qr_accounts(None)?
+            .into_iter()
+            .next();
+        Ok(latest.map(|account| {
+            serde_json::json!({
+                "credential_source": "qr_account",
+                "account_id": account.account_id,
+            })
+        }))
+    }
+}
+
+fn public_wechat_account(
+    account: &crate::platform::wechat_ilink::WeChatQrCredentials,
+) -> serde_json::Value {
+    serde_json::json!({
+        "account_id": account.account_id,
+        "user_id": account.user_id,
+        "base_url": account.base_url,
+        "saved_at": account.saved_at,
+    })
+}
+
+#[must_use]
+pub fn wechat_ilink_account_control() -> Arc<dyn MessageAccountControl> {
+    Arc::new(WechatIlinkAccountControl)
+}
+
 pub fn config_error(message: impl Into<String>) -> PlatformError {
     PlatformError::ConfigError(message.into())
 }
@@ -1206,6 +1497,7 @@ mod tests {
             "fake",
             &["message.send.text"],
             test_adapter_factory,
+            None,
             events,
         );
 

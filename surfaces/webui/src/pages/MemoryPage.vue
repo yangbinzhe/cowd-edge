@@ -3,8 +3,8 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { Database, GitBranch, Network, RefreshCw, RotateCcw, Search, ShieldCheck } from 'lucide-vue-next';
+import { useRoute } from 'vue-router';
+import { RefreshCw, RotateCcw, Search } from 'lucide-vue-next';
 import { api } from '../api/client';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
@@ -14,16 +14,13 @@ import StatusPill from '../components/workbench/StatusPill.vue';
 import EvidenceObjectDetail from '../components/workbench/EvidenceObjectDetail.vue';
 import EvidenceTrace from '../components/workbench/EvidenceTrace.vue';
 import GraphSurface from '../components/graph/GraphSurface.vue';
-import { useAppStore } from '../stores/app';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptKnowledgeGraph } from '../adapters/graph/knowledge';
 import { useGraphQueryState } from '../composables/useGraphQueryState';
 
 const route = useRoute();
-const router = useRouter();
 const graphQuery = useGraphQueryState({ depth: 2 });
-const store = useAppStore();
 const loading = ref(false);
 const error = ref('');
 const status = ref<any>({});
@@ -75,6 +72,17 @@ let lastGraphRequest = '';
 const layerItems = computed(() => Array.isArray(layers.value?.layers) ? layers.value.layers : []);
 const entries = computed(() => Array.isArray(layerEntries.value?.entries) ? layerEntries.value.entries : []);
 const selectedEntry = computed(() => entries.value.find((entry: any) => entry.id === selectedEntryId.value) || null);
+const selectedLayerInfo = computed(() => layerItems.value.find((item: any) => item.layer === selectedLayer.value) || {});
+const layerRole = (layer: string) => {
+  switch (layer) {
+    case 'L0': return t('memory.layers.L0.role');
+    case 'L1': return t('memory.layers.L1.role');
+    case 'L2': return t('memory.layers.L2.role');
+    case 'L3': return t('memory.layers.L3.role');
+    case 'L4': return t('memory.layers.L4.role');
+    default: return layer;
+  }
+};
 const recallRows = computed(() => (Array.isArray(recallExplain.value?.results) ? recallExplain.value.results : []).map((item: any) => ({
   title: item.title || item.id,
   layer: item.source_layer || item.layer,
@@ -159,6 +167,27 @@ const backgroundExtraction = computed(() => status.value?.kernel_health?.backgro
 const backgroundExtractionStatus = computed(() => {
   if (backgroundExtraction.value?.last_error || Number(backgroundExtraction.value?.failed_requests || 0) > 0) return 'degraded';
   if (Number(backgroundExtraction.value?.pending_requests || 0) > 0) return 'active';
+  return 'ready';
+});
+const automaticGovernance = computed(() => (
+  maintenance.value?.automatic_governance
+  || knowledgeMaintenance.value?.automatic_governance
+  || status.value?.automatic_governance
+  || {}
+));
+const automaticGovernanceApplied = computed(() => (
+  Number(automaticGovernance.value?.auto_applied_duplicates || 0)
+  + Number(automaticGovernance.value?.auto_resolved_conflicts || 0)
+  + Number(automaticGovernance.value?.auto_archived_stale || 0)
+  + Number(automaticGovernance.value?.auto_validated_authority || 0)
+  + Number(automaticGovernance.value?.auto_refreshed_relationships || 0)
+  + Number(automaticGovernance.value?.auto_dismissed_obsolete || 0)
+  + Number(automaticGovernance.value?.consolidated_knowledge_packs || 0)
+  + Number(automaticGovernance.value?.auto_retired_knowledge_conflicts || 0)
+));
+const automaticGovernanceStatus = computed(() => {
+  if (Number(automaticGovernance.value?.errors?.length || 0) > 0) return 'degraded';
+  if (!automaticGovernance.value?.completed_at) return 'idle';
   return 'ready';
 });
 const memoryContext = computed(() => [
@@ -269,7 +298,7 @@ async function refresh() {
       api.memoryLinks(),
       api.memoryClusters(24, graphFocus.value, graphFilter.value, 0, graphDepth.value),
       api.memoryGraph(graphFocus.value, graphDepth.value, graphFilter.value, 80, graphCursor.value),
-      api.memoryMaintenance(),
+      api.memoryMaintenance('open'),
       api.memoryPerformance(),
       api.memoryRuntime(),
       api.memoryContextEnvelope('', 20),
@@ -412,12 +441,12 @@ async function deleteEntry() {
 
 async function scanMaintenance() {
   maintenanceScan.value = await api.scanMemoryMaintenance({ max_candidates: 40 });
-  maintenance.value = maintenanceScan.value;
+  maintenance.value = await api.memoryMaintenance('open');
 }
 
 async function markCandidate(id: string, nextStatus: string) {
   actionResult.value = await api.updateMemoryMaintenance(id, nextStatus);
-  maintenance.value = await api.memoryMaintenance();
+  maintenance.value = await api.memoryMaintenance('open');
 }
 
 async function planStructuredIngest() {
@@ -439,11 +468,6 @@ function summarize(value: any, fallback = '-') {
 
 function selectStructuredRow(row: Record<string, unknown>) {
   selectedDetail.value = (row.raw as Record<string, unknown> | undefined) || row;
-}
-
-async function selectMemorySection(sectionId: string) {
-  store.selectSection('memory', sectionId);
-  await router.replace({ query: { ...route.query, section: sectionId } });
 }
 
 onMounted(refresh);
@@ -509,22 +533,30 @@ watch(
     </section>
 
     <section class="memory-workbench">
-      <nav class="memory-sections" :aria-label="t('page.memory.page.aria-label.6f075355c0')">
-        <button type="button" @click="selectMemorySection('layers')"><Database :size="15" />{{ t('page.memory.page.text.da827dc4ae') }}</button>
-        <button type="button" @click="selectMemorySection('recall')"><Search :size="15" />{{ t('page.memory.page.text.58e722778f') }}</button>
-        <button type="button" @click="selectMemorySection('context-envelope')"><Network :size="15" />{{ t('memory.contextEnvelope.label') }}</button>
-        <button type="button" @click="selectMemorySection('knowledge-governance')"><ShieldCheck :size="15" />{{ t('memory.knowledgeGovernance.label') }}</button>
-        <button type="button" @click="selectMemorySection('graph')"><GitBranch :size="15" />{{ t('page.memory.page.text.c676fc9eca') }}</button>
-        <button type="button" @click="selectMemorySection('maintenance')"><ShieldCheck :size="15" />{{ t('page.memory.page.text.44500c4e90') }}</button>
-        <button type="button" @click="selectMemorySection('structured-core')"><Network :size="15" />{{ t('page.memory.page.text.23d5f43eb0') }}</button>
-      </nav>
-
       <main class="memory-main">
         <section id="memory-layers" class="management-panel memory-panel wide" v-show="isSectionActive('layers')" data-section="layers">
           <header>
             <h2>{{ t('page.memory.page.text.59a9b03328') }}</h2>
             <span>{{ formatCount('entries', entries.length) }}</span>
           </header>
+          <div class="memory-layer-strip">
+            <button
+              v-for="layer in layerItems"
+              :key="layer.layer"
+              type="button"
+              class="memory-layer-card"
+              :class="{ active: selectedLayer === layer.layer }"
+              :data-state="layer.state"
+              @click="selectedLayer = layer.layer; loadLayer()"
+            >
+              <span>
+                <strong>{{ layer.layer }}</strong>
+                <StatusPill :status="layer.state === 'ready_empty' ? 'idle' : layer.state" />
+              </span>
+              <b>{{ layer.entry_count || 0 }}</b>
+              <small>{{ layerRole(layer.layer) }}</small>
+            </button>
+          </div>
           <div class="memory-split">
             <aside class="memory-list">
               <div class="filter-row">
@@ -533,6 +565,12 @@ watch(
                 </select>
                 <StatusPill :status="layerEntries.enabled === false ? 'offline' : 'ready'" />
               </div>
+              <p class="memory-layer-role">
+                {{ layerRole(selectedLayer) }}
+                <span v-if="selectedLayerInfo.write_mode === 'governed_promotion_only'">
+                  {{ t('memory.layers.governedOnly') }}
+                </span>
+              </p>
               <button
                 v-for="entry in entries"
                 :key="entry.id"
@@ -582,7 +620,7 @@ watch(
                 </label>
               </div>
               <div class="button-row">
-                <button class="primary-action" type="button" @click="createEntry">{{ t('page.memory.page.text.ca1c3fc9cf') }}</button>
+                <button class="primary-action" type="button" :disabled="selectedLayer === 'L4'" @click="createEntry">{{ t('page.memory.page.text.ca1c3fc9cf') }}</button>
                 <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="updateEntry">{{ t('page.memory.page.text.9644fbecf5') }}</button>
                 <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="inspectLifecycle">{{ t('page.memory.page.text.239620d0a8') }}</button>
                 <button class="ghost-action" type="button" :disabled="!selectedEntry" @click="deleteEntry">{{ t('page.memory.page.text.a81ea49866') }}</button>
@@ -593,7 +631,7 @@ watch(
           </div>
         </section>
 
-        <section id="memory-recall" class="management-panel memory-panel" v-show="isSectionActive('recall')" data-section="recall">
+        <section id="memory-recall" class="management-panel memory-panel wide" v-show="isSectionActive('recall')" data-section="recall">
           <header>
             <h2>{{ t('page.memory.page.text.74f1596f5e') }}</h2>
             <span>{{ formatCount('matches', recallExplain.total || 0) }}</span>
@@ -717,7 +755,7 @@ watch(
           <ObjectInspectorDrawer :title="t('memory.knowledgeGovernance.raw')" :data="knowledge" />
         </section>
 
-        <section id="memory-graph" class="management-panel memory-panel" v-show="isSectionActive('graph')" data-section="graph">
+        <section id="memory-graph" class="management-panel memory-panel wide" v-show="isSectionActive('graph')" data-section="graph">
           <header>
             <h2>{{ t('page.memory.page.text.8af20392f9') }}</h2>
             <span>{{ t('common.shownCount', { count: entityRows.length, unit: t('unit.entities') }) }}</span>
@@ -775,11 +813,33 @@ watch(
           <ObjectInspectorDrawer :title="t('page.memory.page.title.c2bbd9a5f2')" :data="{ clusters, runtime, links }" />
         </section>
 
-        <section id="memory-maintenance" class="management-panel memory-panel" v-show="isSectionActive('maintenance')" data-section="maintenance">
+        <section id="memory-maintenance" class="management-panel memory-panel wide" v-show="isSectionActive('maintenance')" data-section="maintenance">
           <header>
             <h2>{{ t('page.memory.page.text.44500c4e90') }}</h2>
             <span>{{ formatCount('candidates', candidateRows.length) }}</span>
           </header>
+          <section class="metric-row compact">
+            <article class="metric-card" :data-tone="automaticGovernanceStatus === 'ready' ? 'success' : automaticGovernanceStatus === 'degraded' ? 'danger' : 'info'">
+              <span>{{ t('memory.automaticGovernance.lastRun') }}</span>
+              <strong>{{ displayStatus(automaticGovernanceStatus) }}</strong>
+              <small>{{ automaticGovernance.completed_at || t('memory.automaticGovernance.notRun') }}</small>
+            </article>
+            <article class="metric-card" data-tone="success">
+              <span>{{ t('memory.automaticGovernance.autoApplied') }}</span>
+              <strong>{{ automaticGovernanceApplied }}</strong>
+              <small>{{ t('memory.automaticGovernance.mode', { mode: automaticGovernance.mode || '-' }) }}</small>
+            </article>
+            <article class="metric-card" :data-tone="Number(automaticGovernance.pending_human_review || 0) > 0 ? 'warn' : 'success'">
+              <span>{{ t('memory.automaticGovernance.pendingReview') }}</span>
+              <strong>{{ automaticGovernance.pending_human_review || 0 }}</strong>
+              <small>{{ t('memory.automaticGovernance.pendingReviewDetail') }}</small>
+            </article>
+            <article class="metric-card" :data-tone="Number(automaticGovernance.errors?.length || 0) > 0 ? 'danger' : 'success'">
+              <span>{{ t('memory.automaticGovernance.errors') }}</span>
+              <strong>{{ automaticGovernance.errors?.length || 0 }}</strong>
+              <small>{{ automaticGovernance.errors?.[0] || t('memory.automaticGovernance.noErrors') }}</small>
+            </article>
+          </section>
           <button class="primary-action" type="button" @click="scanMaintenance">{{ t('page.memory.page.text.9dffc03a7b') }}</button>
           <RequestReceipt :receipt="maintenanceScan || actionResult" :title="t('page.memory.page.title.ba22f93cf4')" />
           <div class="maintenance-list">

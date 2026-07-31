@@ -2,10 +2,12 @@
 import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { Network, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
+import { qrImageSource } from '../utils/qrImage';
+import { resolveWechatQrPollState } from '../utils/wechatQr';
 import DataTable from '../components/workbench/DataTable.vue';
 import EmptyState from '../components/workbench/EmptyState.vue';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
@@ -36,6 +38,13 @@ const idempotencyKey = ref('');
 const platformName = ref('wechat-ilink');
 const wechatBotType = ref('3');
 const wechatQrCode = ref('');
+const wechatQrImage = ref('');
+const wechatQrBaseUrl = ref('');
+const wechatQrStatus = ref('idle');
+const wechatQrError = ref('');
+let wechatQrPollTimer: ReturnType<typeof setInterval> | undefined;
+let wechatQrPollPending = false;
+let wechatQrPollFailures = 0;
 const connectorServiceId = ref('');
 const connectorServiceToolId = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
@@ -79,6 +88,7 @@ const sourceSnapshotRowsText = ref(JSON.stringify([
 const sourceSnapshotError = ref('');
 
 const accounts = computed(() => Array.isArray(state.value.accounts?.accounts) ? state.value.accounts.accounts : []);
+const wechatAccounts = computed(() => Array.isArray(state.value.wechatAccounts?.accounts) ? state.value.wechatAccounts.accounts : []);
 const capabilities = computed(() => Array.isArray(state.value.capabilities?.capabilities) ? state.value.capabilities.capabilities : []);
 const capabilityContract = computed(() => state.value.capabilityContract || {});
 const capabilityCoverage = computed(() => capabilityContract.value.coverage || {});
@@ -674,11 +684,12 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextCapabilities, nextResources, mcp, servicesData, connectorSources, edge, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextWechatAccounts, nextCapabilities, nextResources, mcp, servicesData, connectorSources, edge, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
       api.connectorAccounts(),
+      api.wechatIlinkAccounts(),
       api.connectorCapabilities(),
       api.connectorResources(),
       api.connectorMcpServers(),
@@ -699,7 +710,7 @@ async function refresh() {
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorSources, connectorServiceTools: serviceTools, edge, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
+    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, wechatAccounts: nextWechatAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorSources, connectorServiceTools: serviceTools, edge, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -720,14 +731,70 @@ async function loadPlatform() {
 }
 
 async function startWechatQr() {
-  actionResult.value = await api.wechatIlinkQrStart(wechatBotType.value);
-  wechatQrCode.value = actionResult.value?.data?.qrcode || actionResult.value?.data?.qr_code || wechatQrCode.value;
+  stopWechatQrPolling();
+  wechatQrError.value = '';
+  wechatQrPollFailures = 0;
+  wechatQrStatus.value = 'starting';
+  try {
+    actionResult.value = await api.wechatIlinkQrStart(wechatBotType.value);
+    const payload = actionResult.value?.data?.payload || actionResult.value?.data || {};
+    wechatQrCode.value = payload.qrcode || payload.qr_code || '';
+    wechatQrBaseUrl.value = payload.base_url || '';
+    wechatQrStatus.value = payload.status || (wechatQrCode.value ? 'waiting_for_scan' : 'error');
+    wechatQrImage.value = await qrImageSource(
+      payload.qrcode_img_content || '',
+      payload.scan_data || wechatQrCode.value,
+    );
+    if (wechatQrCode.value) {
+      wechatQrPollTimer = setInterval(() => {
+        void pollWechatQr();
+      }, 2_000);
+    }
+  } catch (err) {
+    wechatQrStatus.value = 'error';
+    wechatQrError.value = err instanceof Error ? err.message : String(err);
+  }
 }
 
 async function pollWechatQr() {
-  if (!wechatQrCode.value) return;
-  actionResult.value = await api.wechatIlinkQrPoll(wechatQrCode.value, location.origin);
+  if (!wechatQrCode.value || wechatQrPollPending) return;
+  wechatQrPollPending = true;
+  try {
+    actionResult.value = await api.wechatIlinkQrPoll(wechatQrCode.value, wechatQrBaseUrl.value || undefined);
+    const payload = actionResult.value?.data?.payload || actionResult.value?.data || {};
+    const next = resolveWechatQrPollState(payload, wechatQrBaseUrl.value);
+    wechatQrStatus.value = next.status;
+    wechatQrBaseUrl.value = next.baseUrl;
+    wechatQrError.value = '';
+    wechatQrPollFailures = 0;
+    if (wechatQrStatus.value === 'connected') {
+      state.value = {
+        ...(state.value || {}),
+        wechatAccounts: await api.wechatIlinkAccounts(),
+      };
+    }
+    if (next.terminal) stopWechatQrPolling();
+  } catch (err) {
+    wechatQrPollFailures += 1;
+    wechatQrStatus.value = 'retrying';
+    wechatQrError.value = err instanceof Error ? err.message : String(err);
+    if (wechatQrPollFailures >= 5) {
+      wechatQrStatus.value = 'error';
+      stopWechatQrPolling();
+    }
+  } finally {
+    wechatQrPollPending = false;
+  }
 }
+
+function stopWechatQrPolling() {
+  if (wechatQrPollTimer) {
+    clearInterval(wechatQrPollTimer);
+    wechatQrPollTimer = undefined;
+  }
+}
+
+onBeforeUnmount(stopWechatQrPolling);
 
 async function loadConnectorServiceTools() {
   if (!connectorServiceId.value) return;
@@ -1042,15 +1109,20 @@ onMounted(refresh);
             <input v-model="wechatBotType" type="text" />
           </label>
         </div>
-        <label class="field-line">
-          {{ t('template.pages.gatewaypage.88c0393033') }}
-          <input v-model="wechatQrCode" type="text" />
-        </label>
+        <div v-if="wechatQrCode" class="wechat-qr-card">
+          <img v-if="wechatQrImage" :src="wechatQrImage" :alt="t('gateway.wechat.qrAlt')" />
+          <div class="wechat-qr-copy">
+            <strong>{{ t('gateway.wechat.scanTitle') }}</strong>
+            <span>{{ t('gateway.wechat.scanDetail') }}</span>
+            <StatusPill :status="wechatQrStatus" />
+            <p v-if="wechatQrError" class="field-error">{{ wechatQrError }}</p>
+          </div>
+        </div>
         <div class="button-row">
           <button class="ghost-action" type="button" @click="loadPlatform">{{ t('page.gateway.page.text.997144189c') }}</button>
           <button class="ghost-action" type="button" @click="startWechatQr">{{ t('page.gateway.page.text.5b05d63e12') }}</button>
-          <button class="ghost-action" type="button" :disabled="!wechatQrCode" @click="pollWechatQr">{{ t('page.gateway.page.text.45ad9b8b7f') }}</button>
         </div>
+        <DataTable v-if="wechatAccounts.length" :rows="wechatAccounts" :columns="['account_id', 'user_id', 'saved_at']" />
         <DataTable v-if="connectorServiceRows.length" searchable copyable row-key="id" :rows="connectorServiceRows" :columns="['id', 'provider', 'family', 'mode']" @row-click="selectedDetail = $event" />
         <label class="field-line">
           {{ t('page.gateway.field.connectorService') }}
@@ -1144,7 +1216,7 @@ onMounted(refresh);
         <ObjectInspectorDrawer :title="t('page.gateway.page.title.023d50a0fe')" :data="state.crossPlane || {}" />
       </section>
 
-      <section class="management-panel gateway-panel" v-show="isSectionActive('identities')" data-section="identities">
+      <section class="management-panel gateway-panel wide" v-show="isSectionActive('identities')" data-section="identities">
         <header>
           <h2>{{ t('page.gateway.page.text.1a7b03d75e') }}</h2>
           <span>{{ formatCount('identities', identities.length) }}</span>
