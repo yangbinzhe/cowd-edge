@@ -298,6 +298,7 @@ export const useAppStore = defineStore('app', () => {
   const sessionHasMore = ref(true);
   const sessionLoadingMore = ref(false);
   const selectedSessionIds = ref<string[]>([]);
+  const sessionBulkDeleteProgress = ref({ active: false, done: 0, total: 0 });
   const openTurnActivity = ref<Record<string, boolean>>({});
   const pinnedSessionIds = ref<string[]>(readStoredArray(PINNED_SESSION_KEY));
   const sessionViewedCounts = ref<Record<string, number>>(readStoredRecord(VIEWED_SESSION_KEY));
@@ -414,14 +415,29 @@ export const useAppStore = defineStore('app', () => {
         ref: attachment.ref_id,
       });
     });
-    const events = Array.isArray(currentTimeline.value?.events) ? currentTimeline.value.events : [];
-    events.forEach((event: any) => {
-      const text = JSON.stringify(event);
-      const matches = text.match(/(?:resource:\/\/|path["': ]+)([A-Za-z0-9_./@-]+\.[A-Za-z0-9]+)/g) || [];
-      matches.forEach((match) => {
-        const path = match.replace(/^resource:\/\//, '').replace(/^path["': ]+/, '');
-        if (!fileMap.has(path)) fileMap.set(path, { path, kind: 'runtime-ref', status: event.status || 'observed', ref: event.kind || event.type });
-      });
+    const typedRefs = [
+      ...(Array.isArray(chatSessions.active?.turnProjection?.turns)
+        ? chatSessions.active.turnProjection.turns.flatMap((turn: any) => turn?.activity_events || [])
+        : []),
+      ...activity.value,
+    ].flatMap((event: any) => [
+      ...(Array.isArray(event?.raw?.refs) ? event.raw.refs : []),
+      ...(Array.isArray(event?.refs) ? event.refs : []),
+    ]).filter((reference: any) => (
+      ['file', 'resource'].includes(String(reference?.type || reference?.kind || '').toLowerCase())
+    ));
+    typedRefs.forEach((reference: any) => {
+      const path = String(reference?.path || reference?.id || reference?.ref || '')
+        .replace(/^resource:\/\//, '')
+        .trim();
+      if (path && !fileMap.has(path)) {
+        fileMap.set(path, {
+          path,
+          kind: String(reference?.type || reference?.kind || 'runtime-ref'),
+          status: 'observed',
+          ref: String(reference?.ref || reference?.id || path),
+        });
+      }
     });
     return Array.from(fileMap.values());
   });
@@ -624,9 +640,7 @@ export const useAppStore = defineStore('app', () => {
     if (!sessionId) return;
     const generation = activeSessionLoadGeneration;
     const chat = chatSessions;
-    const detailHydration = companionTab.value === 'evidence'
-      ? chat.hydrateRuntimeDetails(sessionId, includeProjection)
-      : chat.hydrateExecutionIndex(sessionId, includeProjection);
+    const detailHydration = chat.hydrateRuntimeDetails(sessionId, includeProjection);
     await Promise.allSettled([
       detailHydration,
       loadAttachments(sessionId, generation),
@@ -789,19 +803,47 @@ export const useAppStore = defineStore('app', () => {
 
   async function deleteSelectedSessions() {
     const ids = [...selectedSessionIds.value];
+    if (!ids.length) return { deleted: 0, failures: [] };
+    sessionBulkDeleteProgress.value = { active: true, done: 0, total: ids.length };
     const failures: any[] = [];
-    for (const id of ids) {
-      try {
-        await deleteSession(id);
-      } catch (error) {
-        failures.push({ id, error: error instanceof Error ? error.message : String(error) });
+    const deleted = new Set<string>();
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(4, ids.length) }, async () => {
+      while (cursor < ids.length) {
+        const id = ids[cursor];
+        cursor += 1;
+        try {
+          await api.deleteSession(id);
+          deleted.add(id);
+        } catch (error) {
+          failures.push({ id, error: error instanceof Error ? error.message : String(error) });
+        } finally {
+          sessionBulkDeleteProgress.value = {
+            active: true,
+            done: sessionBulkDeleteProgress.value.done + 1,
+            total: ids.length,
+          };
+        }
       }
+    });
+    await Promise.all(workers);
+    const chat = chatSessions;
+    deleted.forEach((id) => {
+      chat.setDraft(id, '');
+      chat.close(id);
+    });
+    sessions.value = sessions.value.filter((session) => !deleted.has(session.id));
+    selectedSessionIds.value = failures.map((failure) => failure.id);
+    if (deleted.has(activeSessionId.value)) {
+      activeSessionId.value = sessions.value[0]?.id || '';
+      if (activeSessionId.value) await loadMessages(activeSessionId.value);
     }
+    sessionBulkDeleteProgress.value = { active: false, done: ids.length, total: ids.length };
     if (failures.length) {
       selectedActivity.value = { kind: 'session.bulk_delete', failures };
       companionTab.value = 'inspector';
     }
-    return { deleted: ids.length - failures.length, failures };
+    return { deleted: deleted.size, failures };
   }
 
   async function branchSession(sessionId: string) {
@@ -1389,7 +1431,7 @@ export const useAppStore = defineStore('app', () => {
   function openCompanion(tab: CompanionTab) {
     companionTab.value = tab;
     companionCollapsed.value = false;
-    hydrateActiveSessionPanels(tab === 'activity' || tab === 'evidence').catch(() => undefined);
+    hydrateActiveSessionPanels(tab === 'activity').catch(() => undefined);
   }
 
   function closeCompanion() {
@@ -1399,7 +1441,7 @@ export const useAppStore = defineStore('app', () => {
   function toggleCompanion() {
     companionCollapsed.value = !companionCollapsed.value;
     if (!companionCollapsed.value) {
-      hydrateActiveSessionPanels(companionTab.value === 'activity' || companionTab.value === 'evidence')
+      hydrateActiveSessionPanels(companionTab.value === 'activity')
         .catch(() => undefined);
     }
   }
@@ -1846,6 +1888,7 @@ export const useAppStore = defineStore('app', () => {
     sessionHasMore,
     sessionLoadingMore,
     selectedSessionIds,
+    sessionBulkDeleteProgress,
     pinnedSessionIds,
     sessionRenderLimit,
     sessionRenderHasMore,

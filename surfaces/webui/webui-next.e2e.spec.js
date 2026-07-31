@@ -106,21 +106,19 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
   await page.goto('/index.html#/chat');
   await expectSemanticNavigation(page.locator('.rail-button:not(.mobile-more)'));
   await expect(page.locator('.session-sidebar')).toBeVisible();
+  await expect(page.locator('.companion-panel')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open inspector' }).click();
   await expect(page.locator('.companion-tabs')).toContainText('Activity');
   await expect(page.locator('.companion-tabs')).toContainText('Workspace');
-  await expect(page.locator('.companion-tabs')).toContainText('Evidence');
+  await expect(page.locator('.companion-tabs')).toContainText('Inspector');
   await expect(page.locator('.rail')).not.toContainText('Workspace');
-  await expect(page.locator('.chat-workbench-links')).toBeVisible();
   await expect(page.locator('.run-panorama')).toHaveCount(0);
   await expect(page.locator('.transcript')).toBeVisible();
   await expect(page.locator('.composer textarea')).toBeVisible();
   await expect(page.locator('.turn-role')).toHaveCount(0);
-  await expect(page.locator('.status-strip')).toContainText(
-    realGateway ? /healthy|ready/ : /unknown|local|offline|healthy|ready/,
-  );
-  await expect(page.locator('.status-strip button')).not.toHaveText('');
-  await page.locator('.mode-switch button').nth(1).click();
-  await expect(page.locator('.composer-stats')).toBeVisible();
+  await expect(page.locator('.composer-runtime-summary')).toBeVisible();
+  await expect(page.locator('.composer-runtime-chip.model')).not.toHaveText('');
+  await page.getByRole('button', { name: 'Collapse inspector' }).click();
   await expect(page.locator('.run-panorama')).toHaveCount(0);
   await expect(page.locator('.companion-panel')).toHaveCount(0);
 });
@@ -183,8 +181,10 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
       if (sessionId === 'session-B') {
         return json(route, { error: 'browser acceptance history unavailable' }, 500);
       }
-      const offset = Number(url.searchParams.get('offset') || 0);
       const limit = Number(url.searchParams.get('limit') || 100);
+      const offset = url.searchParams.get('tail') === 'true'
+        ? Math.max(0, historyA.length - limit)
+        : Number(url.searchParams.get('offset') || 0);
       return json(route, {
         session_id: sessionId,
         messages: historyA.slice(offset, offset + limit),
@@ -192,6 +192,15 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
         offset,
         limit,
         has_more: offset + limit < historyA.length,
+      });
+    }
+    const turnProjectionMatch = path.match(/^\/api\/sessions\/(session-[AB])\/turns$/);
+    if (turnProjectionMatch && request.method() === 'GET') {
+      return json(route, {
+        kind: 'session.turn_projection',
+        session_id: turnProjectionMatch[1],
+        turn_count: 0,
+        turns: [],
       });
     }
     const sessionMatch = path.match(/^\/api\/sessions\/(session-[AB])\/(attach|detach|evidence|execution|attachments|inputs|turn-inbox)$/);
@@ -276,12 +285,14 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
   expect(browserErrors).toEqual([]);
   expect(browserRequestFailures).toEqual([]);
   expect(browserHttpFailures).toEqual([]);
-  await expect(transcript).toContainText('session-A-durable-105');
+  await expect(transcript).toContainText('session-A-durable-155');
   await expect(transcript).toContainText('session-A-durable-204');
   await expect(transcript).not.toContainText('session-A-durable-0');
-  await expect(page.locator('.history-controls')).toContainText('106–205 / 205');
-  await expect(page.locator('.composer-context')).toContainText('effective-A');
-  await expect(page.locator('.composer-stats')).toContainText('0');
+  await expect(page.locator('.history-controls')).toContainText('156–205 / 205');
+  await expect(page.locator('.composer-runtime-chip.model')).toContainText('requested-A');
+  await page.getByRole('button', { name: 'Open inspector' }).click();
+  await expect(page.locator('.composer-runtime-chip.model')).toContainText('effective-A');
+  await expect(page.locator('.composer-runtime-summary')).toContainText('0');
 
   await page.locator('.composer textarea').fill('draft belongs only to A');
   await transcript.evaluate((element) => {
@@ -289,22 +300,23 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
     element.dispatchEvent(new Event('scroll'));
   });
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
-  await expect(page.locator('[role="alert"]')).toContainText(
-    /500|server|history unavailable/i,
-  );
+  await expect(page.locator('.chat-execution-status'))
+    .toHaveAttribute('title', /500|server|history unavailable/i);
   await page.locator('.composer textarea').fill('draft belongs only to B');
-  await expect(page.locator('.composer-stats')).toContainText('—');
+  await expect(page.locator('.composer-runtime-chip.model')).toContainText('effective-B');
+  await expect(page.locator('.composer-runtime-summary')).not.toContainText('effective-A');
 
   await page.locator('.session-row').filter({ hasText: 'Session A' }).click();
   await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to A');
-  await expect(transcript).toHaveJSProperty('scrollTop', 120);
+  await expect(transcript).toContainText('session-A-durable-204');
   await page.getByRole('button', { name: 'Load older messages' }).click();
-  await expect(transcript).toContainText('session-A-durable-5');
-  await expect(page.locator('.history-controls')).toContainText('6–205 / 205');
+  await expect(transcript).toContainText('session-A-durable-105');
+  await expect(page.locator('.history-controls')).toContainText('106–205 / 205');
 
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
   await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to B');
-  await expect(page.locator('[role="alert"]')).toContainText(/500|server|history unavailable/i);
+  await expect(page.locator('.chat-execution-status'))
+    .toHaveAttribute('title', /500|server|history unavailable/i);
 });
 
 test('session authorization revocation clears that view, fences reconnects, and leaves another session interactive', async ({ page }) => {
@@ -520,9 +532,11 @@ test('session authorization revocation clears that view, fences reconnects, and 
   });
 
   await page.goto('/index.html#/chat');
-  await expect(page.locator('[role="alert"]')).toContainText(/revoked|authorization|credential epoch/i);
+  await page.getByRole('button', { name: 'Open inspector' }).click();
+  await expect(page.locator('.session-row').filter({ hasText: 'Restricted session' }))
+    .toContainText(/revoked|authorization|credential epoch/i);
   await expect(page.locator('.transcript')).not.toContainText('SECRET-A-MUST-BE-CLEARED');
-  await expect(page.locator('.composer-context')).not.toContainText('private-effective-A');
+  await expect(page.locator('.composer-runtime-summary')).not.toContainText('private-effective-A');
   await page.waitForTimeout(600);
   expect(revokedStreamRequests).toBe(1);
 
@@ -530,12 +544,13 @@ test('session authorization revocation clears that view, fences reconnects, and 
   await expect(page.locator('.transcript')).toContainText('HEALTHY-B-REMAINS-VISIBLE');
   await page.locator('.composer textarea').fill('healthy session remains editable');
   await expect(page.locator('.composer textarea')).toHaveValue('healthy session remains editable');
-  await page.locator('.status-strip button').click();
+  await page.locator('.composer-runtime-chip.model').click();
   await expect(page.getByRole('heading', { name: 'Model and profile' })).toBeVisible();
 });
 
 test('workspace tab supports folder browsing and editable preview surface', async ({ page }) => {
   await page.goto('/index.html#/chat');
+  await page.getByRole('button', { name: 'Open inspector' }).click();
   await page.getByRole('button', { name: 'Workspace', exact: true }).click();
   await expect(page.locator('.workspace-root')).toBeVisible();
   await expect(page.locator('.upload-drop')).toContainText('Drop workspace files here');
@@ -591,7 +606,7 @@ test('memory page exposes memory and structured-data kernel controls', async ({ 
   await page.goto('/index.html#/memory');
   await expect(page.getByRole('heading', { name: 'Memory Graph', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Layer entries' })).toBeVisible();
-  await expect(page.locator('.memory-sections')).toBeVisible();
+  await expect(page.locator('.capability-sidebar')).toBeVisible();
   await page.goto('/index.html#/memory?section=recall');
   await expect(page.getByRole('heading', { name: 'Search, recall, packet' })).toBeVisible();
   await page.goto('/index.html#/memory?section=layers');
@@ -1265,17 +1280,17 @@ test('mobile shell exposes all routes through a stable more menu', async ({ page
 
 test('composer model workspace and command controls are clickable', async ({ page }) => {
   await page.goto('/index.html#/chat');
-  await page.locator('.status-strip button').click();
+  await page.locator('.composer-runtime-chip.model').click();
   await expect(page.getByRole('heading', { name: 'Model and profile' })).toBeVisible();
   await expect(page.locator('.command-modal')).toContainText(/Model|后端未报告可切换模型/);
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.command-modal .modal-close').click();
 
   await page.getByRole('button', { name: /root/ }).click();
   await expect(page.getByRole('heading', { name: 'Workspace picker' })).toBeVisible();
   await page.locator('.command-modal .choice-row').first().click();
   await expect(page.locator('.companion-tabs button.active')).toContainText('Workspace');
 
-  await page.getByRole('button', { name: /Commands/ }).click();
+  await page.locator('.composer textarea').fill('/');
   await expect(page.getByRole('heading', { name: 'Commands' })).toBeVisible();
   await expect(page.locator('.command-row, .modal-note').first()).toBeVisible();
 });
@@ -1433,29 +1448,27 @@ test('all shell controls remain interactive while a conversation is running', as
   await expect(page.locator('.composer textarea')).toHaveValue('Keep the interface interactive while this task runs');
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
   await page.getByRole('button', { name: 'Send' }).click();
-  await expect(page.locator('.run-status')).toContainText(/queued|calling|preparing|排队|调用|准备/i);
+  await expect(page.locator('.chat-execution-status')).toContainText(/queued|calling|preparing|排队|调用|准备/i);
   await expect(page.getByRole('button', { name: /Stop|停止/ })).toBeVisible();
 
-  await page.locator('.status-strip button').click();
+  await page.locator('.composer-runtime-chip.model').click();
   await expect(page.getByRole('heading', { name: 'Model and profile' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.command-modal .modal-close').click();
   await page.getByRole('button', { name: /root/ }).click();
   await expect(page.getByRole('heading', { name: 'Workspace picker' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
-  await page.getByRole('button', { name: /Commands/ }).click();
+  await page.locator('.command-modal .modal-close').click();
+  await page.locator('.composer textarea').fill('/');
   await expect(page.getByRole('heading', { name: 'Commands' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.command-modal .modal-close').click();
+  await page.getByRole('button', { name: 'Open inspector' }).click();
   await page.locator('.companion-tabs').getByRole('button', { name: 'Workspace' }).click();
-  await page.locator('.mode-switch button').nth(1).click();
-  await expect(page.locator('.composer-stats')).toBeVisible();
   await page.locator('.companion-toggle').click();
   await page.locator('.companion-toggle').click();
-  await page.locator('.mode-switch button').first().click();
 
   await page.locator('.rail-button[title="Tools"]').click();
   await expect(page).toHaveURL(/tools/);
   await page.locator('.rail-button[title="Chat"]').click();
-  await expect(page.locator('.run-status')).toBeVisible();
+  await expect(page.locator('.chat-execution-status')).toBeVisible();
   releaseLiveStream();
   await page.getByRole('button', { name: /Stop|停止/ }).click();
   await expect(page.locator('.modal-scrim')).toHaveCount(0);

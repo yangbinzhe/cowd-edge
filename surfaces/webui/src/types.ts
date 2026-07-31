@@ -3,7 +3,7 @@ import type { components as GatewayComponents } from './generated/gateway-api';
 
 export type CoreNavId = 'chat' | 'mission' | 'runtime' | 'context' | 'reality' | 'memory' | 'skills' | 'agents' | 'tools' | 'surfaces' | 'gateway' | 'audit' | 'settings';
 export type NavId = CoreNavId | (string & {});
-export type CompanionTab = 'activity' | 'thinking' | 'workspace' | 'evidence' | 'inspector';
+export type CompanionTab = 'activity' | 'workspace' | 'inspector';
 export type Tone = 'neutral' | 'info' | 'success' | 'warn' | 'danger';
 export type ChatDisplayMode = 'panorama' | 'clean';
 export type ApiReadStatus = 'ready' | 'offline' | 'forbidden' | 'not_found' | 'invalid_response' | 'server_error' | 'error' | 'stale';

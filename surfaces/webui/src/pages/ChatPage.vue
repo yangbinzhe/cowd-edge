@@ -6,9 +6,11 @@ import {
   ArrowDown,
   Boxes,
   Brain,
+  Check,
   CircleDot,
   CircleX,
   Coins,
+  Copy,
   Eye,
   FileCheck2,
   Folder,
@@ -43,6 +45,8 @@ const commandSearchInput = ref<HTMLInputElement | null>(null);
 const transcriptPinnedToTail = ref(true);
 const historyLoadInFlight = ref(false);
 const pendingTailSessionId = ref('');
+const copiedAnswerId = ref('');
+let copiedAnswerResetTimer: ReturnType<typeof setTimeout> | null = null;
 const unboundDraft = ref('');
 const draft = computed({
   get: () => store.activeSessionId ? (chat.active?.draft || '') : unboundDraft.value,
@@ -255,6 +259,12 @@ const chatRuntimeMetrics = computed(() => {
     totalTokens: input + output,
   };
 });
+const chatEvidenceCount = computed(() => new Set(
+  (chat.active?.turnProjection?.turns || [])
+    .flatMap((turn: any) => Array.isArray(turn?.evidence_refs) ? turn.evidence_refs : [])
+    .map((reference: unknown) => String(reference || '').trim())
+    .filter(Boolean),
+).size);
 const showRequestedModel = computed(() => (
   !!store.selectedModel && effectiveModel.value !== store.selectedModel
 ));
@@ -347,7 +357,10 @@ watch(
   },
   { immediate: true },
 );
-onBeforeUnmount(() => projections.release(executionGraphConsumer));
+onBeforeUnmount(() => {
+  projections.release(executionGraphConsumer);
+  if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
+});
 
 function scrollTranscriptToLatest() {
   const element = transcript.value;
@@ -396,7 +409,7 @@ function rememberScroll() {
   }
 }
 
-function openChatCompanion(tab: 'activity' | 'thinking' | 'workspace' | 'evidence' | 'inspector') {
+function openChatCompanion(tab: 'activity' | 'workspace' | 'inspector') {
   store.setChatDisplayMode('panorama');
   store.openCompanion(tab);
 }
@@ -742,6 +755,28 @@ function openAnswerExecutionGraph(turns: ChatTurn[], answerIndex: number) {
   if (graphId) store.openChatExecutionGraph(graphId);
 }
 
+async function copyAnswer(turn: ChatTurn) {
+  const content = turn.content.trim();
+  if (!content) return;
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(content);
+  } else {
+    const textarea = document.createElement('textarea');
+    textarea.value = content;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand?.('copy');
+    textarea.remove();
+  }
+  copiedAnswerId.value = turn.id;
+  if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
+  copiedAnswerResetTimer = setTimeout(() => {
+    if (copiedAnswerId.value === turn.id) copiedAnswerId.value = '';
+  }, 1_500);
+}
+
 function activityFailed(event: ActivityEvent) {
   return event.kind === 'error'
     || ['error', 'failed', 'denied', 'timed_out'].includes(String(event.status || '').toLowerCase());
@@ -829,11 +864,11 @@ function chooseFirstCommand() {
           <button
             type="button"
             class="session-evidence-head"
-            :title="`${chat.active?.evidence?.evidence_refs?.length || 0} evidence refs`"
-            @click="openChatCompanion('evidence')"
+            :title="`${chatEvidenceCount} evidence refs`"
+            @click="openChatCompanion('activity')"
           >
             <FileCheck2 :size="13" />
-            <strong>{{ chat.active?.evidence?.evidence_refs?.length || 0 }}</strong>
+            <strong>{{ chatEvidenceCount }}</strong>
             <span>{{ t('page.chat.page.text.848af509ba') }}</span>
           </button>
         </div>
@@ -978,23 +1013,32 @@ function chooseFirstCommand() {
                     :content="turn.content"
                     :streaming="turn.id === chat.active?.streamTurnId && turnRunning"
                   />
-                  <footer
-                    v-if="exchangeUsageParts(chat.active?.turns || [], index).length || exchangeExecutionEntry(chat.active?.turns || [], index)?.graph_id"
-                    class="answer-usage"
-                  >
+                  <footer class="answer-usage">
                     <span v-for="item in exchangeUsageParts(chat.active?.turns || [], index)" :key="item.key">
                       {{ item.label }} <strong>{{ formatTokenQuantity(item.value) }}</strong>
                     </span>
-                    <button
-                      v-if="exchangeExecutionEntry(chat.active?.turns || [], index)?.graph_id"
-                      class="answer-execution-link"
-                      type="button"
-                      :title="t('chat.execution.openTurnGraph')"
-                      :aria-label="t('chat.execution.openTurnGraph')"
-                      @click="openAnswerExecutionGraph(chat.active?.turns || [], index)"
-                    >
-                      <Workflow :size="13" />
-                    </button>
+                    <span class="answer-actions">
+                      <button
+                        v-if="exchangeExecutionEntry(chat.active?.turns || [], index)?.graph_id"
+                        class="answer-execution-link"
+                        type="button"
+                        :title="t('chat.execution.openTurnGraph')"
+                        :aria-label="t('chat.execution.openTurnGraph')"
+                        @click="openAnswerExecutionGraph(chat.active?.turns || [], index)"
+                      >
+                        <Workflow :size="13" />
+                      </button>
+                      <button
+                        class="answer-copy-link"
+                        type="button"
+                        :title="copiedAnswerId === turn.id ? t('common.copied') : t('chat.answer.copy')"
+                        :aria-label="copiedAnswerId === turn.id ? t('common.copied') : t('chat.answer.copy')"
+                        @click="copyAnswer(turn)"
+                      >
+                        <Check v-if="copiedAnswerId === turn.id" :size="13" />
+                        <Copy v-else :size="13" />
+                      </button>
+                    </span>
                   </footer>
                 </div>
               </div>
@@ -1096,7 +1140,7 @@ function chooseFirstCommand() {
           type="button"
           class="composer-runtime-chip"
           :title="t('chat.execution.memoryCalls')"
-          @click="openChatCompanion('evidence')"
+          @click="openChatCompanion('activity')"
         >
           <Brain :size="13" />
           <span>{{ t('chat.execution.memoryCalls') }}</span>

@@ -18,8 +18,6 @@ vi.mock('./liveTransport', () => ({
   },
 }));
 
-const emptyEvidence = { session_id: '', evidence_refs: [], turns: [], freshness: 'unavailable' };
-
 function causalFields(itemId: string, segmentKind: string, deltaSequence = 1) {
   return {
     model_step_id: 'model-step-test',
@@ -35,10 +33,6 @@ function mockEmptySessionReads() {
     session_id: sessionId,
     messages: [],
     total: 0,
-  }) as any);
-  vi.spyOn(api, 'sessionEvidence').mockImplementation(async (sessionId) => ({
-    ...emptyEvidence,
-    session_id: sessionId,
   }) as any);
   vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
     session_id: sessionId,
@@ -75,10 +69,9 @@ describe('chatSessions', () => {
     localStorage.clear();
   });
 
-  it('renders the latest transcript before evidence and execution hydration finish', async () => {
+  it('renders the latest transcript before execution detail hydration finishes', async () => {
     setActivePinia(createPinia());
     const chat = useChatSessionsStore();
-    let resolveEvidence!: (value: unknown) => void;
     let resolveExecution!: (value: unknown) => void;
     const messages = vi.spyOn(api, 'messages').mockResolvedValue({
       session_id: 'history-fast',
@@ -92,12 +85,12 @@ describe('chatSessions', () => {
       total: 42,
       offset: 41,
     } as any);
-    vi.spyOn(api, 'sessionEvidence').mockImplementation(() => new Promise((resolve) => {
-      resolveEvidence = resolve;
-    }) as any);
     vi.spyOn(api, 'sessionExecution').mockImplementation(() => new Promise((resolve) => {
       resolveExecution = resolve;
     }) as any);
+    const evidence = vi.spyOn(api, 'sessionEvidence').mockRejectedValue(
+      new Error('whole-session evidence must stay off the chat hydration path'),
+    );
 
     await chat.load('history-fast');
 
@@ -109,15 +102,15 @@ describe('chatSessions', () => {
     expect(chat.states['history-fast'].turns[0].content).toBe('visible before details');
     expect(chat.states['history-fast'].historyLoading).toBe(false);
     expect(chat.states['history-fast'].detailsLoading).toBe(false);
-    expect(api.sessionEvidence).not.toHaveBeenCalled();
+    expect(evidence).not.toHaveBeenCalled();
     expect(api.sessionExecution).not.toHaveBeenCalled();
 
     const hydration = chat.hydrateRuntimeDetails('history-fast');
     expect(chat.states['history-fast'].detailsLoading).toBe(true);
-    resolveEvidence({ ...emptyEvidence, session_id: 'history-fast' });
     resolveExecution({ session_id: 'history-fast', active_execution_ids: [] });
     await hydration;
     expect(chat.states['history-fast'].detailsLoaded).toBe(true);
+    expect(evidence).not.toHaveBeenCalled();
   });
 
   it('restores public reasoning summaries without exposing private provider transcript blocks', async () => {
@@ -694,9 +687,6 @@ describe('chatSessions', () => {
     vi.spyOn(api, 'messages').mockImplementation(async (sessionId) => ({
       session_id: sessionId, messages: [], total: 0,
     }) as any);
-    vi.spyOn(api, 'sessionEvidence').mockImplementation(async (sessionId) => ({
-      ...emptyEvidence, session_id: sessionId,
-    }) as any);
     vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
       session_id: sessionId,
       active_execution_ids: [],
@@ -800,9 +790,6 @@ describe('chatSessions', () => {
         },
       ],
     }) as any);
-    vi.spyOn(api, 'sessionEvidence').mockImplementation(async (sessionId) => ({
-      ...emptyEvidence, session_id: sessionId,
-    }) as any);
     vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
       session_id: sessionId, active_execution_ids: [],
     }) as any);
@@ -841,10 +828,6 @@ describe('chatSessions', () => {
       }],
       total: 1,
     } as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
-      ...emptyEvidence,
-      session_id: 'structured-report',
-    } as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue({
       session_id: 'structured-report',
       active_execution_ids: [],
@@ -879,10 +862,6 @@ describe('chatSessions', () => {
         total: 1,
       }],
       total: 1,
-    } as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
-      ...emptyEvidence,
-      session_id: 'fenced-structured-report',
     } as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue({
       session_id: 'fenced-structured-report',
@@ -922,10 +901,6 @@ describe('chatSessions', () => {
         total: 1,
       }],
       total: 1,
-    } as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
-      ...emptyEvidence,
-      session_id: 'provider-report',
     } as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue({
       session_id: 'provider-report',
@@ -1103,10 +1078,6 @@ describe('chatSessions', () => {
       messages: [],
       total: 0,
     } as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
-      ...emptyEvidence,
-      session_id: 'dual-identity',
-    } as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue({
       session_id: 'dual-identity',
       executions: [{
@@ -1179,9 +1150,6 @@ describe('chatSessions', () => {
       session_id: sessionId,
       messages: durableMessages.map((message) => ({ ...message, session_id: sessionId })),
     }) as any);
-    vi.spyOn(api, 'sessionEvidence').mockImplementation(async (sessionId) => ({
-      ...emptyEvidence, session_id: sessionId,
-    }) as any);
     vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
       session_id: sessionId,
       active_execution_ids: ['execution-current'],
@@ -1250,10 +1218,6 @@ describe('chatSessions', () => {
         }],
       }],
       total: 1,
-    } as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
-      ...emptyEvidence,
-      session_id: 'terminal-dedupe',
     } as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue({
       session_id: 'terminal-dedupe',
@@ -1452,9 +1416,6 @@ describe('chatSessions', () => {
         has_more: offset + messages.length < 205,
       } as any;
     });
-    vi.spyOn(api, 'sessionEvidence').mockImplementation(async (sessionId) => ({
-      ...emptyEvidence, session_id: sessionId, __state: 'ready',
-    }) as any);
     vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
       session_id: sessionId, active_execution_ids: [], __state: 'ready',
     }) as any);
@@ -1513,9 +1474,6 @@ describe('chatSessions', () => {
       limit: 100,
       has_more: false,
     }) as any);
-    vi.spyOn(api, 'sessionEvidence').mockImplementation(async (sessionId) => ({
-      ...emptyEvidence, session_id: sessionId, __state: 'ready',
-    }) as any);
     vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
       session_id: sessionId, active_execution_ids: [], __state: 'ready',
     }) as any);
@@ -1543,9 +1501,6 @@ describe('chatSessions', () => {
       total: 0,
       limit: 1,
       has_more: false,
-    } as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
-      ...emptyEvidence, session_id: 'forbidden-history', __state: 'ready',
     } as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue({
       session_id: 'forbidden-history', active_execution_ids: [], __state: 'ready',
@@ -1650,7 +1605,6 @@ describe('chatSessions', () => {
     expect(chat.states['revoked-session'].reconnectBlocked).toBe(true);
     expect(chat.states['revoked-session'].turns).toEqual([]);
     expect(chat.states['revoked-session'].live).toBeNull();
-    expect(chat.states['revoked-session'].evidence).toBeNull();
     expect(chat.states['revoked-session'].lastError).toContain('authorization revoked');
 
     revoked.onmessage?.({ data: JSON.stringify({
@@ -1698,10 +1652,6 @@ describe('chatSessions', () => {
       }],
       total: 1,
     } as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue({
-      ...emptyEvidence,
-      session_id: 'session-A',
-    } as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue({
       session_id: 'session-A',
       active_execution_ids: [],
@@ -1744,39 +1694,19 @@ describe('chatSessions', () => {
         }],
         total: 1,
       },
-      evidence: { ...emptyEvidence, session_id: 'session-A' },
-      execution: { session_id: 'session-A', active_execution_ids: [] },
-    },
-    {
-      label: 'evidence envelope',
-      messages: { session_id: 'session-A', messages: [], total: 0 },
-      evidence: { ...emptyEvidence, session_id: 'session-B' },
-      execution: { session_id: 'session-A', active_execution_ids: [] },
-    },
-    {
-      label: 'evidence turn',
-      messages: { session_id: 'session-A', messages: [], total: 0 },
-      evidence: {
-        ...emptyEvidence,
-        session_id: 'session-A',
-        turns: [{ session_id: 'session-B' }],
-      },
       execution: { session_id: 'session-A', active_execution_ids: [] },
     },
     {
       label: 'execution envelope',
       messages: { session_id: 'session-A', messages: [], total: 0 },
-      evidence: { ...emptyEvidence, session_id: 'session-A' },
       execution: { session_id: 'session-B', active_execution_ids: [] },
     },
   ])('fails closed on a foreign HTTP $label identity', async ({
     messages,
-    evidence,
     execution,
   }) => {
     setActivePinia(createPinia());
     vi.spyOn(api, 'messages').mockResolvedValue(messages as any);
-    vi.spyOn(api, 'sessionEvidence').mockResolvedValue(evidence as any);
     vi.spyOn(api, 'sessionExecution').mockResolvedValue(execution as any);
     const chat = useChatSessionsStore();
 

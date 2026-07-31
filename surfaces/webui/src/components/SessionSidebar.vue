@@ -2,11 +2,12 @@
 import { t } from '../i18n';
 import { displayStatus } from '../i18n/domain/status';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { Ban, CircleAlert, CircleCheck, GitFork, Plus, Radio, Search, X } from 'lucide-vue-next';
+import { AlertTriangle, Ban, CircleAlert, CircleCheck, GitFork, Plus, Radio, Search, Trash2, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import { releaseProjection } from '../release';
+import { useEscapeKey } from '../composables/useEscapeKey';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
@@ -34,9 +35,46 @@ const ACTIVE_EXECUTION_STATUSES = new Set([
   'finalizing',
 ]);
 const sidebarWidth = ref(DEFAULT_SIDEBAR_WIDTH);
+const batchMode = ref(false);
+const confirmBulkDelete = ref(false);
+const batchDeleting = ref(false);
 let resizeMove: ((event: PointerEvent) => void) | null = null;
 let resizeEnd: (() => void) | null = null;
 let statusTimer: ReturnType<typeof setInterval> | null = null;
+const visibleSessionIds = computed(() => store.groupedSessions.flatMap((group) => group.items.map((session) => session.id)));
+const allVisibleSelected = computed(() => (
+  visibleSessionIds.value.length > 0
+  && visibleSessionIds.value.every((id) => store.selectedSessionIds.includes(id))
+));
+const selectedRunningCount = computed(() => store.sessions.filter((session) => (
+  store.selectedSessionIds.includes(session.id) && isSessionRunning(session)
+)).length);
+
+function setBatchMode(enabled: boolean) {
+  batchMode.value = enabled;
+  confirmBulkDelete.value = false;
+  if (!enabled) store.clearSessionSelection();
+}
+
+function toggleVisibleSelection() {
+  const shouldSelect = !allVisibleSelected.value;
+  for (const id of visibleSessionIds.value) {
+    const selected = store.selectedSessionIds.includes(id);
+    if (selected !== shouldSelect) store.toggleSessionSelected(id);
+  }
+}
+
+async function confirmDeleteSelected() {
+  if (!store.selectedSessionIds.length || batchDeleting.value) return;
+  batchDeleting.value = true;
+  try {
+    const result = await store.deleteSelectedSessions();
+    confirmBulkDelete.value = false;
+    if (!result.failures.length) setBatchMode(false);
+  } finally {
+    batchDeleting.value = false;
+  }
+}
 
 async function searchSessions() {
   await store.refreshSessions();
@@ -167,6 +205,11 @@ onBeforeUnmount(() => {
   if (statusTimer) clearInterval(statusTimer);
   if (typeof document !== 'undefined') document.body.classList.remove('resizing-session-sidebar');
 });
+
+useEscapeKey(() => {
+  if (confirmBulkDelete.value) confirmBulkDelete.value = false;
+  else if (batchMode.value) setBatchMode(false);
+}, () => confirmBulkDelete.value || batchMode.value);
 </script>
 
 <template>
@@ -176,10 +219,27 @@ onBeforeUnmount(() => {
       <button class="icon-action mobile-session-close" type="button" :aria-label="t('common.close')" @click="emit('close')">
         <X :size="16" />
       </button>
-      <button class="primary-action" type="button" @click="createSession">
-        <Plus :size="16" />
-        {{ t('template.components.sessionsidebar.5c881d23b5') }}
-      </button>
+      <div class="session-create-row">
+        <button
+          :class="batchMode ? 'danger-action' : 'primary-action'"
+          type="button"
+          :disabled="batchMode && !store.selectedSessionIds.length"
+          @click="batchMode ? (confirmBulkDelete = true) : createSession()"
+        >
+          <Trash2 v-if="batchMode" :size="16" />
+          <Plus v-else :size="16" />
+          {{ batchMode ? t('session.bulk.selected', { count: store.selectedSessionIds.length }) : t('template.components.sessionsidebar.5c881d23b5') }}
+        </button>
+        <button
+          class="icon-action"
+          type="button"
+          :aria-label="batchMode ? t('session.bulk.clear') : t('session.bulk.delete')"
+          @click="setBatchMode(!batchMode)"
+        >
+          <X v-if="batchMode" :size="15" />
+          <Trash2 v-else :size="15" />
+        </button>
+      </div>
       <label class="search-field">
         <Search :size="15" />
         <input v-model="store.sessionQuery" type="search" :placeholder="t('component.session.sidebar.placeholder.e7ed08a804')" @input="searchSessions" />
@@ -187,15 +247,27 @@ onBeforeUnmount(() => {
     </header>
 
     <div class="session-list" :aria-label="t('component.session.sidebar.aria-label.d05d37d8a1')" @scroll="onScroll">
+      <label v-if="batchMode" class="session-select-all">
+        <input type="checkbox" :checked="allVisibleSelected" @change="toggleVisibleSelection" />
+        <span>{{ t('session.bulk.selectAll') }}</span>
+      </label>
       <section v-for="group in store.groupedSessions" :key="group.label" class="session-group">
         <header>{{ group.label }}</header>
         <div
           v-for="session in group.items"
           :key="session.id"
           class="session-row"
-          :class="{ active: session.id === store.activeSessionId }"
+          :class="{ active: session.id === store.activeSessionId, selected: store.selectedSessionIds.includes(session.id), batch: batchMode }"
         >
-          <button class="session-open" type="button" @click="openSession(session.id)">
+          <input
+            v-if="batchMode"
+            class="session-select-checkbox"
+            type="checkbox"
+            :checked="store.selectedSessionIds.includes(session.id)"
+            :aria-label="t('session.select')"
+            @change="store.toggleSessionSelected(session.id)"
+          />
+          <button class="session-open" type="button" @click="batchMode ? store.toggleSessionSelected(session.id) : openSession(session.id)">
             <span class="session-row-top">
               <span class="session-title">
                 <Radio v-if="isSessionRunning(session)" :size="11" />
@@ -215,7 +287,7 @@ onBeforeUnmount(() => {
               <small v-if="session.parent_session_id || session.branch_count">{{ t('session.badge.branch') }}</small>
             </span>
           </button>
-          <span class="session-actions">
+          <span v-if="!batchMode" class="session-actions">
             <button class="icon-action" type="button" :aria-label="t('session.action.fork')" :title="t('session.action.fork')" @click.stop="branchSession(session.id)">
               <GitFork :size="12" />
             </button>
@@ -235,5 +307,28 @@ onBeforeUnmount(() => {
       <strong>{{ release.label }}</strong>
       <small v-if="release.mismatch">{{ t('release.mismatch') }}</small>
     </footer>
+    <div v-if="confirmBulkDelete" class="modal-scrim" @click.self="confirmBulkDelete = false">
+      <section class="session-delete-confirm" role="dialog" :aria-label="t('session.bulk.confirmTitle')">
+        <header>
+          <AlertTriangle :size="18" />
+          <strong>{{ t('session.bulk.confirmTitle') }}</strong>
+          <button class="icon-action" type="button" :aria-label="t('common.close')" @click="confirmBulkDelete = false"><X :size="15" /></button>
+        </header>
+        <p>{{ t('session.bulk.confirmBody', { count: store.selectedSessionIds.length }) }}</p>
+        <p v-if="selectedRunningCount" class="field-warning">
+          {{ t('session.bulk.runningNotice', { count: selectedRunningCount }) }}
+        </p>
+        <div v-if="store.sessionBulkDeleteProgress.active" class="session-delete-progress">
+          <span>{{ store.sessionBulkDeleteProgress.done }} / {{ store.sessionBulkDeleteProgress.total }}</span>
+          <progress :value="store.sessionBulkDeleteProgress.done" :max="store.sessionBulkDeleteProgress.total"></progress>
+        </div>
+        <footer>
+          <button class="ghost-action" type="button" :disabled="batchDeleting" @click="confirmBulkDelete = false">{{ t('common.cancel') }}</button>
+          <button class="danger-action" type="button" :disabled="batchDeleting" @click="confirmDeleteSelected">
+            <Trash2 :size="14" />{{ t('session.bulk.delete') }}
+          </button>
+        </footer>
+      </section>
+    </div>
   </aside>
 </template>

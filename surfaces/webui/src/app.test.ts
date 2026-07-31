@@ -128,10 +128,11 @@ describe('Cowd Vue WebUI shell', () => {
     await wrapper.get('.companion-toggle').trigger('click');
     await settle();
     expect(wrapper.get('.companion-tabs').text()).toContain('活动');
-    expect(wrapper.get('.companion-tabs').text()).toContain('思考');
     expect(wrapper.get('.companion-tabs').text()).toContain('工作区');
-    expect(wrapper.get('.companion-tabs').text()).toContain('证据');
     expect(wrapper.get('.companion-tabs').text()).toContain('检查器');
+    expect(wrapper.get('.companion-tabs').text()).not.toContain('思考');
+    expect(wrapper.get('.companion-tabs').text()).not.toContain('证据');
+    expect(wrapper.findAll('.companion-tabs button')).toHaveLength(3);
   });
 
   it('renders compact Chat facts and keeps display mode on the companion toggle', async () => {
@@ -551,6 +552,9 @@ describe('Cowd Vue WebUI shell', () => {
     expect(store.chatExecutionGraphExpanded).toBe(true);
     expect(store.chatExecutionGraphId).toBe('graph-turn-1');
     store.closeChatExecutionGraph();
+    expect(wrapper.get('.answer-copy-link').attributes('title')).toBe('复制答案');
+    await wrapper.get('.answer-copy-link').trigger('click');
+    expect(wrapper.get('.answer-copy-link').attributes('title')).toBe('已复制');
     expect(wrapper.text()).not.toContain('FULL TOOL OUTPUT SHOULD NOT BE IN TRANSCRIPT');
 
     store.openCompanion('activity');

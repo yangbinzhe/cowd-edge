@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Brain, ChevronLeft, ChevronRight, CircleDot, Clock3, Code2, Download, ExternalLink, Eye, Folder, Info, Link2, RotateCcw, Save, Search, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
+import { Brain, ChevronLeft, ChevronRight, Clock3, Code2, Coins, Download, ExternalLink, Eye, FileCheck2, FileText, Folder, Info, Link2, MemoryStick, RotateCcw, Save, Search, ShieldCheck, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
@@ -11,6 +11,7 @@ import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 import WorkspaceTree from './workspace/WorkspaceTree.vue';
 import TimelineList from './workbench/TimelineList.vue';
+import EvidenceInspector from './evidence/EvidenceInspector.vue';
 import ExecutionGraphCanvas from './mission/ExecutionGraphCanvas.vue';
 import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/workspacePreview';
 import type { ActivityEvent } from '../types';
@@ -22,6 +23,9 @@ const projections = useProjectionRegistryStore();
 const fileInput = ref<HTMLInputElement | null>(null);
 const previewOpen = ref(false);
 const activityDetailOpen = ref(false);
+const activityEvidenceOpen = ref(false);
+const activityEvidenceOverride = ref<string[]>([]);
+const activityEvidenceDetails = ref<HTMLDetailsElement | null>(null);
 const selectedExecutionNode = ref<Record<string, any> | null>(null);
 const previewMode = ref<'render' | 'source'>('render');
 const imageZoom = ref(1);
@@ -60,18 +64,12 @@ const activityEvents = computed(() => {
   }
   return causalActivityTimeline([...rows.values()], 2_000);
 });
-const thinkingEvents = computed(() => activityEvents.value.filter((event) => event.kind === 'think'));
 const inspectorEvents = computed(() => activityEvents.value.filter((event) => event.kind === 'error' || event.status === 'error'));
 const contextItems = computed(() => {
   const envelope = store.currentContextEnvelope || {};
-  return [
-    ...(Array.isArray(envelope.items) ? envelope.items : []),
-    ...(Array.isArray(envelope.context_items) ? envelope.context_items : []),
-    ...(Array.isArray(envelope.evidence) ? envelope.evidence : []),
-  ].slice(0, 12);
+  return (Array.isArray(envelope.selected) ? envelope.selected : []).slice(0, 100);
 });
 const realityStages = computed(() => (Array.isArray(store.currentRealityFlow?.stages) ? store.currentRealityFlow.stages : []).slice(0, 12));
-const timelineEvents = computed(() => store.runtimeTimelineRows.slice(0, 14));
 const runtimeInputItems = computed(() => {
   const seen = new Set<string>();
   const rows = [
@@ -83,7 +81,7 @@ const runtimeInputItems = computed(() => {
     if (!id || seen.has(id)) return false;
     seen.add(id);
     return true;
-  }).slice(0, 12);
+  });
 });
 const rootProjectionId = computed(() => (
   chat.active?.executionGraphId || chat.active?.executionId || ''
@@ -152,12 +150,33 @@ const executionTurnGroups = computed(() => {
   const visibleTurns = canonicalTurns.slice(-executionHistoryLimit.value).reverse();
   return visibleTurns.map(({ turnId, projected }, index) => {
     const entry = entries.find((candidate) => candidate.turn_id === turnId);
+    const events = activityEvents.value.filter((event) => (
+      event.turn_id === turnId
+      || (!!entry?.execution_id && event.execution_id === entry.execution_id)
+      || (!!entry?.execution_id && event.parent_execution_id === entry.execution_id)
+    ));
+    const evidenceRefs = Array.from(new Set([
+      ...(Array.isArray(projected?.evidence_refs) ? projected.evidence_refs : []),
+      ...events.flatMap(activityEvidenceRefs),
+    ]));
     const fallbackTimestamp = Number(
       projected?.completed_at_ms
       || projected?.started_at_ms
       || projected?.submitted_at_ms
       || 0,
     );
+    const runtimeInput = runtimeInputItems.value.find((item: any) => (
+      String(item?.turn_id || item?.active_turn_id || item?.input_id || item?.id || '') === turnId
+    ));
+    const transcriptInput = (chat.active?.turns || []).find((turn) => (
+      turn.role === 'user' && String(turn.turn_id || turn.id) === turnId
+    ));
+    const userPreview = String(
+      projected?.user_preview
+      || runtimeInput?.content_preview
+      || transcriptInput?.content
+      || '',
+    ).trim();
     return {
       entry: entry || {
         execution_id: '',
@@ -167,14 +186,14 @@ const executionTurnGroups = computed(() => {
         updated_at_ms: fallbackTimestamp,
       },
       turnId,
+      runtimeInput,
+      userPreview,
       label: t('chat.execution.turnNumber', {
         number: Math.max(1, canonicalTurns.length - index),
       }),
-      events: activityEvents.value.filter((event) => (
-        event.turn_id === turnId
-        || (!!entry?.execution_id && event.execution_id === entry.execution_id)
-        || (!!entry?.execution_id && event.parent_execution_id === entry.execution_id)
-      )),
+      events,
+      evidenceRefs,
+      evidenceCount: evidenceRefs.length,
     };
   });
 });
@@ -214,8 +233,40 @@ const executionUsage = computed(() => {
     };
   }, { input: 0, output: 0 });
 });
-const activityToolCount = computed(() => activityEvents.value.filter((event) => event.kind === 'tool').length);
+const activityToolCount = computed(() => Math.max(
+  Number(liveMetrics.value?.tool_calls || 0),
+  activityEvents.value.filter((event) => event.kind === 'tool').length,
+));
+const activityApprovalCount = computed(() => Math.max(
+  Number(liveMetrics.value?.approvals || 0),
+  activityEvents.value.filter((event) => event.kind === 'approval').length,
+));
+const activityEvidenceCount = computed(() => Array.from(new Set([
+  ...(chat.active?.turnProjection?.turns || []).flatMap((turn: any) => turn?.evidence_refs || []),
+  ...activityEvents.value.flatMap(activityEvidenceRefs),
+])).length);
+const activityMemoryEvidenceCount = computed(() =>
+  Number(liveMetrics.value?.memory_evidence || 0),
+);
+const activityContextCount = computed(() => Math.max(
+  Number(liveMetrics.value?.context_items || 0),
+  contextItems.value.length,
+));
+const activityRealityStageCount = computed(() => Math.max(
+  Number(store.currentRealityFlow?.stage_count || 0),
+  realityStages.value.length,
+));
+const activityFileCount = computed(() => Math.max(
+  Number(liveMetrics.value?.files_touched || 0),
+  store.currentRunFiles.length,
+));
 const selectedActivity = computed(() => store.selectedActivity as ActivityEvent | null);
+const selectedActivityEvidenceRefs = computed(() => {
+  if (activityEvidenceOverride.value.length) return activityEvidenceOverride.value;
+  const event = selectedActivity.value;
+  if (!event) return [];
+  return Array.from(new Set(activityEvidenceRefs(event))).slice(0, 100);
+});
 const selectedActivityInput = computed(() => {
   const event = selectedActivity.value;
   return decodedPayload(event?.input
@@ -249,10 +300,34 @@ function runtimeInputId(item: any) {
   return String(item?.input_id || item?.id || '');
 }
 
-function runtimeInputDetail(item: any) {
-  const decision = item?.decision ? displayStatus(item.decision) : displayStatus('unknown');
-  const checkpoint = item?.checkpoint ? ` · ${item.checkpoint}` : '';
-  return `${decision}${checkpoint}`;
+function activityEvidenceRefs(event: any) {
+  const raw = event?.raw || {};
+  const direct = [
+    ...(Array.isArray(event?.evidence_refs) ? event.evidence_refs : []),
+    ...(Array.isArray(raw?.evidence_refs) ? raw.evidence_refs : []),
+    raw?.full_output_ref,
+    raw?.output_ref,
+  ];
+  const typed = [
+    ...(Array.isArray(event?.refs) ? event.refs : []),
+    ...(Array.isArray(raw?.refs) ? raw.refs : []),
+  ].flatMap((reference: any) => {
+    if (typeof reference === 'string') {
+      return /^(?:evidence|tool|memory|matrix|audit):\/\//.test(reference) ? [reference] : [];
+    }
+    const kind = String(reference?.type || reference?.kind || '').toLowerCase();
+    if (!kind.includes('evidence') && !['tool_output', 'memory', 'matrix', 'audit'].includes(kind)) return [];
+    return [reference?.ref || reference?.id].filter(Boolean);
+  });
+  return [...direct, ...typed]
+    .map((reference) => String(reference || '').trim())
+    .filter(Boolean);
+}
+
+function runtimeInputPending(item: any) {
+  return ['pending', 'accepted', 'queued', 'queued_next_step'].includes(
+    String(item?.status || item?.state || '').toLowerCase(),
+  );
 }
 
 async function cancelRuntimeInput(item: any) {
@@ -307,11 +382,39 @@ function closePreview() {
 
 function openActivityDetail(item: Record<string, unknown>) {
   store.selectedActivity = item;
+  activityEvidenceOverride.value = [];
+  activityEvidenceOpen.value = false;
+  activityDetailOpen.value = true;
+}
+
+function openTurnEvidenceDetail(group: any) {
+  activityEvidenceOverride.value = Array.from(new Set(group.evidenceRefs || [])).slice(0, 100);
+  store.selectedActivity = {
+    id: `turn-input:${group.turnId}`,
+    kind: 'input',
+    title: group.userPreview || group.label,
+    detail: group.label,
+    turn_id: group.turnId,
+    timestamp: Number(group.entry?.updated_at_ms || 0),
+    raw: {
+      turn_id: group.turnId,
+      execution_id: group.entry?.execution_id || null,
+      evidence_refs: activityEvidenceOverride.value,
+    },
+  };
+  activityEvidenceOpen.value = false;
   activityDetailOpen.value = true;
 }
 
 function closeActivityDetail() {
   activityDetailOpen.value = false;
+  activityEvidenceOpen.value = false;
+  activityEvidenceOverride.value = [];
+}
+
+function closeActivityEvidence() {
+  activityEvidenceOpen.value = false;
+  if (activityEvidenceDetails.value) activityEvidenceDetails.value.open = false;
 }
 
 function openExecutionTurn(graphId: string | null | undefined) {
@@ -391,17 +494,9 @@ watch(activeTeamExecutionGraphId, (graphId) => {
         <Workflow :size="15" />
         <span>{{ t('component.companion.panel.text.49c2a0044c') }}</span>
       </button>
-      <button :class="{ active: store.companionTab === 'thinking' }" type="button" @click="store.openCompanion('thinking')">
-        <Brain :size="15" />
-        <span>{{ t('component.companion.panel.text.c7e3500e72') }}</span>
-      </button>
       <button :class="{ active: store.companionTab === 'workspace' }" type="button" @click="store.openCompanion('workspace')">
         <Folder :size="15" />
         <span>{{ t('component.companion.panel.text.594060d245') }}</span>
-      </button>
-      <button :class="{ active: store.companionTab === 'evidence' }" type="button" @click="store.openCompanion('evidence')">
-        <CircleDot :size="15" />
-        <span>{{ t('component.companion.panel.text.46cb32e1a3') }}</span>
       </button>
       <button :class="{ active: store.companionTab === 'inspector' }" type="button" @click="store.openCompanion('inspector')">
         <Info :size="15" />
@@ -433,10 +528,15 @@ watch(activeTeamExecutionGraphId, (graphId) => {
           @expand="store.openChatExecutionGraph()"
         />
       </section>
-      <div class="execution-stream-summary">
+      <div class="execution-stream-summary activity-metric-grid">
         <span><Wrench :size="13" />{{ t('chat.execution.tools') }} <strong>{{ activityToolCount }}</strong></span>
-        <span>{{ t('chat.execution.input') }} <strong>{{ formatTokenQuantity(executionUsage.input) }}</strong></span>
-        <span>{{ t('chat.execution.output') }} <strong>{{ formatTokenQuantity(executionUsage.output) }}</strong></span>
+        <span><Brain :size="13" />{{ t('chat.execution.memoryCalls') }} <strong>{{ Number(liveMetrics?.memory_recalls || 0) }}</strong></span>
+        <span><FileCheck2 :size="13" />{{ t('page.chat.cleanCounters.memoryEvidence') }} <strong>{{ activityMemoryEvidenceCount }}</strong></span>
+        <span><MemoryStick :size="13" />{{ t('component.companion.panel.text.de0a30c1bf') }} <strong>{{ activityContextCount }}</strong></span>
+        <span><Workflow :size="13" />{{ t('component.companion.panel.text.75c2e8fc26') }} <strong>{{ activityRealityStageCount }}</strong></span>
+        <span><FileText :size="13" />{{ t('component.companion.panel.text.727690de87') }} <strong>{{ activityFileCount }}</strong></span>
+        <span><ShieldCheck :size="13" />{{ t('execution.kind.approval') }} <strong>{{ activityApprovalCount }}</strong></span>
+        <span><Coins :size="13" />{{ t('chat.execution.totalTokens') }} <strong>{{ formatTokenQuantity(executionUsage.input + executionUsage.output) }}</strong></span>
       </div>
       <p v-if="projectionContractError" class="companion-contract-alert" role="alert">
         {{ t('strategy.state.contractMismatch') }} · {{ projectionContractError }}
@@ -455,6 +555,28 @@ watch(activeTeamExecutionGraphId, (graphId) => {
             </button>
             <time v-if="group.entry.updated_at_ms">{{ new Date(group.entry.updated_at_ms).toLocaleString() }}</time>
           </header>
+          <article v-if="group.userPreview" class="turn-input-node">
+            <div>
+              <strong>{{ group.userPreview }}</strong>
+              <button
+                v-if="group.evidenceCount"
+                class="turn-evidence-action"
+                type="button"
+                :aria-label="t('page.chat.page.text.848af509ba')"
+                @click="openTurnEvidenceDetail(group)"
+              >
+                <FileCheck2 :size="12" />{{ group.evidenceCount }}
+              </button>
+            </div>
+            <div v-if="group.runtimeInput && runtimeInputPending(group.runtimeInput)" class="inline-actions">
+              <button class="icon-action" type="button" :aria-label="t('chat.input.action.queue')" @click="queueRuntimeInput(group.runtimeInput)">
+                <ChevronRight :size="14" />
+              </button>
+              <button class="icon-action danger" type="button" :aria-label="t('chat.input.action.cancel')" @click="cancelRuntimeInput(group.runtimeInput)">
+                <X :size="14" />
+              </button>
+            </div>
+          </article>
           <TimelineList
             v-if="group.events.length"
             :items="group.events"
@@ -482,26 +604,6 @@ watch(activeTeamExecutionGraphId, (graphId) => {
         :selected-id="String(store.selectedActivity?.id || '')"
         @select="openActivityDetail"
       />
-    </section>
-
-    <section v-else-if="store.companionTab === 'thinking'" class="companion-body">
-      <div class="panel-title">
-        <h2>{{ t('component.companion.panel.text.b8012c4678') }}</h2>
-        <span>{{ formatCount('events', thinkingEvents.length) }}</span>
-      </div>
-      <div class="activity-list">
-        <article v-for="event in thinkingEvents" :key="event.id" class="activity-item" data-kind="think">
-          <div>
-            <strong>{{ event.title }}</strong>
-            <p>{{ event.detail || t('component.companion.panel.inline.1f965eaa31') }}</p>
-          </div>
-          <span>{{ displayStatus(event.status || 'unknown') }}</span>
-        </article>
-        <div v-if="!thinkingEvents.length" class="empty-state">
-          <strong>{{ t('component.companion.panel.text.7817ce5674') }}</strong>
-          <p>{{ t('component.companion.panel.text.cc3a224e6f') }}</p>
-        </div>
-      </div>
     </section>
 
     <section v-else-if="store.companionTab === 'workspace'" class="companion-body workspace-tab">
@@ -570,112 +672,6 @@ watch(activeTeamExecutionGraphId, (graphId) => {
             <dd>{{ item.value }}</dd>
           </template>
         </dl>
-      </div>
-    </section>
-
-    <section v-else-if="store.companionTab === 'evidence'" class="companion-body evidence-tab">
-      <div class="panel-title">
-        <h2>{{ t('component.companion.panel.text.0a3b6fabd8') }}</h2>
-        <span>{{ formatCount('tools', Number(liveMetrics?.tool_calls || 0)) }}</span>
-      </div>
-      <dl class="detail-list evidence-summary">
-        <dt>{{ t('component.companion.panel.text.f37df354d9') }}</dt>
-        <dd>{{ displayStatus(liveExecution?.status || 'unknown') }}</dd>
-        <dt>{{ t('component.companion.panel.text.97f11d23ce') }}</dt>
-        <dd>{{ chat.active?.executionId || store.activeSessionId || '-' }}</dd>
-        <dt>{{ t('component.companion.panel.text.2c11686ce6') }}</dt>
-        <dd>{{ liveContextLabel }}</dd>
-        <dt>{{ t('component.companion.panel.text.06f670e7b4') }}</dt>
-        <dd>{{ Number(liveMetrics?.memory_recalls || 0) }} recall / {{ Number(liveMetrics?.memory_evidence || 0) }} evidence</dd>
-      </dl>
-      <div class="stage-list">
-        <article v-for="stage in store.runStageSummary" :key="stage.id" class="stage-row" :data-status="stage.status">
-          <strong>{{ stage.label }}</strong>
-          <span>{{ displayStatus(stage.status) }}</span>
-          <small>{{ stage.count }}</small>
-        </article>
-      </div>
-
-      <div class="panel-title compact">
-        <h2>{{ t('chat.input.panel.title') }}</h2>
-        <span>{{ formatCount('items', runtimeInputItems.length) }}</span>
-      </div>
-      <dl class="detail-list evidence-summary">
-        <dt>{{ t('chat.input.panel.activeTurn') }}</dt>
-        <dd>{{ store.sessionInputProjection?.active_turn_id || store.turnInbox?.turn_id || '-' }}</dd>
-        <dt>{{ t('chat.input.panel.pending') }}</dt>
-        <dd>{{ store.sessionInputProjection?.pending_count ?? store.turnInbox?.pending_count ?? 0 }}</dd>
-        <dt>{{ t('chat.input.panel.queuedNext') }}</dt>
-        <dd>{{ store.sessionInputProjection?.queued_next_count ?? 0 }}</dd>
-        <dt>{{ t('chat.input.panel.consumed') }}</dt>
-        <dd>{{ store.sessionInputProjection?.consumed_count ?? store.turnInbox?.consumed_count ?? 0 }}</dd>
-      </dl>
-      <div class="evidence-list">
-        <article v-for="item in runtimeInputItems" :key="runtimeInputId(item)" class="evidence-item runtime-input-item">
-          <strong>{{ item.content_preview || runtimeInputId(item) }}</strong>
-          <p>{{ runtimeInputDetail(item) }}</p>
-          <div class="inline-actions">
-            <button class="ghost-action" type="button" @click="queueRuntimeInput(item)">{{ t('chat.input.action.queue') }}</button>
-            <button class="danger-action" type="button" @click="cancelRuntimeInput(item)">{{ t('chat.input.action.cancel') }}</button>
-          </div>
-        </article>
-        <div v-if="!runtimeInputItems.length" class="empty-state">
-          <strong>{{ t('chat.input.panel.emptyTitle') }}</strong>
-          <p>{{ t('chat.input.panel.emptyBody') }}</p>
-        </div>
-      </div>
-
-      <div class="panel-title compact">
-        <h2>{{ t('component.companion.panel.text.de0a30c1bf') }}</h2>
-        <span>{{ formatCount('items', contextItems.length) }}</span>
-      </div>
-      <div class="evidence-list">
-        <article v-for="item in contextItems" :key="String(item.id || item.ref || item.path || JSON.stringify(item).slice(0, 40))" class="evidence-item">
-          <strong>{{ item.title || item.kind || item.source || item.ref || t('component.companion.panel.inline.1d4e255098') }}</strong>
-          <p>{{ item.summary || item.text || item.path || item.content || JSON.stringify(item).slice(0, 180) }}</p>
-        </article>
-        <div v-if="!contextItems.length" class="empty-state">
-          <strong>{{ t('component.companion.panel.text.356bff2e1a') }}</strong>
-          <p>{{ t('component.companion.panel.text.b409fb7404') }}</p>
-        </div>
-      </div>
-
-      <div class="panel-title compact">
-        <h2>{{ t('component.companion.panel.text.75c2e8fc26') }}</h2>
-        <span>{{ formatCount('stages', realityStages.length) }}</span>
-      </div>
-      <div class="evidence-list">
-        <article v-for="stage in realityStages" :key="String(stage.id || stage.kind || stage.ref || JSON.stringify(stage).slice(0, 40))" class="evidence-item">
-          <strong>{{ stage.kind || stage.stage || displayStatus(stage.status || 'unknown') }}</strong>
-          <p>{{ stage.summary || stage.detail || stage.message || JSON.stringify(stage).slice(0, 180) }}</p>
-        </article>
-      </div>
-
-      <div class="panel-title compact">
-        <h2>{{ t('component.companion.panel.text.727690de87') }}</h2>
-        <span>{{ store.currentRunFiles.length }}</span>
-      </div>
-      <div class="evidence-list">
-        <article v-for="file in store.currentRunFiles" :key="file.path" class="evidence-item">
-          <strong>{{ file.path }}</strong>
-          <p>{{ file.kind }} · {{ displayStatus(file.status) }} · {{ file.ref }}</p>
-        </article>
-      </div>
-
-      <div class="panel-title compact">
-        <h2>{{ t('component.companion.panel.text.1fb9bd1ff9') }}</h2>
-        <span>{{ timelineEvents.length }}</span>
-      </div>
-      <div class="activity-list">
-        <article v-for="event in timelineEvents" :key="event.id" class="activity-item" :data-kind="['error', 'failed', 'denied', 'timed_out'].includes(event.status.toLowerCase()) ? 'error' : event.domain">
-          <div>
-            <strong>{{ event.title }}</strong>
-            <p>{{ event.detail }}</p>
-            <small v-if="event.correlation">{{ event.correlation }}</small>
-          </div>
-          <span>{{ displayStatus(event.status) }}</span>
-          <RawPayload :title="t('component.workbench.evidence.object.detail.title.payload')" :data="event.raw" />
-        </article>
       </div>
     </section>
 
@@ -784,6 +780,25 @@ watch(activeTeamExecutionGraphId, (graphId) => {
             :max-chars="6000"
             default-open
           />
+          <details
+            v-if="selectedActivityEvidenceRefs.length"
+            ref="activityEvidenceDetails"
+            class="activity-evidence-drilldown"
+            @toggle="activityEvidenceOpen = ($event.currentTarget as HTMLDetailsElement).open"
+          >
+            <summary>
+              <FileCheck2 :size="14" />
+              {{ t('page.chat.page.text.848af509ba') }}
+              <strong>{{ selectedActivityEvidenceRefs.length }}</strong>
+            </summary>
+            <EvidenceInspector
+              v-if="activityEvidenceOpen"
+              :refs="selectedActivityEvidenceRefs"
+              :session-id="chat.activeSessionId || store.activeSessionId"
+              :subject="selectedActivity.raw || selectedActivity"
+              @close="closeActivityEvidence"
+            />
+          </details>
         </div>
       </section>
     </div>

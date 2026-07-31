@@ -9,9 +9,10 @@ import { evidenceBacklinks, evidenceComparison, evidenceDisplayState, evidenceSo
 
 const props = withDefaults(defineProps<{
   refs?: string[];
+  sessionId?: string;
   subject?: Record<string, unknown> | null;
   title?: string;
-}>(), { refs: () => [], subject: null, title: '' });
+}>(), { refs: () => [], sessionId: '', subject: null, title: '' });
 
 const emit = defineEmits<{ close: [] }>();
 const loading = ref(false);
@@ -30,7 +31,7 @@ async function resolveAll() {
   loading.value = true;
   error.value = '';
   try {
-    const response = await api.resolveEvidenceBatch(normalizedRefs.value);
+    const response = await api.resolveEvidenceBatch(normalizedRefs.value, props.sessionId);
     items.value = Array.isArray(response?.items) ? response.items : [];
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause);
@@ -45,7 +46,7 @@ function togglePin(reference: string) {
     : [...pinnedRefs.value, reference];
 }
 
-watch(normalizedRefs, resolveAll, { immediate: true });
+watch([normalizedRefs, () => props.sessionId], resolveAll, { immediate: true });
 </script>
 
 <template>

@@ -133,7 +133,7 @@ describe('Companion projection contract visibility', () => {
     wrapper.unmount();
   });
 
-  it('renders APP, Context, Surface, and Tool rows semantically with expandable raw evidence', async () => {
+  it('unifies thought, tool, input, context, and evidence entry points in Activity', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const router = createRouter({
@@ -143,41 +143,73 @@ describe('Companion projection contract visibility', () => {
     await router.push('/');
     await router.isReady();
     const app = useAppStore();
-    app.companionTab = 'evidence';
-    app.currentTimeline = {
-      events: [
-        {
-          event_id: 'app-1',
-          sequence: 1,
-          type: 'application.execution_outcome',
-          status: 'succeeded',
-          payload: { title: 'Quality snapshot', summary: '12 facts synchronized' },
-        },
-        {
-          event_id: 'context-1',
-          sequence: 2,
-          type: 'context.recommendation_action',
-          payload: { action: 'accepted', note: 'needed by the active turn' },
-        },
-        {
-          event_id: 'surface-1',
-          sequence: 3,
-          type: 'surface.message_received',
-          payload: { surface: 'feishu', message_id: 'om-1', content_preview: 'inspect incident' },
-        },
-        {
-          event_id: 'tool-1',
-          sequence: 4,
-          type: 'tool.invocation.completed',
-          status: 'completed',
-          payload: {
-            tool_call_id: 'call-1',
-            tool_name: 'glob_search',
-            output_preview: '12 matching files',
-          },
-        },
-      ],
+    const chat = useChatSessionsStore();
+    const evidence = vi.spyOn(api, 'resolveEvidenceBatch').mockResolvedValue({
+      kind: 'evidence_batch_projection',
+      count: 1,
+      items: [],
+    } as any);
+    app.companionTab = 'activity';
+    app.currentContextEnvelope = {
+      selected: [{ id: 'context-1', summary: 'relevant context' }],
     };
+    app.currentRealityFlow = { stage_count: 8, stages: [] };
+    app.activity = [{
+      id: 'thought-1',
+      kind: 'think',
+      title: '分析目标',
+      detail: '先核对运行事实',
+      status: 'complete',
+      turn_id: 'turn-1',
+    }, {
+      id: 'tool-1',
+      kind: 'tool',
+      title: 'glob_search',
+      detail: '12 matching files',
+      status: 'complete',
+      turn_id: 'turn-1',
+      raw: { full_output_ref: 'tool://call-1/evidence/result' },
+    }];
+    chat.states['activity-session'] = {
+      sessionId: 'activity-session',
+      turns: [],
+      activity: [],
+      turnProjection: {
+        kind: 'session.turn_projection',
+        session_id: 'activity-session',
+        turn_count: 1,
+        turns: [{
+          turn_id: 'turn-1',
+          status: 'completed',
+          user_preview: '检查最新执行链',
+          evidence_refs: ['tool://call-1/evidence/result'],
+          activity_events: [],
+        }],
+      },
+      executionId: '',
+      executionGraphId: '',
+      live: {
+        revision: 1,
+        status: 'complete',
+        started_at_ms: 1,
+        updated_at_ms: 2,
+        last_progress_at_ms: 2,
+        metrics: {
+          tool_calls: 5,
+          memory_recalls: 4,
+          memory_evidence: 3,
+          approvals: 2,
+          context_items: 6,
+          files_touched: 7,
+          input_tokens: 100,
+          output_tokens: 20,
+          total_tokens: 120,
+        },
+      },
+      streamState: 'offline',
+      pending: false,
+    } as any;
+    chat.activeSessionId = 'activity-session';
 
     const wrapper = mount(CompanionPanel, {
       global: {
@@ -189,18 +221,32 @@ describe('Companion projection contract visibility', () => {
       },
     });
 
-    expect(wrapper.text()).toContain('Quality snapshot');
-    expect(wrapper.text()).toContain('Context recommendation action');
-    expect(wrapper.text()).toContain('feishu · Message received');
-    expect(wrapper.text()).toContain('glob_search completed');
+    expect(wrapper.text()).toContain('检查最新执行链');
+    expect(wrapper.text()).toContain('分析目标');
+    expect(wrapper.text()).toContain('glob_search');
     expect(wrapper.text()).toContain('12 matching files');
-    expect(wrapper.text()).not.toContain('"tool_name"');
-    const rawEvidence = wrapper.findAll('.activity-item .raw-payload');
-    expect(rawEvidence).toHaveLength(4);
-    const toolEvidence = rawEvidence[3];
-    (toolEvidence.element as HTMLDetailsElement).open = true;
-    await toolEvidence.trigger('toggle');
-    expect(toolEvidence.text()).toContain('"tool_name": "glob_search"');
+    expect(wrapper.find('.activity-metric-grid').text()).toContain('5');
+    expect(wrapper.find('.activity-metric-grid').text()).toContain('8');
+    expect(wrapper.find('.activity-metric-grid').text()).toContain('120');
+    expect(wrapper.findAll('.companion-tabs button')).toHaveLength(3);
+    expect(wrapper.text()).not.toContain('思考过程');
+    expect(wrapper.text()).not.toContain('证据与状态');
+    const turnInput = wrapper.get('.turn-input-node');
+    const firstActivity = wrapper.get('.execution-turn-group .timeline-list li');
+    expect(
+      turnInput.element.compareDocumentPosition(firstActivity.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await wrapper.get('.turn-evidence-action').trigger('click');
+    expect(evidence).not.toHaveBeenCalled();
+    const drilldown = wrapper.get('.activity-evidence-drilldown');
+    (drilldown.element as HTMLDetailsElement).open = true;
+    await drilldown.trigger('toggle');
+    await nextTick();
+    expect(evidence).toHaveBeenCalledWith(
+      ['tool://call-1/evidence/result'],
+      'activity-session',
+    );
     wrapper.unmount();
   });
 
@@ -214,7 +260,21 @@ describe('Companion projection contract visibility', () => {
     await router.push('/');
     await router.isReady();
     const app = useAppStore();
+    const chat = useChatSessionsStore();
     app.companionTab = 'activity';
+    chat.states['detail-session'] = {
+      sessionId: 'detail-session',
+      turns: [],
+      activity: [],
+      streamState: 'offline',
+      pending: false,
+    } as any;
+    chat.activeSessionId = 'detail-session';
+    const evidence = vi.spyOn(api, 'resolveEvidenceBatch').mockResolvedValue({
+      kind: 'evidence_batch_projection',
+      count: 1,
+      items: [],
+    } as any);
     app.activity = [{
       id: 'tool-detail-1',
       kind: 'tool',
@@ -223,7 +283,10 @@ describe('Companion projection contract visibility', () => {
       status: 'complete',
       input: { path: 'README.md' },
       output: { bytes: 128 },
-      raw: { tool_call_id: 'call-1' },
+      raw: {
+        tool_call_id: 'call-1',
+        full_output_ref: 'tool://call-1/evidence/output',
+      },
     }];
 
     const wrapper = mount(CompanionPanel, {
@@ -237,9 +300,18 @@ describe('Companion projection contract visibility', () => {
     });
 
     await wrapper.get('.companion-timeline li').trigger('click');
+    expect(evidence).not.toHaveBeenCalled();
     const details = wrapper.findAll('.activity-detail-content .raw-payload');
     expect(details).toHaveLength(3);
     expect(details.every((item) => item.attributes('open') !== undefined)).toBe(true);
+    const drilldown = wrapper.get('.activity-evidence-drilldown');
+    (drilldown.element as HTMLDetailsElement).open = true;
+    await drilldown.trigger('toggle');
+    await nextTick();
+    expect(evidence).toHaveBeenCalledWith(
+      ['tool://call-1/evidence/output'],
+      'detail-session',
+    );
     wrapper.unmount();
   });
 });

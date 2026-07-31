@@ -8,7 +8,6 @@ import type {
   ActivityEvent,
   ChatTurn,
   ExecutionLiveState,
-  SessionEvidenceProjection,
   SessionExecutionIndexProjection,
   SessionTurnProjection,
 } from '../types';
@@ -45,7 +44,6 @@ export type SessionChatState = {
   live: LiveExecutionState | null;
   executionIndex: SessionExecutionIndexProjection | null;
   turnProjection: SessionTurnProjection | null;
-  evidence: SessionEvidenceProjection | null;
   streamState: 'connected' | 'connecting' | 'reconnecting' | 'degraded' | 'offline';
   loadEpoch: number;
   submissionEpoch: number;
@@ -73,8 +71,6 @@ export type SessionChatState = {
   executionIndexLoaded: boolean;
   turnProjectionLoading: boolean;
   turnProjectionLoaded: boolean;
-  evidenceLoading: boolean;
-  evidenceLoaded: boolean;
   detailsLoading: boolean;
   detailsLoaded: boolean;
 };
@@ -384,17 +380,6 @@ function messagesIdentityIssue(page: any, sessionId: string, label: string) {
   return '';
 }
 
-function evidenceIdentityIssue(value: any, sessionId: string) {
-  const envelopeIssue = sessionEnvelopeIdentityIssue(value, sessionId, 'evidence');
-  if (envelopeIssue) return envelopeIssue;
-  if (!Array.isArray(value?.turns)) return 'evidence turns payload is not an array';
-  for (const turn of value.turns) {
-    const turnIssue = sessionEnvelopeIdentityIssue(turn, sessionId, 'evidence turn');
-    if (turnIssue) return turnIssue;
-  }
-  return '';
-}
-
 function normalizeTurns(messages: any[]): ChatTurn[] {
   const normalized = (messages || []).map((message: any) => {
     const role = message.role as ChatTurn['role'];
@@ -621,7 +606,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   const canonicalResyncFlights = new Map<string, Promise<void>>();
   const executionIndexFlights = new Map<string, Promise<void>>();
   const turnProjectionFlights = new Map<string, Promise<void>>();
-  const evidenceFlights = new Map<string, Promise<void>>();
   const progressRecoveryTimers = new Map<string, ReturnType<typeof setInterval>>();
   const progressRecoveryFlights = new Map<string, Promise<void>>();
 
@@ -635,7 +619,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       states[sessionId] = {
         sessionId, turns: [], activity: [], executionId: '', executionGraphId: '', executionTurnId: '', executionGeneration: 0,
         streamGeneration: 0, runtimeCommitCursor: 0, reconnectBlocked: false,
-        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, turnProjection: null, evidence: null, streamState: 'offline',
+        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, turnProjection: null, streamState: 'offline',
         loadEpoch: 0, submissionEpoch: 0, attachmentEpoch: 0,
         pending: false, submitting: false, lastError: '', unread: 0,
         lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
@@ -645,7 +629,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         scrollInitialized: false,
         executionIndexLoading: false, executionIndexLoaded: false,
         turnProjectionLoading: false, turnProjectionLoaded: false,
-        evidenceLoading: false, evidenceLoaded: false,
         historyLoading: false, detailsLoading: false, detailsLoaded: false,
       };
     }
@@ -1095,7 +1078,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.attachmentRole = 'detached';
     state.turns = [];
     state.activity = [];
-    state.evidence = null;
     state.live = null;
     state.executionId = '';
     state.executionGraphId = '';
@@ -1113,8 +1095,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.scrollInitialized = false;
     state.executionIndexLoading = false;
     state.executionIndexLoaded = false;
-    state.evidenceLoading = false;
-    state.evidenceLoaded = false;
     state.detailsLoading = false;
     state.detailsLoaded = false;
     projections.revokeSessionAuthorization(sessionId, reason);
@@ -1210,14 +1190,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const epoch = ++state.loadEpoch;
     executionIndexFlights.delete(sessionId);
     turnProjectionFlights.delete(sessionId);
-    evidenceFlights.delete(sessionId);
     state.historyLoading = true;
     state.executionIndexLoading = false;
     state.executionIndexLoaded = false;
     state.turnProjectionLoading = false;
     state.turnProjectionLoaded = false;
-    state.evidenceLoading = false;
-    state.evidenceLoaded = false;
     state.detailsLoaded = false;
     let data: Awaited<ReturnType<typeof api.messages>>;
     try {
@@ -1311,11 +1288,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   function refreshDetailState(state: SessionChatState) {
     state.detailsLoading = state.executionIndexLoading
-      || state.turnProjectionLoading
-      || state.evidenceLoading;
+      || state.turnProjectionLoading;
     state.detailsLoaded = state.executionIndexLoaded
-      && state.turnProjectionLoaded
-      && state.evidenceLoaded;
+      && state.turnProjectionLoaded;
   }
 
   async function hydrateTurnProjection(sessionId: string) {
@@ -1457,51 +1432,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     await flight;
   }
 
-  async function hydrateEvidence(sessionId: string) {
-    const state = stateFor(sessionId);
-    const epoch = state.loadEpoch;
-    const existing = evidenceFlights.get(sessionId);
-    if (existing) return existing;
-    if (state.evidenceLoaded) return;
-
-    state.evidenceLoading = true;
-    refreshDetailState(state);
-    let flight!: Promise<void>;
-    flight = api.sessionEvidence(sessionId)
-      .then((evidence) => {
-        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
-        const identityIssue = evidenceIdentityIssue(evidence, sessionId);
-        if (identityIssue) {
-          state.streamState = 'degraded';
-          state.lastError = identityIssue;
-          state.degradedReason = identityIssue;
-          return;
-        }
-        const issue = readIssue(evidence, 'evidence');
-        if (issue) {
-          state.lastError = issue;
-          state.degradedReason = issue;
-          return;
-        }
-        state.evidence = evidence;
-        state.evidenceLoaded = true;
-      })
-      .finally(() => {
-        if (state.loadEpoch === epoch) {
-          state.evidenceLoading = false;
-          refreshDetailState(state);
-        }
-        if (evidenceFlights.get(sessionId) === flight) evidenceFlights.delete(sessionId);
-      });
-    evidenceFlights.set(sessionId, flight);
-    await flight;
-  }
-
   async function hydrateRuntimeDetails(sessionId: string, includeProjection = false) {
     await Promise.all([
       hydrateExecutionIndex(sessionId, includeProjection),
       hydrateTurnProjection(sessionId),
-      hydrateEvidence(sessionId),
     ]);
   }
 
@@ -2418,7 +2352,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     canonicalResyncFlights.clear();
     executionIndexFlights.clear();
     turnProjectionFlights.clear();
-    evidenceFlights.clear();
     progressRecoveryTimers.clear();
     progressRecoveryFlights.clear();
     for (const sessionId of Object.keys(states)) delete states[sessionId];
@@ -2443,7 +2376,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     load,
     hydrateExecutionIndex,
     hydrateTurnProjection,
-    hydrateEvidence,
     hydrateRuntimeDetails,
     loadOlder,
     loadLatest,

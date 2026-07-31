@@ -2,6 +2,7 @@ import type { MessageCatalog } from '../keys';
 
 export const enUS: MessageCatalog = {
   "app.aria-label.4afc7f101b": "Cowd primary navigation",
+  "common.cancel": "Cancel",
   "chat.commands.search": "Search command names or purposes",
   "chat.activity.thinking": "Thinking",
   "chat.activity.contextPrepared": "Context prepared",
@@ -10,6 +11,7 @@ export const enUS: MessageCatalog = {
   "chat.activity.toolCompleted": "Tool completed",
   "chat.activity.toolCompletedFields": "Tool completed · {count} fields",
   "chat.timeline.finalAnswer": "Final answer",
+  "chat.answer.copy": "Copy answer",
   "chat.timeline.parallelLane": "Wave {wave} · lane {lane}/{count}",
   "chat.timeline.dependencyWave": "Dependency wave {wave}",
   "chat.timeline.agentLane": "Agent {agent}",
@@ -244,7 +246,11 @@ export const enUS: MessageCatalog = {
   "component.session.sidebar.title.38b7208b6a": "Compact session",
   "session.branch": "Branch session",
   "session.bulk.clear": "Clear selection",
+  "session.bulk.confirmBody": "Permanently delete {count} selected sessions. This cannot be undone.",
+  "session.bulk.confirmTitle": "Delete selected sessions",
   "session.bulk.delete": "Delete selected",
+  "session.bulk.runningNotice": "{count} sessions are still running. Gateway will stop and drain them before deletion.",
+  "session.bulk.selectAll": "Select loaded sessions",
   "session.bulk.selected": "{count} selected",
   "session.copyId": "Copy session ID",
   "session.group.earlier": "Earlier",

@@ -2,6 +2,7 @@ import type { MessageCatalog } from '../keys';
 
 export const zhCN: MessageCatalog = {
   "app.aria-label.4afc7f101b": "Cowd 主导航",
+  "common.cancel": "取消",
   "chat.commands.search": "搜索命令名称或用途",
   "chat.activity.thinking": "思考",
   "chat.activity.contextPrepared": "上下文已准备",
@@ -10,6 +11,7 @@ export const zhCN: MessageCatalog = {
   "chat.activity.toolCompleted": "工具调用完成",
   "chat.activity.toolCompletedFields": "工具调用完成 · {count} 个字段",
   "chat.timeline.finalAnswer": "最终答复",
+  "chat.answer.copy": "复制答案",
   "chat.timeline.parallelLane": "第 {wave} 波 · 泳道 {lane}/{count}",
   "chat.timeline.dependencyWave": "依赖波次 {wave}",
   "chat.timeline.agentLane": "Agent {agent}",
@@ -244,7 +246,11 @@ export const zhCN: MessageCatalog = {
   "component.session.sidebar.title.38b7208b6a": "压缩会话",
   "session.branch": "分叉会话",
   "session.bulk.clear": "清除选择",
+  "session.bulk.confirmBody": "将永久删除已选择的 {count} 个会话，此操作不可恢复。",
+  "session.bulk.confirmTitle": "删除所选会话",
   "session.bulk.delete": "批量删除",
+  "session.bulk.runningNotice": "其中 {count} 个会话仍在运行，Gateway 会先停止并排空执行，再完成删除。",
+  "session.bulk.selectAll": "选择当前已加载会话",
   "session.bulk.selected": "已选 {count}",
   "session.copyId": "复制会话 ID",
   "session.group.earlier": "更早",

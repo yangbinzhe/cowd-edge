@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t } from '../../i18n';
 import { computed, ref } from 'vue';
+import { FileCheck2 } from 'lucide-vue-next';
 import { displayStatus } from '../../i18n/domain/status';
 
 const props = withDefaults(defineProps<{
@@ -86,6 +87,29 @@ function itemLane(item: Record<string, unknown>) {
     ? t('chat.timeline.parallelLane', { wave, lane, count })
     : t('chat.timeline.dependencyWave', { wave });
 }
+
+function itemEvidenceCount(item: Record<string, unknown>) {
+  const raw = (item.raw || {}) as Record<string, unknown>;
+  const direct = [
+    ...(Array.isArray((item as any).evidence_refs) ? (item as any).evidence_refs : []),
+    ...(Array.isArray(raw.evidence_refs) ? raw.evidence_refs : []),
+    raw.full_output_ref,
+    raw.output_ref,
+  ];
+  const typed = [
+    ...(Array.isArray(item.refs) ? item.refs : []),
+    ...(Array.isArray(raw.refs) ? raw.refs : []),
+  ].flatMap((reference: any) => {
+    if (typeof reference === 'string') {
+      return /^(?:evidence|tool|memory|matrix|audit):\/\//.test(reference) ? [reference] : [];
+    }
+    const kind = String(reference?.type || reference?.kind || '').toLowerCase();
+    return kind.includes('evidence') || ['tool_output', 'memory', 'matrix', 'audit'].includes(kind)
+      ? [reference?.ref || reference?.id]
+      : [];
+  });
+  return new Set([...direct, ...typed].map(String).filter(Boolean)).size;
+}
 </script>
 
 <template>
@@ -115,6 +139,7 @@ function itemLane(item: Record<string, unknown>) {
       <strong>{{ itemTitle(item, index) }}</strong>
       <span>{{ displayStatus(itemStatus(item)) }}</span>
       <time v-if="itemTime(item)">{{ itemTime(item) }}</time>
+      <small v-if="itemEvidenceCount(item)" class="timeline-evidence-count"><FileCheck2 :size="11" />{{ itemEvidenceCount(item) }}</small>
       <small v-if="itemLane(item)" class="timeline-lane">{{ itemLane(item) }}</small>
       <details v-if="itemDetail(item).length > 120" class="timeline-detail" @click.stop>
         <summary>{{ itemDetailPreview(item) }}</summary>
