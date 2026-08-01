@@ -4,7 +4,6 @@ import {
   api,
   invalidateApiReadCache,
   providerModels,
-  type EndpointSnapshot,
 } from '../api/client';
 import {
   adaptRuntimeTimeline,
@@ -15,8 +14,6 @@ import type {
   ActivityEvent,
   ChatTurn,
   CompanionTab,
-  GatewayCapabilityContract,
-  GatewayOpenAiTools,
   NavId,
   RuntimeResourceUpload,
   SessionAttachment,
@@ -303,14 +300,7 @@ export const useAppStore = defineStore('app', () => {
   const sessionViewedCounts = ref<Record<string, number>>(readStoredRecord(VIEWED_SESSION_KEY));
   const sessionRenderLimit = ref(100);
   const actionResults = ref<Record<string, any>>({});
-  const gatewayCapabilityContract = ref<GatewayCapabilityContract | null>(null);
-  const gatewayOpenApi = ref<Record<string, any> | null>(null);
-  const gatewayOpenAiTools = ref<GatewayOpenAiTools | null>(null);
-  const gatewayContractError = ref('');
   const authEntitlement = ref<Record<string, unknown> | null>(null);
-  const capabilitySnapshots = ref<Record<string, EndpointSnapshot[]>>({});
-  const capabilityLoading = ref<Record<string, boolean>>({});
-  const capabilityError = ref<Record<string, string>>({});
   const editorDirty = computed(() => selectedFileContent.value !== editorContent.value);
   const filteredWorkspaceFiles = computed(() => {
     const query = workspaceFilter.value.trim().toLowerCase();
@@ -1594,7 +1584,8 @@ export const useAppStore = defineStore('app', () => {
         selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
         startConfigReloadPolling();
       } else {
-        await loadCapability(page);
+        // Management pages own their domain reads and load only visible
+        // sections. API contract inspection is centralized in Gateway.
       }
       if (generation !== authorizationGeneration) return;
       managementCapabilities.value = {
@@ -1762,13 +1753,6 @@ export const useAppStore = defineStore('app', () => {
     sessionViewedCounts.value = {};
     sessionRenderLimit.value = 100;
     actionResults.value = {};
-    capabilitySnapshots.value = {};
-    capabilityLoading.value = {};
-    capabilityError.value = {};
-    gatewayCapabilityContract.value = null;
-    gatewayOpenApi.value = null;
-    gatewayOpenAiTools.value = null;
-    gatewayContractError.value = '';
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(PINNED_SESSION_KEY);
       localStorage.removeItem(VIEWED_SESSION_KEY);
@@ -1801,9 +1785,6 @@ export const useAppStore = defineStore('app', () => {
     sessionViewedCounts.value = remainingViewedCounts;
     writeStored(PINNED_SESSION_KEY, pinnedSessionIds.value);
     writeStored(VIEWED_SESSION_KEY, sessionViewedCounts.value);
-    capabilitySnapshots.value = {};
-    capabilityLoading.value = {};
-    capabilityError.value = {};
     actionResults.value = {};
     commandHistory.value = [];
     if (activeSessionId.value !== sessionId) return;
@@ -1824,51 +1805,6 @@ export const useAppStore = defineStore('app', () => {
       window.removeEventListener('cowd:authorization-invalidated', authorizationInvalidated);
       window.removeEventListener('cowd:session-authorization-invalidated', sessionAuthorizationInvalidated);
     });
-  }
-
-  async function refreshGatewayCapabilityContract() {
-    const generation = authorizationGeneration;
-    const [contract, openApi, openAiTools] = await Promise.all([
-      api.gatewayCapabilityContract(),
-      api.gatewayOpenApi(),
-      api.gatewayOpenAiTools(),
-    ]);
-    if (generation !== authorizationGeneration) {
-      return { contract, openApi, openAiTools };
-    }
-    gatewayCapabilityContract.value = contract;
-    gatewayOpenApi.value = openApi;
-    gatewayOpenAiTools.value = openAiTools;
-    gatewayContractError.value = [contract.__error, openApi.__error, openAiTools.__error].filter(Boolean).join(' · ');
-    return { contract, openApi, openAiTools };
-  }
-
-  async function loadCapability(page: Exclude<NavId, 'chat' | 'settings'>) {
-    const sessionId = activeSessionId.value;
-    const sessionGeneration = activeSessionLoadGeneration;
-    const authGeneration = authorizationGeneration;
-    const isCurrent = () => (
-      authGeneration === authorizationGeneration
-      && sessionGeneration === activeSessionLoadGeneration
-      && sessionId === activeSessionId.value
-      && !revokedSessionIds.has(sessionId)
-    );
-    capabilityLoading.value = { ...capabilityLoading.value, [page]: true };
-    capabilityError.value = { ...capabilityError.value, [page]: '' };
-    try {
-      if (!gatewayCapabilityContract.value) await refreshGatewayCapabilityContract();
-      if (!isCurrent()) return;
-      const snapshots = await api.loadCapabilityPage(page, sessionId, gatewayCapabilityContract.value);
-      if (!isCurrent()) return;
-      capabilitySnapshots.value = { ...capabilitySnapshots.value, [page]: snapshots };
-    } catch (error) {
-      if (!isCurrent()) return;
-      capabilityError.value = { ...capabilityError.value, [page]: error instanceof Error ? error.message : String(error) };
-    } finally {
-      if (isCurrent()) {
-        capabilityLoading.value = { ...capabilityLoading.value, [page]: false };
-      }
-    }
   }
 
   async function refreshCommands() {
@@ -1901,45 +1837,6 @@ export const useAppStore = defineStore('app', () => {
       status: result.ok ? 'complete' : 'error',
     });
     return result;
-  }
-
-  async function runCapabilityAction(page: string, label: string, endpoint?: string) {
-    if (!endpoint) return;
-    const sessionId = activeSessionId.value;
-    const sessionGeneration = activeSessionLoadGeneration;
-    const authGeneration = authorizationGeneration;
-    const isCurrent = () => (
-      sessionId === activeSessionId.value
-      && sessionGeneration === activeSessionLoadGeneration
-      && authGeneration === authorizationGeneration
-      && !revokedSessionIds.has(sessionId)
-    );
-    const id = `${sessionId}:${page}:${label}`;
-    companionTab.value = 'activity';
-    activity.value.unshift({
-      id: `${id}:${Date.now()}`,
-      kind: 'tool',
-      title: label,
-      detail: endpoint,
-      status: 'running',
-    });
-    try {
-      const result = await api.executeCapabilityAction(endpoint, { label, session_id: sessionId });
-      if (!isCurrent()) return result;
-      actionResults.value = { ...actionResults.value, [id]: result };
-      activity.value.unshift({
-        id: `${id}:done:${Date.now()}`,
-        kind: 'tool',
-        title: `${label} completed`,
-        detail: JSON.stringify(result).slice(0, 220),
-        status: 'complete',
-      });
-    } catch (error) {
-      if (!isCurrent()) return;
-      const detail = error instanceof Error ? error.message : String(error);
-      actionResults.value = { ...actionResults.value, [id]: { error: detail } };
-      activity.value.unshift({ id: `${id}:error:${Date.now()}`, kind: 'error', title: `${label} failed`, detail, status: 'error' });
-    }
   }
 
   return {
@@ -2015,14 +1912,7 @@ export const useAppStore = defineStore('app', () => {
     sessionRenderHasMore,
     openTurnActivity,
     actionResults,
-    gatewayCapabilityContract,
-    gatewayOpenApi,
-    gatewayOpenAiTools,
-    gatewayContractError,
     authEntitlement,
-    capabilitySnapshots,
-    capabilityLoading,
-    capabilityError,
     editorDirty,
     busy,
     activeSession,
@@ -2105,11 +1995,8 @@ export const useAppStore = defineStore('app', () => {
     verifyAuth,
     login,
     failClosedAuthorization,
-    refreshGatewayCapabilityContract,
-    loadCapability,
     refreshCommands,
     executeCommand,
-    runCapabilityAction,
     sessionTitle,
     sessionSnippet,
     compactTime,

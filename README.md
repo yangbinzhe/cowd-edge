@@ -2,7 +2,7 @@
 
 `cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.623`。
+当前版本：`0.9.626`。
 
 ## 1. 定位
 
@@ -72,6 +72,7 @@ connectors/source/lark-bitable
 WebUI：
 
 ```bash
+# Node.js 22.12+（或兼容 Vite 8 的 Node.js 20.19+）
 npm --prefix surfaces/webui install
 npm --prefix surfaces/webui test
 npm --prefix surfaces/webui run build
@@ -107,7 +108,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.623",
+  "version": "0.9.626",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -123,7 +124,7 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.623",
+  "version": "0.9.626",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
@@ -152,7 +153,7 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.623",
+  "version": "0.9.626",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",
@@ -215,6 +216,18 @@ WebUI 的 Session 加载遵守两阶段读取合同：
 
 全景活动面板同时消费 Gateway 的连续输入归属、历史恢复状态、上下文覆盖和
 Harness/Provider 分段延迟。WebUI 不重建第二套 Session、Mission 或执行状态。
+
+### 7.1 WebUI 加载与治理边界
+
+- 默认关闭右侧全景栏时，不请求执行图、证据、Memory、工作区等全景数据；展开后再按当前
+  Session 和可见面板异步接线。
+- 会话切换先读取历史索引和最近正文，活动图、证据和其他面板不阻塞聊天首屏。
+- 各业务页不再展示重复的 OpenAPI/端点清单；完整能力合同、OpenAPI 和 OpenAI tools 只在
+  Gateway 管理页按需读取。
+- Memory 页直接消费 Gateway 的自动治理状态、最近运行统计和人工扫描回执。夜间治理运行中
+  禁止重复发起手动全盘扫描；扫描结束后再允许操作。
+- 页面发布版本从 Gateway health 与 Edge 构建常量组合，避免为显示版本额外加载完整 OpenAPI。
+- 前端缓存只保存可失效的读取投影和浏览器交互状态，不替代 Gateway 的 Session、审批或执行真相。
 
 ## 8. 当前能力状态
 

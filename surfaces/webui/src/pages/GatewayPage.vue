@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useCapabilitySection } from "../composables/useCapabilitySection";
-const { isSectionActive } = useCapabilitySection();
+const { activeSection, isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { Network, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -26,6 +26,9 @@ const route = useRoute();
 const loading = ref(false);
 const error = ref('');
 const state = ref<any>({});
+const contractLoading = ref(false);
+const contractLoaded = ref(false);
+const contractError = ref('');
 const actionResult = ref<any>(null);
 const resourceRef = ref('');
 const actor = ref('webui-operator');
@@ -106,18 +109,19 @@ const contractOverviewRows = computed(() => [
   { label: t('page.gateway.contract.parity'), value: capabilityCoverage.value.route_contract_parity ? 'yes' : 'no' },
 ]);
 const gatewayContractRows = computed(() => contractCapabilities.value
-  .filter((item: any) => item.domain === 'connector' || item.domain === 'cross_plane' || item.domain === 'surface' || item.domain === 'edge' || item.http?.path?.startsWith('/api/gateway'))
-  .slice(0, 24)
   .map((item: any) => ({
     id: item.id,
     domain: item.domain,
     method: item.http?.method || '-',
     path: item.http?.path || '-',
+    owner: capabilityContract.value.owner || 'gateway',
+    criticality: item.http?.criticality || '-',
     risk: item.risk || '-',
-    visible: item.surface_visibility?.webui === false ? 'hidden' : 'webui',
+    webui: item.surface_visibility?.webui === false ? 'hidden' : 'visible',
+    ai: item.surface_visibility?.llm === false ? 'hidden' : 'visible',
+    tool: item.ai_affordance?.expose_as_tool ? 'exposed' : 'internal',
   })));
 const openAiToolRows = computed(() => (Array.isArray(openAiTools.value.tools) ? openAiTools.value.tools : [])
-  .slice(0, 18)
   .map((item: any) => ({
     name: item.function?.name || '-',
     description: item.function?.description || '-',
@@ -684,7 +688,7 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [platforms, platformDetail, summary, nextAccounts, nextWechatAccounts, nextCapabilities, nextResources, mcp, servicesData, connectorSources, edge, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload, capabilityContractData, openApi, openAiToolsData] = await Promise.all([
+    const [platforms, platformDetail, summary, nextAccounts, nextWechatAccounts, nextCapabilities, nextResources, mcp, servicesData, connectorSources, edge, crossPlane, identitiesData, grantsData, audit, adapters, nextExecutions, configReload] = await Promise.all([
       api.platforms(),
       api.platform(platformName.value),
       api.connectorsSummary(),
@@ -703,14 +707,11 @@ async function refresh() {
       api.crossPlaneAdapters(),
       api.crossPlaneExecutions(),
       api.configReloadStatus(),
-      api.gatewayCapabilityContract(),
-      api.gatewayOpenApi(),
-      api.gatewayOpenAiTools(),
     ]);
     const services = Array.isArray(servicesData?.services) ? servicesData.services : [];
     const nextServiceId = connectorServiceId.value || services[0]?.id || '';
     const serviceTools = nextServiceId ? await api.connectorServiceTools(nextServiceId) : { tools: [] };
-    state.value = { platforms, platformDetail, summary, accounts: nextAccounts, wechatAccounts: nextWechatAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorSources, connectorServiceTools: serviceTools, edge, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload, capabilityContract: capabilityContractData, openApi, openAiTools: openAiToolsData };
+    state.value = { ...state.value, platforms, platformDetail, summary, accounts: nextAccounts, wechatAccounts: nextWechatAccounts, capabilities: nextCapabilities, resources: nextResources, mcp, connectorServices: servicesData, connectorSources, connectorServiceTools: serviceTools, edge, crossPlane, identities: identitiesData, grants: grantsData, audit, adapters, executions: nextExecutions, configReload };
     connectorServiceId.value = nextServiceId;
     const tools = Array.isArray(serviceTools?.tools) ? serviceTools.tools : [];
     connectorServiceToolId.value = connectorServiceToolId.value || tools[0]?.capability_id || '';
@@ -723,6 +724,42 @@ async function refresh() {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadGatewayContract(force = false) {
+  if (contractLoading.value || (contractLoaded.value && !force)) return;
+  contractLoading.value = true;
+  contractError.value = '';
+  try {
+    const [capabilityContractData, openApi, openAiToolsData] = await Promise.all([
+      api.gatewayCapabilityContract(),
+      api.gatewayOpenApi(),
+      api.gatewayOpenAiTools(),
+    ]);
+    state.value = {
+      ...state.value,
+      capabilityContract: capabilityContractData,
+      openApi,
+      openAiTools: openAiToolsData,
+    };
+    contractError.value = [
+      capabilityContractData.__error,
+      openApi.__error,
+      openAiToolsData.__error,
+    ].filter(Boolean).join(' · ');
+    contractLoaded.value = true;
+  } catch (err) {
+    contractError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    contractLoading.value = false;
+  }
+}
+
+async function pageHeaderRefresh() {
+  await refresh();
+  if (activeSection.value === 'alignment') {
+    await loadGatewayContract(true);
   }
 }
 
@@ -900,7 +937,16 @@ async function revokeGrant() {
   await refresh();
 }
 
-onMounted(refresh);
+onMounted(async () => {
+  await refresh();
+  if (activeSection.value === 'alignment') {
+    await loadGatewayContract();
+  }
+});
+
+watch(activeSection, (section) => {
+  if (section === 'alignment') void loadGatewayContract();
+});
 </script>
 
 <template>
@@ -910,7 +956,7 @@ onMounted(refresh);
         <h1>{{ t('page.gateway.page.text.3545d93ed9') }}</h1>
         <p>{{ t('page.gateway.page.text.0c015c80ce') }}</p>
       </div>
-      <button class="primary-action" type="button" :disabled="loading" @click="refresh">
+      <button class="primary-action" type="button" :disabled="loading" @click="pageHeaderRefresh">
         <RefreshCw :size="15" />
         {{ loading ? t('page.gateway.page.inline.eac49d64ff') : t('page.gateway.page.inline.e8f3da1a82') }}
       </button>
@@ -969,13 +1015,24 @@ onMounted(refresh);
           <StatusPill :status="capabilityContract.__state && capabilityContract.__state !== 'ready' ? capabilityContract.__state : (capabilityCoverage.route_contract_parity ? 'ready' : 'degraded')" />
         </header>
         <p>{{ t('page.gateway.contract.detail') }}</p>
+        <p v-if="contractError" class="settings-alert">{{ contractError }}</p>
         <section class="metric-row compact">
           <article v-for="row in contractOverviewRows" :key="row.label" class="metric-card">
             <span>{{ row.label }}</span>
             <strong>{{ row.value }}</strong>
           </article>
         </section>
-        <DataTable v-if="gatewayContractRows.length" searchable copyable row-key="id" :rows="gatewayContractRows" :columns="['domain', 'method', 'path', 'risk', 'visible']" @row-click="selectedDetail = $event" />
+        <DataTable
+          v-if="gatewayContractRows.length || contractLoading"
+          searchable
+          copyable
+          row-key="id"
+          :rows="gatewayContractRows"
+          :columns="['domain', 'method', 'path', 'owner', 'criticality', 'risk', 'webui', 'ai', 'tool']"
+          :loading="contractLoading"
+          :page-size="50"
+          @row-click="selectedDetail = $event"
+        />
         <EmptyState v-else :title="t('page.gateway.contract.empty')" :detail="t('page.gateway.contract.emptyDetail')" />
         <DataTable v-if="openAiToolRows.length" searchable copyable row-key="name" :rows="openAiToolRows" :columns="['name', 'description', 'parameters']" @row-click="selectedDetail = $event" />
         <ObjectInspectorDrawer :title="t('page.gateway.contract.raw')" :data="{ contract: capabilityContract, openapi: { openapi: openApiDocument.openapi, path_count: openApiPathCount }, openai_tools: openAiTools }" />

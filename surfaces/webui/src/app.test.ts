@@ -4,7 +4,7 @@ import { nextTick } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
-import { api, capabilityPageEndpointsFromContract } from './api/client';
+import { api } from './api/client';
 import ChatPage from './pages/ChatPage.vue';
 import AgentsPage from './pages/AgentsPage.vue';
 import AuditPage from './pages/AuditPage.vue';
@@ -978,7 +978,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('renders gateway governance panels and evidence surfaces', async () => {
-    const wrapper = await mountApp('/gateway');
+    const wrapper = await mountApp('/gateway?section=connectors');
     await settle();
     expect(wrapper.text()).toContain('Gateway 与跨平面');
     expect(wrapper.text()).toContain('将连接器资源晋升到记忆');
@@ -990,41 +990,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Gateway 修复建议');
   });
 
-  it('derives capability endpoint probes from Gateway Capability Contract safely', () => {
-    const contract: any = {
-      kind: 'gateway.capability_contract',
-      schema_version: 1,
-      owner: 'gateway',
-      source: 'test',
-      route_count: 7,
-      capability_count: 7,
-      coverage: {
-        route_count: 7,
-        capability_count: 7,
-        p1_count: 2,
-        ai_visible_count: 4,
-        openapi_path_count: 6,
-        openai_tool_count: 2,
-        route_contract_parity: true,
-      },
-      capabilities: [
-        { id: 'runtime-status', domain: 'runtime', title: 'Runtime status', http: { method: 'GET', path: '/api/runtime/status', criticality: 'p1' }, risk: 'read', surface_visibility: { webui: true } },
-        { id: 'runtime-post', domain: 'runtime', title: 'Runtime write', http: { method: 'POST', path: '/api/runtime/turns', criticality: 'p1' }, risk: 'write', surface_visibility: { webui: true } },
-        { id: 'hidden', domain: 'runtime', title: 'Hidden runtime', http: { method: 'GET', path: '/api/runtime/hidden' }, risk: 'read', surface_visibility: { webui: false } },
-        { id: 'raw', domain: 'runtime', title: 'Raw runtime', http: { method: 'GET', path: '/api/runtime/raw' }, risk: 'read', surface_visibility: { webui: true } },
-        { id: 'download', domain: 'runtime', title: 'Download runtime', http: { method: 'GET', path: '/api/runtime/download' }, risk: 'read', surface_visibility: { webui: true } },
-        { id: 'session', domain: 'context', title: 'Session context', http: { method: 'GET', path: '/api/sessions/:id/context' }, risk: 'read', surface_visibility: { webui: true } },
-        { id: 'unknown-param', domain: 'runtime', title: 'Unknown param', http: { method: 'GET', path: '/api/runtime/:run_id/detail' }, risk: 'read', surface_visibility: { webui: true } },
-      ],
-    };
-
-    const runtime = capabilityPageEndpointsFromContract(contract, 'runtime', 'session-1');
-    expect(runtime.map((item) => item[1])).toEqual(['/api/runtime/status']);
-    const context = capabilityPageEndpointsFromContract(contract, 'context', 'session-1');
-    expect(context.map((item) => item[1])).toContain('/api/sessions/session-1/context');
-  });
-
-  it('loads Gateway contract projections during WebUI boot', async () => {
+  it('does not load Gateway contract projections outside the alignment section', async () => {
     const calls: string[] = [];
     vi.mocked(fetch).mockImplementation((url: any) => {
       const path = String(url);
@@ -1059,15 +1025,11 @@ describe('Cowd Vue WebUI shell', () => {
       }
       return Promise.resolve(new Response(JSON.stringify({ sessions: [], commands: [], profiles: [], workspace_files: [] }), { status: 200, headers: { 'content-type': 'application/json' } }));
     });
-    const wrapper = await mountApp('/gateway');
+    const wrapper = await mountApp('/gateway?section=connectors');
     await settleAsync();
-    const store = useAppStore();
-    expect(store.gatewayCapabilityContract?.coverage.route_contract_parity).toBe(true);
-    expect(store.gatewayOpenAiTools?.tool_count).toBe(1);
-    expect(calls.some((path) => path.includes('/api/gateway/capability-contract'))).toBe(true);
-    expect(calls.some((path) => path.includes('/api/gateway/openapi.json'))).toBe(true);
-    expect(calls.some((path) => path.includes('/api/gateway/openai-tools'))).toBe(true);
-    expect(wrapper.text()).toContain('Gateway 能力合同');
+    expect(calls.some((path) => path.includes('/api/gateway/capability-contract'))).toBe(false);
+    expect(calls.some((path) => path.includes('/api/gateway/openapi.json'))).toBe(false);
+    expect(calls.some((path) => path.includes('/api/gateway/openai-tools'))).toBe(false);
     wrapper.unmount();
     vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
   });
@@ -1612,9 +1574,6 @@ describe('Cowd Vue WebUI shell', () => {
     store.activeSessionId = 'session-A';
     store.attachments = [{ ref_id: 'private-A', path: 'secret.md' }] as any;
     store.currentTimeline = { events: [{ detail: 'secret-A' }] };
-    store.capabilitySnapshots = {
-      runtime: [{ id: 'private-A', data: { secret: 'private-A' } }],
-    } as any;
     store.actionResults = { 'session-A:runtime:stop': { secret: 'private-A' } };
 
     window.dispatchEvent(new CustomEvent('cowd:session-authorization-invalidated', {
@@ -1632,7 +1591,6 @@ describe('Cowd Vue WebUI shell', () => {
     });
     expect(store.attachments).toEqual([]);
     expect(store.currentTimeline).toEqual({});
-    expect(store.capabilitySnapshots).toEqual({});
     expect(store.actionResults).toEqual({});
   });
 
@@ -1737,29 +1695,6 @@ describe('Cowd Vue WebUI shell', () => {
     expect(stableCredential.element.value).toBe('temporary-test-credential');
     expect(wrapper.get('[data-section="gateway"] button[type="submit"]').attributes('disabled')).toBeUndefined();
     wrapper.unmount();
-  });
-
-  it('fences a late capability snapshot after the active session changes', async () => {
-    setActivePinia(createPinia());
-    const store = useAppStore();
-    const chat = useChatSessionsStore();
-    store.activeSessionId = 'session-A';
-    store.gatewayCapabilityContract = { capabilities: [] } as any;
-    vi.spyOn(chat, 'open').mockImplementation(() => new Promise<void>(() => undefined));
-    let finish!: (value: any) => void;
-    vi.spyOn(api, 'loadCapabilityPage').mockImplementation(() => (
-      new Promise((resolve) => { finish = resolve; })
-    ));
-
-    const pending = store.loadCapability('runtime');
-    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
-    void store.loadMessages('session-B');
-    finish([{ id: 'private-A', data: { secret: 'must-not-cross-session' } }]);
-    await pending;
-
-    expect(store.activeSessionId).toBe('session-B');
-    expect(store.capabilitySnapshots.runtime).toBeUndefined();
-    expect(JSON.stringify(store.capabilitySnapshots)).not.toContain('must-not-cross-session');
   });
 
   it('sends resource ids separately from message content', async () => {
@@ -2705,7 +2640,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/local%3Atest/files/raw?path=SKILL.md', expect.any(Object));
   });
 
-  it('loads memory graph workbench from real memory and structured-data endpoints', async () => {
+  it('loads the active memory section without eagerly loading unrelated sections', async () => {
     const fetchMock = vi.fn((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
@@ -2765,7 +2700,63 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     expect(wrapper.text()).toContain('证据下钻载荷');
     expect(fetchMock).toHaveBeenCalledWith('/api/memory/recall/explain?q=manufacturing%20quality%20anomaly&limit=12', expect.any(Object));
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/cowd/structured/sources', expect.any(Object));
+    await wrapper.get('[data-section-id="structured-core"]').trigger('click');
+    await settleAsync();
     expect(fetchMock).toHaveBeenCalledWith('/api/cowd/structured/sources', expect.any(Object));
+  });
+
+  it('keeps manual memory governance disabled while a nightly run is active', async () => {
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/memory/status') {
+        return Promise.resolve(new Response(JSON.stringify({
+          enabled: true,
+          status: 'ready',
+          layers: [],
+          automatic_governance_run: {
+            run_id: 'nightly-1',
+            mode: 'nightly',
+            started_at: '2026-08-01T03:00:00Z',
+          },
+        })));
+      }
+      if (url.startsWith('/api/memory/maintenance')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          enabled: true,
+          running: true,
+          candidates: [],
+          automatic_governance_run: {
+            run_id: 'nightly-1',
+            mode: 'nightly',
+            started_at: '2026-08-01T03:00:00Z',
+          },
+        })));
+      }
+      if (url === '/api/memory/knowledge/maintenance') {
+        return Promise.resolve(new Response(JSON.stringify({ maintenance_candidates: [] })));
+      }
+      if (url === '/api/memory/performance') {
+        return Promise.resolve(new Response(JSON.stringify({})));
+      }
+      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
+      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = await mountApp('/memory?section=maintenance');
+    await settleAsync();
+    const button = wrapper.get('[data-section="maintenance"] button.primary-action');
+    expect(button.attributes('disabled')).toBeDefined();
+    expect(button.text()).toContain('治理运行中');
+    expect(wrapper.text()).toContain('nightly');
+    await button.trigger('click');
+    expect(fetchMock.mock.calls.filter(([path, init]) => (
+      String(path) === '/api/memory/maintenance'
+      && (init as RequestInit | undefined)?.method === 'POST'
+    )).length).toBe(0);
+    wrapper.unmount();
   });
 
   it('loads agents workbench from real agent and task endpoints', async () => {

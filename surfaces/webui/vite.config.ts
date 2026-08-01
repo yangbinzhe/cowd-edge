@@ -8,6 +8,12 @@ const gatewayProxyTarget = process.env.COWD_VITE_GATEWAY_URL || 'http://127.0.0.
 const workspaceManifest = readFileSync(new URL('../../Cargo.toml', import.meta.url), 'utf8');
 const edgeVersion = workspaceManifest.match(/\[workspace\.package\][\s\S]*?version\s*=\s*"([^"]+)"/)?.[1] || 'unknown';
 const webuiRoot = dirname(fileURLToPath(import.meta.url));
+const i18nModules = new Set([
+  resolve(webuiRoot, 'src/i18n/index.ts'),
+  resolve(webuiRoot, 'src/i18n/locale.ts'),
+  resolve(webuiRoot, 'src/i18n/messages/en-US.ts'),
+  resolve(webuiRoot, 'src/i18n/messages/zh-CN.ts'),
+]);
 
 export default defineConfig({
   plugins: [vue()],
@@ -36,16 +42,25 @@ export default defineConfig({
         entryFileNames: 'assets/app/[name]-[hash].js',
         chunkFileNames: 'assets/app/[name]-[hash].js',
         assetFileNames: 'assets/app/[name]-[hash][extname]',
-        manualChunks: {
-          'vendor-vue': ['vue', 'vue-router', 'pinia'],
-          'vendor-icons': ['lucide-vue-next'],
-          'vendor-markdown': ['markdown-it'],
-          'app-i18n': [
-            resolve(webuiRoot, 'src/i18n/index.ts'),
-            resolve(webuiRoot, 'src/i18n/locale.ts'),
-            resolve(webuiRoot, 'src/i18n/messages/en-US.ts'),
-            resolve(webuiRoot, 'src/i18n/messages/zh-CN.ts'),
-          ],
+        manualChunks(id) {
+          const normalized = id.replaceAll('\\', '/');
+          if (
+            normalized.includes('/node_modules/vue/')
+            || normalized.includes('/node_modules/vue-router/')
+            || normalized.includes('/node_modules/pinia/')
+          ) {
+            return 'vendor-vue';
+          }
+          if (normalized.includes('/node_modules/lucide-vue-next/')) {
+            return 'vendor-icons';
+          }
+          if (normalized.includes('/node_modules/markdown-it/')) {
+            return 'vendor-markdown';
+          }
+          if (i18nModules.has(id)) {
+            return 'app-i18n';
+          }
+          return undefined;
         },
       },
     },

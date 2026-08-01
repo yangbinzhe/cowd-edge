@@ -16,7 +16,7 @@ const emit = defineEmits<{
   close: [];
   'session-opened': [];
 }>();
-const release = computed(() => releaseProjection(store.gatewayOpenApi));
+const release = computed(() => releaseProjection(store.health));
 const releaseTitle = computed(() => t('release.versions', {
   edge: release.value.edge,
   gateway: release.value.gateway,

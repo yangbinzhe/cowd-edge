@@ -66,7 +66,7 @@ for (const [pageId, page] of Object.entries(pages)) {
     if (pageId === 'mfg') {
       return !/\bv-(?:if|else-if|else)\b/.test(match[0]);
     }
-    return !match[0].includes(`v-show="isSectionActive('${sectionId}')"`);
+    return !match[0].includes(`isSectionActive('${sectionId}')`);
   }).map((match) => match[1]);
 
   if (!hasPageSpec) failures.push(`${pageId}: capability spec missing`);

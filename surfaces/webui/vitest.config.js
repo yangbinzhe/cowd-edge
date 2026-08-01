@@ -17,6 +17,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    clearMocks: true,
     setupFiles: ['./src/testSetup.ts'],
     include: ['src/**/*.test.ts', '.cowd/apps/*/webui/src/**/*.test.ts'],
     exclude: ['**/*.e2e.spec.js', '**/node_modules/**'],

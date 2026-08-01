@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useCapabilitySection } from "../composables/useCapabilitySection";
-const { isSectionActive } = useCapabilitySection();
+const { activeSection, isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { RefreshCw, RotateCcw, Search } from 'lucide-vue-next';
 import { api } from '../api/client';
@@ -46,6 +46,7 @@ const symbolLinks = ref<any>({});
 const maintenance = ref<any>({});
 const lifecycle = ref<any>({});
 const maintenanceScan = ref<any>(null);
+const manualGovernancePending = ref(false);
 const performance = ref<any>({});
 const runtime = ref<any>({});
 const contextEnvelope = ref<any>({});
@@ -68,6 +69,8 @@ const entryPriority = ref('normal');
 const sourceRef = ref('');
 const factType = ref('');
 let lastGraphRequest = '';
+let maintenancePollTimer: ReturnType<typeof setTimeout> | null = null;
+const loadedSections = new Set<string>();
 
 const layerItems = computed(() => Array.isArray(layers.value?.layers) ? layers.value.layers : []);
 const entries = computed(() => Array.isArray(layerEntries.value?.entries) ? layerEntries.value.entries : []);
@@ -175,6 +178,26 @@ const automaticGovernance = computed(() => (
   || status.value?.automatic_governance
   || {}
 ));
+const automaticGovernanceRun = computed(() => {
+  if (
+    Object.prototype.hasOwnProperty.call(maintenance.value || {}, 'running')
+    || Object.prototype.hasOwnProperty.call(maintenance.value || {}, 'automatic_governance_run')
+  ) {
+    return maintenance.value?.automatic_governance_run || null;
+  }
+  return status.value?.automatic_governance_run || null;
+});
+const automaticGovernanceRunning = computed(() => (
+  manualGovernancePending.value
+  ||
+  Boolean(maintenance.value?.running)
+  || Boolean(automaticGovernanceRun.value)
+));
+const automaticGovernanceDetails = computed(() => (
+  Array.isArray(automaticGovernance.value?.details)
+    ? automaticGovernance.value.details
+    : []
+));
 const automaticGovernanceApplied = computed(() => (
   Number(automaticGovernance.value?.auto_applied_duplicates || 0)
   + Number(automaticGovernance.value?.auto_resolved_conflicts || 0)
@@ -186,10 +209,22 @@ const automaticGovernanceApplied = computed(() => (
   + Number(automaticGovernance.value?.auto_retired_knowledge_conflicts || 0)
 ));
 const automaticGovernanceStatus = computed(() => {
+  if (automaticGovernanceRunning.value) return 'running';
   if (Number(automaticGovernance.value?.errors?.length || 0) > 0) return 'degraded';
   if (!automaticGovernance.value?.completed_at) return 'idle';
   return 'ready';
 });
+const automaticGovernanceDiscoveryRows = computed(() => Object.entries(
+  automaticGovernance.value?.discovered_by_kind || {},
+).map(([kind, count]) => ({ kind, count })));
+const automaticGovernanceActionRows = computed(() => Object.entries(
+  automaticGovernance.value?.handled_by_action || {},
+).map(([action, count]) => ({ action, count })));
+const governanceReviewQueue = computed(() => (
+  maintenance.value?.review_queue
+  || status.value?.governance_review_queue
+  || {}
+));
 const memoryContext = computed(() => [
   { label: t('script.pages.memorypage.label.c1f65ddb75'), value: 'Reality Core / Memory' },
   { label: t('script.pages.memorypage.label.3703cd2168'), value: healthLevel.value, tone: healthLevel.value === 'ready' ? 'success' : 'warn' },
@@ -271,70 +306,96 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [
-      nextStatus,
-      nextStats,
-      nextLayers,
-      nextLinks,
-      nextClusters,
-      nextGraph,
-      nextMaintenance,
-      nextPerformance,
-      nextRuntime,
-      nextContextEnvelope,
-      nextKnowledge,
-      nextKnowledgeNamespaces,
-      nextKnowledgeConflicts,
-      nextKnowledgeMaintenance,
-      nextKnowledgeCandidates,
-      sources,
-      facts,
-      evidence,
-      watermarks,
-    ] = await Promise.all([
-      api.memoryStatus(),
-      api.memoryStats(),
-      api.memoryLayers(),
-      api.memoryLinks(),
-      api.memoryClusters(24, graphFocus.value, graphFilter.value, 0, graphDepth.value),
-      api.memoryGraph(graphFocus.value, graphDepth.value, graphFilter.value, 80, graphCursor.value),
-      api.memoryMaintenance('open'),
-      api.memoryPerformance(),
-      api.memoryRuntime(),
-      api.memoryContextEnvelope('', 20),
-      api.memoryKnowledge(),
-      api.memoryKnowledgeNamespaces(),
-      api.memoryKnowledgeConflicts(),
-      api.memoryKnowledgeMaintenance(),
-      api.memoryKnowledgeCandidates(),
-      api.structuredSources(),
-      api.structuredFacts(),
-      api.structuredEvidence(),
-      api.structuredWatermarks(),
-    ]);
+    const nextStatus = await api.memoryStatus();
     status.value = nextStatus;
-    stats.value = nextStats;
-    layers.value = nextLayers;
-    links.value = nextLinks;
-    clusters.value = nextClusters;
-    entities.value = nextGraph;
-    triples.value = nextGraph;
-    maintenance.value = nextMaintenance;
-    performance.value = nextPerformance;
-    runtime.value = nextRuntime;
-    contextEnvelope.value = nextContextEnvelope;
-    knowledge.value = nextKnowledge;
-    knowledgeNamespaces.value = nextKnowledgeNamespaces;
-    knowledgeConflicts.value = nextKnowledgeConflicts;
-    knowledgeMaintenance.value = nextKnowledgeMaintenance;
-    knowledgeCandidates.value = nextKnowledgeCandidates;
-    structured.value = { sources, facts, evidence, watermarks };
-    await loadLayer();
-    await runRecall();
+    stats.value = {
+      total_entries: nextStatus?.total_entries || 0,
+      vector_count: nextStatus?.vector_count || 0,
+      entity_count: stats.value?.entity_count || 0,
+      triple_count: stats.value?.triple_count || 0,
+    };
+    if (Array.isArray(nextStatus?.layers)) {
+      layers.value = { enabled: nextStatus.enabled, layers: nextStatus.layers };
+    }
+    await loadSection(activeSection.value || 'layers', true);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     loading.value = false;
+  }
+}
+
+async function loadSection(section: string, force = false) {
+  if (!section || (loadedSections.has(section) && !force)) return;
+  try {
+    switch (section) {
+      case 'layers': {
+        const nextLayers = await api.memoryLayers();
+        layers.value = nextLayers;
+        await loadLayer();
+        break;
+      }
+      case 'recall':
+        if (query.value.trim() || symbolQuery.value.trim()) await runRecall();
+        break;
+      case 'graph': {
+        const [nextLinks, nextRuntime] = await Promise.all([
+          api.memoryLinks(),
+          api.memoryRuntime(),
+          loadKnowledgeGraph(graphCursor.value, false),
+        ]);
+        links.value = nextLinks;
+        runtime.value = nextRuntime;
+        const graphStats = await api.memoryStats();
+        stats.value = { ...stats.value, ...graphStats };
+        break;
+      }
+      case 'context-envelope':
+        contextEnvelope.value = await api.memoryContextEnvelope('', 20);
+        break;
+      case 'knowledge-governance': {
+        const [nextKnowledge, namespaces, conflicts, governance, candidates] = await Promise.all([
+          api.memoryKnowledge(),
+          api.memoryKnowledgeNamespaces(),
+          api.memoryKnowledgeConflicts(),
+          api.memoryKnowledgeMaintenance(),
+          api.memoryKnowledgeCandidates(),
+        ]);
+        knowledge.value = nextKnowledge;
+        knowledgeNamespaces.value = namespaces;
+        knowledgeConflicts.value = conflicts;
+        knowledgeMaintenance.value = governance;
+        knowledgeCandidates.value = candidates;
+        break;
+      }
+      case 'maintenance': {
+        const [nextMaintenance, nextKnowledgeMaintenance, nextPerformance] = await Promise.all([
+          api.memoryMaintenance('open'),
+          api.memoryKnowledgeMaintenance(),
+          api.memoryPerformance(),
+        ]);
+        maintenance.value = nextMaintenance;
+        knowledgeMaintenance.value = nextKnowledgeMaintenance;
+        performance.value = nextPerformance;
+        scheduleMaintenancePoll();
+        break;
+      }
+      case 'structured-core': {
+        const [sources, facts, evidence, watermarks] = await Promise.all([
+          api.structuredSources(),
+          api.structuredFacts(),
+          api.structuredEvidence(),
+          api.structuredWatermarks(),
+        ]);
+        structured.value = { sources, facts, evidence, watermarks };
+        break;
+      }
+      default:
+        return;
+    }
+    loadedSections.add(section);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
   }
 }
 
@@ -415,7 +476,7 @@ async function createEntry() {
     priority: entryPriority.value,
     tags: entryTags.value.split(',').map((tag) => tag.trim()).filter(Boolean),
   });
-  await Promise.all([loadLayer(), refresh()]);
+  await Promise.all([loadLayer(), api.memoryStatus().then((value) => { status.value = value; })]);
 }
 
 async function updateEntry() {
@@ -440,8 +501,21 @@ async function deleteEntry() {
 }
 
 async function scanMaintenance() {
-  maintenanceScan.value = await api.scanMemoryMaintenance({ max_candidates: 40 });
-  maintenance.value = await api.memoryMaintenance('open');
+  if (automaticGovernanceRunning.value) return;
+  manualGovernancePending.value = true;
+  scheduleMaintenancePoll();
+  try {
+    maintenanceScan.value = await api.scanMemoryMaintenance({ max_candidates: 256 });
+    maintenance.value = maintenanceScan.value;
+    if (!maintenance.value?.running) {
+      maintenance.value = await api.memoryMaintenance('open');
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    manualGovernancePending.value = false;
+  }
+  scheduleMaintenancePoll();
 }
 
 async function markCandidate(id: string, nextStatus: string) {
@@ -470,7 +544,35 @@ function selectStructuredRow(row: Record<string, unknown>) {
   selectedDetail.value = (row.raw as Record<string, unknown> | undefined) || row;
 }
 
+function scheduleMaintenancePoll() {
+  if (maintenancePollTimer) clearTimeout(maintenancePollTimer);
+  maintenancePollTimer = null;
+  if (activeSection.value !== 'maintenance' || !automaticGovernanceRunning.value) return;
+  maintenancePollTimer = setTimeout(async () => {
+    try {
+      maintenance.value = await api.memoryMaintenance('open');
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err);
+      maintenancePollTimer = null;
+      return;
+    }
+    scheduleMaintenancePoll();
+  }, 2_000);
+}
+
 onMounted(refresh);
+onBeforeUnmount(() => {
+  if (maintenancePollTimer) clearTimeout(maintenancePollTimer);
+});
+watch(activeSection, (section) => {
+  if (section === 'maintenance') {
+    void loadSection(section, true);
+    return;
+  }
+  if (maintenancePollTimer) clearTimeout(maintenancePollTimer);
+  maintenancePollTimer = null;
+  void loadSection(section, false);
+});
 watch(
   () => [route.query.focus, route.query.filter, route.query.depth, route.query.cursor, route.query.from, route.query.to],
   async () => {
@@ -839,9 +941,69 @@ watch(
               <strong>{{ automaticGovernance.errors?.length || 0 }}</strong>
               <small>{{ automaticGovernance.errors?.[0] || t('memory.automaticGovernance.noErrors') }}</small>
             </article>
+            <article class="metric-card" :data-tone="governanceReviewQueue.durable ? 'success' : 'warn'">
+              <span>{{ t('memory.automaticGovernance.reviewQueue') }}</span>
+              <strong>{{ displayStatus(governanceReviewQueue.status || 'unknown') }}</strong>
+              <small>{{ governanceReviewQueue.durable ? t('memory.automaticGovernance.reviewQueueDurable') : t('memory.automaticGovernance.reviewQueueLocal') }}</small>
+            </article>
           </section>
-          <button class="primary-action" type="button" @click="scanMaintenance">{{ t('page.memory.page.text.9dffc03a7b') }}</button>
-          <RequestReceipt :receipt="maintenanceScan || actionResult" :title="t('page.memory.page.title.ba22f93cf4')" />
+          <div class="button-row">
+            <button
+              class="primary-action"
+              type="button"
+              :disabled="automaticGovernanceRunning"
+              @click="scanMaintenance"
+            >
+              <RefreshCw :size="15" :class="{ spinning: automaticGovernanceRunning }" />
+              {{ automaticGovernanceRunning ? t('memory.automaticGovernance.running') : t('page.memory.page.text.9dffc03a7b') }}
+            </button>
+            <span v-if="automaticGovernanceRun" class="subtle-copy">
+              {{ t('memory.automaticGovernance.runningSince', {
+                mode: automaticGovernanceRun.mode || '-',
+                time: automaticGovernanceRun.started_at || '-',
+              }) }}
+              · {{ t('memory.automaticGovernance.progress', {
+                phase: automaticGovernanceRun.phase || 'starting',
+                scanned: automaticGovernanceRun.scanned_entries || 0,
+                processed: automaticGovernanceRun.processed_candidates || 0,
+                total: automaticGovernanceRun.total_candidates || 0,
+              }) }}
+            </span>
+          </div>
+          <dl v-if="automaticGovernance.completed_at" class="detail-list">
+            <dt>{{ t('memory.automaticGovernance.runId') }}</dt>
+            <dd>{{ automaticGovernance.run_id || '-' }}</dd>
+            <dt>{{ t('memory.automaticGovernance.startedAt') }}</dt>
+            <dd>{{ automaticGovernance.started_at || '-' }}</dd>
+            <dt>{{ t('memory.automaticGovernance.completedAt') }}</dt>
+            <dd>{{ automaticGovernance.completed_at || '-' }}</dd>
+            <dt>{{ t('memory.automaticGovernance.duration') }}</dt>
+            <dd>{{ automaticGovernance.duration_ms || 0 }} ms</dd>
+            <dt>{{ t('memory.automaticGovernance.scanned') }}</dt>
+            <dd>
+              {{ automaticGovernance.scanned_entries || 0 }}
+              / {{ automaticGovernance.active_entries || 0 }}
+              / {{ automaticGovernance.scanned_candidates || 0 }}
+            </dd>
+          </dl>
+          <div v-if="automaticGovernanceDiscoveryRows.length || automaticGovernanceActionRows.length" class="memory-tabs">
+            <article>
+              <h3>{{ t('memory.automaticGovernance.discovered') }}</h3>
+              <DataTable :rows="automaticGovernanceDiscoveryRows" :columns="['kind', 'count']" />
+            </article>
+            <article>
+              <h3>{{ t('memory.automaticGovernance.handled') }}</h3>
+              <DataTable :rows="automaticGovernanceActionRows" :columns="['action', 'count']" />
+            </article>
+          </div>
+          <DataTable
+            v-if="automaticGovernanceDetails.length"
+            searchable
+            copyable
+            :rows="automaticGovernanceDetails"
+            :columns="['kind', 'status', 'summary', 'reason', 'action', 'affected_memory_ids', 'error']"
+            @row-click="selectedDetail = $event"
+          />
           <div class="maintenance-list">
             <article v-for="candidate in candidateRows.slice(0, 12)" :key="candidate.id || candidate.memory_id" role="button" tabindex="0" @click="selectedDetail = candidate" @keydown.enter.prevent="selectedDetail = candidate">
               <div>
