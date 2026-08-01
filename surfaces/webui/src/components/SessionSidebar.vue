@@ -189,20 +189,31 @@ async function onScroll(event: Event) {
   }
 }
 
+function reconcileSessionStatuses() {
+  if (
+    store.authorizationState === 'ready'
+    && (typeof document === 'undefined' || document.visibilityState === 'visible')
+  ) {
+    void store.refreshSessionStatuses().catch(() => undefined);
+  }
+}
+
 onMounted(() => {
   const stored = typeof localStorage !== 'undefined' ? Number(localStorage.getItem(SIDEBAR_WIDTH_KEY)) : 0;
   applySidebarWidth(Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_SIDEBAR_WIDTH);
-  statusTimer = setInterval(() => {
-    if (store.authorizationState === 'ready') {
-      void store.refreshSessionStatuses().catch(() => undefined);
-    }
-  }, 5000);
+  statusTimer = setInterval(reconcileSessionStatuses, 30_000);
+  window.addEventListener('focus', reconcileSessionStatuses);
+  window.addEventListener('online', reconcileSessionStatuses);
+  document.addEventListener('visibilitychange', reconcileSessionStatuses);
 });
 
 onBeforeUnmount(() => {
   if (resizeMove) window.removeEventListener('pointermove', resizeMove);
   if (resizeEnd) window.removeEventListener('pointerup', resizeEnd);
   if (statusTimer) clearInterval(statusTimer);
+  window.removeEventListener('focus', reconcileSessionStatuses);
+  window.removeEventListener('online', reconcileSessionStatuses);
+  document.removeEventListener('visibilitychange', reconcileSessionStatuses);
   if (typeof document !== 'undefined') document.body.classList.remove('resizing-session-sidebar');
 });
 

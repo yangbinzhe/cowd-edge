@@ -418,6 +418,9 @@ export async function read<T>(
       throw new ApiReadError(error instanceof Error ? error.message : String(error), 'invalid_response', response.status);
     }
   } catch (error) {
+    if (init.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+      throw error;
+    }
     const readError = error instanceof ApiReadError
       ? error
       : new ApiReadError(error instanceof Error ? error.message : String(error), 'offline');
@@ -928,7 +931,7 @@ export const api = {
     { items: [] },
   ),
   searchSessions: (query: string, limit = 50, offset = 0) => read<{ sessions: SessionSummary[] }>(
-    `/api/sessions?limit=${limit}&offset=${offset}&include_execution=false${query ? `&q=${encodeURIComponent(query)}` : ''}`,
+    `/api/sessions?limit=${limit}&offset=${offset}&include_execution=true${query ? `&q=${encodeURIComponent(query)}` : ''}`,
     { sessions: [] },
   ),
   searchMessages: (query: string) => read(`/api/sessions/search?q=${encodeURIComponent(query)}`, { matches: [] }),
@@ -1048,11 +1051,15 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ content, resource_ids: resourceIds, idempotency_key: idempotencyKey }),
   }),
-  sessionInputs: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/inputs`, {}),
+  sessionInputs: (sessionId: string, signal?: AbortSignal) => read(
+    `/api/sessions/${encodeURIComponent(sessionId)}/inputs`,
+    {},
+    { signal },
+  ),
   sessionInputProjection: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/input-projection`, {}),
-  turnInbox: (sessionId: string, turnId?: string) => {
+  turnInbox: (sessionId: string, turnId?: string, signal?: AbortSignal) => {
     const query = turnId ? `?turn_id=${encodeURIComponent(turnId)}` : '';
-    return read(`/api/sessions/${encodeURIComponent(sessionId)}/turn-inbox${query}`, {});
+    return read(`/api/sessions/${encodeURIComponent(sessionId)}/turn-inbox${query}`, {}, { signal });
   },
   turnInboxByTurn: (sessionId: string, turnId: string) => read(
     `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/inbox`,
@@ -1066,18 +1073,18 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ decision, reason }),
   }),
-  workspace: () => read('/api/workspace', {
+  workspace: (signal?: AbortSignal) => read('/api/workspace', {
     workspace_root: '',
     workspace_canonical: '',
     profile_id: '',
-  }),
+  }, { signal }),
   workspaces: () => read('/api/workspaces', { workspaces: [] }),
-  files: (dir = '') => {
+  files: (dir = '', signal?: AbortSignal) => {
     const suffix = dir ? `?dir=${encodeURIComponent(dir)}` : '';
     return read<{ dir: string; files: WorkspaceFile[] }>(`/api/workspace/files${suffix}`, {
       dir,
       files: [],
-    });
+    }, { signal });
   },
   workspaceRawUrl: (path: string) => `/api/file/raw?path=${encodeURIComponent(path)}`,
   workspaceDownloadUrl: (path: string) => `/api/workspace/download?path=${encodeURIComponent(path)}`,
@@ -1125,7 +1132,11 @@ export const api = {
     body: JSON.stringify({ path, label: label || path, kind: 'workspace_file' }),
   }),
   deleteSessionAttachment: (sessionId: string, refId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(refId)}`, { method: 'DELETE' }),
-  runtimeTimeline: (sessionId: string) => read(`/api/runtime/timeline?session_id=${encodeURIComponent(sessionId)}&limit=50`, { events: [] }),
+  runtimeTimeline: (sessionId: string, signal?: AbortSignal) => read(
+    `/api/runtime/timeline?session_id=${encodeURIComponent(sessionId)}&limit=50`,
+    { events: [] },
+    { signal },
+  ),
   runtimeControlPlane: () => read('/api/runtime/control-plane', {}),
   runtimeStatus: () => read('/api/runtime/status', {}),
   runtimeSnapshot: () => read('/api/runtime/snapshot', {}),
@@ -1233,13 +1244,13 @@ export const api = {
   }),
   realityStatus: () => read('/api/reality/status', {}),
   realityStatic: () => read('/api/reality/static', { core_map: [] }),
-  realityFlow: (sessionId?: string, limit = 50) => {
+  realityFlow: (sessionId?: string, limit = 50, signal?: AbortSignal) => {
     const params = new URLSearchParams();
     if (sessionId) params.set('session_id', sessionId);
     params.set('limit', String(limit));
     const suffix = params.toString();
     const query = suffix ? `?${suffix}` : '';
-    return read(`/api/reality/flow${query}`, { stages: [], events: [], promotions: [] });
+    return read(`/api/reality/flow${query}`, { stages: [], events: [], promotions: [] }, { signal });
   },
   realityPromotions: (filters: { sessionId?: string; target?: string; status?: string; limit?: number } = {}) => {
     const params = new URLSearchParams();
@@ -1281,7 +1292,11 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ session_id: sessionId }),
   }),
-  contextCurrent: (sessionId: string, q = '', profile = 'main_turn') => read(`/api/context/current?session_id=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(q)}&profile=${encodeURIComponent(profile)}`, {}),
+  contextCurrent: (sessionId: string, q = '', profile = 'main_turn', signal?: AbortSignal) => read(
+    `/api/context/current?session_id=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(q)}&profile=${encodeURIComponent(profile)}`,
+    {},
+    { signal },
+  ),
   contextHistory: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/context?limit=20&include_envelopes=true`, {}),
   contextRecommendations: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/context/recommendations?limit=20`, {}),
   recordContextRecommendation: (sessionId: string, envelopeId: string, recommendation: string, action = 'acknowledged') => write(`/api/sessions/${encodeURIComponent(sessionId)}/context/recommendations`, {

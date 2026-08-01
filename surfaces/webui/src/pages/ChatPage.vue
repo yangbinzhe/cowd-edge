@@ -268,7 +268,7 @@ const chatEvidenceCount = computed(() => new Set(
 const showRequestedModel = computed(() => (
   !!store.selectedModel && effectiveModel.value !== store.selectedModel
 ));
-const isPanorama = computed(() => store.chatDisplayMode === 'panorama');
+const isPanorama = computed(() => !store.companionCollapsed);
 const turnRunning = computed(() => !!chat.active?.pending || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(executionStatus.value));
 const submissionBusy = computed(() => !!chat.active?.submitting);
 const attachmentLabel = computed(() => {
@@ -410,7 +410,6 @@ function rememberScroll() {
 }
 
 function openChatCompanion(tab: 'activity' | 'workspace' | 'inspector') {
-  store.setChatDisplayMode('panorama');
   store.openCompanion(tab);
 }
 

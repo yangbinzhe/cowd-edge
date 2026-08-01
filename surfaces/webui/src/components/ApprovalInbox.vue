@@ -17,7 +17,6 @@ const selectedIndex = ref(0);
 const busy = ref(false);
 const error = ref('');
 const presentedInChat = new Set<string>();
-let poll: ReturnType<typeof setInterval> | null = null;
 
 const activeSessionId = computed(() => String(store.activeSessionId || ''));
 const orderedApprovals = computed(() => {
@@ -143,16 +142,18 @@ useEscapeKey(closeInbox, () => modalOpen.value);
 
 onMounted(() => {
   refreshFromRuntime();
-  poll = setInterval(refreshFromRuntime, 5_000);
   window.addEventListener('focus', refreshFromRuntime);
+  window.addEventListener('online', refreshFromRuntime);
   window.addEventListener('cowd:approval-changed', refreshFromRuntime);
+  window.addEventListener('cowd:runtime-live-reconnected', refreshFromRuntime);
   document.addEventListener('visibilitychange', refreshWhenVisible);
 });
 
 onBeforeUnmount(() => {
-  if (poll) clearInterval(poll);
   window.removeEventListener('focus', refreshFromRuntime);
+  window.removeEventListener('online', refreshFromRuntime);
   window.removeEventListener('cowd:approval-changed', refreshFromRuntime);
+  window.removeEventListener('cowd:runtime-live-reconnected', refreshFromRuntime);
   document.removeEventListener('visibilitychange', refreshWhenVisible);
 });
 </script>

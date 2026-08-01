@@ -13,7 +13,6 @@ import {
 import { t } from '../i18n';
 import type {
   ActivityEvent,
-  ChatDisplayMode,
   ChatTurn,
   CompanionTab,
   GatewayCapabilityContract,
@@ -44,6 +43,18 @@ const PINNED_SESSION_KEY = 'cowd.webui.sessions.pinned';
 const VIEWED_SESSION_KEY = 'cowd.webui.sessions.viewedCounts';
 const WORKSPACE_RECENT_KEY = 'cowd.webui.workspace.recentFiles';
 const WORKSPACE_TEXT_PREVIEW_LIMIT_BYTES = 512 * 1024;
+
+type CapabilityLoadPhase = 'idle' | 'loading' | 'ready' | 'error';
+type CapabilityLoadState = {
+  phase: CapabilityLoadPhase;
+  generation: number;
+  loadedAt: string;
+  error: string;
+};
+
+function capabilityLoadState(): CapabilityLoadState {
+  return { phase: 'idle', generation: 0, loadedAt: '', error: '' };
+}
 
 function readStoredArray(key: string) {
   if (typeof localStorage === 'undefined') return [];
@@ -211,29 +222,14 @@ function visibleSessionRows(rows: unknown): SessionSummary[] {
     ));
 }
 
-function withRunningExecutions(
-  rows: SessionSummary[],
-  aggregate: { items?: SessionSummary['execution'][] } | null | undefined,
-) {
-  const active = new Map(
-    (Array.isArray(aggregate?.items) ? aggregate.items : [])
-      .filter((execution): execution is NonNullable<SessionSummary['execution']> => (
-        !!execution?.session_id
-      ))
-      .map((execution) => [execution.session_id, execution]),
-  );
-  return rows.map((session) => {
-    const execution = active.get(session.id);
-    return execution ? { ...session, execution } : session;
-  });
-}
-
 export const useAppStore = defineStore('app', () => {
   const chatSessions = useChatSessionsStore();
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   let bootPromise: Promise<void> | null = null;
   let activeSessionLoadGeneration = 0;
   let authorizationGeneration = 0;
+  let companionHydrationController: AbortController | null = null;
+  let companionHydrationGeneration = 0;
   const revokedSessionIds = new Set<string>();
   let uploadOperationSequence = 0;
   const activeUploadOperations = new Set<number>();
@@ -253,7 +249,10 @@ export const useAppStore = defineStore('app', () => {
   const activeSessionId = ref('');
   const activity = ref<ActivityEvent[]>([]);
   const companionTab = ref<CompanionTab>('activity');
-  const chatDisplayMode = ref<ChatDisplayMode>('panorama');
+  const criticalBoot = ref<CapabilityLoadState>(capabilityLoadState());
+  const chatCapabilities = ref<CapabilityLoadState>(capabilityLoadState());
+  const managementCapabilities = ref<Record<string, CapabilityLoadState>>({});
+  const companionHydration = ref<CapabilityLoadState>(capabilityLoadState());
   const currentRun = ref<any>(null);
   const currentContextEnvelope = ref<any>(null);
   const currentRealityFlow = ref<any>({});
@@ -484,6 +483,12 @@ export const useAppStore = defineStore('app', () => {
     const isCurrent = () => generation === authorizationGeneration;
     const pendingBoot = (async () => {
       busy.value = true;
+      criticalBoot.value = {
+        phase: 'loading',
+        generation: criticalBoot.value.generation + 1,
+        loadedAt: '',
+        error: '',
+      };
       authorizationState.value = 'checking';
       try {
         const bootActiveSessionId = activeSessionId.value;
@@ -503,62 +508,13 @@ export const useAppStore = defineStore('app', () => {
           return;
         }
         authorizationState.value = 'ready';
-        const [
-          manifest,
-          sessionData,
-          runningExecutions,
-          config,
-          runtime,
-          providerData,
-          reloadStatus,
-          profileData,
-          commandData,
-          workspace,
-          approvals,
-          capabilityContract,
-          openApi,
-          openAiTools,
-        ] = await Promise.all([
+        const [manifest, sessionData] = await Promise.all([
           api.health(),
-          api.sessions(sessionPageLimit.value, 0, false),
-          api.runningSessionExecutions(),
-          api.settings(),
-          api.runtimeControlPlane(),
-          api.providers(),
-          api.configReloadStatus(),
-          api.profiles(),
-          api.commands(),
-          api.workspace(),
-          api.approvalConfig(),
-          api.gatewayCapabilityContract(),
-          api.gatewayOpenApi(),
-          api.gatewayOpenAiTools(),
+          api.sessions(sessionPageLimit.value, 0, true),
         ]);
         if (!isCurrent()) return;
         health.value = manifest;
-        settings.value = config;
-        controlPlane.value = runtime;
-        providers.value = providerData;
-        configReloadStatus.value = reloadStatus;
-        profiles.value = profileData.profiles || [];
-        commands.value = commandData.commands || [];
-        workspaceRoot.value = workspace.workspace_canonical || workspace.workspace_root || '';
-        approvalConfig.value = approvals;
-        gatewayCapabilityContract.value = capabilityContract;
-        gatewayOpenApi.value = openApi;
-        gatewayOpenAiTools.value = openAiTools;
-        gatewayContractError.value = [
-          capabilityContract.__error,
-          openApi.__error,
-          openAiTools.__error,
-        ].filter(Boolean).join(' · ');
-        const reportedModel = runtime.configured_model || config.model || '';
-        selectedModel.value = reportedModel && reportedModel !== 'unknown' ? reportedModel : selectedModel.value;
-        selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
-        const bootSessions = withRunningExecutions(
-          visibleSessionRows(sessionData.sessions),
-          runningExecutions,
-        );
+        const bootSessions = visibleSessionRows(sessionData.sessions);
         if (bootSessionsWereEmpty && sessions.value.length === 0) {
           sessions.value = bootSessions;
         }
@@ -574,7 +530,22 @@ export const useAppStore = defineStore('app', () => {
         await (initialSessionId ? loadMessages(initialSessionId) : Promise.resolve());
         if (!isCurrent()) return;
         booted.value = true;
-        startConfigReloadPolling();
+        criticalBoot.value = {
+          phase: 'ready',
+          generation: criticalBoot.value.generation,
+          loadedAt: new Date().toISOString(),
+          error: '',
+        };
+      } catch (error) {
+        if (isCurrent()) {
+          criticalBoot.value = {
+            phase: 'error',
+            generation: criticalBoot.value.generation,
+            loadedAt: '',
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+        throw error;
       } finally {
         if (isCurrent()) busy.value = false;
       }
@@ -603,6 +574,7 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function loadMessages(sessionId: string) {
+    cancelCompanionHydration();
     const generation = ++activeSessionLoadGeneration;
     activeSessionId.value = sessionId;
     const selectedSession = sessions.value.find((session) => session.id === sessionId);
@@ -628,27 +600,68 @@ export const useAppStore = defineStore('app', () => {
         loadAttachments(sessionId, generation),
         refreshSessionInputs(sessionId, generation),
       ]).catch(() => undefined);
-      if (chatDisplayMode.value === 'panorama' && !companionCollapsed.value) {
-        hydrateActiveSessionPanels(true).catch(() => undefined);
+      if (!companionCollapsed.value) {
+        hydrateCompanionTab(companionTab.value).catch(() => undefined);
       }
     });
   }
 
-  async function hydrateActiveSessionPanels(includeProjection = false) {
+  function cancelCompanionHydration() {
+    companionHydrationController?.abort();
+    companionHydrationController = null;
+    companionHydrationGeneration += 1;
+  }
+
+  async function hydrateCompanionTab(tab = companionTab.value) {
     const sessionId = activeSessionId.value;
     if (!sessionId) return;
+    cancelCompanionHydration();
+    const controller = new AbortController();
+    companionHydrationController = controller;
     const generation = activeSessionLoadGeneration;
+    const hydrationGeneration = companionHydrationGeneration;
+    companionHydration.value = {
+      phase: 'loading',
+      generation: hydrationGeneration,
+      loadedAt: '',
+      error: '',
+    };
+    const isCurrent = () => (
+      !controller.signal.aborted
+      && activeSessionId.value === sessionId
+      && activeSessionLoadGeneration === generation
+      && companionTab.value === tab
+      && !companionCollapsed.value
+      && companionHydrationGeneration === hydrationGeneration
+    );
     const chat = chatSessions;
-    const detailHydration = chat.hydrateRuntimeDetails(sessionId, includeProjection);
-    await Promise.allSettled([
-      detailHydration,
-      loadAttachments(sessionId, generation),
-      loadActivity(sessionId, generation),
-      refreshSessionInputs(sessionId, generation),
-      chatDisplayMode.value === 'panorama'
-        ? refreshChatProjection(sessionId, '', generation)
-        : Promise.resolve(),
-    ]);
+    try {
+      if (tab === 'activity') {
+        await Promise.all([
+          chat.hydrateRuntimeDetails(sessionId, true),
+          loadActivity(sessionId, generation, controller.signal),
+          refreshSessionInputs(sessionId, generation, controller.signal),
+          refreshChatProjection(sessionId, '', generation, controller.signal),
+        ]);
+      } else if (tab === 'workspace') {
+        await loadWorkspace('', controller.signal);
+      }
+      if (!isCurrent()) return;
+      companionHydration.value = {
+        phase: 'ready',
+        generation: hydrationGeneration,
+        loadedAt: new Date().toISOString(),
+        error: '',
+      };
+    } catch (error) {
+      if (!isCurrent()) return;
+      companionHydration.value = {
+        phase: 'error',
+        generation: hydrationGeneration,
+        loadedAt: '',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   async function refreshSessions(query = sessionQuery.value, reset = true) {
@@ -668,13 +681,10 @@ export const useAppStore = defineStore('app', () => {
   async function refreshSessionStatuses() {
     const generation = authorizationGeneration;
     const limit = Math.max(sessionPageLimit.value, Math.min(200, sessions.value.length));
-    const [data, runningExecutions] = await Promise.all([
-      api.sessions(limit, 0, false),
-      api.runningSessionExecutions(),
-    ]);
+    const data = await api.sessions(limit, 0, true);
     if (generation !== authorizationGeneration) return data;
     const updates = new Map(
-      withRunningExecutions(visibleSessionRows(data.sessions), runningExecutions)
+      visibleSessionRows(data.sessions)
         .filter((session) => !revokedSessionIds.has(session.id))
         .map((session) => [session.id, session]),
     );
@@ -873,12 +883,13 @@ export const useAppStore = defineStore('app', () => {
   async function loadActivity(
     sessionId = activeSessionId.value,
     generation = activeSessionLoadGeneration,
+    signal?: AbortSignal,
   ) {
     if (!sessionId) {
       activity.value = [];
       return;
     }
-    const data: any = await api.runtimeTimeline(sessionId);
+    const data: any = await api.runtimeTimeline(sessionId, signal);
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     currentTimeline.value = data;
     activity.value = runtimeTimelineRows.value.slice(0, 50).map(timelineActivity);
@@ -888,12 +899,13 @@ export const useAppStore = defineStore('app', () => {
     sessionId = activeSessionId.value,
     query = '',
     generation = activeSessionLoadGeneration,
+    signal?: AbortSignal,
   ) {
-    if (!sessionId || chatDisplayMode.value !== 'panorama') return;
+    if (!sessionId || companionCollapsed.value || companionTab.value !== 'activity') return;
     const [timeline, reality, context] = await Promise.all([
-      api.runtimeTimeline(sessionId),
-      api.realityFlow(sessionId, 80),
-      api.contextCurrent(sessionId, query, 'main_turn'),
+      api.runtimeTimeline(sessionId, signal),
+      api.realityFlow(sessionId, 80, signal),
+      api.contextCurrent(sessionId, query, 'main_turn', signal),
     ]);
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     currentTimeline.value = timeline;
@@ -904,11 +916,12 @@ export const useAppStore = defineStore('app', () => {
   async function refreshSessionInputs(
     sessionId = activeSessionId.value,
     generation = activeSessionLoadGeneration,
+    signal?: AbortSignal,
   ) {
     if (!sessionId) return;
     const [projection, inbox] = await Promise.all([
-      api.sessionInputs(sessionId).catch(() => null),
-      api.turnInbox(sessionId).catch(() => null),
+      api.sessionInputs(sessionId, signal).catch(() => null),
+      api.turnInbox(sessionId, undefined, signal).catch(() => null),
     ]);
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     if (projection) sessionInputProjection.value = projection;
@@ -971,14 +984,6 @@ export const useAppStore = defineStore('app', () => {
     return receipt;
   }
 
-  function setChatDisplayMode(mode: ChatDisplayMode) {
-    chatDisplayMode.value = mode;
-    if (mode === 'panorama' && activeSessionId.value) {
-      refreshChatProjection(activeSessionId.value).catch(() => undefined);
-      loadActivity().catch(() => undefined);
-    }
-  }
-
   function normalizeWorkspaceFiles(files: any[]): WorkspaceFile[] {
     return (files || []).map((file: any) => ({
       ...file,
@@ -1031,9 +1036,9 @@ export const useAppStore = defineStore('app', () => {
     writeStored(WORKSPACE_RECENT_KEY, recentWorkspaceFiles.value);
   }
 
-  async function loadWorkspace(dir = workspaceDir.value) {
+  async function loadWorkspace(dir = workspaceDir.value, signal?: AbortSignal) {
     const generation = authorizationGeneration;
-    const data = await api.files(dir);
+    const data = await api.files(dir, signal);
     if (generation !== authorizationGeneration) return;
     const currentDir = data.dir || dir || '';
     const files = normalizeWorkspaceFiles(data.files || []);
@@ -1430,25 +1435,29 @@ export const useAppStore = defineStore('app', () => {
   function openCompanion(tab: CompanionTab) {
     companionTab.value = tab;
     companionCollapsed.value = false;
-    hydrateActiveSessionPanels(tab === 'activity').catch(() => undefined);
+    hydrateCompanionTab(tab).catch(() => undefined);
   }
 
   function closeCompanion() {
     companionCollapsed.value = true;
+    cancelCompanionHydration();
   }
 
   function toggleCompanion() {
     companionCollapsed.value = !companionCollapsed.value;
     if (!companionCollapsed.value) {
-      hydrateActiveSessionPanels(companionTab.value === 'activity')
-        .catch(() => undefined);
+      hydrateCompanionTab(companionTab.value).catch(() => undefined);
+    } else {
+      cancelCompanionHydration();
     }
   }
 
   function openChatExecutionGraph(executionGraphId = '') {
     chatExecutionGraphId.value = executionGraphId.trim();
     chatExecutionGraphExpanded.value = true;
-    hydrateActiveSessionPanels(true).catch(() => undefined);
+    if (!companionCollapsed.value && companionTab.value === 'activity') {
+      hydrateCompanionTab('activity').catch(() => undefined);
+    }
   }
 
   function closeChatExecutionGraph() {
@@ -1471,6 +1480,10 @@ export const useAppStore = defineStore('app', () => {
   function openModal(modal: 'model' | 'workspace' | 'commands') {
     activeModal.value = modal;
     if (modal === 'commands' && !commands.value.length) refreshCommands().catch(() => undefined);
+    if (modal === 'model' && !providers.value) loadChatCapabilities().catch(() => undefined);
+    if (modal === 'workspace' && !workspaceRoot.value) {
+      loadWorkspace().catch(() => undefined);
+    }
   }
 
   function closeModal() {
@@ -1503,6 +1516,107 @@ export const useAppStore = defineStore('app', () => {
       closeModal();
     } catch (error) {
       commandError.value = t('store.app.profile.switchFailed', { error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  async function loadChatCapabilities() {
+    if (chatCapabilities.value.phase === 'loading' || chatCapabilities.value.phase === 'ready') {
+      return;
+    }
+    const generation = authorizationGeneration;
+    chatCapabilities.value = {
+      phase: 'loading',
+      generation: chatCapabilities.value.generation + 1,
+      loadedAt: '',
+      error: '',
+    };
+    try {
+      const [runtime, providerData, profileData] = await Promise.all([
+        api.runtimeControlPlane(),
+        api.providers(),
+        api.profiles(),
+      ]);
+      if (generation !== authorizationGeneration) return;
+      controlPlane.value = runtime;
+      providers.value = providerData;
+      profiles.value = profileData.profiles || [];
+      selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
+      const reportedModel = runtime.configured_model || providerData.configured_model || '';
+      if (reportedModel && reportedModel !== 'unknown') selectedModel.value = reportedModel;
+      chatCapabilities.value = {
+        phase: 'ready',
+        generation: chatCapabilities.value.generation,
+        loadedAt: new Date().toISOString(),
+        error: '',
+      };
+    } catch (error) {
+      if (generation !== authorizationGeneration) return;
+      chatCapabilities.value = {
+        phase: 'error',
+        generation: chatCapabilities.value.generation,
+        loadedAt: '',
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  async function loadManagementCapabilities(page: NavId) {
+    if (page === 'chat') return;
+    const previous = managementCapabilities.value[page] || capabilityLoadState();
+    if (previous.phase === 'loading' || previous.phase === 'ready') return;
+    const generation = authorizationGeneration;
+    managementCapabilities.value = {
+      ...managementCapabilities.value,
+      [page]: {
+        phase: 'loading',
+        generation: previous.generation + 1,
+        loadedAt: '',
+        error: '',
+      },
+    };
+    try {
+      if (page === 'settings') {
+        const [config, runtime, providerData, reloadStatus, profileData, approvals] = await Promise.all([
+          api.settings(),
+          api.runtimeControlPlane(),
+          api.providers(),
+          api.configReloadStatus(),
+          api.profiles(),
+          api.approvalConfig(),
+        ]);
+        if (generation !== authorizationGeneration) return;
+        settings.value = config;
+        controlPlane.value = runtime;
+        providers.value = providerData;
+        configReloadStatus.value = reloadStatus;
+        profiles.value = profileData.profiles || [];
+        approvalConfig.value = approvals;
+        selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
+        startConfigReloadPolling();
+      } else {
+        await loadCapability(page);
+      }
+      if (generation !== authorizationGeneration) return;
+      managementCapabilities.value = {
+        ...managementCapabilities.value,
+        [page]: {
+          phase: 'ready',
+          generation: previous.generation + 1,
+          loadedAt: new Date().toISOString(),
+          error: '',
+        },
+      };
+    } catch (error) {
+      if (generation !== authorizationGeneration) return;
+      managementCapabilities.value = {
+        ...managementCapabilities.value,
+        [page]: {
+          phase: 'error',
+          generation: previous.generation + 1,
+          loadedAt: '',
+          error: error instanceof Error ? error.message : String(error),
+        },
+      };
     }
   }
 
@@ -1592,12 +1706,17 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function failClosedAuthorization() {
+    cancelCompanionHydration();
     authorizationGeneration += 1;
     authorizationViewGeneration.value += 1;
     authorizationState.value = 'invalidated';
     activeSessionLoadGeneration += 1;
     revokedSessionIds.clear();
     booted.value = false;
+    criticalBoot.value = capabilityLoadState();
+    chatCapabilities.value = capabilityLoadState();
+    managementCapabilities.value = {};
+    companionHydration.value = capabilityLoadState();
     bootPromise = null;
     if (configReloadTimer) clearInterval(configReloadTimer);
     configReloadTimer = null;
@@ -1843,7 +1962,10 @@ export const useAppStore = defineStore('app', () => {
     activeSessionId,
     activity,
     companionTab,
-    chatDisplayMode,
+    criticalBoot,
+    chatCapabilities,
+    managementCapabilities,
+    companionHydration,
     currentRun,
     currentContextEnvelope,
     currentRealityFlow,
@@ -1930,6 +2052,7 @@ export const useAppStore = defineStore('app', () => {
     turnActivitySummary,
     refreshChatProjection,
     refreshSessionInputs,
+    hydrateCompanionTab,
     loadWorkspace,
     loadWorkspaceTreeDir,
     toggleWorkspaceTreeDir,
@@ -1964,13 +2087,14 @@ export const useAppStore = defineStore('app', () => {
     toggleChatExecutionGraph,
     cancelSessionInput,
     reclassifySessionInput,
-    setChatDisplayMode,
     selectSection,
     openModal,
     closeModal,
     chooseModel,
     chooseProfile,
     refreshRuntimeConfigProjection,
+    loadChatCapabilities,
+    loadManagementCapabilities,
     refreshConfigReloadStatus,
     saveDefaultModel,
     refreshProfiles,

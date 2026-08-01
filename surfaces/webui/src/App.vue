@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t, useI18n } from './i18n';
-import { computed, onMounted, provide, readonly, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, provide, readonly, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   Activity, Brain, Boxes, CircleDot, ClipboardCheck, Crosshair, Layers, MessageSquare,
@@ -10,13 +10,13 @@ import { useAppStore } from './stores/app';
 import type { NavId, NavItem } from './types';
 import { buildCapabilitySpecs } from './data/capabilities';
 import { appPluginForRoute, pluginCapabilitySpecs, pluginNavItems } from './plugins/registry';
-import CompanionPanel from './components/CompanionPanel.vue';
 import ApprovalInbox from './components/ApprovalInbox.vue';
 import CapabilitySidebar from './components/CapabilitySidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
 import CapabilitySectionNav from './components/layout/CapabilitySectionNav.vue';
 import { activeCapabilitySectionKey } from './composables/useCapabilitySection';
 
+const CompanionPanel = defineAsyncComponent(() => import('./components/CompanionPanel.vue'));
 const store = useAppStore();
 const { locale, setLocale } = useI18n();
 const route = useRoute();
@@ -148,11 +148,9 @@ function toggleCompanionSurface() {
     return;
   }
   if (showCompanion.value) {
-    store.setChatDisplayMode('clean');
     store.closeCompanion();
     return;
   }
-  store.setChatDisplayMode('panorama');
   store.openCompanion('activity');
 }
 const configReloadStatus = computed(() => store.configReloadStatus || {});
@@ -178,6 +176,16 @@ watch([currentPage, activeSection], () => {
     store.selectSection(currentPage.value, section);
   }
 }, { immediate: true });
+
+watch(currentPage, (page) => {
+  if (store.authorizationState === 'ready') {
+    void store.loadManagementCapabilities(page);
+  }
+}, { immediate: true });
+
+watch(() => store.authorizationState, (state) => {
+  if (state === 'ready') void store.loadManagementCapabilities(currentPage.value);
+});
 
 async function selectCapabilitySection(sectionId: string) {
   if (!currentSections.value.some((section) => section.id === sectionId)) return;

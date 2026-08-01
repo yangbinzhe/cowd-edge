@@ -511,9 +511,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', stopResize);
 });
 
-watch(rootProjectionId, (executionId) => {
+watch([rootProjectionId, () => store.companionTab], ([executionId, tab]) => {
   projections.release('chat:companion-root-execution');
-  if (!executionId || !store.activeSessionId) return;
+  if (tab !== 'activity' || !executionId || !store.activeSessionId) return;
   projections.acquire(
     executionId,
     'chat:companion-root-execution',
@@ -523,9 +523,9 @@ watch(rootProjectionId, (executionId) => {
   );
 }, { immediate: true });
 
-watch(activeTeamExecutionGraphId, (graphId) => {
+watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) => {
   projections.release('chat:companion-team-execution');
-  if (!graphId || !store.activeSessionId) return;
+  if (tab !== 'activity' || !graphId || !store.activeSessionId) return;
   projections.acquire(
     graphId,
     'chat:companion-team-execution',

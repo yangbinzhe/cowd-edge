@@ -26,6 +26,10 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets/app',
+    // Capability workbenches are intentionally lazy. Avoid rewriting every
+    // dynamic edge into eager module-preload hints and keep the critical chat
+    // entry independent from closed companion and management surfaces.
+    modulePreload: false,
     rollupOptions: {
       input: 'index.dev.html',
       output: {
@@ -36,6 +40,12 @@ export default defineConfig({
           'vendor-vue': ['vue', 'vue-router', 'pinia'],
           'vendor-icons': ['lucide-vue-next'],
           'vendor-markdown': ['markdown-it'],
+          'app-i18n': [
+            resolve(webuiRoot, 'src/i18n/index.ts'),
+            resolve(webuiRoot, 'src/i18n/locale.ts'),
+            resolve(webuiRoot, 'src/i18n/messages/en-US.ts'),
+            resolve(webuiRoot, 'src/i18n/messages/zh-CN.ts'),
+          ],
         },
       },
     },

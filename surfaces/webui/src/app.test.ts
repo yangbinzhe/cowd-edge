@@ -72,6 +72,7 @@ async function settle() {
 
 async function settleAsync() {
   await settle();
+  await vi.dynamicImportSettled();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await settle();
 }
@@ -126,7 +127,7 @@ describe('Cowd Vue WebUI shell', () => {
     const rail = wrapper.get('.rail').text();
     expect(rail).not.toContain('工作区');
     await wrapper.get('.companion-toggle').trigger('click');
-    await settle();
+    await settleAsync();
     expect(wrapper.get('.companion-tabs').text()).toContain('活动');
     expect(wrapper.get('.companion-tabs').text()).toContain('工作区');
     expect(wrapper.get('.companion-tabs').text()).toContain('检查器');
@@ -404,7 +405,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.find('.chat-execution-overlay').exists()).toBe(false);
 
     store.openCompanion('activity');
-    await nextTick();
+    await settleAsync();
     expect(wrapper.get('.companion-execution-graph').exists()).toBe(true);
     await wrapper
       .get('.companion-execution-graph .graph-toolbar [aria-label="全屏"]')
@@ -445,6 +446,7 @@ describe('Cowd Vue WebUI shell', () => {
     const store = useAppStore();
     const chat = useChatSessionsStore();
     store.activeSessionId = 'timeline-session';
+    store.companionCollapsed = false;
     store.selectedModel = 'deepseek-v4';
     store.providers = {
       catalog: {
@@ -558,7 +560,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).not.toContain('FULL TOOL OUTPUT SHOULD NOT BE IN TRANSCRIPT');
 
     store.openCompanion('activity');
-    await nextTick();
+    await settleAsync();
     await wrapper.get('.execution-turn-group .timeline-list li').trigger('click');
     expect(wrapper.get('.activity-detail-modal').text()).toContain('workspace.read');
     expect(wrapper.get('.activity-detail-modal').text()).toContain('125 ms');
@@ -571,7 +573,7 @@ describe('Cowd Vue WebUI shell', () => {
     const store = useAppStore();
     const chat = useChatSessionsStore();
     store.activeSessionId = 'live-now-session';
-    store.chatDisplayMode = 'panorama';
+    store.companionCollapsed = false;
     chat.activeSessionId = 'live-now-session';
     chat.active!.pending = true;
     chat.active!.streamTurnId = 'stream:live-now-session:1';
@@ -677,13 +679,13 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
     expect(wrapper.find('.companion-toggle').exists()).toBe(true);
     await wrapper.get('.companion-toggle').trigger('click');
-    await settle();
+    await settleAsync();
     expect(wrapper.find('.companion-panel').exists()).toBe(true);
-    expect(useAppStore().chatDisplayMode).toBe('panorama');
+    expect(useAppStore().companionCollapsed).toBe(false);
     await wrapper.get('.companion-toggle').trigger('click');
     await settle();
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
-    expect(useAppStore().chatDisplayMode).toBe('clean');
+    expect(useAppStore().companionCollapsed).toBe(true);
     wrapper.unmount();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
   });
@@ -722,10 +724,10 @@ describe('Cowd Vue WebUI shell', () => {
     store.currentTimeline = { events: [{ kind: 'ToolStart' }, { kind: 'ToolComplete' }, { kind: 'memory_recall' }] };
     store.currentRealityFlow = { stages: [{ kind: 'memory.promoted' }, { kind: 'memory.held' }, { kind: 'context.fact' }] };
     await wrapper.get('.companion-toggle').trigger('click');
-    await settle();
+    await settleAsync();
     await wrapper.get('.companion-toggle').trigger('click');
     await settle();
-    expect(store.chatDisplayMode).toBe('clean');
+    expect(store.companionCollapsed).toBe(true);
     expect(wrapper.find('.run-panorama').exists()).toBe(false);
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
     expect(wrapper.find('.clean-counts').exists()).toBe(false);
@@ -843,7 +845,7 @@ describe('Cowd Vue WebUI shell', () => {
     store.workspaceFiles = [{ name: 'a.md', path: 'docs/a.md', kind: 'file' }];
     store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', store.workspaceFiles, new Set(['']));
     store.openCompanion('workspace');
-    await settle();
+    await settleAsync();
     expect(wrapper.find('.workspace-tree').exists()).toBe(true);
     expect(wrapper.find('.workspace-tree-node').text()).toContain('a.md');
     await wrapper.get('button[aria-label="a.md 更多操作"]').trigger('click');
@@ -851,7 +853,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.find('.workspace-context-menu').exists()).toBe(true);
     expect(wrapper.find('.workspace-context-menu').text()).toContain('重命名');
     store.openCompanion('inspector');
-    await settle();
+    await settleAsync();
     expect(wrapper.text()).toContain('检查器');
     expect(wrapper.text()).toContain('上下文');
   });
@@ -864,7 +866,7 @@ describe('Cowd Vue WebUI shell', () => {
     store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
     const createFile = vi.spyOn(store, 'createWorkspaceFile').mockResolvedValue(undefined as any);
     store.openCompanion('workspace');
-    await settle();
+    await settleAsync();
     await wrapper.get('button[aria-label="docs 更多操作"]').trigger('click');
     await settle();
     await wrapper.findAll('.workspace-context-menu button').find((button) => button.text().includes('新建文件'))?.trigger('click');
@@ -883,7 +885,7 @@ describe('Cowd Vue WebUI shell', () => {
     store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
     const deletePath = vi.spyOn(store, 'deleteWorkspacePathConfirmed').mockResolvedValue(undefined as any);
     store.openCompanion('workspace');
-    await settle();
+    await settleAsync();
     await wrapper.get('button[aria-label="a.md 更多操作"]').trigger('click');
     await settle();
     const deleteButton = () => wrapper.findAll('.workspace-context-menu button').find((button) => button.text().includes('删除'));
@@ -905,7 +907,7 @@ describe('Cowd Vue WebUI shell', () => {
     const download = vi.spyOn(store, 'downloadWorkspacePath').mockImplementation(() => undefined);
     const openExternal = vi.spyOn(store, 'openWorkspacePathExternally').mockResolvedValue(undefined as any);
     store.openCompanion('workspace');
-    await settle();
+    await settleAsync();
     await wrapper.get('button[aria-label="a.md 更多操作"]').trigger('click');
     await settle();
     const menuText = wrapper.find('.workspace-context-menu').text();
@@ -945,7 +947,7 @@ describe('Cowd Vue WebUI shell', () => {
     const upload = vi.spyOn(store, 'uploadWorkspaceFiles').mockResolvedValue([] as any);
     const reload = vi.spyOn(store, 'loadWorkspaceTreeDir').mockResolvedValue([] as any);
     store.openCompanion('workspace');
-    await settle();
+    await settleAsync();
     await wrapper.get('.workspace-tree-node').trigger('drop', {
       dataTransfer: { files: [new File(['hello'], 'dropped.txt', { type: 'text/plain' })] },
     });
