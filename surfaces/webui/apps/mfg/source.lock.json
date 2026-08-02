@@ -1,7 +1,7 @@
 {
   "app_id": "mfg",
   "repository": "https://gitee.com/eyeout/cowd-app-mfg",
-  "revision": "e83d25518b1ad0dac31d01bc2612c36ad15e6625",
+  "revision": "c0ceecb4ab2be692665a4dda409d76fd26bf09bf",
   "package": "webui",
   "module": "@cowd/app-mfg-webui"
 }

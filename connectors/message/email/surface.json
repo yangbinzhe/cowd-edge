@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "email",
   "name": "Email Message Connector",
-  "version": "0.9.626",
+  "version": "0.9.627",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
@@ -27,7 +27,10 @@
     "timeout_ms": 5000
   },
   "config_schema": {
-    "required": []
+    "required": [
+      "smtp_host",
+      "from_address"
+    ]
   },
   "default_enabled": false
 }
