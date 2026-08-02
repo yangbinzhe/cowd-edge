@@ -11463,6 +11463,23 @@ export interface components {
             /** @default [] */
             required_node_ids: string[];
         };
+        /** @description Readiness rule applied to one node's `DependsOn` predecessors. */
+        ExecutionDependencyPolicy: {
+            /** @constant */
+            mode: "all";
+        } | {
+            /** @default false */
+            cancel_remaining: boolean;
+            /** @constant */
+            mode: "any";
+        } | {
+            /** @default false */
+            cancel_remaining: boolean;
+            /** Format: uint16 */
+            minimum: number;
+            /** @constant */
+            mode: "quorum";
+        };
         /** @enum {string} */
         ExecutionEdgeKind: "depends_on" | "verifies" | "produces";
         /**
@@ -11495,6 +11512,7 @@ export interface components {
             /** @default interactive */
             service_class: components["schemas"]["ExecutionServiceClass"];
             terminal_result_ref?: string | null;
+            work?: components["schemas"]["ExecutionWorkGraphProjection"] | null;
         };
         /**
          * @description Runtime-owned latency attribution for one execution.
@@ -11684,6 +11702,7 @@ export interface components {
              *     }
              */
             usage: components["schemas"]["ExecutionUsage"];
+            work?: components["schemas"]["ExecutionWorkProjection"] | null;
         };
         /** @enum {string} */
         ExecutionNodeStatus: "planned" | "ready" | "running" | "waiting_input" | "waiting_approval" | "waiting_external" | "paused" | "completed" | "blocked" | "failed" | "cancelled";
@@ -11805,6 +11824,56 @@ export interface components {
             /** Format: uint64 */
             tool_calls: number;
         };
+        ExecutionWorkGraphProjection: {
+            /** Format: uint64 */
+            actual_critical_path_ms: number;
+            /** Format: uint64 */
+            actual_serial_ms: number;
+            /** Format: uint32 */
+            actual_speedup_basis_points?: number | null;
+            /** Format: uint64 */
+            cached_tokens: number;
+            /** Format: uint */
+            cancelled_optional_nodes: number;
+            /** Format: uint */
+            depth: number;
+            /** Format: uint64 */
+            expected_critical_path_ms: number;
+            /** Format: uint64 */
+            expected_serial_ms: number;
+            /** Format: uint32 */
+            expected_speedup_basis_points?: number | null;
+            /** Format: uint64 */
+            input_tokens: number;
+            /** Format: uint */
+            node_count: number;
+            /** Format: uint */
+            optional_nodes: number;
+            /** Format: uint64 */
+            output_tokens: number;
+            /** Format: uint */
+            width: number;
+        };
+        ExecutionWorkProjection: {
+            cancellation_group?: string | null;
+            dependency: components["schemas"]["ExecutionDependencyPolicy"];
+            /** Format: uint64 */
+            expected_duration_ms: number;
+            /** Format: uint64 */
+            expected_input_tokens: number;
+            /** Format: uint64 */
+            expected_output_tokens: number;
+            required: boolean;
+            role: components["schemas"]["ExecutionWorkRole"];
+        };
+        /**
+         * @description Semantic responsibility inside the canonical execution graph.
+         *
+         *     This is planning and projection metadata, not a second node identity or
+         *     executor registry.
+         * @enum {string}
+         */
+        ExecutionWorkRole: "plan" | "tool" | "evidence_analyze" | "cross_check" | "synthesize" | "verify";
         GatewayError: {
             error: string;
         };
@@ -15702,12 +15771,20 @@ export interface components {
             provider_concurrency: number;
             /** Format: uint16 */
             provider_concurrency_penalty_bp: number;
+            /** Format: uint16 */
+            provider_effective_limit?: number;
+            /** Format: uint16 */
+            provider_failure_timeout_upper_bound_bp?: number;
             /**
              * @description SHA-256 of the effective provider/model profile. The raw provider or
              *     model name is deliberately excluded from public strategy projections.
              * @default
              */
             provider_profile_fingerprint: string;
+            /** Format: uint64 */
+            provider_queue_p95_ms?: number;
+            /** Format: uint64 */
+            provider_service_p95_ms?: number;
             /** Format: uint32 */
             sample_count: number;
             sample_source: string;

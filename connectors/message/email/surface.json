@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "email",
   "name": "Email Message Connector",
-  "version": "0.9.627",
+  "version": "0.9.628",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
