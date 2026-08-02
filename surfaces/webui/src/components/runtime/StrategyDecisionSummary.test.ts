@@ -27,6 +27,24 @@ async function mountSummary(surface: 'runtime' | 'mission' | 'mfg') {
   await router.isReady();
   const strategy = {
     ...fixture,
+    resource_snapshot: {
+      version: 'resource-v1',
+      provider_available: true,
+      tools_available: true,
+      team_available: true,
+      provider_concurrency: 8,
+      tool_concurrency: 12,
+      team_slots: 4,
+      provider_concurrency_penalty_bp: 0,
+      provider_effective_limit: 6,
+      provider_queue_p95_ms: 80,
+      provider_service_p95_ms: 1_200,
+      provider_failure_timeout_upper_bound_bp: 100,
+      provider_profile_fingerprint: 'public-fingerprint',
+      sample_source: 'runtime',
+      sample_count: 20,
+      provenance: 'observed',
+    },
     detail: {
       ...fixture.detail,
       prompt: 'private prompt /home/operator/secret',
@@ -78,6 +96,8 @@ describe('StrategyDecisionSummary surface wiring', () => {
       expect(wrapper.attributes('data-surface')).toBe(surface);
       expect(wrapper.text()).toContain('team');
       expect(wrapper.text()).toContain('calibrated');
+      expect(wrapper.get('.strategy-summary__resources').text()).toContain('1.2s');
+      expect(wrapper.get('.strategy-summary__resources').text()).toContain('6');
       expect(wrapper.find('a[href*="/runtime?"]').exists()).toBe(true);
       expect(wrapper.find('a[href*="/mission?"]').exists()).toBe(true);
       expect(wrapper.find('a[href*="/reality?"]').exists()).toBe(true);

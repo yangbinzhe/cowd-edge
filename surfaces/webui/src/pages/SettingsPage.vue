@@ -56,7 +56,8 @@ const gatewayAuthenticationRequired = computed(() => (
 ));
 const providerModels = computed(() => store.providers?.models || []);
 const providerRows = computed(() => store.providers?.providers || []);
-const configuredModel = computed(() => store.providers?.configured_model || store.controlPlane?.configured_model || store.settings?.model || '');
+const providerControl = computed(() => store.controlPlane?.components?.provider || {});
+const configuredModel = computed(() => store.providers?.configured_model || providerControl.value.configured_model || store.settings?.model || '');
 const settingsContext = computed(() => [
   { label: t('script.pages.settingspage.label.44ab85a252'), value: origin.value },
   { label: t('script.pages.settingspage.label.2f81a22de0'), value: accessMode.value, tone: accessModeCode.value === 'offline' ? 'warn' : 'success' },
@@ -65,7 +66,7 @@ const settingsContext = computed(() => [
 ]);
 const settingsSections = computed(() => [
   { id: 'ui', label: t('settings.nav.ui'), description: t('settings.nav.ui.desc'), status: theme.value },
-  { id: 'providers', label: t('settings.nav.providers'), description: t('settings.nav.providers.desc'), status: providerRows.value.length ? formatCount('models', store.providers?.provider_model_count ?? store.controlPlane?.provider_model_count ?? 0) : t('status.missing') },
+  { id: 'providers', label: t('settings.nav.providers'), description: t('settings.nav.providers.desc'), status: providerRows.value.length ? formatCount('models', store.providers?.provider_model_count ?? providerControl.value.model_count ?? 0) : t('status.missing') },
   { id: 'profile', label: t('settings.nav.profile'), description: t('settings.nav.profile.desc'), status: formatCount('profiles', store.profiles?.length || 0) },
   { id: 'policy', label: t('settings.nav.policy'), description: t('settings.nav.policy.desc'), status: approvalDraftError.value ? t('status.invalid') : store.approvalConfig ? t('status.ready') : t('status.unknown') },
   { id: 'gateway', label: t('settings.nav.gateway'), description: t('settings.nav.gateway.desc'), status: accessMode.value },
@@ -545,11 +546,11 @@ function selectSettingsSection(id: string) {
           <dt>{{ t('page.settings.page.text.2ffa592e62') }}</dt>
           <dd>{{ configuredModel || t('page.settings.page.inline.3be9ccc7cd') }}</dd>
           <dt>{{ t('page.settings.page.text.a1adbaf0bc') }}</dt>
-          <dd>{{ store.providers?.configured_model_resolved === false ? t('page.settings.page.inline.ac37db7f63') : (store.controlPlane?.provider_status || t('page.settings.page.inline.3be9ccc7cd')) }}</dd>
+          <dd>{{ store.providers?.configured_model_resolved === false ? t('page.settings.page.inline.ac37db7f63') : (providerControl.status || t('page.settings.page.inline.3be9ccc7cd')) }}</dd>
           <dt>{{ t('page.settings.page.text.f6742b5c94') }}</dt>
           <dd>{{ providerRows.map((provider) => provider.name).join(', ') || t('status.unknown') }}</dd>
           <dt>{{ t('page.settings.page.text.26ab54433f') }}</dt>
-          <dd>{{ store.providers?.provider_model_count ?? store.controlPlane?.provider_model_count ?? 0 }}</dd>
+          <dd>{{ store.providers?.provider_model_count ?? providerControl.model_count ?? 0 }}</dd>
           <dt>{{ t('config.reload.label') }}</dt>
           <dd>{{ store.configReloadStatus?.status || '-' }} / {{ store.configReloadStatus?.trigger || 'auto' }}</dd>
           <dt>{{ t('config.reload.restartRequired') }}</dt>

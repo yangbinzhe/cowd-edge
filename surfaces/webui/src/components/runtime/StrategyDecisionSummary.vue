@@ -119,6 +119,25 @@ function trackVisualState(event: Event) {
       <div><dt>{{ t('strategy.field.revision') }}</dt><dd>r{{ view.revision }}</dd></div>
     </dl>
 
+    <dl v-if="view.resources" class="strategy-summary__resources">
+      <div>
+        <dt>{{ t('strategy.resource.providerLimit') }}</dt>
+        <dd>{{ view.resources.provider_effective_limit || view.resources.provider_concurrency || 0 }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('strategy.resource.queueP95') }}</dt>
+        <dd>{{ formatDuration(view.resources.provider_queue_p95_ms) }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('strategy.resource.serviceP95') }}</dt>
+        <dd>{{ formatDuration(view.resources.provider_service_p95_ms) }}</dd>
+      </div>
+      <div>
+        <dt>{{ t('strategy.resource.teamSlots') }}</dt>
+        <dd>{{ view.resources.team_slots }}</dd>
+      </div>
+    </dl>
+
     <div class="strategy-summary__comparison">
       <section>
         <span>{{ t('strategy.label.estimated') }}</span>
@@ -211,6 +230,10 @@ function trackVisualState(event: Event) {
 .strategy-summary__identity div { min-width: 0; padding-left: 8px; border-left: 1px solid var(--border); }
 .strategy-summary__identity dt { color: var(--text-faint); font-size: 10px; text-transform: uppercase; }
 .strategy-summary__identity dd { overflow: hidden; margin: 3px 0 0; color: var(--text); font: 11px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.strategy-summary__resources { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.strategy-summary__resources div { padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); }
+.strategy-summary__resources dt { color: var(--text-muted); font-size: 10px; }
+.strategy-summary__resources dd { margin: 3px 0 0; color: var(--text); font: 14px var(--font-mono); }
 .strategy-summary__comparison { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; }
 .strategy-summary__comparison section { display: grid; gap: 3px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .strategy-summary__comparison section[data-state="unknown"] { border-style: dashed; }
@@ -238,6 +261,7 @@ function trackVisualState(event: Event) {
   .strategy-summary__identity { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
+  .strategy-summary__resources { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .strategy-summary__header { align-items: stretch; flex-direction: column; }
   .strategy-summary__status { justify-content: flex-start; }
   .strategy-summary__identity { grid-template-columns: repeat(2, minmax(0, 1fr)); }

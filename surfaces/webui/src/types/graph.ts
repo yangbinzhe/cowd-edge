@@ -35,4 +35,20 @@ export interface GraphViewModel {
   nodes: GraphNodeView[];
   edges: GraphEdgeView[];
   truncated?: boolean;
+  work?: {
+    nodeCount: number;
+    width: number;
+    depth: number;
+    expectedSerialMs: number;
+    expectedCriticalPathMs: number;
+    expectedSpeedupBasisPoints?: number;
+    actualSerialMs: number;
+    actualCriticalPathMs: number;
+    actualSpeedupBasisPoints?: number;
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    optionalNodes: number;
+    cancelledOptionalNodes: number;
+  };
 }

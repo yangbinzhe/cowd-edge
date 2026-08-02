@@ -54,11 +54,32 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
   const edges = Array.isArray(graph?.edges) ? graph.edges : [];
   const graphId = String(graph?.graph_id || 'execution-graph');
   const waves = dependencyWaves(nodes, edges);
+  const work = graph?.work && typeof graph.work === 'object' ? graph.work : null;
   return {
     id: graphId,
     title: String(graph?.objective || graph?.graph_id || ''),
     revision: Number(graph?.revision || 0),
     status: String(graph?.status || (graph?.terminal_result_ref ? 'complete' : 'running')),
+    work: work ? {
+      nodeCount: Number(work.node_count || 0),
+      width: Number(work.width || 0),
+      depth: Number(work.depth || 0),
+      expectedSerialMs: Number(work.expected_serial_ms || 0),
+      expectedCriticalPathMs: Number(work.expected_critical_path_ms || 0),
+      expectedSpeedupBasisPoints: work.expected_speedup_basis_points == null
+        ? undefined
+        : Number(work.expected_speedup_basis_points),
+      actualSerialMs: Number(work.actual_serial_ms || 0),
+      actualCriticalPathMs: Number(work.actual_critical_path_ms || 0),
+      actualSpeedupBasisPoints: work.actual_speedup_basis_points == null
+        ? undefined
+        : Number(work.actual_speedup_basis_points),
+      inputTokens: Number(work.input_tokens || 0),
+      outputTokens: Number(work.output_tokens || 0),
+      cachedTokens: Number(work.cached_tokens || 0),
+      optionalNodes: Number(work.optional_nodes || 0),
+      cancelledOptionalNodes: Number(work.cancelled_optional_nodes || 0),
+    } : undefined,
     nodes: nodes.map((node: any) => {
       const nodeId = String(node.node_id);
       const executor = String(node.executor_kind || '').trim();
@@ -86,6 +107,8 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
           t('execution.wave', { number: wave + 1 }),
           parallelCount > 1 ? t('execution.parallelCount', { count: parallelCount }) : '',
           node.usage?.total_tokens ? t('execution.tokens', { count: node.usage.total_tokens }) : '',
+          node.work?.role ? String(node.work.role).replace(/_/g, ' ') : '',
+          node.work?.expected_duration_ms ? `${node.work.expected_duration_ms} ms` : '',
         ].filter(Boolean).map(String),
         raw: node,
       };

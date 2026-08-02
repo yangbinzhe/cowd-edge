@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useCapabilitySection } from "../composables/useCapabilitySection";
-const { isSectionActive } = useCapabilitySection();
+const { activeSection, isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -30,6 +30,10 @@ const projections = useProjectionRegistryStore();
 const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
+const loadedSections = new Set<string>();
+const sectionControllers = new Map<string, AbortController>();
+const sectionGenerations = new Map<string, number>();
+let pendingLoads = 0;
 const error = ref('');
 const controlPlane = ref<any>({});
 const runtimeStatus = ref<any>({});
@@ -55,6 +59,16 @@ const sessionId = computed(() => {
   return routed || store.activeSessionId || 'api-context';
 });
 const configReloadStatus = computed(() => store.configReloadStatus || {});
+const providerControl = computed(() => controlPlane.value?.components?.provider || {});
+const gatewayHealth = computed(() => (
+  controlPlane.value?.health
+  || store.health?.health
+  || {}
+));
+const hotStateHealth = computed(() => gatewayHealth.value?.runtime?.hot_state || {});
+const providerTransportHealth = computed(() => gatewayHealth.value?.runtime?.provider_transport || {});
+const postgresHealth = computed(() => gatewayHealth.value?.storage?.postgres || {});
+const storageExecutionHealth = computed(() => gatewayHealth.value?.storage?.session_execution || {});
 const configReloadRestartFields = computed(() => {
   const fields = configReloadStatus.value?.restart_required?.fields;
   return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
@@ -167,70 +181,97 @@ function formatEpochMs(value: unknown) {
   return new Date(ms).toLocaleString();
 }
 
-async function refresh() {
+function formatBytes(value: unknown) {
+  const bytes = Number(value || 0);
+  if (value === undefined || value === null || !Number.isFinite(bytes)) return '-';
+  if (bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+}
+
+async function loadSection(section = activeSection.value || 'overview', force = false) {
+  if (!force && loadedSections.has(section)) return;
+  sectionControllers.get(section)?.abort();
+  const controller = new AbortController();
+  sectionControllers.set(section, controller);
+  const generation = (sectionGenerations.get(section) || 0) + 1;
+  sectionGenerations.set(section, generation);
+  const current = () => (
+    sectionGenerations.get(section) === generation
+    && !controller.signal.aborted
+    && (activeSection.value || 'overview') === section
+  );
+  pendingLoads += 1;
   loading.value = true;
   error.value = '';
   try {
-    const [
-      nextControl,
-      nextStatus,
-      nextSnapshot,
-      nextSourceAudit,
-      nextRepairPlan,
-      nextTurns,
-      nextConfig,
-      nextLeases,
-      nextApprovals,
-      nextTimeline,
-      nextTasks,
-      nextGrowthStatus,
-      nextGrowthEvents,
-      nextReloadStatus,
-      nextSessionExecution,
-    ] = await Promise.all([
-      api.runtimeControlPlane(),
-      api.runtimeStatus(),
-      api.runtimeSnapshot(),
-      api.runtimeSourceAudit(),
-      api.runtimeSourceRepairPlan(),
-      api.runtimeTurns(),
-      api.effectiveConfig(),
-      api.runtimeSessionLeases(),
-      api.approvalPending(),
-      api.runtimeTimeline(sessionId.value),
-      api.tasks(),
-      api.growthStatus(),
-      api.growthEvents(),
-      store.refreshConfigReloadStatus(),
-      api.sessionExecution(sessionId.value),
-    ]);
-    controlPlane.value = nextControl;
-    runtimeStatus.value = nextStatus;
-    runtimeSnapshot.value = nextSnapshot;
-    sourceAudit.value = nextSourceAudit;
-    sourceRepairPlan.value = nextRepairPlan;
-    runtimeTurns.value = nextTurns;
-    effectiveConfig.value = nextConfig;
-    leases.value = nextLeases;
-    approvals.value = nextApprovals;
-    timeline.value = nextTimeline;
-    tasks.value = nextTasks;
-    growthStatus.value = nextGrowthStatus;
-    growthEvents.value = nextGrowthEvents;
-    sessionExecution.value = nextSessionExecution;
-    store.configReloadStatus = nextReloadStatus;
-    selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
+    if (section === 'overview') {
+      const [nextControl, nextSnapshot, nextSourceAudit, nextRepairPlan, nextEffectiveConfig] = await Promise.all([
+        api.runtimeControlPlane(controller.signal),
+        api.runtimeSnapshot(controller.signal),
+        api.runtimeSourceAudit(controller.signal),
+        api.runtimeSourceRepairPlan(controller.signal),
+        api.effectiveConfig(controller.signal),
+      ]);
+      if (!current()) return;
+      controlPlane.value = nextControl;
+      runtimeStatus.value = nextControl?.runtime_status || {};
+      runtimeSnapshot.value = nextSnapshot;
+      sourceAudit.value = nextSourceAudit;
+      sourceRepairPlan.value = nextRepairPlan;
+      effectiveConfig.value = nextEffectiveConfig;
+      store.configReloadStatus = nextControl?.config_reload || {};
+    } else if (section === 'runs') {
+      const [nextTurns, nextLeases, nextTasks, nextSessionExecution] = await Promise.all([
+        api.runtimeTurns(controller.signal),
+        api.runtimeSessionLeases(controller.signal),
+        api.tasks(controller.signal),
+        api.sessionExecution(sessionId.value, controller.signal),
+      ]);
+      if (!current()) return;
+      runtimeTurns.value = nextTurns;
+      leases.value = nextLeases;
+      tasks.value = nextTasks;
+      sessionExecution.value = nextSessionExecution;
+      selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
+    } else if (section === 'policy') {
+      const nextApprovals = await api.approvalPending(controller.signal);
+      if (!current()) return;
+      approvals.value = nextApprovals;
+    } else if (section === 'timeline') {
+      const nextTimeline = await api.runtimeTimeline(sessionId.value, controller.signal);
+      if (!current()) return;
+      timeline.value = nextTimeline;
+    } else if (section === 'growth') {
+      const [nextGrowthStatus, nextGrowthEvents] = await Promise.all([
+        api.growthStatus(controller.signal),
+        api.growthEvents(controller.signal),
+      ]);
+      if (!current()) return;
+      growthStatus.value = nextGrowthStatus;
+      growthEvents.value = nextGrowthEvents;
+    }
+    if (current()) loadedSections.add(section);
   } catch (err) {
+    if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
-    loading.value = false;
+    if (sectionControllers.get(section) === controller) sectionControllers.delete(section);
+    pendingLoads = Math.max(0, pendingLoads - 1);
+    loading.value = pendingLoads > 0;
   }
+}
+
+async function refresh() {
+  await loadSection(activeSection.value || 'overview', true);
 }
 
 async function submitTurn() {
   if (!turnPrompt.value.trim()) return;
   actionResult.value = await api.submitRuntimeTurn(turnPrompt.value, sessionId.value, taskRows.value[0]?.id);
-  await refresh();
+  await loadSection('runs', true);
 }
 
 async function inspectTurn() {
@@ -242,7 +283,7 @@ async function inspectTurn() {
 async function cancelTurn() {
   if (!selectedTurnId.value) return;
   actionResult.value = await api.cancelRuntimeTurn(selectedTurnId.value);
-  await refresh();
+  await loadSection('runs', true);
 }
 
 async function acquireLease() {
@@ -255,7 +296,7 @@ async function acquireLease() {
         session_id: store.activeSessionId,
         error: chatSessions.states[store.activeSessionId]?.degradedReason || 'writer lease rejected',
       };
-  await refresh();
+  await loadSection('runs', true);
 }
 
 async function releaseLease() {
@@ -269,7 +310,7 @@ async function releaseLease() {
         session_id: store.activeSessionId,
         error: state?.degradedReason || 'writer lease release rejected',
       };
-  await refresh();
+  await loadSection('runs', true);
 }
 
 async function respondApproval(approval: any, approved: boolean) {
@@ -288,7 +329,7 @@ async function respondApproval(approval: any, approved: boolean) {
   }
   const id = approval?.approval_id || approval?.id || approval?.request_id;
   actionResult.value = await api.approvalRespond(id, approved, approved ? 'approved from Runtime Workbench' : 'rejected from Runtime Workbench');
-  await refresh();
+  await loadSection('policy', true);
 }
 
 watch([activeExecutionId, sessionId], ([executionId, authority], previous) => {
@@ -300,8 +341,31 @@ watch([activeExecutionId, sessionId], ([executionId, authority], previous) => {
   }
   else projections.release('runtime-page');
 }, { immediate: true });
-onMounted(refresh);
-onUnmounted(() => projections.release('runtime-page'));
+watch(activeSection, (section) => {
+  const next = section || 'overview';
+  for (const [ownedSection, controller] of sectionControllers.entries()) {
+    if (ownedSection !== next) {
+      controller.abort();
+      sectionControllers.delete(ownedSection);
+    }
+  }
+  const liveSection = ['runs', 'policy', 'timeline', 'growth'].includes(next);
+  void loadSection(next, liveSection);
+});
+watch(sessionId, () => {
+  loadedSections.delete('runs');
+  loadedSections.delete('timeline');
+  const section = activeSection.value || 'overview';
+  if (section === 'runs' || section === 'timeline') void loadSection(section, true);
+});
+onMounted(() => {
+  void loadSection(activeSection.value || 'overview');
+});
+onUnmounted(() => {
+  for (const controller of sectionControllers.values()) controller.abort();
+  sectionControllers.clear();
+  projections.release('runtime-page');
+});
 </script>
 
 <template>
@@ -319,16 +383,16 @@ onUnmounted(() => projections.release('runtime-page'));
 
     <p v-if="error" class="settings-alert">{{ error }}</p>
 
-    <section class="metric-row">
+    <section class="metric-row" v-show="isSectionActive('overview')">
       <article class="metric-card">
         <span>{{ t('page.runtime.page.text.895180bcc2') }}</span>
         <strong>{{ controlPlane.degraded || runtimeStatus.degraded ? t('page.runtime.page.inline.394dec1c4e') : t('page.runtime.page.inline.a6b1ab29de') }}</strong>
-        <small>{{ controlPlane.configured_model || t('page.runtime.page.inline.b523fd5a1b') }}</small>
+        <small>{{ providerControl.configured_model || t('page.runtime.page.inline.b523fd5a1b') }}</small>
       </article>
       <article class="metric-card" data-tone="info">
         <span>{{ t('page.runtime.page.text.b803a28e02') }}</span>
-        <strong>{{ controlPlane.provider_count ?? controlPlane.provider_names?.length ?? 0 }}</strong>
-        <small>{{ formatCount('models', controlPlane.provider_model_count || 0) }}</small>
+        <strong>{{ providerControl.provider_count ?? providerControl.provider_names?.length ?? '-' }}</strong>
+        <small>{{ formatCount('models', providerControl.model_count || 0) }}</small>
       </article>
       <article class="metric-card" data-tone="success">
         <span>{{ t('page.runtime.page.text.8ee2353a6b') }}</span>
@@ -339,6 +403,32 @@ onUnmounted(() => projections.release('runtime-page'));
         <span>{{ t('config.reload.label') }}</span>
         <strong>{{ displayStatus(configReloadStatusLabel) }}</strong>
         <small>{{ store.configReloadNeedsRestart ? configReloadRestartFields : displayStatus(configReloadStatus.trigger || 'auto') }}</small>
+      </article>
+    </section>
+
+    <section class="metric-row" v-show="isSectionActive('overview')">
+      <article class="metric-card" :data-tone="hotStateHealth.metrics ? (hotStateHealth.pressure_high ? 'warn' : 'success') : 'neutral'">
+        <span>{{ t('runtime.health.hotState') }}</span>
+        <strong>{{ formatBytes(hotStateHealth.metrics?.resident_bytes) }}</strong>
+        <small>{{ t('runtime.health.ofBudget', { value: formatBytes(hotStateHealth.budget?.limit_bytes) }) }}</small>
+      </article>
+      <article class="metric-card" :data-tone="postgresHealth.metrics ? (Number(postgresHealth.metrics?.query_error_count || 0) > 0 ? 'warn' : 'success') : 'neutral'">
+        <span>{{ t('runtime.health.postgres') }}</span>
+        <strong>{{ postgresHealth.metrics?.query_count ?? '-' }}</strong>
+        <small>{{ t('runtime.health.queryErrors', { value: postgresHealth.metrics?.query_error_count ?? '-' }) }}</small>
+      </article>
+      <article class="metric-card" :data-tone="storageExecutionHealth.active !== undefined ? (Number(storageExecutionHealth.queue_rejected || 0) > 0 ? 'warn' : 'success') : 'neutral'">
+        <span>{{ t('runtime.health.storagePlane') }}</span>
+        <strong>{{ storageExecutionHealth.active ?? '-' }} / {{ storageExecutionHealth.queued ?? '-' }}</strong>
+        <small>{{ t('runtime.health.activeQueued') }}</small>
+      </article>
+      <article class="metric-card" :data-tone="providerTransportHealth.entries !== undefined ? 'success' : 'neutral'">
+        <span>{{ t('runtime.health.providerTransport') }}</span>
+        <strong>{{ providerTransportHealth.entries ?? '-' }}</strong>
+        <small>{{ t('runtime.health.transportReuse', {
+          hits: providerTransportHealth.hits ?? '-',
+          checkouts: providerTransportHealth.checkouts ?? '-',
+        }) }}</small>
       </article>
     </section>
 
@@ -371,9 +461,9 @@ onUnmounted(() => projections.release('runtime-page'));
           <dt>{{ t('page.runtime.page.text.1debc04086') }}</dt>
           <dd>{{ controlPlane.degraded ? t('page.runtime.page.inline.394dec1c4e') : t('page.runtime.page.inline.a6b1ab29de') }}</dd>
           <dt>{{ t('page.runtime.page.text.75cdd3e77e') }}</dt>
-          <dd>{{ controlPlane.configured_model || '-' }}</dd>
+          <dd>{{ providerControl.configured_model || '-' }}</dd>
           <dt>{{ t('page.runtime.page.text.d54281d656') }}</dt>
-          <dd>{{ controlPlane.config_source || effectiveConfig.source || '-' }}</dd>
+          <dd>{{ controlPlane.config?.source || effectiveConfig.source || '-' }}</dd>
           <dt>{{ t('page.runtime.page.text.1b6d171a3f') }}</dt>
           <dd>{{ controlPlane.workspace_root || '-' }}</dd>
           <dt>{{ t('config.reload.label') }}</dt>

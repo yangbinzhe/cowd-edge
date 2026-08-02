@@ -36,6 +36,44 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
     expect(graphDiagnostics(model.nodes, model.edges).danglingEdgeIds).toHaveLength(1);
   });
 
+  it('projects canonical graph and node work estimates without recomputing them in the surface', () => {
+    const model = adaptExecutionGraph({
+      graph_id: 'exec-work',
+      work: {
+        node_count: 2,
+        width: 2,
+        depth: 1,
+        expected_serial_ms: 2_000,
+        expected_critical_path_ms: 1_000,
+        expected_speedup_basis_points: 20_000,
+        actual_serial_ms: 1_800,
+        actual_critical_path_ms: 950,
+        actual_speedup_basis_points: 18_947,
+        input_tokens: 400,
+        output_tokens: 200,
+      },
+      nodes: [
+        {
+          node_id: 'analyze',
+          kind: 'agent_task',
+          status: 'running',
+          work: { role: 'evidence_analyze', expected_duration_ms: 1_000 },
+        },
+      ],
+      edges: [],
+    });
+
+    expect(model.work).toMatchObject({
+      width: 2,
+      depth: 1,
+      expectedCriticalPathMs: 1_000,
+      actualCriticalPathMs: 950,
+      actualSpeedupBasisPoints: 18_947,
+    });
+    expect(model.nodes[0].badges).toContain('evidence analyze');
+    expect(model.nodes[0].badges).toContain('1000 ms');
+  });
+
   it('combines a revisioned Team template with canonical live working state', () => {
     const model = adaptTeamTopology({
       revision_ref: { template_id: 'template-1', revision: 7 },

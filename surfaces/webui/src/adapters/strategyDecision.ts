@@ -38,6 +38,7 @@ export interface StrategyDecisionViewModel {
   actualStatus: 'unknown' | 'observed';
   actualMode: StrategyActualMode;
   actual: StrategyActualProjection | null;
+  resources: StrategyDecisionProjection['resource_snapshot'];
   why: string[];
   whyNot: string[];
   evidenceScopes: NonNullable<StrategyDecisionProjection['evidence_scopes']>;
@@ -536,6 +537,7 @@ export function adaptStrategyDecision(
     actualStatus: observedStatus,
     actualMode,
     actual,
+    resources: projection.resource_snapshot || null,
     why: safeArray(projection.benefit_reason).map(publicText),
     whyNot: safeArray(projection.cost_reason).map(publicText),
     evidenceScopes,

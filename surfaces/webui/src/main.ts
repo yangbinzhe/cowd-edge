@@ -8,9 +8,16 @@ import { applyDocumentLocale } from './i18n';
 import './styles/tokens.css';
 import './styles/base.css';
 
+const APP_MANIFEST_TIMEOUT_MS = 2_000;
+
 async function configureGatewayApps() {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), APP_MANIFEST_TIMEOUT_MS);
   try {
-    const response = await fetch('/api/webui/manifest', { credentials: 'same-origin' });
+    const response = await fetch('/api/webui/manifest', {
+      credentials: 'same-origin',
+      signal: controller.signal,
+    });
     if (!response.ok) throw new Error(`Gateway manifest returned ${response.status}`);
     const manifest = await response.json() as { enabled_app_ids?: unknown };
     const enabledAppIds = Array.isArray(manifest.enabled_app_ids)
@@ -21,6 +28,8 @@ async function configureGatewayApps() {
     // A stale WebUI must fail closed for APP extensions. Core WebUI remains
     // available, and a later page reload will reconcile after Gateway returns.
     configureEnabledAppPlugins([]);
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 

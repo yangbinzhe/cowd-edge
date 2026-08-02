@@ -5,7 +5,7 @@ export type CoreNavId = 'chat' | 'mission' | 'runtime' | 'context' | 'reality' |
 export type NavId = CoreNavId | (string & {});
 export type CompanionTab = 'activity' | 'workspace' | 'inspector';
 export type Tone = 'neutral' | 'info' | 'success' | 'warn' | 'danger';
-export type ApiReadStatus = 'ready' | 'offline' | 'forbidden' | 'not_found' | 'invalid_response' | 'server_error' | 'error' | 'stale';
+export type ApiReadStatus = 'ready' | 'offline' | 'timeout' | 'forbidden' | 'not_found' | 'invalid_response' | 'server_error' | 'error' | 'stale';
 
 export interface ApiReadState {
   __state?: ApiReadStatus;

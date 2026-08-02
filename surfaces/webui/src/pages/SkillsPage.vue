@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useCapabilitySection } from "../composables/useCapabilitySection";
-const { isSectionActive } = useCapabilitySection();
+const { activeSection, isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { FileText, Languages, Plus, RefreshCw, Search, Trash2, X } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import { api } from '../api/client';
@@ -45,6 +45,9 @@ const createName = ref('');
 const createDescription = ref('');
 const createContent = ref('');
 const deleteArmedId = ref('');
+const loadedSections = new Set<string>();
+let hydrationController: AbortController | null = null;
+let hydrationGeneration = 0;
 
 const items = computed(() => Array.isArray(catalog.value?.items) ? catalog.value.items : []);
 const filteredItems = computed(() => items.value.filter((skill: any) => {
@@ -58,7 +61,19 @@ const filteredItems = computed(() => items.value.filter((skill: any) => {
   if (risk.value !== 'all' && skill.risk !== risk.value) return false;
   return true;
 }));
-const facets = computed(() => projection.value?.facets || {});
+const facets = computed(() => {
+  if (projection.value?.facets) return projection.value.facets;
+  const values = (field: string) => Array.from(new Set(
+    items.value.map((item: any) => item?.[field]).filter(Boolean),
+  ));
+  return {
+    scopes: values('scope'),
+    domains: values('domain'),
+    statuses: values('status'),
+    risks: values('risk'),
+    tags: Array.from(new Set(items.value.flatMap((item: any) => item.tags || []))),
+  };
+});
 const sourceFacet = computed(() => Array.from(new Set(items.value.map((skill: any) => skill.source).filter(Boolean))));
 const skill = computed(() => detail.value?.skill || filteredItems.value.find((item: any) => item.id === selectedSkillId.value) || {});
 const skillManagement = computed(() => detail.value?.management || {});
@@ -69,6 +84,34 @@ const translatedMarkdown = computed(() => {
   const data = translateResult.value?.data || translateResult.value || {};
   return data.translated_markdown || data.response || data.text || data.content || '';
 });
+const cacheHealth = computed(() => projection.value?.cache || {});
+const cacheMetrics = computed(() => [
+  { label: t('page.skills.cache.resident'), value: formatBytes(cacheHealth.value.resident_bytes) },
+  { label: t('page.skills.cache.entries'), value: Number(cacheHealth.value.resident_entries || 0) },
+  { label: t('page.skills.cache.hits'), value: Number(cacheHealth.value.hits || 0) },
+  { label: t('page.skills.cache.misses'), value: Number(cacheHealth.value.misses || 0) },
+  { label: t('page.skills.cache.loads'), value: Number(cacheHealth.value.loads || 0) },
+  { label: t('page.skills.cache.failures'), value: Number(cacheHealth.value.failures || 0) },
+  { label: t('page.skills.cache.evictions'), value: Number(cacheHealth.value.evictions || 0) },
+  { label: t('page.skills.cache.persisted'), value: Number(cacheHealth.value.usage_persisted || 0) },
+  { label: t('page.skills.cache.persistenceFailures'), value: Number(cacheHealth.value.usage_persistence_failures || 0) },
+]);
+
+function formatBytes(value: unknown) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${Math.round(bytes)} B`;
+}
+
+function currentSection() {
+  return activeSection.value || 'catalog';
+}
+
+function sectionKey(section: string, skillId = '') {
+  return `${section}:${skillId}`;
+}
 const skillContext = computed(() => [
   { label: t('page.skills.context.skills'), value: filteredItems.value.length, tone: filteredItems.value.length ? 'success' : 'warn' },
   { label: t('page.skills.context.selected'), value: selectedSkillId.value || t('status.none') },
@@ -123,22 +166,70 @@ const skillEvidence = computed(() => [
   })),
 ].filter((item) => item.id || item.summary));
 
+async function refreshCatalog() {
+  catalog.value = await api.skillCatalog();
+  if (selectedSkillId.value && !items.value.some((item: any) => item.id === selectedSkillId.value)) {
+    selectedSkillId.value = '';
+  }
+  if (!selectedSkillId.value) selectedSkillId.value = String(items.value[0]?.id || '');
+}
+
+async function hydrateSection(section = currentSection(), force = false) {
+  if (section === 'catalog') return;
+  const skillId = selectedSkillId.value;
+  const globalKey = sectionKey(section);
+  if (section === 'runs' && !force && loadedSections.has(globalKey)) return;
+
+  hydrationController?.abort();
+  const controller = new AbortController();
+  hydrationController = controller;
+  const generation = ++hydrationGeneration;
+  const current = () => (
+    hydrationController === controller
+    && hydrationGeneration === generation
+    && !controller.signal.aborted
+    && selectedSkillId.value === skillId
+    && currentSection() === section
+  );
+
+  try {
+    if (section === 'runs') {
+      const nextRuns = await api.skillRuns(controller.signal);
+      if (!current()) return;
+      runs.value = nextRuns;
+      loadedSections.add(globalKey);
+    } else if (section === 'projection' || section === 'governance') {
+      const needsProjection = force || !loadedSections.has(sectionKey('projection'));
+      const [nextProjection, nextDetail] = await Promise.all([
+        needsProjection
+          ? api.skillProjection(controller.signal)
+          : Promise.resolve(projection.value),
+        skillId
+          ? api.skillDetail(skillId, controller.signal)
+          : Promise.resolve({}),
+      ]);
+      if (!current()) return;
+      projection.value = nextProjection;
+      detail.value = nextDetail;
+      if (needsProjection) loadedSections.add(sectionKey('projection'));
+    } else if (section === 'files' && skillId) {
+      await loadSelectedSkillFiles(skillId, controller, generation);
+    }
+  } catch (err) {
+    if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
+    throw err;
+  } finally {
+    if (hydrationController === controller) hydrationController = null;
+  }
+}
+
 async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [nextCatalog, nextProjection, nextRuns] = await Promise.all([
-      api.skillCatalog(),
-      api.skillProjection(),
-      api.skillRuns(),
-    ]);
-    catalog.value = nextCatalog;
-    projection.value = nextProjection;
-    runs.value = nextRuns;
-    if (!selectedSkillId.value) {
-      selectedSkillId.value = nextCatalog?.items?.[0]?.id || '';
-    }
-    await loadSelectedSkill();
+    loadedSections.clear();
+    await refreshCatalog();
+    await hydrateSection(currentSection(), true);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -146,31 +237,68 @@ async function refresh() {
   }
 }
 
-async function loadSelectedSkill() {
-  if (!selectedSkillId.value) return;
+async function loadSelectedSkillFiles(
+  skillId = selectedSkillId.value,
+  controller = new AbortController(),
+  generation = ++hydrationGeneration,
+) {
+  if (!skillId) return;
+  const ownsController = hydrationController !== controller;
+  if (ownsController) {
+    hydrationController?.abort();
+    hydrationController = controller;
+  }
+  const current = () => (
+    hydrationController === controller
+    && hydrationGeneration === generation
+    && !controller.signal.aborted
+    && selectedSkillId.value === skillId
+  );
   const [nextDetail, nextFiles] = await Promise.all([
-    api.skillDetail(selectedSkillId.value),
-    api.skillFiles(selectedSkillId.value),
+    api.skillDetail(skillId, controller.signal),
+    api.skillFiles(skillId, controller.signal),
   ]);
+  if (!current()) return;
   detail.value = nextDetail;
   files.value = nextFiles;
   selectedFile.value = fileItems.value.find((file: any) => file.path === 'SKILL.md')?.path
     || nextFiles?.primary
     || fileItems.value.find((file: any) => file.kind === 'file')?.path
     || 'SKILL.md';
-  await loadRawFile();
+  const nextRaw = await api.skillFileRaw(skillId, selectedFile.value, controller.signal);
+  if (!current()) return;
+  rawFile.value = nextRaw;
 }
 
 async function loadRawFile(path = selectedFile.value) {
   if (!selectedSkillId.value || !path) return;
+  hydrationController?.abort();
+  const controller = new AbortController();
+  hydrationController = controller;
+  const generation = ++hydrationGeneration;
+  const skillId = selectedSkillId.value;
   selectedFile.value = path;
-  rawFile.value = await api.skillFileRaw(selectedSkillId.value, path);
+  try {
+    const nextRaw = await api.skillFileRaw(skillId, path, controller.signal);
+    if (
+      hydrationController === controller
+      && hydrationGeneration === generation
+      && selectedSkillId.value === skillId
+      && selectedFile.value === path
+    ) rawFile.value = nextRaw;
+  } catch (err) {
+    if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
+    throw err;
+  } finally {
+    if (hydrationController === controller) hydrationController = null;
+  }
 }
 
 async function runAction(action: 'validate' | 'plan' | 'run') {
   if (!selectedSkillId.value) return;
   actionResult.value = await api.skillAction(selectedSkillId.value, action, { session_id: 'webui-skills' });
-  await refresh();
+  loadedSections.delete(sectionKey('runs'));
+  if (currentSection() === 'runs') await hydrateSection('runs', true);
 }
 
 async function translateSkill() {
@@ -204,7 +332,9 @@ async function createSkill() {
   createDescription.value = '';
   createContent.value = '';
   selectedSkillId.value = `local:${name}`;
-  await refresh();
+  loadedSections.clear();
+  await refreshCatalog();
+  await hydrateSection(currentSection(), true);
 }
 
 async function deleteSelectedSkill() {
@@ -219,7 +349,9 @@ async function deleteSelectedSkill() {
   detail.value = {};
   files.value = {};
   rawFile.value = {};
-  await refresh();
+  loadedSections.clear();
+  await refreshCatalog();
+  await hydrateSection(currentSection(), true);
 }
 
 async function loadRunDetail(run: any) {
@@ -230,8 +362,23 @@ async function loadRunDetail(run: any) {
   selectedDetail.value = runDetail.value?.run || run;
 }
 
-watch(selectedSkillId, loadSelectedSkill);
+watch(activeSection, (section) => {
+  hydrationController?.abort();
+  hydrateSection(section || 'catalog').catch((err) => {
+    error.value = err instanceof Error ? err.message : String(err);
+  });
+});
+watch(selectedSkillId, () => {
+  detail.value = {};
+  files.value = {};
+  rawFile.value = {};
+  translateResult.value = null;
+  hydrateSection(currentSection(), false).catch((err) => {
+    error.value = err instanceof Error ? err.message : String(err);
+  });
+});
 onMounted(refresh);
+onUnmounted(() => hydrationController?.abort());
 </script>
 
 <template>
@@ -460,6 +607,15 @@ onMounted(refresh);
             <dd>{{ displayStatus(skill.risk || 'policy') }}</dd>
           </dl>
           <EvidenceTrace :items="skillEvidence" :title="t('page.skills.page.title.9c2c16a5fe')" />
+          <section :aria-label="t('page.skills.cache.title')">
+            <h3>{{ t('page.skills.cache.title') }}</h3>
+            <dl class="detail-list">
+              <template v-for="metric in cacheMetrics" :key="metric.label">
+                <dt>{{ metric.label }}</dt>
+                <dd>{{ metric.value }}</dd>
+              </template>
+            </dl>
+          </section>
           <RequestReceipt :receipt="actionResult || runDetail" :title="t('page.skills.page.title.dbff7b9cc4')" />
           <ObjectInspectorDrawer :title="t('page.skills.page.title.cd28167d21')" :data="{ projection, skill, actionResult }" />
         </section>

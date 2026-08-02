@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import ELK from 'elkjs/lib/elk.bundled.js';
 import { Panel, VueFlow } from '@vue-flow/core';
 import {
   ArrowDown,
@@ -23,6 +22,7 @@ import { displayStatus } from '../../i18n/domain/status';
 import DataTable from '../workbench/DataTable.vue';
 import StatusPill from '../workbench/StatusPill.vue';
 import EvidenceInspector from '../evidence/EvidenceInspector.vue';
+import { runGraphLayout } from './graphLayout';
 import { graphDiagnostics, graphExportPayload, graphLayoutSignature } from './graphRuntime';
 
 const props = withDefaults(defineProps<{
@@ -57,7 +57,6 @@ const emit = defineEmits<{
   toggleFullscreen: [];
 }>();
 
-const elk = new ELK();
 const root = ref<HTMLElement | null>(null);
 const flow = ref<any>(null);
 const search = ref(props.searchQuery);
@@ -193,7 +192,7 @@ async function layout() {
   }
   const signature = graphLayoutSignature(props.model.id, direction.value, canvasNodes.value, canvasEdges.value);
   const cached = layoutCache.get(signature);
-  const graph = cached ? null : await elk.layout({
+  const graph = cached ? null : await runGraphLayout({
       id: props.model.id,
       layoutOptions: {
         'elk.algorithm': 'layered',
@@ -319,6 +318,15 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
         <small :id="summaryId">{{ t('graph.summary', { nodes: visibleNodes.length, edges: visibleEdges.length }) }}</small>
         <small v-if="model.truncated" class="graph-truncated">{{ t('graph.state.truncated') }}</small>
         <small v-if="diagnosticCount" class="graph-diagnostic">{{ t('graph.state.diagnostics', { count: diagnosticCount, dangling: diagnostics.danglingEdgeIds.length }) }}</small>
+        <small v-if="model.work" class="graph-work-summary">
+          {{ t('graph.work.summary', {
+            width: model.work.width,
+            depth: model.work.depth,
+            expected: model.work.expectedSpeedupBasisPoints == null ? '-' : `${(model.work.expectedSpeedupBasisPoints / 10000).toFixed(2)}x`,
+            actual: model.work.actualSpeedupBasisPoints == null ? '-' : `${(model.work.actualSpeedupBasisPoints / 10000).toFixed(2)}x`,
+            tokens: model.work.inputTokens + model.work.outputTokens + model.work.cachedTokens,
+          }) }}
+        </small>
       </div>
       <div class="graph-header-actions">
         <RouterLink v-if="selectedNode?.href" class="ghost-action" :to="selectedNode.href">{{ t('graph.action.openLinked') }}</RouterLink>

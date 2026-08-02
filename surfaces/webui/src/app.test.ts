@@ -4,7 +4,7 @@ import { nextTick } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
-import { api } from './api/client';
+import { api, invalidateApiReadCache } from './api/client';
 import ChatPage from './pages/ChatPage.vue';
 import AgentsPage from './pages/AgentsPage.vue';
 import AuditPage from './pages/AuditPage.vue';
@@ -14,7 +14,7 @@ import RuntimePage from './pages/RuntimePage.vue';
 import ContextPage from './pages/ContextPage.vue';
 import GatewayPage from './pages/GatewayPage.vue';
 import MissionControlPage from './pages/MissionControlPage.vue';
-import { MfgApp as MfgPage } from '@cowd/app-mfg-webui';
+import MfgPage from '@cowd/app-mfg-webui/MfgApp.vue';
 import { mfgApi } from '@cowd/app-mfg-webui/api/mfgApi';
 import SettingsPage from './pages/SettingsPage.vue';
 import SkillsPage from './pages/SkillsPage.vue';
@@ -2148,7 +2148,15 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
       if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
-      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({ configured_model: 'DeepSeek-v4-flash', provider_count: 1, provider_model_count: 2 })));
+      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({
+        components: {
+          provider: {
+            configured_model: 'DeepSeek-v4-flash',
+            provider_count: 1,
+            model_count: 2,
+          },
+        },
+      })));
       if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
       if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
       if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
@@ -2188,7 +2196,7 @@ describe('Cowd Vue WebUI shell', () => {
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
-    const wrapper = await mountApp('/runtime');
+    const wrapper = await mountApp('/runtime?section=growth');
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('成长闭环');
@@ -2270,6 +2278,72 @@ describe('Cowd Vue WebUI shell', () => {
     await buttons[1].trigger('click');
     await settleAsync();
     expect(detach).toHaveBeenCalledWith('runtime-lease-session');
+  });
+
+  it('loads a truthful five-request Runtime overview projection', async () => {
+    invalidateApiReadCache();
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/runtime/control-plane') {
+        return Promise.resolve(new Response(JSON.stringify({
+          status: 'healthy',
+          config: { source: 'config' },
+          config_reload: { status: 'applied', trigger: 'auto' },
+          components: {
+            provider: {
+              configured_model: 'deepseek-pro',
+              provider_count: 2,
+              model_count: 4,
+            },
+          },
+          health: {
+            runtime: {
+              provider_transport: { entries: 3, hits: 8, checkouts: 10 },
+              hot_state: {
+                pressure_high: false,
+                metrics: { resident_bytes: 1024 },
+                budget: { limit_bytes: 4096 },
+              },
+            },
+            storage: {
+              backend: 'postgres',
+              postgres: { metrics: { query_count: 20, query_error_count: 0 } },
+              session_execution: { active: 2, queued: 1 },
+            },
+          },
+        })));
+      }
+      if (url === '/api/runtime/snapshot') return Promise.resolve(new Response(JSON.stringify({ status: 'ready' })));
+      if (url === '/api/runtime/source-audit') return Promise.resolve(new Response(JSON.stringify({ report: { ok: true } })));
+      if (url === '/api/runtime/source-repair-plan') return Promise.resolve(new Response(JSON.stringify({ repair_plan: [] })));
+      if (url === '/api/runtime/config/effective') return Promise.resolve(new Response(JSON.stringify({ source: 'config', workspace_root: '/workspace' })));
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const router = createRouter({
+      history: createWebHashHistory(),
+      routes: [{ path: '/runtime', component: RuntimePage }],
+    });
+    await router.push('/runtime');
+    await router.isReady();
+    const wrapper = mount(RuntimePage, { global: { plugins: [pinia, router] } });
+    await settleAsync();
+
+    expect(wrapper.text()).toContain('deepseek-pro');
+    expect(wrapper.text()).toContain('1.0 KiB');
+    expect(wrapper.text()).toContain('20');
+    const runtimeReads = fetchMock.mock.calls
+      .map(([path]) => String(path))
+      .filter((path) => path.startsWith('/api/runtime/'));
+    expect(runtimeReads).toEqual([
+      '/api/runtime/control-plane',
+      '/api/runtime/snapshot',
+      '/api/runtime/source-audit',
+      '/api/runtime/source-repair-plan',
+      '/api/runtime/config/effective',
+    ]);
   });
 
   it('renders Reality Core evidence object detail from flow rows', async () => {
@@ -2624,7 +2698,7 @@ describe('Cowd Vue WebUI shell', () => {
       return Promise.resolve(new Response(JSON.stringify({})));
     });
     vi.stubGlobal('fetch', fetchMock);
-    const wrapper = await mountApp('/skills');
+    const wrapper = await mountApp('/skills?section=files');
     await settleAsync();
     await settleAsync();
     expect(wrapper.text()).toContain('技能控制台');
@@ -2634,10 +2708,78 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('技能选中详情');
     expect(wrapper.text()).toContain('SKILL.md');
     expect(wrapper.find('.markdown-body h1').text()).toBe('test');
-    await wrapper.find('.run-list article').trigger('click');
-    await settleAsync();
-    expect(fetchMock).toHaveBeenCalledWith('/api/skills/runs/run-1', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/local%3Atest/files/raw?path=SKILL.md', expect.any(Object));
+  });
+
+  it('loads only the skill catalog on the catalog section', async () => {
+    invalidateApiReadCache();
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/skills/catalog') {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [{ id: 'local:test', name: 'test', scope: 'local', status: 'ready', risk: 'review', tags: [] }],
+        })));
+      }
+      if (url.startsWith('/api/sessions?')) {
+        return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      }
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = await mountApp('/skills');
+    await settleAsync();
+    await settleAsync();
+
+    expect(wrapper.text()).toContain('test');
+    const skillRequests = fetchMock.mock.calls
+      .map(([path]) => String(path))
+      .filter((path) => path.startsWith('/api/skills/'));
+    expect(skillRequests).toEqual(['/api/skills/catalog']);
+  });
+
+  it('rehydrates skill detail after selecting A, B, then A again', async () => {
+    invalidateApiReadCache();
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/skills/catalog') {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { id: 'local:a', name: 'Skill A', scope: 'local', status: 'ready', risk: 'low', tags: [] },
+            { id: 'local:b', name: 'Skill B', scope: 'local', status: 'ready', risk: 'low', tags: [] },
+          ],
+        })));
+      }
+      if (url === '/api/skills/projection?surface=webui') {
+        return Promise.resolve(new Response(JSON.stringify({ facets: {} })));
+      }
+      if (url === '/api/skills/local%3Aa') {
+        return Promise.resolve(new Response(JSON.stringify({ skill: { id: 'local:a', name: 'Skill A detail', scope: 'local' } })));
+      }
+      if (url === '/api/skills/local%3Ab') {
+        return Promise.resolve(new Response(JSON.stringify({ skill: { id: 'local:b', name: 'Skill B detail', scope: 'local' } })));
+      }
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = await mountApp('/skills');
+    await settleAsync();
+
+    await wrapper.vm.$router.push('/skills?section=projection');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Skill A detail');
+    await wrapper.vm.$router.push('/skills');
+    await settleAsync();
+    await wrapper.findAll('.skill-row').find((row) => row.text().includes('Skill B'))?.trigger('click');
+    await wrapper.vm.$router.push('/skills?section=projection');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Skill B detail');
+    await wrapper.vm.$router.push('/skills');
+    await settleAsync();
+    await wrapper.findAll('.skill-row').find((row) => row.text().includes('Skill A'))?.trigger('click');
+    await wrapper.vm.$router.push('/skills?section=projection');
+    await settleAsync();
+    expect(wrapper.text()).toContain('Skill A detail');
   });
 
   it('loads the active memory section without eagerly loading unrelated sections', async () => {

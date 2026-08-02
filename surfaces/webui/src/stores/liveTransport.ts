@@ -1,5 +1,5 @@
 import { reactive, ref } from 'vue';
-import { api, ApiWriteError, webuiObserverId } from '../api/client';
+import { api, ApiWriteError, claimWebuiObserverId } from '../api/client';
 
 export type LiveSourceKind = 'session' | 'execution' | 'mission';
 export type LiveDetailScope = 'summary' | 'full';
@@ -146,10 +146,6 @@ function selectorPayload() {
   return [...sources.values()]
     .map((owner) => normalizedSelector(owner.selector))
     .sort((left, right) => sourceKey(left).localeCompare(sourceKey(right)));
-}
-
-function surfaceInstance() {
-  return webuiObserverId();
 }
 
 function closePhysical() {
@@ -347,6 +343,7 @@ async function synchronize() {
     }
     try {
       subscriptionHealth.state = 'syncing';
+      const surfaceInstance = await claimWebuiObserverId();
       if (!subscription && pendingDelete) {
         const stale = pendingDelete;
         try {
@@ -368,9 +365,9 @@ async function synchronize() {
           selector: { sources: selected },
         })
         : await api.createLiveSubscription({
-          surface_instance: surfaceInstance(),
+          surface_instance: surfaceInstance,
           selector: { sources: selected },
-          idempotency_key: `webui-live:${surfaceInstance()}`,
+          idempotency_key: `webui-live:${surfaceInstance}`,
         });
       if (response?.__state && response.__state !== 'ready') {
         throw new Error(String(response.__error || response.__state));

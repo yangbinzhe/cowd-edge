@@ -17,6 +17,7 @@ import type {
   SessionTurnProjection,
   WorkspaceFile,
 } from '../types';
+import { apiReadPolicy, type ApiReadClass } from './readPolicy';
 
 export interface ApiReceipt<T = any> {
   ok: boolean;
@@ -131,25 +132,97 @@ function headers(init: RequestInit = {}) {
 }
 
 let fallbackObserverId = '';
+let claimedObserverId = '';
+let observerLeaseChannel: BroadcastChannel | null = null;
+let observerClaim: Promise<string> | null = null;
+
+function newObserverId() {
+  const suffix = globalThis.crypto?.randomUUID?.()
+    || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `webui:${suffix}`;
+}
+
+function ensureObserverLeaseChannel() {
+  if (observerLeaseChannel || typeof globalThis.BroadcastChannel !== 'function') {
+    return observerLeaseChannel;
+  }
+  observerLeaseChannel = new globalThis.BroadcastChannel('cowd.webui.observer.lease');
+  observerLeaseChannel.addEventListener('message', (event: MessageEvent) => {
+    const message = event.data as { type?: string; observer_id?: string; nonce?: string };
+    if (
+      message?.type !== 'probe'
+      || !message.nonce
+      || message.observer_id !== claimedObserverId
+    ) return;
+    observerLeaseChannel?.postMessage({
+      type: 'occupied',
+      observer_id: claimedObserverId,
+      nonce: message.nonce,
+    });
+  });
+  return observerLeaseChannel;
+}
 
 export function webuiObserverId() {
+  if (claimedObserverId) return claimedObserverId;
   const key = 'cowd.webui.observer_id';
   try {
     const existing = globalThis.sessionStorage?.getItem(key);
-    if (existing) return existing;
-    const suffix = globalThis.crypto?.randomUUID?.()
-      || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-    const observer = `webui:${suffix}`;
-    globalThis.sessionStorage?.setItem(key, observer);
-    return observer;
+    claimedObserverId = existing || newObserverId();
+    globalThis.sessionStorage?.setItem(key, claimedObserverId);
   } catch {
-    if (!fallbackObserverId) {
-      const suffix = globalThis.crypto?.randomUUID?.()
-        || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-      fallbackObserverId = `webui:${suffix}`;
-    }
-    return fallbackObserverId;
+    if (!fallbackObserverId) fallbackObserverId = newObserverId();
+    claimedObserverId = fallbackObserverId;
   }
+  ensureObserverLeaseChannel();
+  return claimedObserverId;
+}
+
+export function claimWebuiObserverId(): Promise<string> {
+  if (observerClaim) return observerClaim;
+  const current = webuiObserverId();
+  const channel = ensureObserverLeaseChannel();
+  if (!channel) {
+    observerClaim = Promise.resolve(current);
+    return observerClaim;
+  }
+  observerClaim = new Promise<string>((resolve) => {
+    const nonce = newObserverId();
+    let occupied = false;
+    const onMessage = (event: MessageEvent) => {
+      const message = event.data as { type?: string; observer_id?: string; nonce?: string };
+      if (
+        message?.type === 'occupied'
+        && message.observer_id === current
+        && message.nonce === nonce
+      ) occupied = true;
+    };
+    channel.addEventListener('message', onMessage);
+    channel.postMessage({ type: 'probe', observer_id: current, nonce });
+    setTimeout(() => {
+      channel.removeEventListener('message', onMessage);
+      if (occupied) {
+        claimedObserverId = newObserverId();
+        fallbackObserverId = claimedObserverId;
+        try {
+          globalThis.sessionStorage?.setItem('cowd.webui.observer_id', claimedObserverId);
+        } catch {
+          // The process-local identity remains authoritative for this document.
+        }
+      }
+      resolve(claimedObserverId);
+    }, 40);
+  });
+  return observerClaim;
+}
+
+export function resetWebuiObserverIdentityForTests() {
+  if (import.meta.env.MODE !== 'test') return;
+  observerLeaseChannel?.close();
+  observerLeaseChannel = null;
+  observerClaim = null;
+  claimedObserverId = '';
+  fallbackObserverId = '';
 }
 
 function requestIdempotencyKey(scope: string) {
@@ -203,12 +276,23 @@ class ApiReadError extends Error {
 interface CachedRead {
   data: unknown;
   refreshedAt: string;
+  cacheUntil: number;
   sessionId: string;
   referencedSessionIds: string[];
 }
 
+interface SharedRead {
+  promise: Promise<unknown>;
+  controller: AbortController;
+  authorization: RequestAuthorizationStamp;
+  subscribers: number;
+  settled: boolean;
+}
+
 const lastSuccessfulReads = new Map<string, CachedRead>();
+const inFlightReads = new Map<string, SharedRead>();
 let authenticationEpoch = 0;
+let readRevision = 0;
 const sessionAuthorizationEpochs = new Map<string, number>();
 
 interface RequestAuthorizationStamp {
@@ -274,7 +358,10 @@ function invalidateRejectedAuthorization(
 
 export function invalidateApiReadCache() {
   authenticationEpoch += 1;
+  readRevision += 1;
   lastSuccessfulReads.clear();
+  for (const pending of inFlightReads.values()) pending.controller.abort();
+  inFlightReads.clear();
 }
 
 export function invalidateAuthentication(reason = 'Gateway authorization changed') {
@@ -297,11 +384,21 @@ export function invalidateSessionAuthorization(
   }
   const sessionEpoch = (sessionAuthorizationEpochs.get(normalized) || 0) + 1;
   sessionAuthorizationEpochs.set(normalized, sessionEpoch);
+  readRevision += 1;
   for (const [key, cached] of lastSuccessfulReads.entries()) {
     if (
       cached.sessionId === normalized
       || cached.referencedSessionIds.includes(normalized)
     ) lastSuccessfulReads.delete(key);
+  }
+  for (const [key, pending] of inFlightReads.entries()) {
+    if (
+      !pending.authorization.sessionId
+      || pending.authorization.sessionId === normalized
+    ) {
+      pending.controller.abort();
+      inFlightReads.delete(key);
+    }
   }
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('cowd:session-authorization-invalidated', {
@@ -331,57 +428,206 @@ function withReadState<T>(data: T, state: ApiReadState): T & ApiReadState {
   return { value: data, ...state } as T & ApiReadState;
 }
 
+function positiveReadTtlMs(path: string) {
+  if (
+    path === '/api/config'
+    || path === '/api/config/providers'
+    || path === '/api/config/provider-catalog'
+    || path === '/api/profiles'
+    || path.startsWith('/api/slash?')
+    || path === '/api/skills/catalog'
+    || path.startsWith('/api/skills/projection?')
+  ) return 750;
+  return 0;
+}
+
 function referencedSessionIds(value: unknown): string[] {
   const found = new Set<string>();
-  const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
-  let visited = 0;
-  while (pending.length && visited < 10_000) {
-    const item = pending.pop()!;
-    visited += 1;
-    if (!item.value || typeof item.value !== 'object' || item.depth > 8) continue;
-    if (Array.isArray(item.value)) {
-      for (const nested of item.value) pending.push({ value: nested, depth: item.depth + 1 });
-      continue;
-    }
-    const record = item.value as Record<string, unknown>;
-    if (typeof record.session_id === 'string' && record.session_id.trim()) {
-      found.add(record.session_id.trim());
-    }
-    if (Array.isArray(record.sessions)) {
-      for (const session of record.sessions) {
-        if (session && typeof session === 'object') {
-          const id = (session as Record<string, unknown>).id;
-          if (typeof id === 'string' && id.trim()) found.add(id.trim());
-        }
+  if (!value || typeof value !== 'object') return [];
+  const pending: Array<{ record: Record<string, unknown>; depth: number }> = [{
+    record: value as Record<string, unknown>,
+    depth: 0,
+  }];
+  const visited = new WeakSet<object>();
+  const addSessionId = (candidate: unknown) => {
+    if (typeof candidate === 'string' && candidate.trim()) found.add(candidate.trim());
+  };
+  let inspected = 0;
+  while (pending.length && inspected < 64) {
+    const { record, depth } = pending.shift()!;
+    if (visited.has(record)) continue;
+    visited.add(record);
+    inspected += 1;
+    addSessionId(record.session_id);
+
+    const sessions = record.sessions;
+    if (Array.isArray(sessions)) {
+      for (const candidate of sessions.slice(0, 1_000)) {
+        if (!candidate || typeof candidate !== 'object') continue;
+        const session = candidate as Record<string, unknown>;
+        addSessionId(session.session_id);
+        addSessionId(session.id);
+        if (depth < 3) pending.push({ record: session, depth: depth + 1 });
       }
     }
-    for (const nested of Object.values(record)) {
-      pending.push({ value: nested, depth: item.depth + 1 });
+
+    for (const field of ['items', 'turns', 'tasks', 'executions']) {
+      const entries = record[field];
+      if (!Array.isArray(entries)) continue;
+      for (const candidate of entries.slice(0, 1_000)) {
+        if (!candidate || typeof candidate !== 'object') continue;
+        const item = candidate as Record<string, unknown>;
+        addSessionId(item.session_id);
+        if (depth < 3) pending.push({ record: item, depth: depth + 1 });
+      }
+    }
+
+    if (depth >= 3) continue;
+    for (const field of ['snapshot', 'projection', 'data', 'result', 'receipt', 'payload']) {
+      const nested = record[field];
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        pending.push({ record: nested as Record<string, unknown>, depth: depth + 1 });
+      }
     }
   }
   return [...found];
 }
 
-export async function read<T>(
+function waitForSharedRead<T>(shared: SharedRead, signal?: AbortSignal | null): Promise<T> {
+  if (signal?.aborted) return Promise.reject(new DOMException('The operation was aborted', 'AbortError'));
+  shared.subscribers += 1;
+  return new Promise<T>((resolve, reject) => {
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      shared.subscribers = Math.max(0, shared.subscribers - 1);
+      if (shared.subscribers === 0 && !shared.settled) shared.controller.abort();
+    };
+    const abort = () => {
+      release();
+      reject(new DOMException('The operation was aborted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    shared.promise.then(
+      (value) => {
+        signal?.removeEventListener('abort', abort);
+        release();
+        resolve(value as T);
+      },
+      (error) => {
+        signal?.removeEventListener('abort', abort);
+        release();
+        reject(error);
+      },
+    );
+  });
+}
+
+async function readAtRevision<T>(
   path: string,
   fallback: T,
   init: RequestInit = {},
   authorizationSessionId = '',
+  requestedReadClass?: ApiReadClass,
+  retryAfterInvalidation = true,
 ): Promise<T & ApiReadState> {
   const requestAuthorization = authorizationStamp(path, init, authorizationSessionId);
+  const requestReadRevision = readRevision;
+  const requestHeaders = headers(init);
+  const readPolicy = apiReadPolicy(path, requestedReadClass);
   const cacheKey = [
     requestAuthorization.globalEpoch,
     requestAuthorization.sessionId,
     requestAuthorization.sessionEpoch,
+    readPolicy.class,
     path,
+    [...requestHeaders.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&'),
   ].join(':');
+  const positiveTtlMs = positiveReadTtlMs(path);
+  const positiveCached = lastSuccessfulReads.get(cacheKey);
+  if (
+    positiveTtlMs > 0
+    &&
+    positiveCached
+    && positiveCached.cacheUntil >= Date.now()
+    && authorizationStampIsCurrent(requestAuthorization)
+  ) {
+    return withReadState(positiveCached.data as T, {
+      __state: 'ready',
+      __refreshed_at: positiveCached.refreshedAt,
+      __last_success_at: positiveCached.refreshedAt,
+    });
+  }
   try {
-    const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
-    if (!response.ok) {
-      throw new ApiReadError(await response.text() || `${response.status} ${response.statusText}`, readStatusFor(response), response.status);
+    let shared = inFlightReads.get(cacheKey);
+    if (!shared) {
+      const { signal: _callerSignal, ...sharedInit } = init;
+      const controller = new AbortController();
+      let deadlineExpired = false;
+      let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+      const promise = (async () => {
+        try {
+          const response = await fetch(path, {
+            credentials: 'same-origin',
+            ...sharedInit,
+            headers: requestHeaders,
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            throw new ApiReadError(
+              await response.text() || `${response.status} ${response.statusText}`,
+              readStatusFor(response),
+              response.status,
+            );
+          }
+          try {
+            return await parseResponse(response, path) as T;
+          } catch (error) {
+            if (error instanceof ApiReadError) throw error;
+            throw new ApiReadError(
+              error instanceof Error ? error.message : String(error),
+              'invalid_response',
+              response.status,
+            );
+          }
+        } catch (error) {
+          if (deadlineExpired && controller.signal.aborted) {
+            throw new ApiReadError(
+              `${readPolicy.class} read exceeded ${readPolicy.deadlineMs}ms`,
+              'timeout',
+            );
+          }
+          throw error;
+        } finally {
+          if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+        }
+      })();
+      if (readPolicy.deadlineMs !== null) {
+        deadlineTimer = setTimeout(() => {
+          deadlineExpired = true;
+          controller.abort();
+        }, readPolicy.deadlineMs);
+      }
+      shared = {
+        promise,
+        controller,
+        authorization: requestAuthorization,
+        subscribers: 0,
+        settled: false,
+      };
+      inFlightReads.set(cacheKey, shared);
+      const owned = shared;
+      void promise.finally(() => {
+        owned.settled = true;
+        if (inFlightReads.get(cacheKey) === owned) inFlightReads.delete(cacheKey);
+      }).catch(() => {});
     }
     try {
-      const parsed = await parseResponse(response, path) as T;
+      const parsed = await waitForSharedRead<T>(shared, init.signal);
       if (!authorizationStampIsCurrent(requestAuthorization)) {
         throw new ApiReadError(
           'authorization changed while this response was in flight',
@@ -389,10 +635,27 @@ export async function read<T>(
           403,
         );
       }
+      if (requestReadRevision !== readRevision) {
+        if (retryAfterInvalidation) {
+          return readAtRevision(
+            path,
+            fallback,
+            init,
+            authorizationSessionId,
+            requestedReadClass,
+            false,
+          );
+        }
+        throw new ApiReadError(
+          'read invalidated while this response was in flight',
+          'stale',
+        );
+      }
       const refreshedAt = new Date().toISOString();
       lastSuccessfulReads.set(cacheKey, {
         data: parsed,
         refreshedAt,
+        cacheUntil: positiveTtlMs > 0 ? Date.now() + positiveTtlMs : 0,
         sessionId: requestAuthorization.sessionId,
         referencedSessionIds: referencedSessionIds(parsed),
       });
@@ -403,10 +666,31 @@ export async function read<T>(
       });
     } catch (error) {
       if (error instanceof ApiReadError) throw error;
-      throw new ApiReadError(error instanceof Error ? error.message : String(error), 'invalid_response', response.status);
+      throw error;
     }
   } catch (error) {
-    if (init.signal?.aborted || (error instanceof DOMException && error.name === 'AbortError')) {
+    if (init.signal?.aborted) {
+      throw error;
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      if (!authorizationStampIsCurrent(requestAuthorization)) {
+        return withReadState(fallback, {
+          __state: 'forbidden',
+          __error: 'authorization changed while this response was in flight',
+          __http_status: 403,
+          __refreshed_at: new Date().toISOString(),
+        });
+      }
+      if (requestReadRevision !== readRevision && retryAfterInvalidation) {
+        return readAtRevision(
+          path,
+          fallback,
+          init,
+          authorizationSessionId,
+          requestedReadClass,
+          false,
+        );
+      }
       throw error;
     }
     const readError = error instanceof ApiReadError
@@ -425,7 +709,11 @@ export async function read<T>(
     const cached = lastSuccessfulReads.get(cacheKey);
     const mayRetainCachedProjection = authorizationStampIsCurrent(requestAuthorization)
       && cached
-      && (readError.state === 'offline' || readError.state === 'server_error');
+      && (
+        readError.state === 'offline'
+        || readError.state === 'server_error'
+        || readError.state === 'timeout'
+      );
     return withReadState((mayRetainCachedProjection ? cached.data : fallback) as T, {
       __state: mayRetainCachedProjection ? 'stale' : readError.state,
       __error: readError.message,
@@ -434,6 +722,16 @@ export async function read<T>(
       __last_success_at: cached?.refreshedAt,
     });
   }
+}
+
+export async function read<T>(
+  path: string,
+  fallback: T,
+  init: RequestInit = {},
+  authorizationSessionId = '',
+  readClass?: ApiReadClass,
+): Promise<T & ApiReadState> {
+  return readAtRevision(path, fallback, init, authorizationSessionId, readClass);
 }
 
 function payloadSummary(body: BodyInit | null | undefined): string {
@@ -546,6 +844,10 @@ export async function writeWithMetadata<T>(
       });
     }
   }
+  readRevision += 1;
+  lastSuccessfulReads.clear();
+  for (const pending of inFlightReads.values()) pending.controller.abort();
+  inFlightReads.clear();
   return { data: parsed, metadata };
 }
 
@@ -647,11 +949,11 @@ export const api = {
     method: 'POST', body: JSON.stringify(request),
   }),
   writeReceipt: writeWithReceipt,
-  health: () => read('/api/webui/manifest', {
+  health: (signal?: AbortSignal) => read('/api/webui/manifest', {
     kind: 'cowd.webui.manifest',
     status: 'offline',
     static_webui: 'local vite fallback',
-  }),
+  }, { signal }),
   gatewayCapabilityContract: () => read<GatewayCapabilityContract>('/api/gateway/capability-contract', {
     kind: 'gateway.capability_contract',
     schema_version: 1,
@@ -726,11 +1028,15 @@ export const api = {
     body: JSON.stringify({ reason: 'cancel requested from WebUI' }),
   }),
   sessionStats: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/stats`, {}),
-  sessionExecution: (sessionId: string) => read<SessionExecutionIndexProjection>(`/api/sessions/${encodeURIComponent(sessionId)}/execution`, {
-    session_id: sessionId,
-    executions: [],
-    active_execution_ids: [],
-  }),
+  sessionExecution: (sessionId: string, signal?: AbortSignal) => read<SessionExecutionIndexProjection>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/execution`,
+    {
+      session_id: sessionId,
+      executions: [],
+      active_execution_ids: [],
+    },
+    { signal },
+  ),
   sessionHistoryIndex: (sessionId: string, metadataLimit = 128, cardLimit = 64) => read<SessionHistoryIndexProjection>(
     `/api/sessions/${encodeURIComponent(sessionId)}/history-index?metadata_limit=${Math.max(1, Math.min(500, metadataLimit))}&card_limit=${Math.max(1, Math.min(200, cardLimit))}`,
     {
@@ -913,12 +1219,12 @@ export const api = {
     { events: [] },
     { signal },
   ),
-  runtimeControlPlane: () => read('/api/runtime/control-plane', {}),
-  runtimeStatus: () => read('/api/runtime/status', {}),
-  runtimeSnapshot: () => read('/api/runtime/snapshot', {}),
-  runtimeSourceAudit: () => read('/api/runtime/source-audit', {}),
-  runtimeSourceRepairPlan: () => read('/api/runtime/source-repair-plan', {}),
-  runtimeTurns: () => read('/api/runtime/turns', { turns: [] }),
+  runtimeControlPlane: (signal?: AbortSignal) => read('/api/runtime/control-plane', {}, { signal }),
+  runtimeStatus: (signal?: AbortSignal) => read('/api/runtime/status', {}, { signal }),
+  runtimeSnapshot: (signal?: AbortSignal) => read('/api/runtime/snapshot', {}, { signal }),
+  runtimeSourceAudit: (signal?: AbortSignal) => read('/api/runtime/source-audit', {}, { signal }),
+  runtimeSourceRepairPlan: (signal?: AbortSignal) => read('/api/runtime/source-repair-plan', {}, { signal }),
+  runtimeTurns: (signal?: AbortSignal) => read('/api/runtime/turns', { turns: [] }, { signal }),
   submitRuntimeTurn: (prompt: string, sessionId?: string, taskId?: string) => writeWithReceipt('/api/runtime/turns', {
     method: 'POST',
     body: JSON.stringify({ prompt, session_id: sessionId, task_id: taskId }),
@@ -1037,11 +1343,11 @@ export const api = {
     return read(`/api/reality/promotions?${params.toString()}`, { promotions: [] });
   },
   realityBoundaries: () => read('/api/reality/boundaries', { boundaries: [] }),
-  growthStatus: () => read('/api/growth/status', {}),
-  growthEvents: () => read('/api/growth/events', { events: [], promotions: [] }),
+  growthStatus: (signal?: AbortSignal) => read('/api/growth/status', {}, { signal }),
+  growthEvents: (signal?: AbortSignal) => read('/api/growth/events', { events: [], promotions: [] }, { signal }),
   providers: () => read('/api/config/providers', { providers: [], models: [], catalog: { providers: [], models: [], profiles: [], sources: [], warnings: [] } }),
   providerCatalog: () => read('/api/config/provider-catalog', { catalog: { providers: [], models: [], profiles: [], sources: [], warnings: [] } }),
-  effectiveConfig: () => read('/api/runtime/config/effective', {}),
+  effectiveConfig: (signal?: AbortSignal) => read('/api/runtime/config/effective', {}, { signal }),
   configReloadStatus: () => read('/api/runtime/config/reload/status', {}),
   approvalConfig: () => read('/api/approval/config', {}),
   updateApprovalConfig: (config: Record<string, unknown>) => write('/api/approval/config', {
@@ -1049,7 +1355,7 @@ export const api = {
     body: JSON.stringify(config),
   }),
   toggleSolo: () => write('/api/approval/solo', { method: 'POST' }),
-  approvalPending: () => read('/api/approval/pending', []),
+  approvalPending: (signal?: AbortSignal) => read('/api/approval/pending', [], { signal }),
   approvalRiskReceipt: (toolName: string, input: unknown, sessionId?: string) => writeWithReceipt('/api/approval/risk-receipt', {
     method: 'POST',
     body: JSON.stringify({ tool_name: toolName, input, session_id: sessionId }),
@@ -1059,7 +1365,7 @@ export const api = {
     body: JSON.stringify({ id, approved, reason }),
   }),
   approvalHistory: () => read('/api/approval/history?limit=20', []),
-  runtimeSessionLeases: () => read('/api/runtime/session-leases', {}),
+  runtimeSessionLeases: (signal?: AbortSignal) => read('/api/runtime/session-leases', {}, { signal }),
   acquireRuntimeLease: (sessionId: string, mode = 'collaborative') => write('/api/runtime/session-leases/acquire', {
     method: 'POST',
     body: JSON.stringify({ session_id: sessionId, mode }),
@@ -1158,20 +1464,20 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  skillCatalog: () => read('/api/skills/catalog', {}),
-  skillProjection: () => read('/api/skills/projection?surface=webui', {}),
+  skillCatalog: (signal?: AbortSignal) => read('/api/skills/catalog', {}, { signal }),
+  skillProjection: (signal?: AbortSignal) => read('/api/skills/projection?surface=webui', {}, { signal }),
   createSkill: (body: Record<string, unknown>) => writeWithReceipt('/api/skills', {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  skillRuns: () => read('/api/skills/runs', {}),
+  skillRuns: (signal?: AbortSignal) => read('/api/skills/runs', {}, { signal }),
   skillRunDetail: (id: string) => read(`/api/skills/runs/${encodeURIComponent(id)}`, {}),
-  skillDetail: (id: string) => read(`/api/skills/${encodeURIComponent(id)}`, {}),
+  skillDetail: (id: string, signal?: AbortSignal) => read(`/api/skills/${encodeURIComponent(id)}`, {}, { signal }),
   deleteSkill: (id: string) => writeWithReceipt(`/api/skills/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   }),
-  skillFiles: (id: string) => read(`/api/skills/${encodeURIComponent(id)}/files`, {}),
-  skillFileRaw: (id: string, path = 'SKILL.md') => read(`/api/skills/${encodeURIComponent(id)}/files/raw?path=${encodeURIComponent(path)}`, {}),
+  skillFiles: (id: string, signal?: AbortSignal) => read(`/api/skills/${encodeURIComponent(id)}/files`, {}, { signal }),
+  skillFileRaw: (id: string, path = 'SKILL.md', signal?: AbortSignal) => read(`/api/skills/${encodeURIComponent(id)}/files/raw?path=${encodeURIComponent(path)}`, {}, { signal }),
   skillTranslate: (id: string, content: string, path = 'SKILL.md', locale = 'zh-CN') => write(`/api/skills/${encodeURIComponent(id)}/translate`, {
     method: 'POST',
     body: JSON.stringify({ content, path, locale }),
@@ -1180,7 +1486,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  tasks: () => read('/api/tasks', {}),
+  tasks: (signal?: AbortSignal) => read('/api/tasks', {}, { signal }),
   startTask: (objective: string, yoloMode = false) => write('/api/tasks/start', {
     method: 'POST',
     body: JSON.stringify({ objective, yolo_mode: yoloMode }),
@@ -1602,7 +1908,8 @@ async function readText(path: string, fallback = ''): Promise<string> {
 }
 
 export function providerModels(controlPlane: any, config: any): string[] {
-  const catalogModels = config?.catalog?.models || controlPlane?.components?.provider?.catalog?.models;
+  const providerProjection = controlPlane?.components?.provider || {};
+  const catalogModels = config?.catalog?.models || providerProjection.catalog?.models;
   if (Array.isArray(catalogModels) && catalogModels.length) {
     return catalogModels
       .filter((model: any) => model?.status !== 'unavailable')
@@ -1615,11 +1922,11 @@ export function providerModels(controlPlane: any, config: any): string[] {
       .filter((model: any) => typeof model === 'string' && model.trim() && model !== 'unknown');
   }
   const models = new Set<string>();
-  const configured = controlPlane?.configured_model || config?.model;
+  const configured = providerProjection.configured_model || config?.configured_model || config?.model;
   const normalized = typeof configured === 'string' ? configured.trim() : '';
   if (normalized && normalized !== 'unknown') models.add(normalized);
-  const providerNames = controlPlane?.provider_names || [];
-  const count = Number(controlPlane?.provider_model_count || 0);
+  const providerNames = providerProjection.provider_names || [];
+  const count = Number(providerProjection.model_count || 0);
   if (count > 0 && models.size === 0) {
     providerNames.forEach((name: string) => models.add(`${name}:default`));
   }

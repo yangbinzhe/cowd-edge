@@ -1531,7 +1531,9 @@ export const useAppStore = defineStore('app', () => {
       providers.value = providerData;
       profiles.value = profileData.profiles || [];
       selectedProfile.value = profileData.active_profile || profileData.runtime_profile || selectedProfile.value;
-      const reportedModel = runtime.configured_model || providerData.configured_model || '';
+      const reportedModel = (runtime as any).components?.provider?.configured_model
+        || (providerData as any).configured_model
+        || '';
       if (reportedModel && reportedModel !== 'unknown') selectedModel.value = reportedModel;
       chatCapabilities.value = {
         phase: 'ready',

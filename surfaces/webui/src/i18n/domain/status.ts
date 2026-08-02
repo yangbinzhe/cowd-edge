@@ -52,6 +52,7 @@ const statusKeys: Record<string, string> = {
   not_tested: 'status.notTested',
   observed: 'status.observed',
   offline: 'status.offline',
+  timeout: 'status.timeout',
   ok: 'status.ok',
   open: 'status.open',
   optional: 'status.optional',

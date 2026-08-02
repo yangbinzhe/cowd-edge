@@ -126,7 +126,6 @@ const providerModelRows = computed(() => {
   return [
     ...(Array.isArray(providers?.models) ? providers.models : []),
     ...(Array.isArray(providers?.catalog?.models) ? providers.catalog.models : []),
-    ...(Array.isArray(control?.provider?.catalog?.models) ? control.provider.catalog.models : []),
     ...(Array.isArray(control?.components?.provider?.catalog?.models) ? control.components.provider.catalog.models : []),
     ...(Array.isArray(settings?.models) ? settings.models : []),
   ];
