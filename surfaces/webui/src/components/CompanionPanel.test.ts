@@ -265,17 +265,17 @@ describe('Companion projection contract visibility', () => {
     expect(wrapper.find('.activity-metric-grid').text()).toContain('40 ms');
     expect(wrapper.find('.activity-metric-grid').text()).toContain('150 ms');
     expect(wrapper.find('.activity-metric-grid').text()).toContain('9');
-    expect(wrapper.get('.turn-input-node').text()).toContain('当前回合');
+    expect(wrapper.get('.turn-title-action').text()).toContain('检查最新执行链');
     expect(wrapper.findAll('.companion-tabs button')).toHaveLength(3);
     expect(wrapper.text()).not.toContain('思考过程');
     expect(wrapper.text()).not.toContain('证据与状态');
-    const turnInput = wrapper.get('.turn-input-node');
+    const turnInput = wrapper.get('.execution-turn-head');
     const firstActivity = wrapper.get('.execution-turn-group .timeline-list li');
     expect(
       turnInput.element.compareDocumentPosition(firstActivity.element)
         & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    await wrapper.get('.turn-evidence-action').trigger('click');
+    await wrapper.get('.turn-title-action').trigger('click');
     expect(evidence).not.toHaveBeenCalled();
     const drilldown = wrapper.get('.activity-evidence-drilldown');
     (drilldown.element as HTMLDetailsElement).open = true;
@@ -339,9 +339,10 @@ describe('Companion projection contract visibility', () => {
 
     await wrapper.get('.companion-timeline li').trigger('click');
     expect(evidence).not.toHaveBeenCalled();
+    expect(wrapper.findAll('.activity-detail-content .activity-structured-section')).toHaveLength(2);
     const details = wrapper.findAll('.activity-detail-content .raw-payload');
-    expect(details).toHaveLength(3);
-    expect(details.every((item) => item.attributes('open') !== undefined)).toBe(true);
+    expect(details).toHaveLength(1);
+    expect(details[0].attributes('open')).toBeUndefined();
     const drilldown = wrapper.get('.activity-evidence-drilldown');
     (drilldown.element as HTMLDetailsElement).open = true;
     await drilldown.trigger('toggle');

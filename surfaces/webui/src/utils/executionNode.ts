@@ -69,12 +69,14 @@ function activityNodeRefs(event: ActivityEvent) {
 
 export function executionNodeActivities(node: Record<string, any>, events: ActivityEvent[]) {
   const nodeId = String(node.node_id || node.id || '');
+  const originalNodeId = String(node.original_node_id || '');
   if (!nodeId) return [];
   return events.filter((event) => {
-    if (activityNodeRefs(event).has(nodeId)) return true;
+    const refs = activityNodeRefs(event);
+    if (refs.has(nodeId) || (!!originalNodeId && refs.has(originalNodeId))) return true;
     return String(event.correlation || '')
       .split(/\s*·\s*/)
-      .some((reference) => reference === nodeId);
+      .some((reference) => reference === nodeId || reference === originalNodeId);
   });
 }
 

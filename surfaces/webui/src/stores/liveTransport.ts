@@ -455,6 +455,17 @@ export function openSessionLiveSource(
       error: () => adapter.onerror?.(new Event('error')),
       envelope: (envelope) => {
         let payload = envelope.payload;
+        if (
+          payload
+          && typeof payload === 'object'
+          && !Array.isArray(payload)
+          && typeof payload.session_id !== 'string'
+        ) {
+          payload = {
+            ...payload,
+            session_id: envelope.source_id,
+          };
+        }
         if (envelope.event === 'source.authorization_revoked') {
           payload = {
             type: 'SessionAuthorizationRevoked',

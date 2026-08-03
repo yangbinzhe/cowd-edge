@@ -294,6 +294,7 @@ const inFlightReads = new Map<string, SharedRead>();
 let authenticationEpoch = 0;
 let readRevision = 0;
 const sessionAuthorizationEpochs = new Map<string, number>();
+const sessionReadRevisions = new Map<string, number>();
 
 interface RequestAuthorizationStamp {
   globalEpoch: number;
@@ -353,12 +354,16 @@ function invalidateRejectedAuthorization(
     invalidateSessionAuthorization(stamp.sessionId, reason);
     return;
   }
-  invalidateAuthentication(reason);
+  // A global 403 means that the authenticated principal lacks one
+  // capability. It must remain a local operation error. Only 401 proves that
+  // the browser credential itself is no longer valid.
+  if (status === 401) invalidateAuthentication(reason);
 }
 
 export function invalidateApiReadCache() {
   authenticationEpoch += 1;
   readRevision += 1;
+  sessionReadRevisions.clear();
   lastSuccessfulReads.clear();
   for (const pending of inFlightReads.values()) pending.controller.abort();
   inFlightReads.clear();
@@ -384,7 +389,11 @@ export function invalidateSessionAuthorization(
   }
   const sessionEpoch = (sessionAuthorizationEpochs.get(normalized) || 0) + 1;
   sessionAuthorizationEpochs.set(normalized, sessionEpoch);
+  // Authorization revocation is a security boundary, not a normal data
+  // mutation. Fence every in-flight aggregate response even if its transport
+  // ignores AbortSignal, while ordinary session writes stay session-scoped.
   readRevision += 1;
+  sessionReadRevisions.set(normalized, (sessionReadRevisions.get(normalized) || 0) + 1);
   for (const [key, cached] of lastSuccessfulReads.entries()) {
     if (
       cached.sessionId === normalized
@@ -404,6 +413,43 @@ export function invalidateSessionAuthorization(
     window.dispatchEvent(new CustomEvent('cowd:session-authorization-invalidated', {
       detail: { reason, sessionId: normalized, sessionEpoch, authenticationEpoch },
     }));
+  }
+}
+
+function readRevisionIsCurrent(globalRevision: number, sessionId: string, sessionRevision: number) {
+  return globalRevision === readRevision
+    && (!sessionId || sessionRevision === (sessionReadRevisions.get(sessionId) || 0));
+}
+
+function isProjectionNeutralControlWrite(path: string) {
+  const pathname = path.split('?', 1)[0];
+  return /^\/api\/sessions\/[^/]+\/(?:attach|detach)$/.test(pathname)
+    || pathname === '/api/runtime/session-leases/acquire'
+    || pathname === '/api/runtime/session-leases/release';
+}
+
+function invalidateReadsAfterWrite(path: string, sessionId: string) {
+  if (isProjectionNeutralControlWrite(path)) return;
+  if (!sessionId) {
+    readRevision += 1;
+    lastSuccessfulReads.clear();
+    for (const pending of inFlightReads.values()) pending.controller.abort();
+    inFlightReads.clear();
+    return;
+  }
+
+  sessionReadRevisions.set(sessionId, (sessionReadRevisions.get(sessionId) || 0) + 1);
+  for (const [key, cached] of lastSuccessfulReads.entries()) {
+    if (
+      cached.sessionId === sessionId
+      || cached.referencedSessionIds.includes(sessionId)
+    ) lastSuccessfulReads.delete(key);
+  }
+  for (const [key, pending] of inFlightReads.entries()) {
+    if (pending.authorization.sessionId === sessionId) {
+      pending.controller.abort();
+      inFlightReads.delete(key);
+    }
   }
 }
 
@@ -534,12 +580,16 @@ async function readAtRevision<T>(
 ): Promise<T & ApiReadState> {
   const requestAuthorization = authorizationStamp(path, init, authorizationSessionId);
   const requestReadRevision = readRevision;
+  const requestSessionReadRevision = requestAuthorization.sessionId
+    ? (sessionReadRevisions.get(requestAuthorization.sessionId) || 0)
+    : 0;
   const requestHeaders = headers(init);
   const readPolicy = apiReadPolicy(path, requestedReadClass);
   const cacheKey = [
     requestAuthorization.globalEpoch,
     requestAuthorization.sessionId,
     requestAuthorization.sessionEpoch,
+    requestSessionReadRevision,
     readPolicy.class,
     path,
     [...requestHeaders.entries()]
@@ -635,7 +685,11 @@ async function readAtRevision<T>(
           403,
         );
       }
-      if (requestReadRevision !== readRevision) {
+      if (!readRevisionIsCurrent(
+        requestReadRevision,
+        requestAuthorization.sessionId,
+        requestSessionReadRevision,
+      )) {
         if (retryAfterInvalidation) {
           return readAtRevision(
             path,
@@ -681,7 +735,14 @@ async function readAtRevision<T>(
           __refreshed_at: new Date().toISOString(),
         });
       }
-      if (requestReadRevision !== readRevision && retryAfterInvalidation) {
+      if (
+        !readRevisionIsCurrent(
+          requestReadRevision,
+          requestAuthorization.sessionId,
+          requestSessionReadRevision,
+        )
+        && retryAfterInvalidation
+      ) {
         return readAtRevision(
           path,
           fallback,
@@ -844,10 +905,7 @@ export async function writeWithMetadata<T>(
       });
     }
   }
-  readRevision += 1;
-  lastSuccessfulReads.clear();
-  for (const pending of inFlightReads.values()) pending.controller.abort();
-  inFlightReads.clear();
+  invalidateReadsAfterWrite(path, requestAuthorization.sessionId);
   return { data: parsed, metadata };
 }
 
@@ -1324,6 +1382,23 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ approved, decided_by: 'webui', reason }),
   }),
+  missionSchedules: () => read('/api/mission/schedules', {
+    ok: true,
+    schedules: { schedules: [], fires: [] },
+    policy: {},
+  }),
+  createMissionSchedule: (body: Record<string, unknown>) => writeWithReceipt('/api/mission/schedules', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  updateMissionSchedule: (scheduleId: string, body: Record<string, unknown>) => writeWithReceipt(`/api/mission/schedules/${encodeURIComponent(scheduleId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  }),
+  runMissionSchedule: (scheduleId: string) => writeWithReceipt(`/api/mission/schedules/${encodeURIComponent(scheduleId)}/run`, { method: 'POST' }),
+  pauseMissionSchedule: (scheduleId: string) => writeWithReceipt(`/api/mission/schedules/${encodeURIComponent(scheduleId)}/pause`, { method: 'POST' }),
+  resumeMissionSchedule: (scheduleId: string) => writeWithReceipt(`/api/mission/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' }),
+  deleteMissionSchedule: (scheduleId: string) => writeWithReceipt(`/api/mission/schedules/${encodeURIComponent(scheduleId)}`, { method: 'DELETE' }),
   realityStatus: () => read('/api/reality/status', {}),
   realityStatic: () => read('/api/reality/static', { core_map: [] }),
   realityFlow: (sessionId?: string, limit = 50, signal?: AbortSignal) => {
@@ -1474,6 +1549,11 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
+  installSkill: (file: File) => {
+    const body = new FormData();
+    body.append('package', file, file.name);
+    return writeWithReceipt('/api/skills/install', { method: 'POST', body });
+  },
   skillRuns: (signal?: AbortSignal) => read('/api/skills/runs', {}, { signal }),
   skillRunDetail: (id: string) => read(`/api/skills/runs/${encodeURIComponent(id)}`, {}),
   skillDetail: (id: string, signal?: AbortSignal) => read(`/api/skills/${encodeURIComponent(id)}`, {}, { signal }),

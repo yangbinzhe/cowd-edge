@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Brain, ChevronLeft, ChevronRight, Clock3, Code2, Coins, Download, ExternalLink, Eye, FileCheck2, FileText, Folder, Info, Link2, MemoryStick, RotateCcw, Save, Search, ShieldCheck, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
+import { Brain, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CircleDashed, Clipboard, Clock3, Code2, Coins, Download, Edit3, ExternalLink, FileCheck2, FileText, Folder, Info, Link2, LoaderCircle, MemoryStick, RotateCcw, Save, Search, ShieldCheck, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
@@ -11,11 +11,13 @@ import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
 import WorkspaceTree from './workspace/WorkspaceTree.vue';
 import TimelineList from './workbench/TimelineList.vue';
+import StructuredValue from './workbench/StructuredValue.vue';
 import EvidenceInspector from './evidence/EvidenceInspector.vue';
 import ExecutionGraphCanvas from './mission/ExecutionGraphCanvas.vue';
 import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/workspacePreview';
 import type { ActivityEvent } from '../types';
 import { activityIdentityKey, causalActivityTimeline } from '../utils/causalTimeline';
+import { combineExecutionLineage, executionProjectionLinks } from '../utils/executionLineage';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
@@ -28,9 +30,11 @@ const activityEvidenceOverride = ref<string[]>([]);
 const activityEvidenceDetails = ref<HTMLDetailsElement | null>(null);
 const selectedExecutionNode = ref<Record<string, any> | null>(null);
 const previewMode = ref<'render' | 'source'>('render');
+const previewEditing = ref(false);
 const imageZoom = ref(1);
 const resizing = ref(false);
 const executionHistoryLimit = ref(50);
+const collapsedTurnIds = ref(new Set<string>());
 
 const previewKind = computed(() => store.selectedFile ? workspacePreviewKind(store.selectedFile) : 'binary');
 const rawFileUrl = computed(() => store.rawWorkspaceFileUrl(store.selectedFile));
@@ -89,46 +93,55 @@ const rootProjectionId = computed(() => (
 const rootProjection = computed(() => rootProjectionId.value
   ? projections.projectionFor(rootProjectionId.value)
   : null);
-const activeTeamExecutionGraphId = computed(() => {
-  const projection = rootProjection.value as any;
-  const strategyGraphId = String(projection?.strategy?.team_execution_id || '').trim();
-  if (strategyGraphId && strategyGraphId !== rootProjectionId.value) return strategyGraphId;
-  const linked = (Array.isArray(projection?.teams) ? projection.teams : [])
-    .map((team: any) => String(team?.detail?.graph_id || '').trim())
-    .find((graphId: string) => graphId && graphId !== rootProjectionId.value);
-  if (linked) return linked;
-  const childGraph = (Array.isArray(projection?.child_executions)
-    ? projection.child_executions
-    : [])
-    .map((child: any) => String(child?.execution_id || '').trim())
-    .find((graphId: string) => graphId && graphId !== rootProjectionId.value);
-  if (childGraph) return childGraph;
-  return [...activityEvents.value]
-    .reverse()
-    .filter((event) => event.parent_execution_id === rootProjectionId.value)
-    .map((event) => String(event.graph_id || '').trim())
-    .find((graphId) => graphId && graphId !== rootProjectionId.value) || '';
-});
-const displayedExecutionGraphId = computed(() => (
-  activeTeamExecutionGraphId.value || rootProjectionId.value
+const linkedProjectionIds = computed(() => executionProjectionLinks(rootProjection.value));
+const lineageProjections = computed(() => [
+  rootProjection.value,
+  ...linkedProjectionIds.value.map((executionId) => projections.projectionFor(executionId)),
+]);
+const activeProjection = computed(() => rootProjection.value);
+const activeProjectionEntry = computed(() => rootProjectionId.value
+  ? projections.entries[rootProjectionId.value]
+  : null);
+const executionGraph = computed(() => combineExecutionLineage(
+  rootProjectionId.value,
+  lineageProjections.value,
 ));
-const activeProjection = computed(() => displayedExecutionGraphId.value
-  ? projections.projectionFor(displayedExecutionGraphId.value)
-  : null);
-const activeProjectionEntry = computed(() => displayedExecutionGraphId.value
-  ? projections.entries[displayedExecutionGraphId.value]
-  : null);
-const executionGraph = computed(() => activeProjection.value?.graph || null);
+const executionConnectionState = computed(() => {
+  const states = [rootProjectionId.value, ...linkedProjectionIds.value]
+    .filter(Boolean)
+    .map((executionId) => projections.stateFor(executionId));
+  if (states.some((state) => state === 'error')) return 'error';
+  if (states.some((state) => ['materializing', 'connecting', 'reconnecting'].includes(state))) return 'materializing';
+  if (states.some((state) => state === 'live')) return 'live';
+  if (states.length && states.every((state) => state === 'terminal')) return 'terminal';
+  return states[0] || 'materializing';
+});
 const canonicalExecutionTurns = computed(() => {
-  const projectedTurns = chat.active?.turnProjection?.turns || [];
-  if (projectedTurns.length) {
-    return projectedTurns.map((projected) => ({
-      turnId: projected.turn_id,
+  const rows = new Map<string, {
+    turnId: string;
+    projected: any;
+    userTurns: any[];
+    order: number;
+    timestamp: number;
+  }>();
+  let order = 0;
+  for (const projected of chat.active?.turnProjection?.turns || []) {
+    const turnId = String(projected.turn_id || '').trim();
+    if (!turnId) continue;
+    rows.set(turnId, {
+      turnId,
       projected,
-    }));
+      userTurns: [],
+      order: order += 1,
+      timestamp: Number(
+        projected.submitted_at_ms
+        || projected.started_at_ms
+        || projected.completed_at_ms
+        || 0,
+      ),
+    });
   }
   const transcript = chat.active?.turns || [];
-  const canonical = [];
   for (let index = 0; index < transcript.length; index += 1) {
     const userTurn = transcript[index];
     if (userTurn.role !== 'user') continue;
@@ -137,19 +150,39 @@ const canonicalExecutionTurns = computed(() => {
       if (transcript[cursor].role === 'user') break;
       turnId = String(transcript[cursor].turn_id || '');
     }
-    canonical.push({
-      turnId: turnId || `legacy-user:${userTurn.id}`,
-      projected: null,
-    });
+    turnId = turnId || `message:${userTurn.id}`;
+    const existing = rows.get(turnId);
+    if (existing) {
+      existing.userTurns.push(userTurn);
+      existing.timestamp ||= Number(userTurn.created_at_ms || 0);
+    } else {
+      rows.set(turnId, {
+        turnId,
+        projected: null,
+        userTurns: [userTurn],
+        order: order += 1,
+        timestamp: Number(userTurn.created_at_ms || 0),
+      });
+    }
   }
-  return canonical;
+  return [...rows.values()].sort((left, right) => (
+    left.order - right.order || left.timestamp - right.timestamp
+  ));
 });
 const executionTurnGroups = computed(() => {
   const entries = chat.active?.executionIndex?.executions || [];
   const canonicalTurns = canonicalExecutionTurns.value;
   const visibleTurns = canonicalTurns.slice(-executionHistoryLimit.value).reverse();
-  return visibleTurns.map(({ turnId, projected }, index) => {
-    const entry = entries.find((candidate) => candidate.turn_id === turnId);
+  return visibleTurns.map(({ turnId, projected, userTurns, order }) => {
+    const indexedEntry = entries.find((candidate) => candidate.turn_id === turnId);
+    const isActiveTurn = turnId === chat.active?.executionTurnId;
+    const entry = indexedEntry || (isActiveTurn ? {
+      execution_id: chat.active?.executionId || '',
+      graph_id: chat.active?.executionGraphId || null,
+      turn_id: turnId,
+      status: chat.active?.live?.status || (chat.active?.pending ? 'running' : 'unknown'),
+      updated_at_ms: chat.active?.lastEventAtMs || Date.now(),
+    } : null);
     const events = activityEvents.value.filter((event) => (
       event.turn_id === turnId
       || (!!entry?.execution_id && event.execution_id === entry.execution_id)
@@ -168,9 +201,7 @@ const executionTurnGroups = computed(() => {
     const runtimeInput = runtimeInputItems.value.find((item: any) => (
       String(item?.turn_id || item?.active_turn_id || item?.input_id || item?.id || '') === turnId
     ));
-    const transcriptInput = (chat.active?.turns || []).find((turn) => (
-      turn.role === 'user' && String(turn.turn_id || turn.id) === turnId
-    ));
+    const transcriptInput = userTurns[0];
     const userPreview = String(
       projected?.user_preview
       || runtimeInput?.content_preview
@@ -189,8 +220,15 @@ const executionTurnGroups = computed(() => {
       runtimeInput,
       userPreview,
       label: t('chat.execution.turnNumber', {
-        number: Math.max(1, canonicalTurns.length - index),
+        number: Math.max(1, order),
       }),
+      status: String(
+        (isActiveTurn && chat.active?.pending ? chat.active?.live?.status : '')
+        || projected?.status
+        || entry?.status
+        || transcriptInput?.status
+        || 'unknown',
+      ),
       events,
       evidenceRefs,
       evidenceCount: evidenceRefs.length,
@@ -423,7 +461,28 @@ function openPreview() {
   if (!store.selectedFile) return;
   previewOpen.value = true;
   previewMode.value = 'render';
+  previewEditing.value = false;
   imageZoom.value = 1;
+}
+
+async function copyPreviewLink() {
+  if (!store.selectedFile) return;
+  const link = new URL(rawFileUrl.value, window.location.origin).toString();
+  try {
+    await navigator.clipboard.writeText(link);
+  } catch (error) {
+    store.fileError = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function togglePreviewEditing() {
+  previewEditing.value = !previewEditing.value;
+  previewMode.value = previewEditing.value ? 'source' : 'render';
+}
+
+async function savePreviewFile() {
+  await store.saveFile();
+  if (!store.fileError) previewEditing.value = false;
 }
 
 function closePreview() {
@@ -444,16 +503,51 @@ function openTurnEvidenceDetail(group: any) {
     kind: 'input',
     title: group.userPreview || group.label,
     detail: group.label,
+    input: {
+      message: group.userPreview,
+      ownership: group.runtimeInput ? runtimeInputOwnership(group.runtimeInput) : null,
+    },
+    output: {
+      status: group.status,
+      event_count: group.events.length,
+      evidence_count: group.evidenceCount,
+      execution_id: group.entry?.execution_id || null,
+      graph_id: group.entry?.graph_id || null,
+    },
     turn_id: group.turnId,
     timestamp: Number(group.entry?.updated_at_ms || 0),
     raw: {
       turn_id: group.turnId,
       execution_id: group.entry?.execution_id || null,
       evidence_refs: activityEvidenceOverride.value,
+      events: group.events,
     },
   };
   activityEvidenceOpen.value = false;
   activityDetailOpen.value = true;
+}
+
+function toggleTurn(turnId: string) {
+  const next = new Set(collapsedTurnIds.value);
+  if (next.has(turnId)) next.delete(turnId);
+  else next.add(turnId);
+  collapsedTurnIds.value = next;
+}
+
+function turnCollapsed(turnId: string) {
+  return collapsedTurnIds.value.has(turnId);
+}
+
+function turnStatusIcon(status: string) {
+  const normalized = status.toLowerCase();
+  if (['complete', 'completed', 'succeeded', 'resolved'].includes(normalized)) return CheckCircle2;
+  if (['error', 'failed', 'blocked'].includes(normalized)) return CircleAlert;
+  if (['running', 'thinking', 'calling_model', 'calling_tool', 'preparing_context', 'finalizing'].includes(normalized)) return LoaderCircle;
+  return CircleDashed;
+}
+
+function turnStatus(status: string) {
+  return String(status || 'unknown').toLowerCase();
 }
 
 function closeActivityDetail() {
@@ -497,6 +591,8 @@ watch(() => store.selectedFile, (path) => {
 useEscapeKey(() => closePreview(), () => previewOpen.value);
 useEscapeKey(() => closeActivityDetail(), () => activityDetailOpen.value);
 
+const lineageProjectionConsumers = new Set<string>();
+
 onMounted(() => {
   const savedWidth = Number(localStorage.getItem('cowd-webui-companion-width') || 0);
   if (savedWidth) applyCompanionWidth(savedWidth);
@@ -506,7 +602,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   projections.release('chat:companion-root-execution');
-  projections.release('chat:companion-team-execution');
+  for (const consumer of lineageProjectionConsumers) projections.release(consumer);
+  lineageProjectionConsumers.clear();
   window.removeEventListener('mousemove', dragResize);
   window.removeEventListener('mouseup', stopResize);
 });
@@ -523,17 +620,31 @@ watch([rootProjectionId, () => store.companionTab], ([executionId, tab]) => {
   );
 }, { immediate: true });
 
-watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) => {
-  projections.release('chat:companion-team-execution');
-  if (tab !== 'activity' || !graphId || !store.activeSessionId) return;
-  projections.acquire(
-    graphId,
-    'chat:companion-team-execution',
-    'full',
-    'bounded',
-    store.activeSessionId,
-  );
-}, { immediate: true });
+watch(
+  [() => linkedProjectionIds.value.join('\u0000'), () => store.companionTab],
+  ([, tab]) => {
+    const expected = new Set<string>();
+    if (tab === 'activity' && store.activeSessionId) {
+      for (const executionId of linkedProjectionIds.value) {
+        const consumer = `chat:companion-lineage:${executionId}`;
+        expected.add(consumer);
+        projections.acquire(
+          executionId,
+          consumer,
+          'full',
+          'bounded',
+          store.activeSessionId,
+        );
+      }
+    }
+    for (const consumer of lineageProjectionConsumers) {
+      if (!expected.has(consumer)) projections.release(consumer);
+    }
+    lineageProjectionConsumers.clear();
+    for (const consumer of expected) lineageProjectionConsumers.add(consumer);
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -563,19 +674,19 @@ watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) =
         <header>
           <span>
             <Workflow :size="14" />
-            {{ activeTeamExecutionGraphId ? t('chat.execution.teamGraph') : t('chat.execution.graph') }}
+            {{ linkedProjectionIds.length ? t('chat.execution.teamGraph') : t('chat.execution.graph') }}
           </span>
-          <small>{{ displayStatus(displayedExecutionGraphId ? projections.stateFor(displayedExecutionGraphId) : 'materializing') }}</small>
+          <small>{{ displayStatus(executionConnectionState) }}</small>
         </header>
         <ExecutionGraphCanvas
           :graph="executionGraph"
           :selected-node-id="String(selectedExecutionNode?.node_id || selectedExecutionNode?.id || '')"
-          :connection-state="displayedExecutionGraphId ? projections.stateFor(displayedExecutionGraphId) : 'materializing'"
+          :connection-state="executionConnectionState"
           :loading="!executionGraph"
           :activity-events="activityEvents"
           compact
           @select="selectedExecutionNode = $event"
-          @expand="store.openChatExecutionGraph()"
+          @expand="store.openChatExecutionGraph(rootProjectionId)"
         />
       </section>
       <div class="execution-stream-summary activity-metric-grid">
@@ -597,49 +708,61 @@ watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) =
       </p>
       <div v-if="executionTurnGroups.length" class="execution-turn-groups">
         <section v-for="group in executionTurnGroups" :key="group.turnId" class="execution-turn-group">
-          <header>
+          <header class="execution-turn-head">
             <button
+              class="turn-collapse-action"
               type="button"
-              :disabled="!group.entry.graph_id"
-              @click="openExecutionTurn(group.entry.graph_id)"
+              :aria-label="turnCollapsed(group.turnId) ? t('common.expand') : t('common.collapse')"
+              :aria-expanded="!turnCollapsed(group.turnId)"
+              @click="toggleTurn(group.turnId)"
             >
-              <Workflow :size="13" />
-              <strong>{{ group.label }}</strong>
-              <small>{{ displayStatus(group.entry.status) }}</small>
+              <ChevronRight v-if="turnCollapsed(group.turnId)" :size="13" />
+              <ChevronDown v-else :size="13" />
             </button>
-            <time v-if="group.entry.updated_at_ms">{{ new Date(group.entry.updated_at_ms).toLocaleString() }}</time>
-          </header>
-          <article v-if="group.userPreview" class="turn-input-node">
-            <div>
-              <strong>{{ group.userPreview }}</strong>
-              <small v-if="group.runtimeInput">{{ runtimeInputOwnership(group.runtimeInput) }}</small>
+            <button
+              class="turn-title-action"
+              type="button"
+              :title="group.userPreview"
+              @click="openTurnEvidenceDetail(group)"
+            >
+              <component :is="turnStatusIcon(group.status)" :size="13" :class="{ spinning: ['running', 'thinking', 'calling_model', 'calling_tool', 'preparing_context', 'finalizing'].includes(turnStatus(group.status)) }" />
+              <strong>{{ group.label }}</strong>
+              <span v-if="group.userPreview">· {{ group.userPreview }}</span>
+              <small :data-status="turnStatus(group.status)">{{ displayStatus(group.status) }}</small>
+              <small v-if="group.evidenceCount" class="turn-evidence-count"><FileCheck2 :size="11" />{{ group.evidenceCount }}</small>
+            </button>
+            <div class="turn-head-actions">
+              <template v-if="group.runtimeInput && runtimeInputPending(group.runtimeInput)">
+                <button class="icon-action" type="button" :aria-label="t('chat.input.action.queue')" @click="queueRuntimeInput(group.runtimeInput)">
+                  <ChevronRight :size="14" />
+                </button>
+                <button class="icon-action danger" type="button" :aria-label="t('chat.input.action.cancel')" @click="cancelRuntimeInput(group.runtimeInput)">
+                  <X :size="14" />
+                </button>
+              </template>
+              <time v-if="group.entry?.updated_at_ms">{{ new Date(group.entry.updated_at_ms).toLocaleTimeString() }}</time>
               <button
-                v-if="group.evidenceCount"
-                class="turn-evidence-action"
+                class="icon-action"
                 type="button"
-                :aria-label="t('page.chat.page.text.848af509ba')"
-                @click="openTurnEvidenceDetail(group)"
+                :disabled="!group.entry?.graph_id"
+                :aria-label="t('chat.execution.graph')"
+                :title="t('chat.execution.graph')"
+                @click="openExecutionTurn(group.entry?.graph_id)"
               >
-                <FileCheck2 :size="12" />{{ group.evidenceCount }}
+                <Workflow :size="13" />
               </button>
             </div>
-            <div v-if="group.runtimeInput && runtimeInputPending(group.runtimeInput)" class="inline-actions">
-              <button class="icon-action" type="button" :aria-label="t('chat.input.action.queue')" @click="queueRuntimeInput(group.runtimeInput)">
-                <ChevronRight :size="14" />
-              </button>
-              <button class="icon-action danger" type="button" :aria-label="t('chat.input.action.cancel')" @click="cancelRuntimeInput(group.runtimeInput)">
-                <X :size="14" />
-              </button>
-            </div>
-          </article>
-          <TimelineList
-            v-if="group.events.length"
-            :items="group.events"
-            :filterable="false"
-            :selected-id="String(store.selectedActivity?.id || '')"
-            @select="openActivityDetail"
-          />
-          <p v-else class="empty-note">{{ t('chat.execution.turnNoEvents') }}</p>
+          </header>
+          <div v-show="!turnCollapsed(group.turnId)" class="execution-turn-content">
+            <TimelineList
+              v-if="group.events.length"
+              :items="group.events"
+              :filterable="false"
+              :selected-id="String(store.selectedActivity?.id || '')"
+              @select="openActivityDetail"
+            />
+            <p v-else class="empty-note">{{ t('chat.execution.turnNoEvents') }}</p>
+          </div>
         </section>
         <button
           v-if="hasMoreExecutionTurns"
@@ -689,33 +812,7 @@ watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) =
         <Search :size="14" />
         <input v-model="store.workspaceFilter" type="search" :placeholder="t('component.companion.panel.placeholder.070c810b3f')" />
       </label>
-      <div v-if="store.recentWorkspaceFiles.length" class="workspace-recent">
-        <div class="panel-title compact">
-          <h2>{{ t('workspace.preview.recent') }}</h2>
-          <span>{{ store.recentWorkspaceFiles.length }}</span>
-        </div>
-        <button v-for="file in store.recentWorkspaceFiles" :key="file.path" type="button" @click="store.openFile(file.path)">
-          <span>{{ file.name }}</span>
-          <small>{{ file.path }}</small>
-        </button>
-      </div>
       <WorkspaceTree />
-      <div class="preview-summary" v-if="store.selectedFile">
-        <div class="preview-head">
-          <strong>{{ store.selectedFile }}</strong>
-          <div>
-            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.preview')" @click="openPreview"><Eye :size="14" /></button>
-            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.openExternal')" @click="store.openWorkspacePathExternally(store.selectedFile)"><ExternalLink :size="14" /></button>
-            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.download')" @click="store.downloadWorkspacePath(store.selectedFile, 'file')"><Download :size="14" /></button>
-            <button class="icon-action" type="button" @click="store.attachWorkspaceFile(store.selectedFile)"><Link2 :size="14" /></button>
-            <button class="icon-action" type="button" :disabled="!store.editorDirty || !canEdit" @click="store.resetFile"><RotateCcw :size="14" /></button>
-            <button class="icon-action" type="button" :disabled="!store.editorDirty || !canEdit" @click="store.saveFile"><Save :size="14" /></button>
-          </div>
-        </div>
-        <p v-if="store.fileError" class="file-error">{{ store.fileError }}</p>
-        <p v-if="!canEdit" class="readonly-note"><Eye :size="14" />{{ t('component.companion.panel.text.be83b668ee') }}</p>
-        <span class="dirty-state" :class="{ dirty: store.editorDirty }">{{ store.editorDirty ? t('component.companion.panel.inline.cc6b6c33d6') : t('component.companion.panel.inline.86b4b292f0') }}</span>
-      </div>
       <div v-if="workspaceMetaEntries.length" class="workspace-meta-panel">
         <div class="panel-title compact">
           <h2>{{ t('workspace.preview.meta.title') }}</h2>
@@ -771,6 +868,10 @@ watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) =
             <button v-if="previewKind === 'image'" class="icon-action" type="button" :aria-label="t('workspace.preview.zoomOut')" @click="imageZoom = Math.max(0.4, imageZoom - 0.2)"><ZoomOut :size="16" /></button>
             <button v-if="previewKind === 'image'" class="icon-action" type="button" :aria-label="t('workspace.preview.zoomIn')" @click="imageZoom = Math.min(3, imageZoom + 0.2)"><ZoomIn :size="16" /></button>
             <button v-if="canEdit" class="icon-action" type="button" :aria-label="t('workspace.preview.toggleSource')" @click="previewMode = previewMode === 'render' ? 'source' : 'render'"><Code2 :size="16" /></button>
+            <button v-if="canEdit" class="icon-action" type="button" :aria-pressed="previewEditing" :aria-label="t('workspace.preview.action.edit')" @click="togglePreviewEditing"><Edit3 :size="16" /></button>
+            <button v-if="previewEditing" class="icon-action" type="button" :disabled="!store.editorDirty" :aria-label="t('workspace.preview.action.reset')" @click="store.resetFile"><RotateCcw :size="16" /></button>
+            <button v-if="previewEditing" class="icon-action" type="button" :disabled="!store.editorDirty" :aria-label="t('workspace.preview.action.save')" @click="savePreviewFile"><Save :size="16" /></button>
+            <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.copyLink')" @click="copyPreviewLink"><Clipboard :size="16" /></button>
             <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.openExternal')" @click="store.openWorkspacePathExternally(store.selectedFile)"><ExternalLink :size="16" /></button>
             <button class="icon-action" type="button" :aria-label="t('workspace.preview.action.download')" @click="store.downloadWorkspacePath(store.selectedFile, 'file')"><Download :size="16" /></button>
             <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="closePreview"><X :size="16" /></button>
@@ -794,7 +895,7 @@ watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) =
           <div v-else-if="previewKind === 'markdown' && previewMode === 'render'" class="render-preview">
             <MarkdownBlock :content="store.editorContent" />
           </div>
-          <textarea v-else-if="canEdit" v-model="store.editorContent" class="structured-preview" spellcheck="false" />
+          <textarea v-else-if="canEdit" v-model="store.editorContent" class="structured-preview" :readonly="!previewEditing" spellcheck="false" />
           <div v-else class="unsupported-preview">
             <strong>{{ t('workspace.preview.unsupported.title') }}</strong>
             <p>{{ t('workspace.preview.unsupported.body') }}</p>
@@ -817,23 +918,18 @@ watch([activeTeamExecutionGraphId, () => store.companionTab], ([graphId, tab]) =
         </header>
         <div class="activity-detail-content">
           <p v-if="selectedActivity.detail" class="activity-detail-summary">{{ selectedActivity.detail }}</p>
-          <RawPayload
-            :title="t('chat.activity.detail.input')"
-            :data="selectedActivityInput"
-            :max-chars="6000"
-            default-open
-          />
-          <RawPayload
-            :title="t('chat.activity.detail.output')"
-            :data="selectedActivityOutput"
-            :max-chars="6000"
-            default-open
-          />
+          <section v-if="selectedActivityInput !== null && selectedActivityInput !== undefined" class="activity-structured-section">
+            <header><strong>{{ t('chat.activity.detail.input') }}</strong></header>
+            <StructuredValue :value="selectedActivityInput" />
+          </section>
+          <section v-if="selectedActivityOutput !== null && selectedActivityOutput !== undefined" class="activity-structured-section">
+            <header><strong>{{ t('chat.activity.detail.output') }}</strong></header>
+            <StructuredValue :value="selectedActivityOutput" />
+          </section>
           <RawPayload
             :title="t('chat.activity.detail.event')"
             :data="selectedActivity.raw || selectedActivity"
             :max-chars="6000"
-            default-open
           />
           <details
             v-if="selectedActivityEvidenceRefs.length"

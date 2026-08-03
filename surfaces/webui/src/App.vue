@@ -277,7 +277,6 @@ onMounted(() => {
     <SessionSidebar
       v-if="isChatRoute"
       :class="{ 'mobile-open': mobileSessionsOpen }"
-      @close="mobileSessionsOpen = false"
       @session-opened="mobileSessionsOpen = false"
     />
     <CapabilitySidebar v-else-if="!isSettingsRoute" />

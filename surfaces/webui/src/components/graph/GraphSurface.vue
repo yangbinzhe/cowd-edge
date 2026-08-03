@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowRight,
   Download,
+  ExternalLink,
   Filter,
   List,
   Maximize2,
@@ -94,6 +95,7 @@ const nodeDescriptionKeys: Record<string, string> = {
   'relation': 'graph.nodeType.relation',
   'session': 'graph.nodeType.session',
   'stage': 'graph.nodeType.stage',
+  'subgraph': 'graph.nodeType.childExecution',
   'synthesize': 'graph.nodeType.synthesize',
   'task': 'graph.nodeType.task',
   'team': 'graph.nodeType.team',
@@ -312,13 +314,13 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
 
 <template>
   <section ref="root" class="graph-surface" :data-density="compact ? 'compact' : 'full'" role="region" tabindex="0" :aria-describedby="summaryId" @keydown="onKeydown">
-    <header v-if="!compact" class="graph-surface-header">
-      <div>
+    <header class="graph-surface-header" :data-density="compact ? 'compact' : 'full'">
+      <div class="graph-title">
         <h3>{{ model.title || t('graph.title.default') }}</h3>
         <small :id="summaryId">{{ t('graph.summary', { nodes: visibleNodes.length, edges: visibleEdges.length }) }}</small>
-        <small v-if="model.truncated" class="graph-truncated">{{ t('graph.state.truncated') }}</small>
-        <small v-if="diagnosticCount" class="graph-diagnostic">{{ t('graph.state.diagnostics', { count: diagnosticCount, dangling: diagnostics.danglingEdgeIds.length }) }}</small>
-        <small v-if="model.work" class="graph-work-summary">
+        <small v-if="!compact && model.truncated" class="graph-truncated">{{ t('graph.state.truncated') }}</small>
+        <small v-if="!compact && diagnosticCount" class="graph-diagnostic">{{ t('graph.state.diagnostics', { count: diagnosticCount, dangling: diagnostics.danglingEdgeIds.length }) }}</small>
+        <small v-if="!compact && model.work" class="graph-work-summary">
           {{ t('graph.work.summary', {
             width: model.work.width,
             depth: model.work.depth,
@@ -329,60 +331,69 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
         </small>
       </div>
       <div class="graph-header-actions">
-        <RouterLink v-if="selectedNode?.href" class="ghost-action" :to="selectedNode.href">{{ t('graph.action.openLinked') }}</RouterLink>
+        <RouterLink
+          v-if="selectedNode?.href"
+          class="graph-icon-action"
+          :to="selectedNode.href"
+          :title="t('graph.action.openLinked')"
+          :aria-label="t('graph.action.openLinked')"
+        >
+          <ExternalLink :size="15" />
+        </RouterLink>
         <StatusPill :status="connectionState || model.status || 'ready'" />
+        <div class="graph-toolbar" :data-density="compact ? 'compact' : 'full'">
+          <button
+            class="graph-icon-action"
+            type="button"
+            :class="{ active: compactSearchOpen || Boolean(search) }"
+            :title="t('graph.action.search')"
+            :aria-label="t('graph.action.search')"
+            :aria-expanded="compactSearchOpen"
+            @click="compactSearchOpen = !compactSearchOpen"
+          >
+            <Search :size="15" />
+          </button>
+          <label
+            class="graph-icon-select"
+            :class="{ active: statusFilter !== 'all' }"
+            :title="t('graph.action.filterStatus')"
+          >
+            <Filter :size="15" />
+            <select v-model="statusFilter" :aria-label="t('graph.action.filterStatus')" @change="emitViewState">
+              <option value="all">{{ t('graph.filter.all') }}</option>
+              <option v-for="status in statuses" :key="status" :value="status">{{ displayStatus(status) }}</option>
+            </select>
+          </label>
+          <button
+            class="graph-icon-action"
+            type="button"
+            :title="nextDirectionLabel"
+            :aria-label="nextDirectionLabel"
+            @click="toggleDirection"
+          >
+            <ArrowDown v-if="nextDirection === 'DOWN'" :size="15" />
+            <ArrowRight v-else :size="15" />
+          </button>
+          <button class="graph-icon-action" type="button" :title="t('graph.action.list')" :aria-label="t('graph.action.list')" :aria-pressed="listMode" @click="listMode = !listMode">
+            <List :size="15" />
+          </button>
+          <button class="graph-icon-action" type="button" :title="t('graph.action.export')" :aria-label="t('graph.action.export')" @click="exportGraph">
+            <Download :size="15" />
+          </button>
+          <button class="graph-icon-action" type="button" :title="t('graph.action.fullscreen')" :aria-label="t('graph.action.fullscreen')" @click="toggleFullscreen">
+            <Minimize2 v-if="fullscreen" :size="15" />
+            <Maximize2 v-else :size="15" />
+          </button>
+        </div>
       </div>
     </header>
-    <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
-    <div class="graph-toolbar" :data-density="compact ? 'compact' : 'full'">
-      <button
-        v-if="compact"
-        class="graph-icon-action"
-        type="button"
-        :class="{ active: compactSearchOpen || Boolean(search) }"
-        :title="t('graph.action.search')"
-        :aria-label="t('graph.action.search')"
-        :aria-expanded="compactSearchOpen"
-        @click="compactSearchOpen = !compactSearchOpen"
-      >
-        <Search :size="15" />
-      </button>
-      <label v-if="!compact || compactSearchOpen" class="search-field">
+    <div class="graph-search-slot">
+      <label v-if="compactSearchOpen" class="graph-search-row search-field">
         <Search :size="14" />
         <input v-model="search" :placeholder="t('graph.action.search')" @input="emitViewState" />
       </label>
-      <label
-        class="graph-icon-select"
-        :class="{ active: statusFilter !== 'all' }"
-        :title="t('graph.action.filterStatus')"
-      >
-        <Filter :size="15" />
-        <select v-model="statusFilter" :aria-label="t('graph.action.filterStatus')" @change="emitViewState">
-          <option value="all">{{ t('graph.filter.all') }}</option>
-          <option v-for="status in statuses" :key="status" :value="status">{{ displayStatus(status) }}</option>
-        </select>
-      </label>
-      <button
-        class="graph-icon-action"
-        type="button"
-        :title="nextDirectionLabel"
-        :aria-label="nextDirectionLabel"
-        @click="toggleDirection"
-      >
-        <ArrowDown v-if="nextDirection === 'DOWN'" :size="15" />
-        <ArrowRight v-else :size="15" />
-      </button>
-      <button class="graph-icon-action" type="button" :title="t('graph.action.list')" :aria-label="t('graph.action.list')" :aria-pressed="listMode" @click="listMode = !listMode">
-        <List :size="15" />
-      </button>
-      <button class="graph-icon-action" type="button" :title="t('graph.action.export')" :aria-label="t('graph.action.export')" @click="exportGraph">
-        <Download :size="15" />
-      </button>
-      <button class="graph-icon-action" type="button" :title="t('graph.action.fullscreen')" :aria-label="t('graph.action.fullscreen')" @click="toggleFullscreen">
-        <Minimize2 v-if="fullscreen" :size="15" />
-        <Maximize2 v-else :size="15" />
-      </button>
     </div>
+    <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
     <p v-if="graphIsAggregated" class="empty-note">{{ t('graph.state.aggregated', { limit: graphNodeLimit, total: visibleNodes.length }) }}</p>
     <p v-if="loading" class="empty-note">{{ t('graph.state.loading') }}</p>
     <p v-else-if="!visibleNodes.length" class="empty-note">{{ t('graph.state.empty') }}</p>

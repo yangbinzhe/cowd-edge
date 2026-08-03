@@ -26,6 +26,15 @@ const contextX = ref(0);
 const contextY = ref(0);
 const dropTargetPath = ref('');
 
+function formatFileSize(value: number | undefined) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1_024) return `${Math.round(bytes)} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1_024).toFixed(bytes >= 102_400 ? 0 : 1).replace(/\.0$/, '')} KB`;
+  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(bytes >= 104_857_600 ? 0 : 1).replace(/\.0$/, '')} MB`;
+  return `${(bytes / 1_073_741_824).toFixed(1).replace(/\.0$/, '')} GB`;
+}
+
 const treeRows = computed(() => {
   const rows = flattenWorkspaceTree(store.workspaceTreeRoot);
   const query = store.workspaceFilter.trim().toLowerCase();
@@ -189,7 +198,7 @@ async function dropOnNode(event: DragEvent, node: WorkspaceTreeNode) {
         :key="node.path || 'root'"
         class="workspace-tree-node"
         :class="{ selected: store.selectedFile === node.path || store.workspaceDir === node.path, loading: node.loading, 'drop-target': dropTargetPath === node.path }"
-        :style="{ '--tree-depth': node.depth }"
+        :style="{ '--tree-depth': Math.min(node.depth, 8) }"
         role="treeitem"
         :aria-expanded="node.kind === 'dir' ? String(node.expanded) : undefined"
         tabindex="0"
@@ -202,34 +211,36 @@ async function dropOnNode(event: DragEvent, node: WorkspaceTreeNode) {
       >
         <button class="workspace-tree-main" type="button" @click="activateNode(node)">
           <ChevronRight v-if="node.kind === 'dir'" class="tree-chevron" :class="{ expanded: node.expanded }" :size="14" />
+          <span v-else class="tree-chevron-placeholder" aria-hidden="true"></span>
           <FolderOpen v-if="node.kind === 'dir' && node.expanded" :size="15" />
           <Folder v-else-if="node.kind === 'dir'" :size="15" />
           <FileText v-else :size="15" />
           <span class="workspace-tree-name" :title="node.path || node.name">{{ node.name }}</span>
           <i v-if="store.selectedFile === node.path && store.editorDirty" class="workspace-tree-dirty" :title="t('workspace.tree.dirty')"></i>
         </button>
-        <small>{{ node.kind === 'dir' ? (node.loaded ? node.children.length : t('workspace.tree.lazy')) : (node.size || '') }}</small>
-        <button
-          v-if="node.kind === 'file'"
-          class="icon-action workspace-tree-preview"
-          type="button"
-          :aria-label="t('workspace.tree.action.previewTarget', { name: node.name })"
-          @click.stop="store.openFile(node.path)"
-        >
-          <Eye :size="14" />
-        </button>
-        <span v-else class="workspace-tree-placeholder"></span>
-        <button
-          class="icon-action workspace-tree-download"
-          type="button"
-          :aria-label="t('workspace.tree.action.downloadTarget', { name: node.name })"
-          @click.stop="store.downloadWorkspacePath(node.path, node.kind)"
-        >
-          <Download :size="14" />
-        </button>
-        <button class="icon-action workspace-tree-more" type="button" :aria-label="t('workspace.tree.action.more', { name: node.name })" @click.stop="openContext($event, targetFromNode(node))">
-          <MoreHorizontal :size="14" />
-        </button>
+        <small>{{ node.kind === 'dir' ? (node.loaded ? node.children.length : t('workspace.tree.lazy')) : formatFileSize(node.size) }}</small>
+        <div class="workspace-tree-actions">
+          <button
+            v-if="node.kind === 'file'"
+            class="icon-action workspace-tree-preview"
+            type="button"
+            :aria-label="t('workspace.tree.action.previewTarget', { name: node.name })"
+            @click.stop="store.openFile(node.path)"
+          >
+            <Eye :size="14" />
+          </button>
+          <button
+            class="icon-action workspace-tree-download"
+            type="button"
+            :aria-label="t('workspace.tree.action.downloadTarget', { name: node.name })"
+            @click.stop="store.downloadWorkspacePath(node.path, node.kind)"
+          >
+            <Download :size="14" />
+          </button>
+          <button class="icon-action workspace-tree-more" type="button" :aria-label="t('workspace.tree.action.more', { name: node.name })" @click.stop="openContext($event, targetFromNode(node))">
+            <MoreHorizontal :size="14" />
+          </button>
+        </div>
         <div v-if="inlineAction?.kind === 'rename' && inlineAction.path === node.path" class="workspace-inline-action rename">
           <input
             ref="inlineInput"

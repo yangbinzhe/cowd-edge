@@ -205,7 +205,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.session-sidebar').classes()).toContain('mobile-open');
     expect(wrapper.get('.mobile-session-backdrop').exists()).toBe(true);
 
-    await wrapper.get('.mobile-session-close').trigger('click');
+    await wrapper.get('.mobile-session-backdrop').trigger('click');
     await nextTick();
     expect(wrapper.get('.session-sidebar').classes()).not.toContain('mobile-open');
     expect(wrapper.find('.mobile-session-backdrop').exists()).toBe(false);
@@ -234,6 +234,36 @@ describe('Cowd Vue WebUI shell', () => {
 
     resolveLoad();
     await selection;
+    wrapper.unmount();
+  });
+
+  it('atomically changes the send target while a new session is being created', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.sessions = [{ id: 'old-session', title: 'Old session' }] as any;
+    store.activeSessionId = 'old-session';
+    chat.activeSessionId = 'old-session';
+    let resolveCreate!: (session: any) => void;
+    const create = vi.spyOn(api, 'createSession').mockImplementation(() => (
+      new Promise((resolve) => { resolveCreate = resolve; })
+    ));
+
+    const first = store.createSession();
+    const second = store.createSession();
+    expect(store.sessionCreating).toBe(true);
+    expect(store.activeSessionId).toBe('');
+    expect(chat.activeSessionId).toBe('');
+    expect(create).toHaveBeenCalledTimes(1);
+
+    resolveCreate({ id: 'new-session', title: 'New session', model: 'deepseek-v4-pro' });
+    await Promise.all([first, second]);
+    expect(store.sessionCreating).toBe(false);
+    expect(store.activeSessionId).toBe('new-session');
+    expect(chat.activeSessionId).toBe('new-session');
+    expect(create).toHaveBeenCalledTimes(1);
+    create.mockRestore();
     wrapper.unmount();
   });
 
@@ -395,7 +425,7 @@ describe('Cowd Vue WebUI shell', () => {
       .get('.chat-execution-overlay .graph-toolbar [aria-label="列表视图"]')
       .trigger('click');
     await nextTick();
-    await wrapper.get('.chat-execution-overlay .data-table tbody tr').trigger('click');
+    await wrapper.findAll('.chat-execution-overlay .data-table tbody tr')[1].trigger('click');
     await nextTick();
     expect(wrapper.get('.execution-node-detail').text()).toContain('WebSearch');
     expect(wrapper.get('.execution-node-detail').text()).toContain('WAIC evidence is being collected');
@@ -564,7 +594,8 @@ describe('Cowd Vue WebUI shell', () => {
     await wrapper.get('.execution-turn-group .timeline-list li').trigger('click');
     expect(wrapper.get('.activity-detail-modal').text()).toContain('workspace.read');
     expect(wrapper.get('.activity-detail-modal').text()).toContain('125 ms');
-    expect(wrapper.findAll('.activity-detail-modal .raw-payload')).toHaveLength(3);
+    expect(wrapper.findAll('.activity-detail-modal .activity-structured-section')).toHaveLength(2);
+    expect(wrapper.findAll('.activity-detail-modal .raw-payload')).toHaveLength(1);
   });
 
   it('shows a rolling live action before the causal thought and tool timeline', async () => {
@@ -926,7 +957,7 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     const store = useAppStore();
     const rawFile = vi.spyOn(api, 'rawFile').mockResolvedValue('should not load');
-    const files = [{ name: 'huge.md', path: 'docs/huge.md', kind: 'file' as const, size: 700 * 1024 }];
+    const files = [{ name: 'huge.md', path: 'docs/huge.md', kind: 'file' as const, size: 2 * 1024 * 1024 }];
     store.workspaceFiles = files;
     store.workspaceTreeRoot = mergeWorkspaceTreeChildren(createWorkspaceRoot(), '', files, new Set(['']));
     await store.openFile('docs/huge.md');
@@ -2709,6 +2740,8 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('SKILL.md');
     expect(wrapper.find('.markdown-body h1').text()).toBe('test');
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/local%3Atest/files/raw?path=SKILL.md', expect.any(Object));
+    expect(fetchMock.mock.calls.filter(([path]) => String(path) === '/api/skills/local%3Atest/files').length).toBe(1);
+    expect(fetchMock.mock.calls.filter(([path]) => String(path) === '/api/skills/local%3Atest/files/raw?path=SKILL.md').length).toBe(1);
   });
 
   it('loads only the skill catalog on the catalog section', async () => {

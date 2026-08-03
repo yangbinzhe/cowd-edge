@@ -35,10 +35,17 @@ import { displayStatus } from '../i18n/domain/status';
 import type { ActivityEvent, ChatTurn } from '../types';
 import { causalActivityTimeline } from '../utils/causalTimeline';
 import { mergeActivityEvent } from '../utils/turnSettlement';
+import { releaseProjection } from '../release';
+import { combineExecutionLineage, executionProjectionLinks } from '../utils/executionLineage';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
+const release = computed(() => releaseProjection(store.health));
+const releaseTitle = computed(() => t('release.versions', {
+  edge: release.value.edge,
+  gateway: release.value.gateway,
+}));
 const transcript = ref<HTMLElement | null>(null);
 const composerInput = ref<HTMLTextAreaElement | null>(null);
 const commandSearchInput = ref<HTMLInputElement | null>(null);
@@ -68,36 +75,25 @@ const requestedExecutionGraphId = computed(() => (
 const requestedProjection = computed(() => requestedExecutionGraphId.value
   ? projections.projectionFor(requestedExecutionGraphId.value)
   : null);
-const teamExecutionGraphId = computed(() => {
-  const projection = requestedProjection.value as any;
-  const strategyGraphId = String(projection?.strategy?.team_execution_id || '').trim();
-  if (strategyGraphId && strategyGraphId !== requestedExecutionGraphId.value) return strategyGraphId;
-  const linked = (Array.isArray(projection?.teams) ? projection.teams : [])
-    .map((team: any) => String(team?.detail?.graph_id || '').trim())
-    .find((graphId: string) => graphId && graphId !== requestedExecutionGraphId.value);
-  if (linked) return linked;
-  const childGraph = (Array.isArray(projection?.child_executions)
-    ? projection.child_executions
-    : [])
-    .map((child: any) => String(child?.execution_id || '').trim())
-    .find((graphId: string) => graphId && graphId !== requestedExecutionGraphId.value);
-  if (childGraph) return childGraph;
-  return [...(chat.active?.activity || [])]
-    .reverse()
-    .filter((event) => event.parent_execution_id === requestedExecutionGraphId.value)
-    .map((event) => String(event.graph_id || '').trim())
-    .find((graphId) => graphId && graphId !== requestedExecutionGraphId.value) || '';
-});
-const displayedExecutionGraphId = computed(() => (
-  teamExecutionGraphId.value || requestedExecutionGraphId.value
+const linkedExecutionProjectionIds = computed(() => executionProjectionLinks(requestedProjection.value));
+const activeProjection = computed(() => requestedProjection.value);
+const executionGraph = computed(() => combineExecutionLineage(
+  requestedExecutionGraphId.value,
+  [
+    requestedProjection.value,
+    ...linkedExecutionProjectionIds.value.map((executionId) => projections.projectionFor(executionId)),
+  ],
 ));
-const activeProjection = computed(() => displayedExecutionGraphId.value
-  ? projections.projectionFor(displayedExecutionGraphId.value)
-  : null);
-const executionGraph = computed(() => activeProjection.value?.graph || null);
-const executionConnectionState = computed(() => displayedExecutionGraphId.value
-  ? projections.stateFor(displayedExecutionGraphId.value)
-  : 'idle');
+const executionConnectionState = computed(() => {
+  const states = [requestedExecutionGraphId.value, ...linkedExecutionProjectionIds.value]
+    .filter(Boolean)
+    .map((executionId) => projections.stateFor(executionId));
+  if (states.some((state) => state === 'error')) return 'error';
+  if (states.some((state) => ['materializing', 'connecting', 'reconnecting'].includes(state))) return 'materializing';
+  if (states.some((state) => state === 'live')) return 'live';
+  if (states.length && states.every((state) => state === 'terminal')) return 'terminal';
+  return states[0] || 'idle';
+});
 const executionGraphLoading = computed(() => (
   !executionGraph.value
   && ['idle', 'materializing', 'connecting', 'reconnecting'].includes(executionConnectionState.value)
@@ -267,9 +263,8 @@ const chatEvidenceCount = computed(() => new Set(
 const showRequestedModel = computed(() => (
   !!store.selectedModel && effectiveModel.value !== store.selectedModel
 ));
-const isPanorama = computed(() => !store.companionCollapsed);
 const turnRunning = computed(() => !!chat.active?.pending || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(executionStatus.value));
-const submissionBusy = computed(() => !!chat.active?.submitting);
+const submissionBusy = computed(() => store.sessionCreating || !!chat.active?.submitting);
 const attachmentLabel = computed(() => {
   if (chat.active?.attachmentRole === 'writer') return t('page.chat.attachment.writer');
   if (chat.active?.attachmentRole === 'reader') return t('page.chat.attachment.reader');
@@ -339,15 +334,15 @@ watch(
 );
 
 const executionGraphConsumer = 'chat:expanded-execution-graph';
+const lineageExecutionConsumers = new Set<string>();
 watch(
-  [() => store.chatExecutionGraphExpanded, requestedExecutionGraphId, teamExecutionGraphId],
-  ([expanded, rootGraphId, teamGraphId]) => {
+  [() => store.chatExecutionGraphExpanded, requestedExecutionGraphId],
+  ([expanded, rootGraphId]) => {
     projections.release(executionGraphConsumer);
     if (!expanded) return;
-    const graphId = teamGraphId || rootGraphId;
-    if (!graphId) return;
+    if (!rootGraphId) return;
     projections.acquire(
-      graphId,
+      rootGraphId,
       executionGraphConsumer,
       'full',
       'bounded',
@@ -356,8 +351,38 @@ watch(
   },
   { immediate: true },
 );
+watch(
+  [
+    () => store.chatExecutionGraphExpanded,
+    () => linkedExecutionProjectionIds.value.join('\u0000'),
+  ],
+  ([expanded]) => {
+    const expected = new Set<string>();
+    if (expanded && store.activeSessionId) {
+      for (const executionId of linkedExecutionProjectionIds.value) {
+        const consumer = `chat:expanded-lineage:${executionId}`;
+        expected.add(consumer);
+        projections.acquire(
+          executionId,
+          consumer,
+          'full',
+          'bounded',
+          store.activeSessionId,
+        );
+      }
+    }
+    for (const consumer of lineageExecutionConsumers) {
+      if (!expected.has(consumer)) projections.release(consumer);
+    }
+    lineageExecutionConsumers.clear();
+    for (const consumer of expected) lineageExecutionConsumers.add(consumer);
+  },
+  { immediate: true },
+);
 onBeforeUnmount(() => {
   projections.release(executionGraphConsumer);
+  for (const consumer of lineageExecutionConsumers) projections.release(consumer);
+  lineageExecutionConsumers.clear();
   if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
 });
 
@@ -840,7 +865,17 @@ function chooseFirstCommand() {
   <section class="chat-page">
     <header class="page-header chat-topbar">
       <div class="chat-title-block">
-        <h1>{{ t('page.chat.page.text.177c6b9656') }}</h1>
+        <div class="chat-title-line">
+          <h1>{{ t('page.chat.page.text.177c6b9656') }}</h1>
+          <span
+            class="chat-release"
+            :data-version-mismatch="release.mismatch"
+            :title="releaseTitle"
+          >
+            {{ release.label }}
+          </span>
+          <span v-if="release.mismatch" class="chat-release-warning">{{ t('release.mismatch') }}</span>
+        </div>
         <div class="chat-session-facts">
           <span class="chat-fact observer" :data-role="chat.active?.attachmentRole">
             <Eye :size="13" />
@@ -874,44 +909,50 @@ function chooseFirstCommand() {
     </header>
 
     <div class="chat-transcript-stage">
-      <section
+      <div
         v-if="store.chatExecutionGraphExpanded && chat.active"
-        class="chat-execution-overlay"
-        role="dialog"
-        :aria-label="t('chat.execution.graph')"
+        class="chat-execution-modal-scrim"
+        @click.self="store.closeChatExecutionGraph()"
       >
-        <header>
-          <div>
-            <Workflow :size="15" />
-            <strong>{{ teamExecutionGraphId ? t('chat.execution.teamGraph') : t('chat.execution.graph') }}</strong>
-            <span v-if="selectedExecutionEntry?.turn_id">{{ t('chat.execution.turn', { turn: selectedExecutionEntry.turn_id }) }}</span>
-            <span>{{ displayStatus(String(activeProjection?.live?.status || executionGraph?.status || executionStatus)) }}</span>
+        <section
+          class="chat-execution-overlay"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('chat.execution.graph')"
+        >
+          <header>
+            <div>
+              <Workflow :size="15" />
+              <strong>{{ linkedExecutionProjectionIds.length ? t('chat.execution.teamGraph') : t('chat.execution.graph') }}</strong>
+              <span v-if="selectedExecutionEntry?.turn_id">{{ t('chat.execution.turn', { turn: selectedExecutionEntry.turn_id }) }}</span>
+              <span>{{ displayStatus(String(activeProjection?.live?.status || executionGraph?.status || executionStatus)) }}</span>
+            </div>
+            <button
+              class="icon-action"
+              type="button"
+              :aria-label="t('common.close')"
+              :title="t('common.close')"
+              @click="store.closeChatExecutionGraph()"
+            >
+              <X :size="16" />
+            </button>
+          </header>
+          <div v-if="executionGraphLoading" class="execution-graph-loading" role="status">
+            <LoaderCircle :size="20" />
+            <div>
+              <strong>{{ t('status.loading') }}</strong>
+              <span>{{ t('chat.execution.loadingDetail') }}</span>
+            </div>
           </div>
-          <button
-            class="icon-action"
-            type="button"
-            :aria-label="t('common.close')"
-            :title="t('common.close')"
-            @click="store.closeChatExecutionGraph()"
-          >
-            <X :size="16" />
-          </button>
-        </header>
-        <div v-if="executionGraphLoading" class="execution-graph-loading" role="status">
-          <LoaderCircle :size="20" />
-          <div>
-            <strong>{{ t('status.loading') }}</strong>
-            <span>{{ t('chat.execution.loadingDetail') }}</span>
-          </div>
-        </div>
-        <ExecutionGraphCanvas
-          v-else
-          :graph="executionGraph"
-          :connection-state="executionConnectionState"
-          :activity-events="executionActivityEvents"
-          :loading="executionGraphLoading"
-        />
-      </section>
+          <ExecutionGraphCanvas
+            v-else
+            :graph="executionGraph"
+            :connection-state="executionConnectionState"
+            :activity-events="executionActivityEvents"
+            :loading="executionGraphLoading"
+          />
+        </section>
+      </div>
       <div
         ref="transcript"
         class="transcript"
@@ -984,7 +1025,7 @@ function chooseFirstCommand() {
                 </Transition>
               </div>
               <ol
-                v-if="isPanorama && causalTurnTimelineActivities(chat.active?.turns || [], index).length"
+                v-if="causalTurnTimelineActivities(chat.active?.turns || [], index).length"
                 class="conversation-timeline"
               >
                 <li

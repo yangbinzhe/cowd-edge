@@ -843,6 +843,39 @@ describe('chatSessions', () => {
         turn_id: 'turn-new',
       }),
     ]));
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'SessionInputReceived',
+      session_id: 'cross-surface',
+      execution_id: 'execution-new',
+      turn_id: 'turn-new',
+      receipt: {
+        input_id: 'input-live-1',
+        active_turn_id: 'turn-new',
+        status: 'pending',
+        decision: 'supplement_current_turn',
+        evidence_refs: ['session-input://input-live-1'],
+      },
+    }) } as MessageEvent);
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'TurnInputCheckpointConsumed',
+      session_id: 'cross-surface',
+      execution_id: 'execution-new',
+      turn_id: 'turn-new',
+      checkpoint: 'after_tool',
+      consumed: [{
+        input_id: 'input-live-1',
+        content_preview: 'additional constraint',
+        status: 'consumed',
+      }],
+    }) } as MessageEvent);
+    expect(chat.states['cross-surface'].activity).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'session-input:input-live-1',
+        status: 'complete',
+        turn_id: 'turn-new',
+        output: { checkpoint: 'after_tool', consumed: true },
+      }),
+    ]));
 
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TerminalCommitted',
@@ -1112,6 +1145,57 @@ describe('chatSessions', () => {
     )?.content).toBe('你好啊');
   });
 
+  it('retains live tool activity received before the canonical execution receipt', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found' } as any);
+    let resolveSend!: (value: unknown) => void;
+    vi.spyOn(api, 'sendMessage').mockImplementation(() => new Promise((resolve) => {
+      resolveSend = resolve;
+    }) as any);
+
+    const chat = useChatSessionsStore();
+    await chat.open('early-progress');
+    const sending = chat.send('early-progress', 'inspect now');
+    await vi.waitFor(() => expect(vi.mocked(api.sendMessage)).toHaveBeenCalled());
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'ToolStart',
+      ...causalFields('tool-before-receipt', 'tool', 1),
+      session_id: 'early-progress',
+      name: 'workspace_read',
+      tool_call_id: 'tool-before-receipt',
+      input: { path: 'README.md' },
+    }) } as MessageEvent);
+
+    resolveSend({
+      message: { message_id: 'message-1', sequence: 1, turn_id: 'turn-1' },
+      execution: { graph_id: 'execution-1', turn_id: 'turn-1', status: 'running' },
+    });
+    await sending;
+
+    const state = chat.states['early-progress'];
+    const streamTurn = state.turns.find((turn) => turn.id === state.streamTurnId);
+    expect(state.executionId).toBe('execution-1');
+    expect(streamTurn?.activity).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'tool-before-receipt',
+        title: 'workspace_read',
+        status: 'running',
+      }),
+    ]));
+  });
+
   it('recovers an active turn from the canonical live snapshot when the stream is silent', async () => {
     vi.useFakeTimers();
     setActivePinia(createPinia());
@@ -1215,6 +1299,62 @@ describe('chatSessions', () => {
     expect(chat.states['dual-identity'].executionGraphId).toBe('execution-graph:turn-1');
     expect(chat.states['dual-identity'].executionIndex?.executions[0].turn_id).toBe('turn-1');
     expect(projection.mock.calls.every(([executionId]) => executionId === 'execution-graph:turn-1')).toBe(true);
+  });
+
+  it('hydrates an execution projection when the index has no separate graph id', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'execution-only',
+      messages: [],
+      total: 0,
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'execution-only',
+      executions: [{
+        execution_id: 'execution-without-graph',
+        turn_id: 'turn-without-graph',
+        status: 'calling_model',
+        updated_at_ms: 2,
+      }],
+      active_execution_ids: ['execution-without-graph'],
+      latest_execution_id: 'execution-without-graph',
+      latest_status: 'calling_model',
+    } as any);
+    vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'execution-without-graph',
+      live: {
+        revision: 2,
+        status: 'calling_model',
+        started_at_ms: 1,
+        updated_at_ms: 2,
+        last_progress_at_ms: 2,
+        output_preview: '',
+        output_preview_start_bytes: 0,
+        output_bytes: 0,
+        metrics: {},
+      },
+    } as any);
+    const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'execution-without-graph',
+      revision: 2,
+      cursor: 2,
+      live: {
+        revision: 2,
+        status: 'calling_model',
+      },
+    } as any);
+
+    await chat.load('execution-only');
+    await chat.hydrateRuntimeDetails('execution-only', true);
+
+    expect(chat.states['execution-only'].executionId).toBe('execution-without-graph');
+    expect(chat.states['execution-only'].executionGraphId).toBe('');
+    expect(projection.mock.calls.some(
+      ([executionId]) => executionId === 'execution-without-graph',
+    )).toBe(true);
   });
 
   it('merges history and live output by causal identity rather than equal text', async () => {
@@ -1838,6 +1978,12 @@ describe('chatSessions', () => {
     streams[0].onopen?.();
     expect(streams).toHaveLength(1);
     expect(chat.activeSourceCount).toBe(1);
+    expect(chat.states['reconnect-session'].streamState).toBe('connecting');
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'Connected',
+      session_id: 'reconnect-session',
+      runtime_commit_cursor: 0,
+    }) } as MessageEvent);
     expect(chat.states['reconnect-session'].streamState).toBe('connected');
     await chat.close('reconnect-session');
   });

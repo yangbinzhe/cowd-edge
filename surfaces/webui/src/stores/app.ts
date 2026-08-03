@@ -39,7 +39,7 @@ import { useProjectionRegistryStore } from './projectionRegistry';
 const PINNED_SESSION_KEY = 'cowd.webui.sessions.pinned';
 const VIEWED_SESSION_KEY = 'cowd.webui.sessions.viewedCounts';
 const WORKSPACE_RECENT_KEY = 'cowd.webui.workspace.recentFiles';
-const WORKSPACE_TEXT_PREVIEW_LIMIT_BYTES = 512 * 1024;
+const WORKSPACE_TEXT_PREVIEW_LIMIT_BYTES = 1024 * 1024;
 
 type CapabilityLoadPhase = 'idle' | 'loading' | 'ready' | 'error';
 type CapabilityLoadState = {
@@ -223,6 +223,7 @@ export const useAppStore = defineStore('app', () => {
   const chatSessions = useChatSessionsStore();
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   let bootPromise: Promise<void> | null = null;
+  let sessionCreateFlight: Promise<SessionSummary> | null = null;
   let activeSessionLoadGeneration = 0;
   let authorizationGeneration = 0;
   let companionHydrationController: AbortController | null = null;
@@ -231,6 +232,7 @@ export const useAppStore = defineStore('app', () => {
   let uploadOperationSequence = 0;
   const activeUploadOperations = new Set<number>();
   const booted = ref(false);
+  const sessionCreating = ref(false);
   const authorizationState = ref<'checking' | 'ready' | 'required' | 'invalidated'>('checking');
   const authorizationViewGeneration = ref(0);
   const health = ref<any>(null);
@@ -712,11 +714,40 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function createSession() {
-    const session = await api.createSession(selectedModel.value || undefined);
-    sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)];
-    selectedModel.value = session.model || selectedModel.value;
-    await loadMessages(session.id);
+  async function createSession(): Promise<SessionSummary> {
+    if (sessionCreateFlight) return sessionCreateFlight;
+    const previousSessionId = activeSessionId.value;
+    const creationGeneration = ++activeSessionLoadGeneration;
+    activeSessionId.value = '';
+    chatSessions.activeSessionId = '';
+    clearActiveSessionDerivedState();
+    sessionCreating.value = true;
+    sessionCreateFlight = (async () => {
+      let session: SessionSummary;
+      try {
+        session = await api.createSession(selectedModel.value || undefined);
+      } catch (error) {
+        if (
+          activeSessionLoadGeneration === creationGeneration
+          && !activeSessionId.value
+          && previousSessionId
+        ) {
+          activeSessionId.value = previousSessionId;
+          chatSessions.activeSessionId = previousSessionId;
+        }
+        throw error;
+      }
+      sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)];
+      selectedModel.value = session.model || selectedModel.value;
+      if (activeSessionLoadGeneration === creationGeneration && !activeSessionId.value) {
+        await loadMessages(session.id);
+      }
+      return session;
+    })().finally(() => {
+      sessionCreating.value = false;
+      sessionCreateFlight = null;
+    });
+    return sessionCreateFlight;
   }
 
   async function deleteSession(sessionId: string) {
@@ -1839,6 +1870,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     booted,
+    sessionCreating,
     authorizationState,
     authorizationViewGeneration,
     health,

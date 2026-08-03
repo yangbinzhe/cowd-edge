@@ -6,21 +6,14 @@ import { AlertTriangle, Ban, CircleAlert, CircleCheck, GitFork, Plus, Radio, Sea
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
-import { releaseProjection } from '../release';
 import { useEscapeKey } from '../composables/useEscapeKey';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
 const emit = defineEmits<{
-  close: [];
   'session-opened': [];
 }>();
-const release = computed(() => releaseProjection(store.health));
-const releaseTitle = computed(() => t('release.versions', {
-  edge: release.value.edge,
-  gateway: release.value.gateway,
-}));
 const SIDEBAR_WIDTH_KEY = 'cowd.webui.sessionSidebarWidth';
 const MIN_SIDEBAR_WIDTH = 220;
 const MAX_SIDEBAR_WIDTH = 420;
@@ -227,14 +220,11 @@ useEscapeKey(() => {
   <aside class="session-sidebar">
     <button class="session-sidebar-resizer" type="button" :aria-label="t('session.sidebar.resize')" @pointerdown="startResize" />
     <header class="sidebar-head">
-      <button class="icon-action mobile-session-close" type="button" :aria-label="t('common.close')" @click="emit('close')">
-        <X :size="16" />
-      </button>
       <div class="session-create-row">
         <button
           :class="batchMode ? 'danger-action' : 'primary-action'"
           type="button"
-          :disabled="batchMode && !store.selectedSessionIds.length"
+          :disabled="store.sessionCreating || (batchMode && !store.selectedSessionIds.length)"
           @click="batchMode ? (confirmBulkDelete = true) : createSession()"
         >
           <Trash2 v-if="batchMode" :size="16" />
@@ -313,11 +303,6 @@ useEscapeKey(() => {
       </button>
     </div>
 
-    <footer class="sidebar-foot" :data-version-mismatch="release.mismatch" :title="releaseTitle">
-      <span>{{ t('component.session.sidebar.text.85eb9812ae') }}</span>
-      <strong>{{ release.label }}</strong>
-      <small v-if="release.mismatch">{{ t('release.mismatch') }}</small>
-    </footer>
     <div v-if="confirmBulkDelete" class="modal-scrim" @click.self="confirmBulkDelete = false">
       <section class="session-delete-confirm" role="dialog" :aria-label="t('session.bulk.confirmTitle')">
         <header>

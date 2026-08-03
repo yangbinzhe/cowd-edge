@@ -12,7 +12,7 @@ const gate = process.argv.includes('--gate');
 
 const pages = {
   runtime: { file: 'RuntimePage.vue', sections: ['overview', 'mission-link', 'runs', 'policy', 'timeline', 'growth'] },
-  mission: { file: 'MissionControlPage.vue', sections: ['overview', 'sessions', 'teams', 'agents', 'routes', 'runtime-v2', 'relations', 'approvals', 'trace'] },
+  mission: { file: 'MissionControlPage.vue', sections: ['overview', 'sessions', 'teams', 'agents', 'routes', 'runtime-v2', 'relations', 'approvals', 'trace', 'schedules'] },
   context: { file: 'ContextPage.vue', sections: ['packet', 'budget', 'evidence', 'history'] },
   reality: { file: 'RealityCorePage.vue', sections: ['management', 'core-map', 'overview', 'matrix', 'fact-flow', 'context-runtime', 'evidence', 'promotions', 'boundaries'] },
   memory: { file: 'MemoryPage.vue', sections: ['layers', 'recall', 'graph', 'context-envelope', 'knowledge-governance', 'maintenance', 'structured-core'] },
@@ -66,7 +66,8 @@ for (const [pageId, page] of Object.entries(pages)) {
     if (pageId === 'mfg') {
       return !/\bv-(?:if|else-if|else)\b/.test(match[0]);
     }
-    return !match[0].includes(`isSectionActive('${sectionId}')`);
+    return !match[0].includes(`isSectionActive('${sectionId}')`)
+      && !match[0].includes('data-section-visibility="persistent"');
   }).map((match) => match[1]);
 
   if (!hasPageSpec) failures.push(`${pageId}: capability spec missing`);

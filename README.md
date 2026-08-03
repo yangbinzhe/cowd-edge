@@ -2,7 +2,7 @@
 
 `cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.631`。
+当前版本：`0.9.632`。
 
 ## 1. 定位
 
@@ -108,7 +108,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.631",
+  "version": "0.9.632",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -124,7 +124,7 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.631",
+  "version": "0.9.632",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
@@ -153,7 +153,7 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.631",
+  "version": "0.9.632",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",
@@ -228,6 +228,14 @@ Harness/Provider 分段延迟。WebUI 不重建第二套 Session、Mission 或�
   禁止重复发起手动全盘扫描；扫描结束后再允许操作。
 - 页面发布版本从 Gateway health 与 Edge 构建常量组合，避免为显示版本额外加载完整 OpenAPI。
 - 前端缓存只保存可失效的读取投影和浏览器交互状态，不替代 Gateway 的 Session、审批或执行真相。
+- 对话主时间线直接消费 session SSE；早于 execution receipt 到达的思考、工具和证据事件会迁移到正式
+  execution，不依赖刷新或右侧全景栏才能显示。
+- 工作区只保留文件树和弹窗预览；文本、Markdown、HTML、图片与下载在同一预览器处理，文件名和
+  文件大小使用可读格式，预览器提供链接复制与文本编辑。
+- Skills 管理面区分目录、Surface 投影、文件树、运行记录和治理；上传的 `.tar` 包由 Gateway 检查后
+  安装，WebUI 不自行解包或绕过技能治理。
+- Mission Control 的定时任务页消费 Runtime 唯一调度存储，支持 at、interval、cron、时区、权限上限、
+  立即运行、暂停、恢复与删除；不存在前端调度器或第二套执行链路。
 
 ## 8. 当前能力状态
 

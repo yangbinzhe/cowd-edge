@@ -225,6 +225,43 @@ describe('API authorization epoch', () => {
     expect(catalogReads).toBe(2);
   });
 
+  it('does not abort an execution projection when the same session attaches a reader', async () => {
+    let finishExecution!: (response: Response) => void;
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      if (String(path) === '/api/sessions/session-A/execution') {
+        return new Promise<Response>((resolve) => {
+          finishExecution = resolve;
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        ok: true,
+        session_id: 'session-A',
+        role: 'reader',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const execution = api.sessionExecution('session-A');
+    await api.attachSession('session-A', 'reader');
+    finishExecution(new Response(JSON.stringify({
+      session_id: 'session-A',
+      latest_execution_id: 'execution-A',
+      active_execution_ids: [],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await expect(execution).resolves.toMatchObject({
+      latest_execution_id: 'execution-A',
+      __state: 'ready',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('briefly reuses static catalog projections but never live runtime state', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), {
       status: 200,
@@ -240,21 +277,22 @@ describe('API authorization epoch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it('a single forbidden response invalidates cached reads for every endpoint', async () => {
+  it('keeps global authentication and unrelated caches for a capability-scoped forbidden response', async () => {
+    const invalidated = vi.fn();
+    window.addEventListener('cowd:authorization-invalidated', invalidated);
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ secret: 'cached-A' }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }))
-      .mockResolvedValueOnce(new Response('authorization revoked', { status: 403 }))
-      .mockRejectedValueOnce(new Error('offline'));
+      .mockResolvedValueOnce(new Response('definition.manage required', { status: 403 }));
     vi.stubGlobal('fetch', fetchMock);
 
     expect((await read('/api/a', { secret: '' })).secret).toBe('cached-A');
     expect((await read('/api/b', { secret: '' })).__state).toBe('forbidden');
-    const afterRevoke = await read('/api/a', { secret: 'fallback' });
-    expect(afterRevoke.__state).toBe('offline');
-    expect(afterRevoke.secret).toBe('fallback');
+    expect((await read('/api/a', { secret: 'fallback' })).secret).toBe('cached-A');
+    expect(invalidated).not.toHaveBeenCalled();
+    window.removeEventListener('cowd:authorization-invalidated', invalidated);
   });
 
   it('invalidates only the forbidden session while retaining another session cache', async () => {

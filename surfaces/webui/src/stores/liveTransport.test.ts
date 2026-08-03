@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import {
   liveTransportHealth,
   openLiveSource,
+  openSessionLiveSource,
   parseLiveEnvelope,
   resetLiveTransportForTests,
   type LiveEnvelope,
@@ -220,6 +221,50 @@ describe('WebUI multiplex live transport', () => {
     expect(liveTransportHealth().subscription.state).toBe('ready');
     expect(liveTransportHealth().sources.get('session:session-1')).toBe('live');
     lease.close();
+  });
+
+  it('projects the authorized session source identity into unscoped runtime payloads', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const subscriptionApi = mockSubscriptionApi();
+    const received: any[] = [];
+    const source = openSessionLiveSource('session-input', 0);
+    source.onmessage = (event) => received.push(JSON.parse(event.data));
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    const revision = subscriptionApi.revision();
+    FakeEventSource.instances[0].emit({
+      schema_version: 1,
+      subscription_id: 'live-test',
+      subscription_revision: revision,
+      source_kind: 'subscription',
+      source_id: 'live-test',
+      detail_scope: 'summary',
+      delivery_class: 'snapshot_reconstructable',
+      source_health: 'baseline',
+      event: 'subscription.ready',
+      payload: { revision },
+    });
+    FakeEventSource.instances[0].emit({
+      schema_version: 1,
+      subscription_id: 'live-test',
+      subscription_revision: revision,
+      source_kind: 'session',
+      source_id: 'session-input',
+      detail_scope: 'summary',
+      delivery_class: 'durable',
+      source_health: 'live',
+      event: 'SessionInputProjection',
+      payload: {
+        type: 'SessionInputProjection',
+        projection: { pending_count: 1 },
+      },
+    });
+
+    expect(received).toEqual([{
+      type: 'SessionInputProjection',
+      session_id: 'session-input',
+      projection: { pending_count: 1 },
+    }]);
+    source.close();
   });
 
   it('keeps a natively recovered EventSource instead of closing it with a stale timer', async () => {

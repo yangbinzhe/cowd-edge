@@ -109,6 +109,8 @@ const SESSION_ACTIVITY_CAP = 2_000;
 const TURN_ACTIVITY_CAP = 500;
 const LIVE_RECOVERY_INTERVAL_MS = 1_500;
 const LIVE_RECOVERY_SILENCE_MS = 2_000;
+const LIVE_SOURCE_READY_TIMEOUT_MS = import.meta.env.MODE === 'test' ? 0 : 5_000;
+const LIVE_SOURCE_READY_POLL_MS = 25;
 const DURABLE_MESSAGE_ROLES = new Set(['user', 'assistant', 'system', 'tool']);
 const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'Connected',
@@ -131,6 +133,10 @@ const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'ProviderAttempt',
   'ContextEnvelope',
   'RuntimePolicyDecision',
+  'SessionInputReceived',
+  'SessionInputProjection',
+  'TurnInboxUpdated',
+  'TurnInputCheckpointConsumed',
   'ApprovalRequested',
   'ApprovalResolved',
   'TurnError',
@@ -834,6 +840,81 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       event_kind: type,
       raw: payload,
     };
+    if (type === 'SessionInputReceived') {
+      const receipt = payload.receipt || {};
+      const inputId = String(receipt.input_id || payload.input_id || '');
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `session-input:${inputId || executionId}`,
+        kind: 'runtime',
+        title: t('chat.input.received'),
+        detail: compactToolOutput(receipt.reason || receipt.decision || receipt.status),
+        status: String(receipt.status || 'pending'),
+        turn_id: String(receipt.active_turn_id || payload.turn_id || state.executionTurnId || ''),
+        input: receipt,
+        refs: Array.isArray(receipt.evidence_refs) ? receipt.evidence_refs.map(String) : [],
+      });
+      return;
+    }
+    if (type === 'SessionInputProjection') {
+      const projection = payload.projection || {};
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `session-input-projection:${executionId}`,
+        kind: 'runtime',
+        title: t('chat.input.projection'),
+        detail: `${Number(projection.pending_count || 0)} pending · ${Number(projection.consumed_count || 0)} consumed`,
+        status: Number(projection.pending_count || 0) > 0 ? 'running' : 'complete',
+        turn_id: String(projection.active_turn_id || payload.turn_id || state.executionTurnId || ''),
+        input: projection.inputs,
+        output: {
+          total: projection.total,
+          pending_count: projection.pending_count,
+          queued_next_count: projection.queued_next_count,
+          consumed_count: projection.consumed_count,
+          last_decision: projection.last_decision,
+        },
+      });
+      return;
+    }
+    if (type === 'TurnInboxUpdated') {
+      const inbox = payload.inbox || {};
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `turn-inbox:${String(inbox.turn_id || state.executionTurnId || executionId)}`,
+        kind: 'runtime',
+        title: t('chat.input.inbox'),
+        detail: `${Number(inbox.pending_count || 0)} pending · ${Number(inbox.consumed_count || 0)} consumed`,
+        status: Number(inbox.pending_count || 0) > 0 ? 'running' : 'complete',
+        turn_id: String(inbox.turn_id || payload.turn_id || state.executionTurnId || ''),
+        input: inbox.items,
+        output: {
+          pending_count: inbox.pending_count,
+          consumed_count: inbox.consumed_count,
+          admitted_cursor: inbox.admitted_cursor,
+          consumed_cursor: inbox.consumed_cursor,
+        },
+      });
+      return;
+    }
+    if (type === 'TurnInputCheckpointConsumed') {
+      const consumed = Array.isArray(payload.consumed) ? payload.consumed : [];
+      for (const item of consumed) {
+        const inputId = String(item?.input_id || '');
+        upsertSessionActivity(sessionId, {
+          ...base,
+          id: `session-input:${inputId || executionId}`,
+          kind: 'runtime',
+          title: t('chat.input.consumed'),
+          detail: compactToolOutput(item?.content_preview || payload.checkpoint),
+          status: 'complete',
+          turn_id: String(payload.turn_id || state.executionTurnId || ''),
+          input: item,
+          output: { checkpoint: payload.checkpoint, consumed: true },
+        });
+      }
+      return;
+    }
     if (type === 'ToolStart' || type === 'ToolProgress' || type === 'ToolComplete') {
       const failed = type === 'ToolComplete' && Number(payload.exit_code || 0) !== 0;
       const activityId = toolId || causalItemKey || `tool:${executionId}:${payload.name || 'unknown'}`;
@@ -1153,6 +1234,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
     clearStreamByteEnds(sessionId);
+    const previousStreamTurn = state.streamTurnId
+      ? state.turns.find((turn) => turn.id === state.streamTurnId)
+      : undefined;
     if (state.streamTurnId) {
       state.turns = state.turns.filter((turn) => turn.id !== state.streamTurnId || !!turn.content);
     }
@@ -1168,7 +1252,19 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       status_detail: 'execution adopted from canonical session stream',
       last_progress_at_ms: Date.now(),
     };
-    if (markPending) ensureStreamTurn(state);
+    if (markPending) {
+      ensureStreamTurn(state);
+      const canonicalStreamTurn = state.turns.find((turn) => turn.id === state.streamTurnId);
+      if (canonicalStreamTurn && previousStreamTurn?.activity?.length) {
+        canonicalStreamTurn.activity = mergeProjectedActivity(
+          canonicalStreamTurn.activity || [],
+          previousStreamTurn.activity,
+        );
+      }
+      if (canonicalStreamTurn && previousStreamTurn?.content) {
+        canonicalStreamTurn.content = previousStreamTurn.content;
+      }
+    }
     if (markPending) ensureProgressRecovery(sessionId);
     return true;
   }
@@ -1191,6 +1287,24 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       refreshProjection(sessionId).catch(() => undefined);
     }
     return true;
+  }
+
+  function executionProjectionId(state: SessionChatState) {
+    return state.executionGraphId || state.executionId;
+  }
+
+  async function hydrateExecutionProjection(sessionId: string) {
+    const state = stateFor(sessionId);
+    const projectionId = executionProjectionId(state);
+    if (!projectionId) return false;
+    projections.acquire(
+      projectionId,
+      `chat:${sessionId}`,
+      'full',
+      'bounded',
+      sessionId,
+    );
+    return refreshProjection(sessionId);
   }
 
   async function load(sessionId: string) {
@@ -1391,29 +1505,13 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const existing = executionIndexFlights.get(sessionId);
     if (existing) {
       await existing;
-      if (includeProjection && state.executionGraphId && state.loadEpoch === epoch) {
-        projections.acquire(
-          state.executionGraphId,
-          `chat:${sessionId}`,
-          'full',
-          'bounded',
-          sessionId,
-        );
-        await refreshProjection(sessionId);
+      if (includeProjection && state.loadEpoch === epoch) {
+        await hydrateExecutionProjection(sessionId);
       }
       return;
     }
     if (state.executionIndexLoaded) {
-      if (includeProjection && state.executionGraphId) {
-        projections.acquire(
-          state.executionGraphId,
-          `chat:${sessionId}`,
-          'full',
-          'bounded',
-          sessionId,
-        );
-        await refreshProjection(sessionId);
-      }
+      if (includeProjection) await hydrateExecutionProjection(sessionId);
       return;
     }
 
@@ -1455,16 +1553,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           );
         }
         if (recoveredGraphId) adoptExecutionGraph(sessionId, recoveredGraphId, includeProjection);
-        if (includeProjection && state.executionGraphId) {
-          projections.acquire(
-            state.executionGraphId,
-            `chat:${sessionId}`,
-            'full',
-            'bounded',
-            sessionId,
-          );
-          await refreshProjection(sessionId);
-        }
+        if (includeProjection) await hydrateExecutionProjection(sessionId);
         if (state.executionId) refreshLiveExecution(sessionId).catch(() => undefined);
         state.executionIndexLoaded = true;
       })
@@ -1645,9 +1734,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   async function refreshProjection(sessionId: string): Promise<boolean> {
     const state = stateFor(sessionId);
-    if (!state.executionGraphId) return false;
-    const projection = await projections.load(state.executionGraphId, 'full', sessionId);
-    if (projection?.execution_id === state.executionGraphId) {
+    const projectionId = executionProjectionId(state);
+    if (!projectionId) return false;
+    const projection = await projections.load(projectionId, 'full', sessionId);
+    if (projection?.execution_id === projectionId) {
       if (projection.live && projection.execution_id === state.executionId) {
         return applyRecoveredLive(
           sessionId,
@@ -1656,7 +1746,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         );
       }
     } else {
-      const entry = projections.entries[state.executionGraphId];
+      const entry = projections.entries[projectionId];
       if (entry?.reconnectBlocked) {
         state.live = null;
         state.lastError = entry.lastError || 'execution projection authorization was revoked';
@@ -1732,7 +1822,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     activeSourceCount.value = sourceLeases.size;
     stream.onopen = () => {
       if (!isCurrentStream(sessionId, stream, generation)) return;
-      state.streamState = 'connected';
+      // A physical EventSource can be open before a newly added Session
+      // selector has crossed its source baseline barrier. Only that Session's
+      // Connected envelope proves early Runtime events can no longer be lost.
+      state.streamState = 'connecting';
       state.degradedReason = '';
       state.lastEventAtMs = Date.now();
     };
@@ -1786,6 +1879,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         return;
       }
       state.lastEventAtMs = Date.now();
+      if (state.streamState === 'connecting' || state.streamState === 'reconnecting') {
+        state.streamState = 'connected';
+        state.degradedReason = '';
+      }
       const eventCursor = Number(
         payload.runtime_commit_cursor
           ?? (event as MessageEvent).lastEventId
@@ -1975,6 +2072,25 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     };
   }
 
+  async function waitForSessionLiveReady(
+    sessionId: string,
+    timeoutMs = LIVE_SOURCE_READY_TIMEOUT_MS,
+  ) {
+    const state = stateFor(sessionId);
+    connect(sessionId);
+    if (state.streamState === 'connected') return true;
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (
+      Date.now() < deadline
+      && !state.reconnectBlocked
+      && state.streamState !== 'degraded'
+    ) {
+      if (state.streamState === 'connected') return true;
+      await new Promise((resolve) => setTimeout(resolve, LIVE_SOURCE_READY_POLL_MS));
+    }
+    return state.streamState === 'connected';
+  }
+
   async function attachReader(sessionId: string) {
     return serializeAttachment(sessionId, async () => {
       const state = stateFor(sessionId);
@@ -2135,7 +2251,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       }
     });
     let flight!: Promise<void>;
-    flight = load(sessionId)
+    flight = Promise.all([
+      load(sessionId),
+      waitForSessionLiveReady(sessionId),
+    ]).then(() => undefined)
       .finally(() => {
         if (openFlights.get(sessionId) === flight) openFlights.delete(sessionId);
       });
@@ -2177,6 +2296,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       ensureStreamTurn(state);
     }
     try {
+      if (!await waitForSessionLiveReady(sessionId)) {
+        state.degradedReason = 'live Session source was not ready before submission; canonical recovery remains active';
+      }
       if (!state.writable && !(await attachSurface(sessionId))) {
         throw new Error(state.degradedReason || 'this WebUI tab is attached read-only');
       }

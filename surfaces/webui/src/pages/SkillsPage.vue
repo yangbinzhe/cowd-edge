@@ -3,7 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { activeSection, isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { FileText, Languages, Plus, RefreshCw, Search, Trash2, X } from 'lucide-vue-next';
+import { ChevronDown, ChevronRight, FileText, Folder, Languages, PackagePlus, Plus, RefreshCw, Search, Trash2, X } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import { api } from '../api/client';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
@@ -41,10 +41,15 @@ const translateResult = ref<any>(null);
 const translating = ref(false);
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const createOpen = ref(false);
+const packageInput = ref<HTMLInputElement | null>(null);
+const installing = ref(false);
 const createName = ref('');
 const createDescription = ref('');
 const createContent = ref('');
 const deleteArmedId = ref('');
+const runStatusFilter = ref('all');
+const runSkillFilter = ref('all');
+const collapsedSkillDirs = ref(new Set<string>());
 const loadedSections = new Set<string>();
 let hydrationController: AbortController | null = null;
 let hydrationGeneration = 0;
@@ -79,6 +84,57 @@ const skill = computed(() => detail.value?.skill || filteredItems.value.find((it
 const skillManagement = computed(() => detail.value?.management || {});
 const fileItems = computed(() => Array.isArray(files.value?.files) ? files.value.files : []);
 const runItems = computed(() => Array.isArray(runs.value?.items) ? runs.value.items : []);
+const projectedItems = computed(() => Array.isArray(projection.value?.items) ? projection.value.items : []);
+const projectionDiagnostics = computed<string[]>(() => {
+  const diagnostics = projection.value?.diagnostics;
+  if (Array.isArray(diagnostics)) return diagnostics.map(String);
+  if (typeof diagnostics === 'string' && diagnostics.trim()) return [diagnostics];
+  return [];
+});
+const filteredRunItems = computed(() => runItems.value.filter((run: any) => {
+  const runStatus = String(run.status || run.outcome || 'unknown');
+  const runSkill = String(run.skill_id || run.skill_name || '');
+  return (runStatusFilter.value === 'all' || runStatus === runStatusFilter.value)
+    && (runSkillFilter.value === 'all' || runSkill === runSkillFilter.value);
+}));
+const runStatuses = computed(() => Array.from(new Set(
+  runItems.value.map((run: any) => String(run.status || run.outcome || 'unknown')),
+)));
+const runSkills = computed(() => Array.from(new Set(
+  runItems.value.map((run: any) => String(run.skill_id || run.skill_name || '')).filter(Boolean),
+)));
+const skillFileTree = computed(() => {
+  const rows = new Map<string, { path: string; name: string; kind: 'dir' | 'file'; depth: number; primary?: boolean }>();
+  for (const file of fileItems.value) {
+    const path = String(file.path || '').replace(/^\/+|\/+$/g, '');
+    if (!path) continue;
+    const parts = path.split('/');
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const dirPath = parts.slice(0, index + 1).join('/');
+      rows.set(dirPath, {
+        path: dirPath,
+        name: parts[index],
+        kind: 'dir',
+        depth: index,
+      });
+    }
+    rows.set(path, {
+      path,
+      name: parts.at(-1) || path,
+      kind: 'file',
+      depth: parts.length - 1,
+      primary: Boolean(file.primary),
+    });
+  }
+  return [...rows.values()]
+    .sort((left, right) => left.path.localeCompare(right.path))
+    .filter((row) => {
+      const parents = row.path.split('/').slice(0, -1);
+      return !parents.some((_, index) => (
+        collapsedSkillDirs.value.has(parents.slice(0, index + 1).join('/'))
+      ));
+    });
+});
 const markdownHtml = computed(() => markdown.render(rawFile.value?.content || ''));
 const translatedMarkdown = computed(() => {
   const data = translateResult.value?.data || translateResult.value || {};
@@ -310,9 +366,36 @@ async function translateSkill() {
       String(rawFile.value.content),
       rawFile.value.path || selectedFile.value || 'SKILL.md',
     );
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
   } finally {
     translating.value = false;
   }
+}
+
+async function installSkillPackage(files: FileList | null) {
+  const file = files?.[0];
+  if (!file) return;
+  installing.value = true;
+  error.value = '';
+  try {
+    actionResult.value = await api.installSkill(file);
+    loadedSections.clear();
+    await refreshCatalog();
+    await hydrateSection(currentSection(), true);
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    installing.value = false;
+    if (packageInput.value) packageInput.value.value = '';
+  }
+}
+
+function toggleSkillDir(path: string) {
+  const next = new Set(collapsedSkillDirs.value);
+  if (next.has(path)) next.delete(path);
+  else next.add(path);
+  collapsedSkillDirs.value = next;
 }
 
 async function createSkill() {
@@ -373,6 +456,10 @@ watch(selectedSkillId, () => {
   files.value = {};
   rawFile.value = {};
   translateResult.value = null;
+  // Initial catalog hydration already owns the section request. Starting a
+  // second watcher request here can abort both chains under real network
+  // latency and leave a deep-linked section empty.
+  if (loading.value) return;
   hydrateSection(currentSection(), false).catch((err) => {
     error.value = err instanceof Error ? err.message : String(err);
   });
@@ -398,7 +485,11 @@ onUnmounted(() => hydrationController?.abort());
     <ApiStateBanner v-else-if="loading && !items.length" status="loading" :title="t('skills.state.loadingTitle')" :detail="t('skills.state.loadingDetail')" />
 
     <section class="skills-console">
-      <aside class="skills-catalog" v-show="isSectionActive('catalog')" data-section="catalog">
+      <aside
+        class="skills-catalog"
+        data-section="catalog"
+        data-section-visibility="persistent"
+      >
         <header class="skills-toolbar">
           <div class="skills-toolbar-head">
             <label class="search-field">
@@ -409,6 +500,11 @@ onUnmounted(() => hydrationController?.abort());
               <X v-if="createOpen" :size="15" />
               <Plus v-else :size="15" />
             </button>
+            <button class="icon-action" type="button" :disabled="installing" :title="t('page.skills.management.install')" :aria-label="t('page.skills.management.install')" @click="packageInput?.click()">
+              <RefreshCw v-if="installing" :size="15" class="spinning" />
+              <PackagePlus v-else :size="15" />
+            </button>
+            <input ref="packageInput" class="visually-hidden" type="file" accept=".tar,application/x-tar" @change="installSkillPackage(($event.target as HTMLInputElement).files)" />
           </div>
           <div class="filter-row">
             <select v-model="scope">
@@ -484,8 +580,7 @@ onUnmounted(() => hydrationController?.abort());
       <main class="skills-detail">
         <section
           class="management-panel"
-          v-show="isSectionActive('catalog') || isSectionActive('projection')"
-          data-section="projection"
+          v-show="isSectionActive('catalog')"
         >
           <header>
             <h2>{{ t('page.skills.page.text.e8ec22f1d0') }}</h2>
@@ -528,6 +623,47 @@ onUnmounted(() => hydrationController?.abort());
           <RequestReceipt :receipt="actionResult" :title="t('page.skills.page.title.09895e511f')" />
         </section>
 
+        <section class="management-panel" v-show="isSectionActive('projection')" data-section="projection">
+          <header>
+            <div>
+              <h2>{{ t('page.skills.projection.title') }}</h2>
+              <p>{{ t('page.skills.projection.description') }}</p>
+            </div>
+            <span>{{ formatCount('skills', projectedItems.length) }}</span>
+          </header>
+          <div class="metric-row compact">
+            <article class="metric-card">
+              <small>{{ t('page.skills.projection.catalogCount') }}</small>
+              <strong>{{ Number(projection.catalog_count || items.length) }}</strong>
+            </article>
+            <article class="metric-card">
+              <small>{{ t('page.skills.projection.visibleCount') }}</small>
+              <strong>{{ projectedItems.length }}</strong>
+            </article>
+            <article class="metric-card">
+              <small>{{ t('page.skills.projection.surface') }}</small>
+              <strong>{{ projection.surface || 'webui' }}</strong>
+            </article>
+          </div>
+          <div class="skill-projection-list">
+            <article v-for="item in projectedItems" :key="item.id">
+              <div>
+                <strong>{{ item.name }}</strong>
+                <p>{{ item.description || item.source }}</p>
+              </div>
+              <StatusPill :status="item.status || 'ready'" />
+              <small>{{ item.scope }} · {{ item.source }}</small>
+            </article>
+          </div>
+          <ApiStateBanner
+            v-if="projectionDiagnostics.length"
+            status="degraded"
+            :title="t('page.skills.projection.diagnostics')"
+            :detail="projectionDiagnostics.join(' · ')"
+          />
+          <ObjectInspectorDrawer :title="t('page.skills.projection.activation')" :data="projection.activation || {}" />
+        </section>
+
         <section class="management-panel" v-show="isSectionActive('files')" data-section="files">
           <header>
             <h2>{{ t('page.skills.page.text.44a674dcd4') }}</h2>
@@ -536,17 +672,23 @@ onUnmounted(() => hydrationController?.abort());
               <button class="icon-action" type="button" :disabled="!rawFile.content || translating" :aria-label="t('page.skills.translate.action')" @click="translateSkill"><Languages :size="14" /></button>
             </div>
           </header>
-          <div class="skill-files">
+          <div class="skill-file-tree" role="tree" :aria-label="t('page.skills.files.tree')">
             <button
-              v-for="file in fileItems"
+              v-for="file in skillFileTree"
               :key="file.path"
-              class="file-row compact"
+              class="skill-file-tree-row"
+              :class="{ active: selectedFile === file.path }"
+              :style="{ '--skill-file-depth': file.depth }"
               type="button"
-              :disabled="file.kind !== 'file'"
-              @click="loadRawFile(file.path)"
+              @click="file.kind === 'dir' ? toggleSkillDir(file.path) : loadRawFile(file.path)"
             >
-              <span><FileText :size="14" /> {{ file.path }}</span>
-              <small>{{ file.kind }}{{ file.primary ? t('page.skills.page.inline.fbb83de3b7') : '' }}</small>
+              <ChevronRight v-if="file.kind === 'dir' && collapsedSkillDirs.has(file.path)" :size="13" />
+              <ChevronDown v-else-if="file.kind === 'dir'" :size="13" />
+              <span v-else class="skill-file-tree-spacer"></span>
+              <Folder v-if="file.kind === 'dir'" :size="14" />
+              <FileText v-else :size="14" />
+              <span>{{ file.name }}</span>
+              <small>{{ file.primary ? t('page.skills.page.inline.fbb83de3b7') : '' }}</small>
             </button>
           </div>
           <article class="skill-markdown">
@@ -570,10 +712,26 @@ onUnmounted(() => hydrationController?.abort());
             <h2>{{ t('page.skills.page.text.2ddf474cdf') }}</h2>
             <span>{{ formatCount('runs', runItems.length) }}</span>
           </header>
+          <div class="filter-row skill-run-filters">
+            <label>
+              <span>{{ t('page.skills.runs.status') }}</span>
+              <select v-model="runStatusFilter">
+                <option value="all">{{ t('common.all') }}</option>
+                <option v-for="item in runStatuses" :key="item" :value="item">{{ displayStatus(item) }}</option>
+              </select>
+            </label>
+            <label>
+              <span>{{ t('page.skills.runs.skill') }}</span>
+              <select v-model="runSkillFilter">
+                <option value="all">{{ t('common.all') }}</option>
+                <option v-for="item in runSkills" :key="item" :value="item">{{ item }}</option>
+              </select>
+            </label>
+          </div>
           <EvidenceTrace :items="skillEvidence" :title="t('page.skills.page.title.9c2c16a5fe')" />
           <div class="run-list">
             <article
-              v-for="run in runItems.slice(0, 20)"
+              v-for="run in filteredRunItems.slice(0, 50)"
               :key="run.run_id || run.skill_run_id || run.id"
               :class="{ active: selectedRunId === (run.run_id || run.skill_run_id || run.id) }"
               role="button"
@@ -607,6 +765,14 @@ onUnmounted(() => hydrationController?.abort());
             <dd>{{ displayStatus(skill.risk || 'policy') }}</dd>
           </dl>
           <EvidenceTrace :items="skillEvidence" :title="t('page.skills.page.title.9c2c16a5fe')" />
+          <div class="button-row">
+            <button class="ghost-action" type="button" :disabled="!selectedSkillId" @click="runAction('validate')">
+              {{ t('page.skills.governance.validate') }}
+            </button>
+            <button class="ghost-action" type="button" :disabled="!selectedSkillId" @click="runAction('plan')">
+              {{ t('page.skills.governance.plan') }}
+            </button>
+          </div>
           <section :aria-label="t('page.skills.cache.title')">
             <h3>{{ t('page.skills.cache.title') }}</h3>
             <dl class="detail-list">

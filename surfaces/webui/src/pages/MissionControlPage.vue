@@ -5,8 +5,8 @@ import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
-  AlertTriangle, CheckCircle2, Database, RefreshCw, Route,
-  ShieldCheck, Square, Users, Workflow,
+  AlertTriangle, CalendarClock, CheckCircle2, Database, Pause, Play, RefreshCw, Route,
+  ShieldCheck, Square, Trash2, Users, Workflow,
 } from 'lucide-vue-next';
 import { api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
@@ -54,6 +54,15 @@ const realityFlow = ref<any>({});
 const actionResult = ref<any>(null);
 const recoveryReport = ref<any>(null);
 const teamRunDetail = ref<any>({});
+const scheduleResponse = ref<any>({});
+const scheduleTriggerKind = ref<'interval' | 'at' | 'cron'>('interval');
+const scheduleObjective = ref('');
+const scheduleIntervalMinutes = ref(60);
+const scheduleAt = ref('');
+const scheduleCron = ref('0 0 9 * * *');
+const scheduleTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+const schedulePermission = ref('read-only');
+const scheduleBusyId = ref('');
 const selectedExecutionNode = ref<any>(null);
 const selectedTraceEvidence = ref<Record<string, unknown> | null>(null);
 let missionLiveSource: LiveSourceLease | null = null;
@@ -166,6 +175,13 @@ const actionContractRows = computed(() => {
   })) : [];
 });
 const missionHealth = computed(() => controlProjection.value?.health?.mission || mission.value?.health_projection || {});
+const scheduleProjection = computed(() => scheduleResponse.value?.schedules || {});
+const schedules = computed<any[]>(() => Array.isArray(scheduleProjection.value?.schedules)
+  ? scheduleProjection.value.schedules
+  : []);
+const scheduleFires = computed<any[]>(() => Array.isArray(scheduleProjection.value?.fires)
+  ? scheduleProjection.value.fires
+  : []);
 const controlReadiness = computed(() => controlProjection.value?.control_readiness || mission.value?.control_readiness || {});
 const controlReadinessRows = computed(() => {
   const rows = controlReadiness.value?.actions || [];
@@ -312,16 +328,18 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [nextMission, nextApprovals, nextRelations, nextConflicts] = await Promise.all([
+    const [nextMission, nextApprovals, nextRelations, nextConflicts, nextSchedules] = await Promise.all([
       api.missionControl(),
       api.missionApprovals().catch(() => ({})),
       api.missionRelations().catch(() => ({})),
       api.missionConflicts().catch(() => ({})),
+      api.missionSchedules().catch(() => ({})),
     ]);
     missionSnapshot.value = nextMission.snapshot;
     approvals.value = nextApprovals;
     relations.value = nextRelations;
     conflicts.value = nextConflicts;
+    scheduleResponse.value = nextSchedules;
     if (!selectedSessionId.value && declaredActiveSessionId.value && missionSessionIds.value.has(declaredActiveSessionId.value)) {
       selectedSessionId.value = declaredActiveSessionId.value;
     }
@@ -449,6 +467,86 @@ async function routeToSession() {
     execute: true,
   });
   await refresh();
+}
+
+function missionScheduleTrigger() {
+  if (scheduleTriggerKind.value === 'at') {
+    const atMs = new Date(scheduleAt.value).getTime();
+    if (!Number.isFinite(atMs) || atMs <= Date.now()) {
+      throw new Error(t('page.mission.schedules.error.future'));
+    }
+    return { at: { at_ms: atMs } };
+  }
+  if (scheduleTriggerKind.value === 'cron') {
+    if (!scheduleCron.value.trim()) throw new Error(t('page.mission.schedules.error.cron'));
+    return {
+      cron: {
+        expression: scheduleCron.value.trim(),
+        timezone: scheduleTimezone.value.trim() || 'UTC',
+      },
+    };
+  }
+  const everyMs = Math.round(Number(scheduleIntervalMinutes.value) * 60_000);
+  if (!Number.isFinite(everyMs) || everyMs < 1_000) {
+    throw new Error(t('page.mission.schedules.error.interval'));
+  }
+  return { interval: { every_ms: everyMs } };
+}
+
+async function createSchedule() {
+  error.value = '';
+  const missionId = String(mission.value?.mission_id || '').trim();
+  if (!missionId || !activeSession.value || !scheduleObjective.value.trim()) {
+    error.value = t('page.mission.schedules.error.required');
+    return;
+  }
+  try {
+    actionResult.value = await api.createMissionSchedule({
+      mission_id: missionId,
+      target_session_id: activeSession.value,
+      objective: scheduleObjective.value.trim(),
+      trigger: missionScheduleTrigger(),
+      autonomy_profile: 'assisted',
+      permission_ceiling: schedulePermission.value,
+      priority: 64,
+    });
+    scheduleObjective.value = '';
+    scheduleResponse.value = await api.missionSchedules();
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  }
+}
+
+async function controlSchedule(schedule: any, action: 'run' | 'pause' | 'resume' | 'delete') {
+  const scheduleId = String(schedule?.schedule_id || '').trim();
+  if (!scheduleId || scheduleBusyId.value) return;
+  scheduleBusyId.value = scheduleId;
+  error.value = '';
+  try {
+    if (action === 'run') actionResult.value = await api.runMissionSchedule(scheduleId);
+    if (action === 'pause') actionResult.value = await api.pauseMissionSchedule(scheduleId);
+    if (action === 'resume') actionResult.value = await api.resumeMissionSchedule(scheduleId);
+    if (action === 'delete') {
+      if (!globalThis.confirm(t('page.mission.schedules.confirmDelete'))) return;
+      actionResult.value = await api.deleteMissionSchedule(scheduleId);
+    }
+    scheduleResponse.value = await api.missionSchedules();
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    scheduleBusyId.value = '';
+  }
+}
+
+function formatScheduleTrigger(trigger: any) {
+  if (trigger?.at) {
+    return `${t('page.mission.schedules.trigger.at')} · ${new Date(Number(trigger.at.at_ms || 0)).toLocaleString()}`;
+  }
+  if (trigger?.cron) return `${trigger.cron.expression} · ${trigger.cron.timezone}`;
+  if (trigger?.interval) {
+    return `${t('page.mission.schedules.trigger.interval')} · ${Math.round(Number(trigger.interval.every_ms || 0) / 60_000)} min`;
+  }
+  return '-';
 }
 
 async function decideApproval(approvalId: string, approved: boolean) {
@@ -802,6 +900,72 @@ onUnmounted(() => {
         </label>
         <button class="ghost-action" type="button" :disabled="!routeTarget.trim() || !routeCommand.trim()" @click="routeToSession">
           <Route :size="16" />{{ t('page.mission.control.page.text.7dd0114f4f') }}</button>
+      </section>
+
+      <section class="mission-panel governed-wide" v-show="isSectionActive('schedules')" data-section="schedules">
+        <header>
+          <h2><CalendarClock :size="18" />{{ t('page.mission.schedules.title') }}</h2>
+          <span>{{ schedules.length }} · {{ scheduleFires.length }} {{ t('page.mission.schedules.fires') }}</span>
+        </header>
+        <div class="mission-schedule-form">
+          <label class="field-line">
+            {{ t('page.mission.schedules.objective') }}
+            <textarea v-model="scheduleObjective" rows="3" :placeholder="t('page.mission.schedules.objectivePlaceholder')" />
+          </label>
+          <label class="field-line">
+            {{ t('page.mission.schedules.trigger.label') }}
+            <select v-model="scheduleTriggerKind">
+              <option value="interval">{{ t('page.mission.schedules.trigger.interval') }}</option>
+              <option value="at">{{ t('page.mission.schedules.trigger.at') }}</option>
+              <option value="cron">{{ t('page.mission.schedules.trigger.cron') }}</option>
+            </select>
+          </label>
+          <label v-if="scheduleTriggerKind === 'interval'" class="field-line">
+            {{ t('page.mission.schedules.intervalMinutes') }}
+            <input v-model.number="scheduleIntervalMinutes" type="number" min="1" step="1" />
+          </label>
+          <label v-if="scheduleTriggerKind === 'at'" class="field-line">
+            {{ t('page.mission.schedules.runAt') }}
+            <input v-model="scheduleAt" type="datetime-local" />
+          </label>
+          <template v-if="scheduleTriggerKind === 'cron'">
+            <label class="field-line">
+              {{ t('page.mission.schedules.cronExpression') }}
+              <input v-model="scheduleCron" />
+            </label>
+            <label class="field-line">
+              {{ t('page.mission.schedules.timezone') }}
+              <input v-model="scheduleTimezone" />
+            </label>
+          </template>
+          <label class="field-line">
+            {{ t('page.mission.schedules.permission') }}
+            <select v-model="schedulePermission">
+              <option value="read-only">read-only</option>
+              <option value="workspace-write">workspace-write</option>
+              <option value="prompt">prompt</option>
+            </select>
+          </label>
+          <button class="primary-action" type="button" :disabled="!activeSession || !scheduleObjective.trim()" @click="createSchedule">
+            <CalendarClock :size="16" />{{ t('page.mission.schedules.create') }}
+          </button>
+        </div>
+        <div class="mission-schedule-list">
+          <article v-for="schedule in schedules" :key="schedule.schedule_id" class="mission-schedule-row">
+            <div>
+              <strong>{{ schedule.objective }}</strong>
+              <span>{{ formatScheduleTrigger(schedule.trigger) }} · {{ displayStatus(schedule.status) }}</span>
+              <small>{{ schedule.target_session_id }} · {{ t('page.mission.schedules.next') }} {{ new Date(Number(schedule.next_at_ms || 0)).toLocaleString() }}</small>
+            </div>
+            <div class="icon-button-row">
+              <button class="icon-action" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.runNow')" @click="controlSchedule(schedule, 'run')"><Play :size="16" /></button>
+              <button v-if="String(schedule.status).toLowerCase() !== 'paused'" class="icon-action" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.pause')" @click="controlSchedule(schedule, 'pause')"><Pause :size="16" /></button>
+              <button v-else class="icon-action" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.resume')" @click="controlSchedule(schedule, 'resume')"><Play :size="16" /></button>
+              <button class="icon-action danger" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.delete')" @click="controlSchedule(schedule, 'delete')"><Trash2 :size="16" /></button>
+            </div>
+          </article>
+          <p v-if="!schedules.length" class="empty-note">{{ t('page.mission.schedules.empty') }}</p>
+        </div>
       </section>
 
       <section class="mission-panel governed-wide" v-show="isSectionActive('runtime-v2')" data-section="runtime-v2">

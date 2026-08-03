@@ -47,6 +47,14 @@ function itemTime(item: Record<string, unknown>) {
   });
 }
 
+function itemDuration(item: Record<string, unknown>) {
+  const duration = Number(item.duration_ms);
+  if (!Number.isFinite(duration) || duration < 0) return '';
+  return duration < 1_000
+    ? `${Math.round(duration)} ms`
+    : `${(duration / 1_000).toFixed(duration >= 10_000 ? 0 : 1).replace(/\.0$/, '')} s`;
+}
+
 function compactStructuredDetail(value: string) {
   const text = value.replace(/\s+/g, ' ').trim();
   if (!text) return '';
@@ -136,10 +144,13 @@ function itemEvidenceCount(item: Record<string, unknown>) {
       @click="emit('select', item)"
       @keydown.enter.prevent="emit('select', item)"
     >
-      <strong>{{ itemTitle(item, index) }}</strong>
-      <span>{{ displayStatus(itemStatus(item)) }}</span>
-      <time v-if="itemTime(item)">{{ itemTime(item) }}</time>
-      <small v-if="itemEvidenceCount(item)" class="timeline-evidence-count"><FileCheck2 :size="11" />{{ itemEvidenceCount(item) }}</small>
+      <header class="timeline-item-head">
+        <time v-if="itemTime(item)" class="timeline-item-time">{{ itemTime(item) }}</time>
+        <strong>{{ itemTitle(item, index) }}</strong>
+        <span class="timeline-item-status" :data-status="itemStatus(item)">{{ displayStatus(itemStatus(item)) }}</span>
+        <small v-if="itemEvidenceCount(item)" class="timeline-evidence-count"><FileCheck2 :size="11" />{{ itemEvidenceCount(item) }}</small>
+        <time v-if="itemDuration(item)" class="timeline-item-duration">{{ itemDuration(item) }}</time>
+      </header>
       <small v-if="itemLane(item)" class="timeline-lane">{{ itemLane(item) }}</small>
       <details v-if="itemDetail(item).length > 120" class="timeline-detail" @click.stop>
         <summary>{{ itemDetailPreview(item) }}</summary>
