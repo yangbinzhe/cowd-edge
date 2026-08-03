@@ -6,7 +6,10 @@ export interface GraphNodeView {
   label: string;
   status: string;
   group?: string;
+  description?: string;
   summary?: string;
+  outputSummary?: string;
+  metrics?: string[];
   evidenceRefs?: string[];
   correlationRefs?: string[];
   href?: string;

@@ -21,6 +21,7 @@ import {
   Search,
   Send,
   Square,
+  Users,
   Workflow,
   Wrench,
   X,
@@ -106,9 +107,24 @@ const selectedExecutionEntry = computed(() => (
 ));
 const executionActivityEvents = computed(() => {
   const rows = new Map<string, ActivityEvent>();
+  const lineageIds = new Set([
+    requestedExecutionGraphId.value,
+    ...linkedExecutionProjectionIds.value,
+  ].filter(Boolean));
   for (const event of [...store.activity, ...(chat.active?.activity || [])]) {
     const entry = selectedExecutionEntry.value;
-    if (entry && event.turn_id && entry.turn_id && event.turn_id !== entry.turn_id) continue;
+    const belongsToExecutionLineage = !entry
+      || event.execution_id === entry.execution_id
+      || event.parent_execution_id === entry.execution_id
+      || lineageIds.has(String(event.execution_id || ''))
+      || lineageIds.has(String(event.graph_id || ''));
+    if (
+      entry
+      && event.turn_id
+      && entry.turn_id
+      && event.turn_id !== entry.turn_id
+      && !belongsToExecutionLineage
+    ) continue;
     const previous = rows.get(event.id);
     rows.set(event.id, mergeActivityEvent(previous, event));
   }
@@ -593,7 +609,13 @@ function causalTurnTimelineActivities(turns: ChatTurn[], index: number) {
     for (const event of turns[cursor].activity || []) priorActivityIds.add(event.id);
   }
   const activities = (turn.activity || [])
-    .filter((event) => ['tool', 'think', 'approval', 'error'].includes(event.kind))
+    .filter((event) => (
+      ['agent', 'tool', 'think', 'approval', 'error'].includes(event.kind)
+      || (
+        event.kind === 'runtime'
+        && ['RuntimePolicyDecision', 'runtime.strategy.selected'].includes(String(event.event_kind || ''))
+      )
+    ))
     .filter((event) => turn.role !== 'tool' || !priorActivityIds.has(event.id))
     .map((event) => {
       if (event.kind !== 'tool' || event.status !== 'started') return event;
@@ -678,6 +700,16 @@ function truncateActivityText(value: string, limit = 240) {
 
 function liveNow(turn: ChatTurn) {
   if (!isActiveStreamingTurn(turn)) return null;
+  const streamState = chat.active?.streamState || 'offline';
+  if (['reconnecting', 'degraded'].includes(streamState)) {
+    return {
+      key: `stream:${streamState}`,
+      title: t(streamState === 'degraded'
+        ? 'chat.liveNow.recovering'
+        : 'chat.liveNow.reconnecting'),
+      detail: chat.active?.degradedReason || '',
+    };
+  }
   const events = causalTurnTimelineActivities(chat.active?.turns || [], (chat.active?.turns || []).indexOf(turn));
   const activeTool = [...events].reverse().find((event) => (
     event.kind === 'tool'
@@ -688,6 +720,17 @@ function liveNow(turn: ChatTurn) {
       key: `tool:${activeTool.id}:${activeTool.status || 'running'}`,
       title: t('chat.liveNow.tool', { tool: activeTool.title }),
       detail: truncateActivityText(compactActivityValue(activeTool.input)),
+    };
+  }
+  const activeAgent = [...events].reverse().find((event) => (
+    event.kind === 'agent'
+    && ['queued', 'pending', 'started', 'running'].includes(String(event.status || '').toLowerCase())
+  ));
+  if (activeAgent) {
+    return {
+      key: `agent:${activeAgent.id}:${activeAgent.phase || activeAgent.status || 'running'}`,
+      title: t('chat.liveNow.agent', { agent: activeAgent.title }),
+      detail: truncateActivityText(String(activeAgent.detail || '').replace(/\s+/g, ' ').trim()),
     };
   }
   const activeThought = [...events].reverse().find((event) => (
@@ -814,11 +857,19 @@ function activityDuration(event: ActivityEvent) {
 
 function activityIcon(event: ActivityEvent) {
   if (activityFailed(event)) return CircleX;
+  if (event.kind === 'agent') return Users;
   if (event.kind === 'think') return Brain;
   if (event.kind === 'runtime') return Workflow;
   if (event.kind === 'context') return Gauge;
   if (event.kind === 'approval') return CircleDot;
   return Wrench;
+}
+
+function activityTitle(event: ActivityEvent) {
+  if (event.kind === 'agent' && event.phase) {
+    return `${event.title} · ${displayStatus(event.phase)}`;
+  }
+  return event.title;
 }
 
 function activityDetail(event: ActivityEvent) {
@@ -830,11 +881,21 @@ function activityDetail(event: ActivityEvent) {
 }
 
 function activityLane(event: ActivityEvent) {
-  if (event.kind !== 'tool' && event.kind !== 'error') return '';
-  const agent = String(event.agent_id || '').trim();
+  const agent = String(event.agent_lane_label || event.role || event.agent_id || '').trim();
+  const agentLane = Number(event.agent_lane || 0) + 1;
+  const agentLaneCount = Number(event.agent_lane_count || 0);
   const agentLabel = agent
-    ? t('chat.timeline.agentLane', { agent: truncateActivityText(agent, 32) })
+    ? (
+        agentLaneCount > 1
+          ? t('chat.timeline.agentParallelLane', {
+              agent: truncateActivityText(agent, 32),
+              lane: agentLane,
+              count: agentLaneCount,
+            })
+          : t('chat.timeline.agentLane', { agent: truncateActivityText(agent, 32) })
+      )
     : '';
+  if (event.kind !== 'tool' && event.kind !== 'error') return agentLabel;
   const wave = Number(event.wave || 0) + 1;
   const lane = Number(event.lane || 0) + 1;
   const laneCount = Number(event.lane_count || 0);
@@ -1038,7 +1099,7 @@ function chooseFirstCommand() {
                     <component :is="activityIcon(event)" :size="13" />
                   </span>
                   <div>
-                    <strong>{{ event.title }}</strong>
+                    <strong>{{ activityTitle(event) }}</strong>
                     <p v-if="activityDetail(event)">{{ activityDetail(event) }}</p>
                     <small v-if="activityLane(event)" class="conversation-timeline-lane">{{ activityLane(event) }}</small>
                   </div>

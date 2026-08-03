@@ -72,6 +72,7 @@ let layoutEpoch = 0;
 const graphNodeLimit = 220;
 const layoutCache = new Map<string, Array<{ id: string; x: number; y: number }>>();
 let lastLayoutIdentity = '';
+let fitFrame = 0;
 
 const nodeDescriptionKeys: Record<string, string> = {
   'agent': 'graph.nodeType.agent',
@@ -201,8 +202,16 @@ async function layout() {
         'elk.direction': direction.value,
         'elk.spacing.nodeNode': '42',
         'elk.layered.spacing.nodeNodeBetweenLayers': '82',
+        ...(props.model.id.startsWith('semantic-lineage:') ? {
+          'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+          'elk.layered.crossingMinimization.forceNodeModelOrder': 'true',
+        } : {}),
       },
-      children: canvasNodes.value.map((node) => ({ id: node.id, width: 196, height: 76 })),
+      children: canvasNodes.value.map((node) => ({
+        id: node.id,
+        width: node.raw?.semantic_view ? 228 : 196,
+        height: node.raw?.semantic_view ? 118 : 76,
+      })),
       edges: canvasEdges.value.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
     });
   if (epoch !== layoutEpoch) return;
@@ -221,6 +230,10 @@ async function layout() {
       data: {
         label: node.label,
         description: nodeDescription(node),
+        task: node.description,
+        summary: node.summary,
+        outputSummary: node.outputSummary,
+        metrics: node.metrics || [],
         node,
         status: node.status,
       },
@@ -232,7 +245,7 @@ async function layout() {
   await nextTick();
   const layoutIdentity = `${props.model.id}:${direction.value}`;
   if (lastLayoutIdentity === layoutIdentity && previousViewport) flow.value?.setViewport?.(previousViewport, { duration: 0 });
-  else flow.value?.fitView?.({ padding: 0.2 });
+  else scheduleFit();
   lastLayoutIdentity = layoutIdentity;
 }
 
@@ -268,6 +281,25 @@ function selectNode(event: any) {
 function selectEdge(event: any) {
   const edge = event?.edge?.data?.edge as GraphEdgeView | undefined;
   if (edge) emit('selectEdge', edge);
+}
+
+async function paneReady(instance: any) {
+  flow.value = instance;
+  await nextTick();
+  scheduleFit(instance);
+}
+
+function scheduleFit(instance = flow.value) {
+  if (!instance || showList.value || !laidOutNodes.value.length) return;
+  const fit = () => instance.fitView?.({ padding: 0.2, duration: 0 });
+  if (typeof requestAnimationFrame !== 'function') {
+    fit();
+    return;
+  }
+  cancelAnimationFrame(fitFrame);
+  fitFrame = requestAnimationFrame(() => {
+    fitFrame = requestAnimationFrame(fit);
+  });
 }
 
 function selectListRow(row: Record<string, unknown>) {
@@ -408,14 +440,26 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
       :elements-selectable="true"
       :nodes-focusable="true"
       :edges-focusable="true"
-      @pane-ready="flow = $event"
+      :min-zoom="0.18"
+      @pane-ready="paneReady"
+      @nodes-initialized="scheduleFit()"
       @node-click="selectNode"
       @edge-click="selectEdge"
     >
       <template #node-default="{ data }">
-        <div class="graph-node-content">
-          <strong>{{ data.label }}</strong>
-          <small>{{ data.description }}</small>
+        <div class="graph-node-content" :class="{ 'semantic-node-content': data.node.raw?.semantic_view }">
+          <div class="graph-node-heading">
+            <strong>{{ data.label }}</strong>
+            <span class="graph-node-status">{{ displayStatus(data.status) }}</span>
+          </div>
+          <small v-if="data.node.raw?.semantic_view && data.task" class="graph-node-task">{{ data.task }}</small>
+          <small v-else>{{ data.description }}</small>
+          <small v-if="data.node.raw?.semantic_view && data.outputSummary" class="graph-node-output">
+            {{ t('execution.outputPrefix') }}{{ data.outputSummary }}
+          </small>
+          <div v-if="data.node.raw?.semantic_view && data.metrics?.length" class="graph-node-metrics">
+            <span v-for="metric in data.metrics" :key="metric">{{ metric }}</span>
+          </div>
         </div>
       </template>
       <Panel position="top-right" class="execution-graph-controls">

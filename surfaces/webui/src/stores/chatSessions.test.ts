@@ -388,8 +388,8 @@ describe('chatSessions', () => {
       session_id: 'stream-A',
       execution_id: 'execution-stream-A',
       turn_id: 'turn-stream-A',
-      status: 'calling_tool',
-      detail: 'workspace.read',
+      status: 'preparing_context',
+      detail: 'building root context',
     }) } as MessageEvent);
     for (const [itemId, summary] of [
       ['reasoning-a', 'inspect '],
@@ -465,6 +465,14 @@ describe('chatSessions', () => {
       turn_id: 'turn-stream-A',
     };
     streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'AgentLifecycle',
+      ...childLineage,
+      run_id: 'agent-run-1',
+      role: 'researcher',
+      phase: 'started',
+      status: 'running',
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
       type: 'ToolStart',
       ...causalFields('call-child-search', 'tool-execution', 1),
       ...childLineage,
@@ -482,6 +490,56 @@ describe('chatSessions', () => {
       name: 'web_search',
       summary: 'found 12 sources',
       exit_code: 0,
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'AgentLifecycle',
+      ...childLineage,
+      run_id: 'agent-run-1',
+      role: 'researcher',
+      phase: 'completed',
+      status: 'completed',
+      summary: 'verified research',
+    }) } as MessageEvent);
+    const teamExecution = {
+      session_id: 'stream-A',
+      execution_id: 'runtime-team:researcher:2',
+      turn_id: 'turn-stream-A',
+    };
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ExecutionPhase',
+      ...teamExecution,
+      status: 'calling_tool',
+      detail: 'team researcher is searching',
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ToolStart',
+      ...causalFields('call-team-search', 'tool-execution', 1),
+      ...teamExecution,
+      tool_call_id: 'call-team-search',
+      id: 'call-team-search',
+      name: 'web_search',
+      preview: '{"query":"WAIC team"}',
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ToolComplete',
+      ...causalFields('call-team-search', 'tool-execution', 2),
+      ...teamExecution,
+      tool_call_id: 'call-team-search',
+      id: 'call-team-search',
+      name: 'web_search',
+      summary: 'team result',
+      exit_code: 0,
+    }) } as MessageEvent);
+    streamA?.onmessage?.({ data: JSON.stringify({
+      type: 'ToolStart',
+      ...causalFields('call-stale-turn', 'tool-execution', 1),
+      session_id: 'stream-A',
+      execution_id: 'runtime-team:stale',
+      turn_id: 'turn-before-stream-A',
+      tool_call_id: 'call-stale-turn',
+      id: 'call-stale-turn',
+      name: 'stale_tool',
+      preview: 'must remain isolated',
     }) } as MessageEvent);
     streamA?.onmessage?.({ data: JSON.stringify({
       type: 'TextDelta',
@@ -521,7 +579,9 @@ describe('chatSessions', () => {
     streamB?.onmessage?.({ data: JSON.stringify({ type: 'session_stream_resync', session_id: 'stream-B' }) } as MessageEvent);
 
     expect(chat.states['stream-A'].turns.find((turn) => turn.id === chat.states['stream-A'].streamTurnId)?.content).toBe('one');
-    expect(chat.states['stream-A'].live?.status).toBe('calling_tool');
+    // Nested Agent phases remain activity facts; only the root execution may
+    // move the root status indicator.
+    expect(chat.states['stream-A'].live?.status).toBe('preparing_context');
     expect(chat.states['stream-A'].unread).toBe(0);
     expect(chat.states['stream-A'].lastProgressAtMs).toBeGreaterThan(0);
     expect(chat.states['stream-A'].activity).toEqual(expect.arrayContaining([
@@ -543,6 +603,27 @@ describe('chatSessions', () => {
         agent_id: 'researcher',
       }),
       expect.objectContaining({
+        id: 'agent:agent-run-1:started',
+        kind: 'agent',
+        title: 'researcher',
+        status: 'running',
+        parent_execution_id: 'execution-stream-A',
+      }),
+      expect.objectContaining({
+        id: 'agent:agent-run-1:completed',
+        kind: 'agent',
+        status: 'completed',
+        output: 'verified research',
+      }),
+      expect.objectContaining({
+        id: 'runtime-team:researcher:2:call-team-search',
+        title: 'web_search',
+        status: 'complete',
+        output: 'team result',
+        execution_id: 'runtime-team:researcher:2',
+        turn_id: 'turn-stream-A',
+      }),
+      expect.objectContaining({
         id: 'approval:approval-stream-A',
         title: 'network.external_research',
         status: 'pending',
@@ -562,6 +643,9 @@ describe('chatSessions', () => {
         detail: 'decide',
         status: 'complete',
       }),
+    ]));
+    expect(chat.states['stream-A'].activity).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'stale_tool' }),
     ]));
     expect(approvalChanged).toHaveBeenCalledWith(expect.objectContaining({
       detail: { sessionId: 'stream-A', type: 'ApprovalRequested' },
@@ -1487,6 +1571,59 @@ describe('chatSessions', () => {
       (turn) => turn.id === chat.states['terminal-dedupe'].streamTurnId,
     )).toBe(false);
     expect(chat.states['terminal-dedupe'].live?.status).toBe('complete');
+  });
+
+  it('keeps provider transcript evidence out of the final answer timeline', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'transcript-final',
+      messages: [
+        {
+          id: 'assistant:turn-1:transcript:0',
+          session_id: 'transcript-final',
+          sequence: 1,
+          role: 'assistant',
+          blocks: [{
+            type: 'text',
+            text: 'premature answer',
+            cowd_execution_id: 'execution-1',
+            cowd_turn_id: 'turn-1',
+          }],
+        },
+        {
+          id: 'assistant:turn-1',
+          session_id: 'transcript-final',
+          sequence: 3,
+          role: 'assistant',
+          blocks: [{
+            type: 'text',
+            text: 'verified final answer',
+            cowd_execution_id: 'execution-1',
+            cowd_turn_id: 'turn-1',
+          }],
+        },
+      ],
+      total: 2,
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'transcript-final',
+      active_execution_ids: [],
+      latest_execution_id: 'execution-1',
+      latest_status: 'complete',
+      turn_id: 'turn-1',
+    } as any);
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      execution_id: 'execution-1',
+      revision: 1,
+      live: { status: 'complete', turn_id: 'turn-1' },
+    } as any);
+
+    await chat.load('transcript-final');
+
+    expect(chat.states['transcript-final'].turns.filter(
+      (turn) => turn.role === 'assistant',
+    ).map((turn) => turn.content)).toEqual(['verified final answer']);
   });
 
   it('does not let transcript terminal materialization overwrite canonical error outcome', async () => {

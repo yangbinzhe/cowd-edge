@@ -391,7 +391,10 @@ function messagesIdentityIssue(page: any, sessionId: string, label: string) {
 }
 
 function normalizeTurns(messages: any[]): ChatTurn[] {
-  const normalized = (messages || []).map((message: any) => {
+  const normalized = (messages || []).filter((message: any) => !(
+    message?.role === 'assistant'
+    && String(message?.id || message?.message_id || '').includes(':transcript:')
+  )).map((message: any) => {
     const role = message.role as ChatTurn['role'];
     const result = role === 'tool' ? toolResultBlock(message.blocks) : null;
     const blockText = textFromBlocks(message.blocks);
@@ -755,6 +758,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       || payload?.parent_execution_id === state.executionId;
   }
 
+  function belongsToActiveTurn(state: SessionChatState, payload: any) {
+    if (!state.executionId) return true;
+    if (belongsToActiveExecution(state, payload)) return true;
+    const payloadTurnId = String(payload?.turn_id || '').trim();
+    const activeTurnId = state.executionTurnId.trim();
+    return !!payloadTurnId && !!activeTurnId && payloadTurnId === activeTurnId;
+  }
+
   function ensureStreamTurn(state: SessionChatState) {
     if (!state.streamTurnId) return;
     if (!state.turns.some((turn) => turn.id === state.streamTurnId)) {
@@ -799,15 +810,13 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (
       payloadExecutionId
       && state.executionId
-      && !belongsToActiveExecution(state, payload)
+      && !belongsToActiveTurn(state, payload)
       && type !== 'UserMessageCommitted'
     ) {
       return;
     }
     const executionId = String(payloadExecutionId || state.executionId || 'pending');
-    const nestedExecution = !!payload.parent_execution_id
-      && payload.parent_execution_id === state.executionId
-      && executionId !== state.executionId;
+    const nestedExecution = !!state.executionId && executionId !== state.executionId;
     const modelStepId = String(payload.model_step_id || '');
     const itemId = String(payload.item_id || '');
     const segmentId = String(payload.segment_id || '');
@@ -913,6 +922,27 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           output: { checkpoint: payload.checkpoint, consumed: true },
         });
       }
+      return;
+    }
+    if (type === 'AgentLifecycle') {
+      const runId = String(payload.run_id || executionId || payload.agent_id || 'agent');
+      const phase = String(payload.phase || payload.status || 'running');
+      const role = String(payload.role || '').trim();
+      const agentId = String(payload.agent_id || base.agent_id || runId);
+      upsertSessionActivity(sessionId, {
+        ...base,
+        id: `agent:${runId}:${phase}`,
+        kind: 'agent',
+        title: role || agentId || t('chat.activity.agent'),
+        detail: compactToolOutput(payload.summary),
+        status: String(payload.status || phase),
+        phase,
+        role,
+        agent_id: agentId,
+        output: ['completed', 'failed', 'cancelled', 'blocked'].includes(phase)
+          ? payload.summary
+          : undefined,
+      });
       return;
     }
     if (type === 'ToolStart' || type === 'ToolProgress' || type === 'ToolComplete') {
@@ -1952,6 +1982,13 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         return;
       }
       projectLiveActivity(sessionId, payload);
+      if (
+        payload.type !== 'Connected'
+        && payload.type !== 'UserMessageCommitted'
+        && belongsToActiveTurn(state, payload)
+      ) {
+        recordProgress(sessionId);
+      }
       if (payload.type === 'UserMessageCommitted') {
         const sequence = Number(payload.sequence);
         const supplemental = payload.supplemental === true;

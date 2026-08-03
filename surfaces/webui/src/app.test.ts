@@ -386,7 +386,14 @@ describe('Cowd Vue WebUI shell', () => {
             kind: 'tool_batch',
             executor_kind: 'WebSearch',
             status: 'running',
-            payload_ref: 'payload://waic-research',
+            payload_ref: JSON.stringify({
+              calls: [{
+                id: 'web-search-1',
+                name: 'WebSearch',
+                input: { query: 'WAIC' },
+                depends_on: [],
+              }],
+            }),
             acceptance: {
               criteria: ['current sources'],
               required_evidence: ['web'],
@@ -427,8 +434,16 @@ describe('Cowd Vue WebUI shell', () => {
     await nextTick();
     await wrapper.findAll('.chat-execution-overlay .data-table tbody tr')[1].trigger('click');
     await nextTick();
+    expect(wrapper.get('.execution-node-tool-schedule').text()).toContain('1 次调用');
+    await wrapper.get('.execution-node-tool-schedule summary').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.execution-node-tool-schedule').text()).toContain('WebSearch');
+    await wrapper
+      .get('.execution-node-detail [aria-label="完整输出详情"]')
+      .trigger('click');
+    await nextTick();
     expect(wrapper.get('.execution-node-detail').text()).toContain('WebSearch');
-    expect(wrapper.get('.execution-node-detail').text()).toContain('WAIC evidence is being collected');
+    expect(wrapper.get('.execution-node-detail').text()).toContain('call count');
 
     await wrapper.get('.chat-execution-status').trigger('click');
     await settle();

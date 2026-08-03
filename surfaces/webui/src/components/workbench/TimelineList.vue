@@ -32,7 +32,16 @@ function itemStatus(item: Record<string, unknown>) {
 }
 
 function itemTitle(item: Record<string, unknown>, index: number) {
-  return item.title || item.kind || item.type || t('component.workbench.timeline.event', { index: index + 1 });
+  const title = String(
+    item.title
+    || item.kind
+    || item.type
+    || t('component.workbench.timeline.event', { index: index + 1 }),
+  );
+  if (item.kind === 'agent' && item.phase) {
+    return `${title} · ${displayStatus(item.phase)}`;
+  }
+  return title;
 }
 
 function itemTime(item: Record<string, unknown>) {
@@ -86,14 +95,30 @@ function itemDetailPreview(item: Record<string, unknown>) {
 }
 
 function itemLane(item: Record<string, unknown>) {
-  if (!['tool', 'error'].includes(String(item.kind || ''))) return '';
+  const agent = String(item.agent_lane_label || item.role || item.agent_id || '').trim();
+  const agentLane = Number(item.agent_lane || 0) + 1;
+  const agentCount = Number(item.agent_lane_count || 0);
+  const agentLabel = agent
+    ? (
+        agentCount > 1
+          ? t('chat.timeline.agentParallelLane', {
+              agent,
+              lane: agentLane,
+              count: agentCount,
+            })
+          : t('chat.timeline.agentLane', { agent })
+      )
+    : '';
+  if (!['tool', 'error'].includes(String(item.kind || ''))) return agentLabel;
   const wave = Number(item.wave || 0) + 1;
   const lane = Number(item.lane || 0) + 1;
   const count = Number(item.lane_count || 0);
-  if (count <= 1 && wave <= 1) return '';
-  return count > 1
+  const toolLabel = count > 1
     ? t('chat.timeline.parallelLane', { wave, lane, count })
-    : t('chat.timeline.dependencyWave', { wave });
+    : wave > 1
+      ? t('chat.timeline.dependencyWave', { wave })
+      : '';
+  return [agentLabel, toolLabel].filter(Boolean).join(' · ');
 }
 
 function itemEvidenceCount(item: Record<string, unknown>) {

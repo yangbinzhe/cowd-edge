@@ -119,6 +119,39 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
     expect(model.nodes[2].badges).toContain('第 2 波');
   });
 
+  it('preserves Team role slots after graphs are combined into an execution lineage', () => {
+    const graphId = 'team-graph:review-team';
+    const model = adaptExecutionGraph({
+      graph_id: 'lineage:root-execution',
+      nodes: [
+        {
+          node_id: `${graphId}::${graphId}:researcher:1`,
+          original_node_id: `${graphId}:researcher:1`,
+          execution_id: graphId,
+          kind: 'agent_task',
+          status: 'running',
+        },
+        {
+          node_id: `${graphId}::${graphId}:researcher:2`,
+          original_node_id: `${graphId}:researcher:2`,
+          execution_id: graphId,
+          kind: 'agent_task',
+          status: 'running',
+        },
+      ],
+      edges: [],
+    });
+
+    expect(model.nodes[0]).toMatchObject({
+      label: 'researcher #1',
+      group: 'researcher',
+    });
+    expect(model.nodes[1]).toMatchObject({
+      label: 'researcher #2',
+      group: 'researcher',
+    });
+  });
+
   it('keeps runtime turn, task, tool, approval, recovery, terminal and typed refs correlated', () => {
     const rows = adaptRuntimeTimeline([
       {

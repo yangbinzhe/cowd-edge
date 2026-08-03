@@ -38,15 +38,76 @@ function dependencyWaves(nodes: any[], edges: any[]) {
 
 function teamNodeIdentity(graphId: string, node: any) {
   const kind = String(node?.kind || '').toLowerCase();
-  if (!graphId.startsWith('team-graph:') || !kind.includes('agent')) return null;
-  const nodeId = String(node?.node_id || '');
-  const prefix = `${graphId}:`;
+  const executionId = String(node?.execution_id || graphId);
+  if (!executionId.startsWith('team-graph:') || !kind.includes('agent')) return null;
+  const nodeId = String(node?.original_node_id || node?.node_id || '');
+  const prefix = `${executionId}:`;
   if (!nodeId.startsWith(prefix)) return null;
   const parts = nodeId.slice(prefix.length).split(':').filter(Boolean);
   if (parts.length < 2) return null;
   const slot = parts.pop()!;
   const role = parts.join(':');
   return { role, slot };
+}
+
+function semanticNodeLabel(node: any, teamIdentity: ReturnType<typeof teamNodeIdentity>) {
+  const kind = String(node.kind || '').toLowerCase();
+  if (node.semantic_view && kind === 'execution') {
+    return t('execution.goal');
+  }
+  if (node.semantic_index && String(node.kind || '').toLowerCase() === 'team') {
+    return t('execution.teamNumber', { number: node.semantic_index });
+  }
+  if (teamIdentity) {
+    if (!node.semantic_view) {
+      return `${teamIdentity.role} #${teamIdentity.slot}`;
+    }
+    const roleKey = `execution.agentRole.${teamIdentity.role}`;
+    const role = t(roleKey);
+    const agent = `${role === roleKey ? teamIdentity.role : role} #${teamIdentity.slot}`;
+    return node.semantic_team_index
+      ? `${t('execution.teamNumber', { number: node.semantic_team_index })} · ${agent}`
+      : agent;
+  }
+  if (node.semantic_role) {
+    const roleKey = `execution.agentRole.${node.semantic_role}`;
+    const role = t(roleKey);
+    return `${role === roleKey ? node.semantic_role : role}${node.semantic_slot ? ` #${node.semantic_slot}` : ''}`;
+  }
+  return '';
+}
+
+function semanticMetrics(node: any) {
+  const metrics = node?.semantic_metrics;
+  if (!metrics || typeof metrics !== 'object') return [];
+  const values: string[] = [];
+  if (Number(metrics.teams || 0) > 0) {
+    values.push(t('execution.teamCount', { count: Number(metrics.teams) }));
+  }
+  if (Number(metrics.agents || 0) > 0) {
+    values.push(t('execution.agentCount', { count: Number(metrics.agents) }));
+  } else if (Number(metrics.agents_total || 0) > 0) {
+    values.push(t('execution.agentProgress', {
+      completed: Number(metrics.agents_completed || 0),
+      total: Number(metrics.agents_total),
+    }));
+  }
+  if (Number(metrics.tool_calls || 0) > 0) {
+    values.push(t('execution.toolCalls', { count: Number(metrics.tool_calls) }));
+  }
+  if (Number(metrics.batches || 0) > 0) {
+    values.push(t('execution.batchCount', { count: Number(metrics.batches) }));
+  }
+  if (Number(metrics.max_parallel_width || 0) > 1) {
+    values.push(t('execution.maxParallel', { count: Number(metrics.max_parallel_width) }));
+  }
+  if (Number(metrics.failed_batches || 0) > 0) {
+    values.push(t('execution.failedBatchCount', { count: Number(metrics.failed_batches) }));
+  }
+  if (Number(metrics.orchestration_calls || 0) > 0) {
+    values.push(t('execution.orchestrationCalls', { count: Number(metrics.orchestration_calls) }));
+  }
+  return values;
 }
 
 export function adaptExecutionGraph(graph: Record<string, any> | null): GraphViewModel {
@@ -88,17 +149,19 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
       const executorLabel = executor && executor !== kind
         ? executionNodeKindLabel(executor)
         : executionNodeKindLabel(kind);
+      const semanticLabel = semanticNodeLabel(node, teamIdentity);
       const wave = waves.depth.get(nodeId) || 0;
       const parallelCount = waves.counts.get(wave) || 1;
       return {
         id: nodeId,
         type: kind,
-        label: teamIdentity
-          ? `${teamIdentity.role} #${teamIdentity.slot}`
-          : executorLabel || nodeId,
+        label: semanticLabel || executorLabel || nodeId,
         group: teamIdentity?.role || (parallelCount > 1 ? t('execution.parallelGroup') : undefined),
         status: String(node.status || 'planned'),
+        description: String(node.description || ''),
         summary: String(node.summary || node.result_ref || nodeId),
+        outputSummary: String(node.output_summary || ''),
+        metrics: semanticMetrics(node),
         evidenceRefs: evidenceRefs(node.evidence_refs),
         correlationRefs: [graphId, node.parent_execution_id, node.session_id, node.turn_id, node.task_id, node.result_ref].filter(Boolean).map(String),
         href: `/mission?section=overview&execution_id=${encodeURIComponent(graphId)}&node_id=${encodeURIComponent(String(node.node_id))}`,
@@ -108,7 +171,9 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
           parallelCount > 1 ? t('execution.parallelCount', { count: parallelCount }) : '',
           node.usage?.total_tokens ? t('execution.tokens', { count: node.usage.total_tokens }) : '',
           node.work?.role ? String(node.work.role).replace(/_/g, ' ') : '',
-          node.work?.expected_duration_ms ? `${node.work.expected_duration_ms} ms` : '',
+          node.duration_ms != null
+            ? `${Number(node.duration_ms)} ms`
+            : (node.work?.expected_duration_ms ? `${node.work.expected_duration_ms} ms` : ''),
         ].filter(Boolean).map(String),
         raw: node,
       };
@@ -120,7 +185,11 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
       type: String(edge.kind || 'depends_on'),
       label: edge.kind === 'depends_on'
         ? t('execution.edge.dependsOn')
-        : String(edge.kind || '').replace(/_/g, ' '),
+        : (edge.kind === 'delegates'
+          ? t('execution.edge.delegates')
+          : (edge.kind === 'invokes'
+            ? t('execution.edge.invokes')
+            : String(edge.kind || '').replace(/_/g, ' '))),
       evidenceRefs: evidenceRefs(edge.evidence_refs),
       correlationRefs: [graphId, edge.command_id, edge.approval_id, edge.recovery_id].filter(Boolean).map(String),
       raw: edge,

@@ -3,6 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ActivityEvent } from '../../types';
 import { adaptExecutionGraph } from '../../adapters/graph/execution';
 import { activeExecutionNode } from '../../utils/executionNode';
+import {
+  applyExecutionActivityState,
+  expandExecutionToolBatches,
+} from '../../utils/executionToolGraph';
 import GraphSurface from '../graph/GraphSurface.vue';
 import ExecutionNodeDetail from './ExecutionNodeDetail.vue';
 
@@ -26,13 +30,17 @@ const emit = defineEmits<{
   expand: [];
 }>();
 const root = ref<HTMLElement | null>(null);
-const model = computed(() => adaptExecutionGraph(props.graph));
+const projectedGraph = computed(() => expandExecutionToolBatches(
+  applyExecutionActivityState(props.graph, props.activityEvents),
+  props.activityEvents,
+));
+const model = computed(() => adaptExecutionGraph(projectedGraph.value));
 const selectedNode = ref<Record<string, any> | null>(null);
 const detailOpen = ref(false);
 const fullscreen = ref(false);
 
 const activeNode = computed(() => {
-  const nodes = Array.isArray(props.graph?.nodes) ? props.graph!.nodes : [];
+  const nodes = Array.isArray(projectedGraph.value?.nodes) ? projectedGraph.value!.nodes : [];
   return activeExecutionNode(nodes);
 });
 const activeNodeId = computed(() => String(activeNode.value?.node_id || activeNode.value?.id || ''));
@@ -45,7 +53,7 @@ const resolvedSelectedNodeId = computed(() => String(
 const selectedDetailNode = computed(() => {
   if (selectedNode.value) return selectedNode.value;
   const selectedId = resolvedSelectedNodeId.value;
-  return (Array.isArray(props.graph?.nodes) ? props.graph!.nodes : [])
+  return (Array.isArray(projectedGraph.value?.nodes) ? projectedGraph.value!.nodes : [])
     .find((node: any) => String(node.node_id || node.id || '') === selectedId)
     || null;
 });
@@ -83,7 +91,7 @@ function syncFullscreenState() {
 onMounted(() => document.addEventListener('fullscreenchange', syncFullscreenState));
 onBeforeUnmount(() => document.removeEventListener('fullscreenchange', syncFullscreenState));
 
-watch(() => props.graph?.graph_id, () => {
+watch(() => projectedGraph.value?.graph_id, () => {
   selectedNode.value = null;
   detailOpen.value = false;
 });
@@ -106,9 +114,9 @@ watch(() => props.graph?.graph_id, () => {
       @toggle-fullscreen="toggleFullscreen"
     />
     <ExecutionNodeDetail
-      v-if="!loading && graph && detailOpen && selectedDetailNode"
+      v-if="!loading && projectedGraph && detailOpen && selectedDetailNode"
       :node="selectedDetailNode"
-      :objective="String(graph?.objective || '')"
+      :objective="String(projectedGraph?.objective || '')"
       :activity-events="activityEvents"
       @close="closeDetail"
     />

@@ -18,6 +18,7 @@ const statusKeys: Record<string, string> = {
   cancelled: 'status.cancelled',
   closed: 'status.closed',
   connected: 'status.connected',
+  connecting: 'status.connecting',
   circuit_open: 'status.circuitOpen',
   complete: 'status.complete',
   completed: 'status.complete',
@@ -31,9 +32,11 @@ const statusKeys: Record<string, string> = {
   done: 'status.done',
   empty: 'status.empty',
   error: 'status.error',
+  evaluating: 'status.evaluating',
   events_visible: 'status.eventsVisible',
   fail: 'status.failed',
   failed: 'status.failed',
+  first_output: 'status.firstOutput',
   forbidden: 'status.forbidden',
   finalizing: 'status.finalizing',
   high: 'status.high',
@@ -84,6 +87,7 @@ const statusKeys: Record<string, string> = {
   sending: 'status.sending',
   spa: 'status.spa',
   static: 'status.static',
+  started: 'status.started',
   starting: 'status.starting',
   stopped: 'status.stopped',
   stored: 'status.stored',
@@ -107,6 +111,9 @@ const statusKeys: Record<string, string> = {
   expired: 'status.expired',
   low: 'status.low',
   medium: 'status.medium',
+  materializing: 'status.materializing',
+  reconnecting: 'status.reconnecting',
+  terminal: 'status.terminal',
 };
 
 export function statusKeyFor(value: unknown): string {

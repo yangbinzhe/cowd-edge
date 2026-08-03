@@ -2,7 +2,7 @@
 
 `cowd-edge` 是 Cowd 的独立边缘能力仓库。它承载非 TUI 的用户界面 surface，以及可按需构建、按需安装的外部连接器。
 
-当前版本：`0.9.632`。
+当前版本：`0.9.633`。
 
 ## 1. 定位
 
@@ -108,7 +108,7 @@ WebUI surface：
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.632",
+  "version": "0.9.633",
   "kind": "web-surface",
   "resources": [
     { "kind": "static", "mount": "/", "dir": "./dist", "spa": true }
@@ -124,7 +124,7 @@ Message connector：
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.632",
+  "version": "0.9.633",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
@@ -153,7 +153,7 @@ Source connector：
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.632",
+  "version": "0.9.633",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",
@@ -216,6 +216,8 @@ WebUI 的 Session 加载遵守两阶段读取合同：
 
 全景活动面板同时消费 Gateway 的连续输入归属、历史恢复状态、上下文覆盖和
 Harness/Provider 分段延迟。WebUI 不重建第二套 Session、Mission 或执行状态。
+
+对话执行过程采用三层投影：主对话只保留 Agent、Tool、审批、失败和最终回答等业务事件；右侧活动按用户 Turn、Team/Agent 通道及 Tool 依赖波次展示完整时间线；执行图默认压缩为目标、Team、Agent 与关键门禁节点，Tool 作为 Agent 的并行批次下钻。实时 `AgentLifecycle` 与 Gateway 持久回放使用同一身份键，刷新不会新增伪步骤；活动只覆盖既有图节点状态，不反向创造 Runtime 拓扑。
 
 ### 7.1 WebUI 加载与治理边界
 

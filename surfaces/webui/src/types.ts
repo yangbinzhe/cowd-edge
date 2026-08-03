@@ -77,10 +77,12 @@ export interface ChatTurn {
 
 export interface ActivityEvent {
   id: string;
-  kind: 'tool' | 'think' | 'runtime' | 'context' | 'approval' | 'error';
+  kind: 'agent' | 'tool' | 'think' | 'runtime' | 'context' | 'approval' | 'error';
   title: string;
   detail?: string;
   status?: string;
+  phase?: string;
+  role?: string;
   at?: string | number;
   domain?: string;
   event_kind?: string;
@@ -111,6 +113,9 @@ export interface ActivityEvent {
   wave?: number;
   lane?: number;
   lane_count?: number;
+  agent_lane?: number;
+  agent_lane_count?: number;
+  agent_lane_label?: string;
 }
 
 export type ExecutionProjectionEntity = GatewayComponents['schemas']['ExecutionProjectionEntity'];

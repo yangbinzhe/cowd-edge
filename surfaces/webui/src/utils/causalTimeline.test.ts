@@ -18,7 +18,7 @@ function event(overrides: Partial<ActivityEvent>): ActivityEvent {
 }
 
 describe('causal activity timeline', () => {
-  it('orders reasoning and parallel tools by the Runtime commit cursor', () => {
+  it('orders same-execution causal items while preserving parallel tool lanes', () => {
     const rows = causalActivityTimeline([
       event({
         id: 'reasoning-2',
@@ -54,6 +54,66 @@ describe('causal activity timeline', () => {
     ]);
     expect(rows.find((row) => row.id === 'tool-a')).toMatchObject({ wave: 0, lane: 0, lane_count: 2 });
     expect(rows.find((row) => row.id === 'tool-b')).toMatchObject({ wave: 0, lane: 1, lane_count: 2 });
+  });
+
+  it('projects concurrent child agents into stable parallel lanes', () => {
+    const rows = causalActivityTimeline([
+      event({
+        id: 'agent-a-started',
+        kind: 'agent',
+        execution_id: 'agent-run-a',
+        parent_execution_id: 'root',
+        graph_id: 'team-graph',
+        team_id: 'team-1',
+        agent_id: 'agent-a',
+        role: 'researcher',
+        phase: 'started',
+        at: 10,
+      }),
+      event({
+        id: 'agent-b-started',
+        kind: 'agent',
+        execution_id: 'agent-run-b',
+        parent_execution_id: 'root',
+        graph_id: 'team-graph',
+        team_id: 'team-1',
+        agent_id: 'agent-b',
+        role: 'reviewer',
+        phase: 'started',
+        at: 11,
+      }),
+      event({
+        id: 'tool-a',
+        execution_id: 'agent-run-a',
+        parent_execution_id: 'root',
+        graph_id: 'team-graph',
+        team_id: 'team-1',
+        agent_id: 'agent-a',
+        tool_call_id: 'tool-a',
+        at: 12,
+      }),
+      event({
+        id: 'tool-b',
+        execution_id: 'agent-run-b',
+        parent_execution_id: 'root',
+        graph_id: 'team-graph',
+        team_id: 'team-1',
+        agent_id: 'agent-b',
+        tool_call_id: 'tool-b',
+        at: 12,
+      }),
+    ]);
+
+    expect(rows.find((row) => row.id === 'tool-a')).toMatchObject({
+      agent_lane: 0,
+      agent_lane_count: 2,
+      agent_lane_label: 'researcher',
+    });
+    expect(rows.find((row) => row.id === 'tool-b')).toMatchObject({
+      agent_lane: 1,
+      agent_lane_count: 2,
+      agent_lane_label: 'reviewer',
+    });
   });
 
   it('derives dependency waves from canonical tool call parent ids', () => {

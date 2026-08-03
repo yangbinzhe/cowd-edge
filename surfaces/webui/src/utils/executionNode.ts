@@ -10,7 +10,9 @@ const nodeKindLabels: Record<string, string> = {
   inline_model: 'execution.kind.model',
   recovery: 'execution.kind.recovery',
   synthesize: 'execution.kind.synthesize',
+  team: 'execution.kind.team',
   tool_batch: 'execution.kind.toolBatch',
+  tool_call: 'execution.kind.toolCall',
   verify: 'execution.kind.verify',
 };
 
@@ -70,10 +72,25 @@ function activityNodeRefs(event: ActivityEvent) {
 export function executionNodeActivities(node: Record<string, any>, events: ActivityEvent[]) {
   const nodeId = String(node.node_id || node.id || '');
   const originalNodeId = String(node.original_node_id || '');
+  const canonicalNodeIds = new Set(
+    (Array.isArray(node.canonical_node_ids) ? node.canonical_node_ids : [])
+      .map(String)
+      .filter(Boolean),
+  );
+  const toolCallId = String(node.tool_call_id || '');
   if (!nodeId) return [];
   return events.filter((event) => {
+    if (toolCallId && (
+      event.tool_call_id === toolCallId
+      || event.item_id === toolCallId
+      || event.id === toolCallId
+    )) return true;
     const refs = activityNodeRefs(event);
-    if (refs.has(nodeId) || (!!originalNodeId && refs.has(originalNodeId))) return true;
+    if (
+      refs.has(nodeId)
+      || (!!originalNodeId && refs.has(originalNodeId))
+      || [...canonicalNodeIds].some((reference) => refs.has(reference))
+    ) return true;
     return String(event.correlation || '')
       .split(/\s*·\s*/)
       .some((reference) => reference === nodeId || reference === originalNodeId);
@@ -111,12 +128,14 @@ export function executionNodeDetail(
     resource_scopes: node.resource_scopes,
   });
   const outputFallback = compactObject({
+    output: node.output,
     summary: node.summary,
     result_ref: node.result_ref,
     failure: node.failure,
     evidence_refs: node.evidence_refs,
     usage: node.usage,
   });
+  const semantic = Boolean(node.semantic_view);
   return {
     id: String(node.node_id || node.id || ''),
     title: String(node.executor_kind || node.kind || node.node_id || node.id || ''),
@@ -124,9 +143,9 @@ export function executionNodeDetail(
     status: String(node.status || 'planned'),
     description: String(node.description || objective || ''),
     summary: String(node.summary || ''),
-    input: decodedPayload(inputEvent?.input ?? inputEvent?.raw?.input)
+    input: decodedPayload(semantic ? node.input : (inputEvent?.input ?? inputEvent?.raw?.input))
       ?? (Object.keys(inputFallback).length ? inputFallback : null),
-    output: decodedPayload(outputEvent?.output ?? outputEvent?.raw?.output)
+    output: decodedPayload(semantic ? node.output : (outputEvent?.output ?? outputEvent?.raw?.output))
       ?? (Object.keys(outputFallback).length ? outputFallback : null),
     relatedActivities: related,
     raw: node,
