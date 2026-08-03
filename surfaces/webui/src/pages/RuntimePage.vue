@@ -45,6 +45,8 @@ const sessionExecution = ref<any>({});
 const effectiveConfig = ref<any>({});
 const leases = ref<any>({});
 const approvals = ref<any>([]);
+const approvalGrants = ref<any>({});
+const approvalScopes = ref<Record<string, string>>({});
 const timeline = ref<any>({});
 const tasks = ref<any>({});
 const growthStatus = ref<any>({});
@@ -75,6 +77,10 @@ const configReloadRestartFields = computed(() => {
 });
 const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.status || 'unknown'));
 const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
+const activeApprovalGrants = computed(() => {
+  const rows = Array.isArray(approvalGrants.value?.grants) ? approvalGrants.value.grants : [];
+  return rows.filter((grant: any) => String(grant?.status || '') === 'active');
+});
 const timelineRows = computed(() => adaptRuntimeTimeline(Array.isArray(timeline.value?.events) ? timeline.value.events : []).slice(0, 16));
 const timelineListItems = computed(() => timelineRows.value.map((row: any) => ({
   ...row,
@@ -237,9 +243,13 @@ async function loadSection(section = activeSection.value || 'overview', force = 
       sessionExecution.value = nextSessionExecution;
       selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
     } else if (section === 'policy') {
-      const nextApprovals = await api.approvalPending(controller.signal);
+      const [nextApprovals, nextGrants] = await Promise.all([
+        api.approvalPending(controller.signal),
+        api.approvalGrants(controller.signal),
+      ]);
       if (!current()) return;
       approvals.value = nextApprovals;
+      approvalGrants.value = nextGrants;
     } else if (section === 'timeline') {
       const nextTimeline = await api.runtimeTimeline(sessionId.value, controller.signal);
       if (!current()) return;
@@ -328,7 +338,20 @@ async function respondApproval(approval: any, approved: boolean) {
     return;
   }
   const id = approval?.approval_id || approval?.id || approval?.request_id;
-  actionResult.value = await api.approvalRespond(id, approved, approved ? 'approved from Runtime Workbench' : 'rejected from Runtime Workbench');
+  const scope = approved ? (approvalScopes.value[id] || 'once') : 'once';
+  actionResult.value = await api.approvalRespond(
+    id,
+    approved,
+    scope,
+    approved ? 'approved from Runtime Workbench' : 'rejected from Runtime Workbench',
+  );
+  await loadSection('policy', true);
+}
+
+async function revokeApprovalGrant(grant: any) {
+  const id = String(grant?.grant_id || '');
+  if (!id) return;
+  actionResult.value = await api.revokeApprovalGrant(id, 'revoked from Runtime Workbench');
   await loadSection('policy', true);
 }
 
@@ -538,6 +561,13 @@ onUnmounted(() => {
               <strong>{{ approval.summary || approval.reason || approval.id }}</strong>
               <p>{{ approval.command || approval.tool || approval.kind || t('page.runtime.page.inline.516d8685da') }}</p>
             </div>
+            <select v-model="approvalScopes[approval.approval_id || approval.id || approval.request_id]">
+              <option value="once">{{ t('chat.approval.scope.once') }}</option>
+              <option value="turn">{{ t('chat.approval.scope.turn') }}</option>
+              <option value="task">{{ t('chat.approval.scope.task') }}</option>
+              <option value="session">{{ t('chat.approval.scope.session') }}</option>
+              <option value="global">{{ t('chat.approval.scope.global') }}</option>
+            </select>
             <button class="ghost-action" type="button" @click="respondApproval(approval, false)">{{ t('page.runtime.page.text.ae4dd827f7') }}</button>
             <button class="primary-action" type="button" @click="respondApproval(approval, true)">
               <ShieldCheck :size="14" />
@@ -546,6 +576,21 @@ onUnmounted(() => {
           </article>
         </div>
         <EmptyState v-if="!approvalItems.length" :title="t('page.runtime.page.title.362da6a741')" :detail="t('page.runtime.page.detail.e69affe6a7')" />
+        <header>
+          <h3>{{ t('chat.approval.grants') }}</h3>
+          <span>{{ formatCount('active', activeApprovalGrants.length) }}</span>
+        </header>
+        <div class="runtime-approval-list">
+          <article v-for="grant in activeApprovalGrants" :key="grant.grant_id">
+            <div>
+              <strong>{{ grant.capability }}</strong>
+              <p>{{ grant.scope }} · {{ grant.workspace_key }} · {{ grant.grant_id }}</p>
+            </div>
+            <button class="ghost-action" type="button" @click="revokeApprovalGrant(grant)">
+              {{ t('chat.approval.revoke') }}
+            </button>
+          </article>
+        </div>
         <RequestReceipt :receipt="actionResult" :title="t('page.runtime.page.title.a09bbcf3ae')" />
       </section>
 

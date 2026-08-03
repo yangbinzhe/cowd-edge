@@ -986,7 +986,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (type === 'ApprovalRequested' || type === 'ApprovalResolved') {
       upsertSessionActivity(sessionId, {
         ...base,
-        id: `approval:${String(payload.approval_id || payload.id || executionId)}`,
+        id: `approval:${String(payload.request_id || payload.approval_id || payload.id || executionId)}`,
         kind: 'approval',
         title: String(payload.action || t('chat.approval.title')),
         detail: compactToolOutput(payload.summary),

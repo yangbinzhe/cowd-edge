@@ -1354,17 +1354,21 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(config),
   }),
-  toggleSolo: () => write('/api/approval/solo', { method: 'POST' }),
   approvalPending: (signal?: AbortSignal) => read('/api/approval/pending', [], { signal }),
   approvalRiskReceipt: (toolName: string, input: unknown, sessionId?: string) => writeWithReceipt('/api/approval/risk-receipt', {
     method: 'POST',
     body: JSON.stringify({ tool_name: toolName, input, session_id: sessionId }),
   }),
-  approvalRespond: (id: string, approved: boolean, reason = '') => write('/api/approval/respond', {
+  approvalRespond: (id: string, approved: boolean, scope = 'once', reason = '') => write('/api/approval/respond', {
     method: 'POST',
-    body: JSON.stringify({ id, approved, reason }),
+    body: JSON.stringify({ id, approved, scope, reason }),
   }),
   approvalHistory: () => read('/api/approval/history?limit=20', []),
+  approvalGrants: (signal?: AbortSignal) => read('/api/approval/grants', { grants: [] }, { signal }),
+  revokeApprovalGrant: (id: string, reason = '') => write(`/api/approval/grants/${encodeURIComponent(id)}/revoke`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  }),
   runtimeSessionLeases: (signal?: AbortSignal) => read('/api/runtime/session-leases', {}, { signal }),
   acquireRuntimeLease: (sessionId: string, mode = 'collaborative') => write('/api/runtime/session-leases/acquire', {
     method: 'POST',

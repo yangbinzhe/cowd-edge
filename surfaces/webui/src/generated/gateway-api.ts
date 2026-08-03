@@ -164,6 +164,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/approval/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * approval GET /api/approval/grants
+         * @description Query Gateway approval capability through `/api/approval/grants` handled by `approval_grants_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_approval_get_api_approval_grants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approval/grants/{id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * approval POST /api/approval/grants/:id/revoke
+         * @description Invoke or create Gateway approval capability through `/api/approval/grants/:id/revoke` handled by `approval_grant_revoke_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_approval_post_api_approval_grants_by_id_revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/approval/history": {
         parameters: {
             query?: never;
@@ -246,28 +290,6 @@ export interface paths {
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
         post: operations["gateway_approval_post_api_approval_risk_receipt"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/approval/solo": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * approval POST /api/approval/solo
-         * @description Invoke or create Gateway approval capability through `/api/approval/solo` handled by `toggle_solo_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_approval_post_api_approval_solo"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16413,6 +16435,117 @@ export interface operations {
             };
         };
     };
+    gateway_approval_get_api_approval_grants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_approval_post_api_approval_grants_by_id_revoke: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_approval_get_api_approval_history: {
         parameters: {
             query?: never;
@@ -16558,64 +16691,6 @@ export interface operations {
         };
     };
     gateway_approval_post_api_approval_risk_receipt: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_approval_post_api_approval_solo: {
         parameters: {
             query?: never;
             header?: never;

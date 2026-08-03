@@ -268,7 +268,7 @@ describe('Cowd Vue WebUI shell', () => {
     await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
     await settleAsync();
 
-    expect(respond).toHaveBeenCalledWith('approval-chat-1', true, 'approved from WebUI');
+    expect(respond).toHaveBeenCalledWith('approval-chat-1', true, 'once', 'approved from WebUI');
     expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
     wrapper.unmount();
     pending.mockRestore();

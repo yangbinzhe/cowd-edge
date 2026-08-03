@@ -1661,10 +1661,6 @@ export const useAppStore = defineStore('app', () => {
     settingsSavedAt.value = new Date().toLocaleTimeString();
   }
 
-  async function toggleSolo() {
-    approvalConfig.value = await api.toggleSolo();
-  }
-
   async function verifyAuth() {
     const result = await api.authVerify();
     authEntitlement.value = result.entitlement || null;
@@ -1993,7 +1989,6 @@ export const useAppStore = defineStore('app', () => {
     createProfile,
     deleteProfile,
     saveApprovalConfig,
-    toggleSolo,
     verifyAuth,
     login,
     failClosedAuthorization,

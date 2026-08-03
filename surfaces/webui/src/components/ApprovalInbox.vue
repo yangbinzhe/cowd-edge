@@ -16,6 +16,7 @@ const modalOpen = ref(false);
 const selectedIndex = ref(0);
 const busy = ref(false);
 const error = ref('');
+const approvalScope = ref('once');
 const presentedInChat = new Set<string>();
 
 const activeSessionId = computed(() => String(store.activeSessionId || ''));
@@ -70,6 +71,7 @@ function openInbox() {
   );
   selectedIndex.value = currentIndex >= 0 ? currentIndex : 0;
   error.value = '';
+  approvalScope.value = 'once';
   modalOpen.value = true;
 }
 
@@ -99,6 +101,7 @@ async function decide(approved: boolean) {
     await api.approvalRespond(
       approvalId,
       approved,
+      approved ? approvalScope.value : 'once',
       approved ? 'approved from WebUI' : 'rejected from WebUI',
     );
     approvals.value = approvals.value.filter(
@@ -221,6 +224,15 @@ onBeforeUnmount(() => {
         <p v-if="typedOwnerRoute" class="approval-owner-note">
           {{ t('chat.approval.typedOwner') }}
         </p>
+        <label v-if="!typedOwnerRoute" class="field-line">
+          {{ t('chat.approval.scope') }}
+          <select v-model="approvalScope" :disabled="busy">
+            <option value="once">{{ t('chat.approval.scope.once') }}</option>
+            <option value="turn">{{ t('chat.approval.scope.turn') }}</option>
+            <option value="session">{{ t('chat.approval.scope.session') }}</option>
+            <option value="global">{{ t('chat.approval.scope.global') }}</option>
+          </select>
+        </label>
         <p v-if="error" class="file-error" role="alert">{{ error }}</p>
       </div>
       <footer>

@@ -330,9 +330,11 @@ async function saveApprovalGoverned(payload: Record<string, unknown> = {}) {
   });
 }
 
-function updateSoloDraft(event: Event) {
-  const checked = (event.target as HTMLInputElement).checked;
-  const nextConfig = { ...approvalDraftParsed.value, solo_mode: checked };
+function updateApprovalDraftField(field: 'profile' | 'low_risk_timeout', event: Event) {
+  const nextConfig = {
+    ...approvalDraftParsed.value,
+    [field]: (event.target as HTMLSelectElement).value,
+  };
   approvalDraft.value = JSON.stringify(nextConfig, null, 2);
 }
 
@@ -614,7 +616,21 @@ function selectSettingsSection(id: string) {
 
       <section v-else-if="activeSettingsSection === 'policy'" class="settings-section" data-section="policy">
         <h2>{{ t('page.settings.page.text.9f388e9984') }}</h2>
-        <label><input type="checkbox" :checked="!!approvalDraftParsed.solo_mode" @change="updateSoloDraft" />{{ t('page.settings.page.text.7c3716e92b') }}</label>
+        <label class="field-line">
+          {{ t('chat.approval.profile') }}
+          <select :value="approvalDraftParsed.profile || 'balanced'" @change="updateApprovalDraftField('profile', $event)">
+            <option value="supervised">{{ t('chat.approval.profile.supervised') }}</option>
+            <option value="balanced">{{ t('chat.approval.profile.balanced') }}</option>
+            <option value="autonomous">{{ t('chat.approval.profile.autonomous') }}</option>
+          </select>
+        </label>
+        <label class="field-line">
+          {{ t('chat.approval.timeout') }}
+          <select :value="approvalDraftParsed.low_risk_timeout || 'auto_approve_once'" @change="updateApprovalDraftField('low_risk_timeout', $event)">
+            <option value="auto_approve_once">{{ t('chat.approval.timeout.auto') }}</option>
+            <option value="pending">{{ t('chat.approval.timeout.pending') }}</option>
+          </select>
+        </label>
         <p class="panel-note">{{ t('settings.policy.draftHelp') }}</p>
         <textarea v-model="approvalDraft" spellcheck="false" :aria-invalid="!!approvalDraftError" />
         <p v-if="approvalDraftError" class="field-error">{{ t('settings.policy.invalidJson', { error: approvalDraftError }) }}</p>
