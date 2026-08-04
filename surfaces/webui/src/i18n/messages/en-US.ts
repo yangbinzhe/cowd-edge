@@ -2899,6 +2899,7 @@ export const enUS: MessageCatalog = {
   "page.skills.governance.validate": "Validate again",
   "page.skills.governance.plan": "Build run plan",
   "page.mission.schedules.title": "Schedules",
+  "page.mission.selector.label": "Mission",
   "page.mission.schedules.description": "Trigger Mission work manually or on a durable Runtime schedule.",
   "page.mission.schedules.fires": "fires",
   "page.mission.schedules.objective": "Objective",

@@ -71,7 +71,7 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
       actualSpeedupBasisPoints: 18_947,
     });
     expect(model.nodes[0].badges).toContain('evidence analyze');
-    expect(model.nodes[0].badges).toContain('1000 ms');
+    expect(model.nodes[0].badges).toContain('1 s');
   });
 
   it('combines a revisioned Team template with canonical live working state', () => {
@@ -95,48 +95,60 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
     expect(graphDiagnostics(model.nodes, model.edges).danglingEdgeIds).toEqual([]);
   });
 
-  it('renders Team role slots as explicit parallel dependency waves', () => {
-    const graphId = 'team-graph:review-team';
+  it('renders Runtime-provided Team labels and observed parallel groups without parsing IDs', () => {
+    const graphId = 'execution-review-team';
     const model = adaptExecutionGraph({
       graph_id: graphId,
       nodes: [
-        { node_id: `${graphId}:researcher:1`, kind: 'agent_task', status: 'running' },
-        { node_id: `${graphId}:researcher:2`, kind: 'agent_task', status: 'running' },
-        { node_id: `${graphId}:verify`, kind: 'verify', status: 'planned' },
+        {
+          node_id: 'agent-run-1',
+          kind: 'agent_task',
+          status: 'running',
+          summary: 'researcher #1',
+          parallel_group_id: 'parallel-research',
+        },
+        {
+          node_id: 'agent-run-2',
+          kind: 'agent_task',
+          status: 'running',
+          summary: 'researcher #2',
+          parallel_group_id: 'parallel-research',
+        },
+        { node_id: 'verify', kind: 'verify', status: 'planned' },
       ],
       edges: [
-        { from: `${graphId}:researcher:1`, to: `${graphId}:verify`, kind: 'depends_on' },
-        { from: `${graphId}:researcher:2`, to: `${graphId}:verify`, kind: 'depends_on' },
+        { from: 'agent-run-1', to: 'verify', kind: 'depends_on' },
+        { from: 'agent-run-2', to: 'verify', kind: 'depends_on' },
       ],
     });
 
     expect(model.nodes[0]).toMatchObject({
       label: 'researcher #1',
-      group: 'researcher',
+      group: 'parallel-research',
     });
-    expect(model.nodes[0].badges).toContain('2 路并行');
-    expect(model.nodes[1].badges).toContain('第 1 波');
-    expect(model.nodes[2].badges).toContain('第 2 波');
+    expect(model.nodes[0].badges).toContain('并行执行');
   });
 
-  it('preserves Team role slots after graphs are combined into an execution lineage', () => {
-    const graphId = 'team-graph:review-team';
+  it('preserves canonical Team labels after graphs are combined into an execution lineage', () => {
+    const graphId = 'execution-review-team';
     const model = adaptExecutionGraph({
       graph_id: 'lineage:root-execution',
       nodes: [
         {
-          node_id: `${graphId}::${graphId}:researcher:1`,
-          original_node_id: `${graphId}:researcher:1`,
+          node_id: 'activity-agent-run-1',
           execution_id: graphId,
           kind: 'agent_task',
           status: 'running',
+          summary: 'researcher #1',
+          parallel_group_id: 'parallel-research',
         },
         {
-          node_id: `${graphId}::${graphId}:researcher:2`,
-          original_node_id: `${graphId}:researcher:2`,
+          node_id: 'activity-agent-run-2',
           execution_id: graphId,
           kind: 'agent_task',
           status: 'running',
+          summary: 'researcher #2',
+          parallel_group_id: 'parallel-research',
         },
       ],
       edges: [],
@@ -144,11 +156,11 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
 
     expect(model.nodes[0]).toMatchObject({
       label: 'researcher #1',
-      group: 'researcher',
+      group: 'parallel-research',
     });
     expect(model.nodes[1]).toMatchObject({
       label: 'researcher #2',
-      group: 'researcher',
+      group: 'parallel-research',
     });
   });
 

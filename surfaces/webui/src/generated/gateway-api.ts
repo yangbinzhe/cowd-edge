@@ -7920,6 +7920,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runtime/executions/{id}/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * route_registry GET /api/runtime/executions/:id/activity
+         * @description Query Gateway route_registry capability through `/api/runtime/executions/:id/activity` handled by `runtime_execution_activity_get`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["runtime_execution_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runtime/executions/{id}/commands": {
         parameters: {
             query?: never;
@@ -11298,6 +11320,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        ActivityRelationKind: "contains" | "delegated_to" | "invoked" | "depends_on" | "approved_by" | "produced" | "consumed" | "contributes_to" | "replanned_to" | "recovered_from";
+        /** @enum {string} */
+        ActivityVisibility: "narrative" | "operational" | "audit";
         AdmissionProjection: {
             /** Format: uint64 */
             accepted_at_ms: number;
@@ -11460,6 +11486,63 @@ export interface components {
             /** Format: uint16 */
             minimum_score_basis_points?: number | null;
             required_evidence: string[];
+        };
+        /** ExecutionActivityDetailProjection */
+        ExecutionActivityDetailProjection: {
+            activity: components["schemas"]["ExecutionActivityProjection"];
+            execution_id: string;
+            /** @default [] */
+            related_entities: components["schemas"]["ProjectionEntity"][];
+            /** @default [] */
+            relations: components["schemas"]["ExecutionActivityRelation"][];
+            /** Format: uint32 */
+            schema_version: number;
+        };
+        /** @enum {string} */
+        ExecutionActivityKind: "execution" | "goal" | "team" | "agent" | "model" | "tool_batch" | "tool" | "approval" | "verify" | "artifact" | "outcome" | "replan" | "recovery" | "runtime";
+        ExecutionActivityProjection: {
+            activity_id: string;
+            agent_id?: string | null;
+            approval_id?: string | null;
+            /** @default [] */
+            artifact_refs: string[];
+            /** @default [] */
+            causal_parent_ids: string[];
+            /** Format: uint64 */
+            commit_cursor: number;
+            /** Format: uint64 */
+            completed_at_ms?: number | null;
+            /** @default [] */
+            dependency_ids: string[];
+            detail_capability?: string | null;
+            /** Format: uint64 */
+            duration_ms?: number | null;
+            /** @default [] */
+            evidence_refs: string[];
+            initiator_activity_id?: string | null;
+            kind: components["schemas"]["ExecutionActivityKind"];
+            parallel_group_id?: string | null;
+            parent_activity_id?: string | null;
+            public_summary?: string | null;
+            /** Format: uint32 */
+            schema_version: number;
+            scope: components["schemas"]["ExecutionScopeProjection"];
+            /** Format: uint64 */
+            sequence: number;
+            /** Format: uint64 */
+            started_at_ms?: number | null;
+            status: string;
+            team_id?: string | null;
+            tool_call_id?: string | null;
+            /** @default [] */
+            visibility: components["schemas"]["ActivityVisibility"][];
+        };
+        ExecutionActivityRelation: {
+            evidence_ref?: string | null;
+            from_activity_id: string;
+            kind: components["schemas"]["ActivityRelationKind"];
+            relation_id: string;
+            to_activity_id: string;
         };
         /**
          * @description Unit-preserving estimate for one strategy candidate.
@@ -11805,6 +11888,10 @@ export interface components {
         /** ExecutionProjection */
         ExecutionProjection: {
             /** @default [] */
+            activities: components["schemas"]["ExecutionActivityProjection"][];
+            /** @default [] */
+            activity_relations: components["schemas"]["ExecutionActivityRelation"][];
+            /** @default [] */
             admissions: components["schemas"]["ProjectionEntity"][];
             /** @default [] */
             agents: components["schemas"]["ProjectionEntity"][];
@@ -11846,8 +11933,10 @@ export interface components {
             schema_version: number;
             session_id?: string | null;
             strategy?: components["schemas"]["StrategyDecisionProjection"] | null;
+            task_id?: string | null;
             /** @default [] */
             teams: components["schemas"]["ProjectionEntity"][];
+            turn_id?: string | null;
             /** @default [] */
             usage: components["schemas"]["ProjectionEntity"][];
         };
@@ -11862,6 +11951,17 @@ export interface components {
             revision: number;
             status?: string | null;
             summary?: string | null;
+        };
+        ExecutionScopeProjection: {
+            execution_id: string;
+            goal_id?: string | null;
+            mission_id?: string | null;
+            parent_execution_id?: string | null;
+            parent_node_id?: string | null;
+            session_id?: string | null;
+            task_id?: string | null;
+            turn_id?: string | null;
+            workspace_id: string;
         };
         /**
          * @description Runtime-owned service class for one durable execution graph.
@@ -15096,8 +15196,12 @@ export interface components {
             detail: {
                 [key: string]: unknown;
             };
+            execution_id?: string | null;
+            mission_id?: string | null;
             session_id?: string | null;
             status?: string | null;
+            task_id?: string | null;
+            team_id?: string | null;
         };
         MissionControlApprovalNode: {
             action?: string | null;
@@ -15118,6 +15222,43 @@ export interface components {
             status?: string | null;
             stream_id: string;
             transaction_index: number;
+        };
+        MissionControlGraphEdge: {
+            edge_id: string;
+            from_node_id: string;
+            kind: string;
+            to_node_id: string;
+        };
+        MissionControlGraphNode: {
+            agent_id?: string | null;
+            execution_id?: string | null;
+            kind: string;
+            label: string;
+            mission_id: string;
+            node_id: string;
+            session_id?: string | null;
+            status: string;
+            task_id?: string | null;
+            team_id?: string | null;
+        };
+        MissionControlGraphProjection: {
+            edges: components["schemas"]["MissionControlGraphEdge"][];
+            mission_id: string;
+            nodes: components["schemas"]["MissionControlGraphNode"][];
+            schema_version: number;
+        };
+        MissionControlMissionSummary: {
+            agent_count: number;
+            created_at_ms: number;
+            graph_count: number;
+            mission_id: string;
+            objective: string;
+            revision: number;
+            session_count: number;
+            status: string;
+            task_count: number;
+            team_count: number;
+            updated_at_ms: number;
         };
         MissionControlProjection: {
             agents: components["schemas"]["MissionControlAgentNode"][];
@@ -15140,8 +15281,11 @@ export interface components {
             /** @constant */
             kind: "mission_control.projection";
             mission: unknown;
+            mission_graph: components["schemas"]["MissionControlGraphProjection"];
+            missions: components["schemas"]["MissionControlMissionSummary"][];
             relations: unknown;
             schema_version: number;
+            selected_mission_id: string;
             sessions: components["schemas"]["MissionControlSessionNode"][];
             summary: components["schemas"]["MissionControlSummary"];
             tasks: components["schemas"]["MissionControlTaskNode"][];
@@ -15213,8 +15357,10 @@ export interface components {
                 [key: string]: unknown;
             };
             graph_id: string;
+            mission_id?: string | null;
             session_id?: string | null;
             status?: string | null;
+            task_id?: string | null;
             team_id: string;
         };
         MissionMaterializedSnapshot: {
@@ -15370,6 +15516,8 @@ export interface components {
             /** Format: uint64 */
             revision: number;
             session_id?: string | null;
+            task_id?: string | null;
+            turn_id?: string | null;
         } | {
             /** Format: uint64 */
             commit_cursor: number;
@@ -15401,6 +15549,19 @@ export interface components {
             execution_id: string;
             /** @constant */
             op: "remove_child_execution";
+        } | {
+            activities: components["schemas"]["ExecutionActivityProjection"][];
+            /** @constant */
+            op: "replace_activities";
+            relations: components["schemas"]["ExecutionActivityRelation"][];
+        } | {
+            activity: components["schemas"]["ExecutionActivityProjection"];
+            /** @constant */
+            op: "upsert_activity";
+        } | {
+            /** @constant */
+            op: "upsert_activity_relation";
+            relation: components["schemas"]["ExecutionActivityRelation"];
         } | {
             /** @constant */
             op: "replace_strategy";
@@ -35514,7 +35675,10 @@ export interface operations {
     };
     mission_control_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Mission aggregate selected for this materialized projection. */
+                mission_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -35664,6 +35828,8 @@ export interface operations {
     mission_control_delta_get: {
         parameters: {
             query?: {
+                /** @description Mission aggregate selected for this materialized projection. */
+                mission_id?: string;
                 /** @description Last applied Runtime event commit cursor. */
                 cursor?: number;
                 /** @description Last applied Mission materialized-view revision. */
@@ -38821,6 +38987,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExecutionProjection"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    runtime_execution_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionActivityDetailProjection"];
                 };
             };
             /** @description Bad request */

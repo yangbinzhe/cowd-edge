@@ -23,7 +23,7 @@ describe('GraphSurface', () => {
       props: {
         model: {
           id: 'execution-graph',
-          title: 'WAIC research',
+          title: 'Technical research',
           nodes: [{
             id: 'search',
             type: 'tool_batch',

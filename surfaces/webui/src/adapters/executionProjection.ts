@@ -85,6 +85,8 @@ function applyOperation(
       projection.revision = operation.revision;
       projection.session_id = operation.session_id;
       projection.mission_id = operation.mission_id;
+      projection.task_id = operation.task_id;
+      projection.turn_id = operation.turn_id;
       break;
     case 'set_graph_metadata':
       projection.graph.revision = operation.revision;
@@ -121,6 +123,24 @@ function applyOperation(
     case 'remove_child_execution':
       projection.child_executions = projection.child_executions
         .filter((child) => child.execution_id !== operation.execution_id);
+      break;
+    case 'replace_activities':
+      projection.activities = operation.activities;
+      projection.activity_relations = operation.relations;
+      break;
+    case 'upsert_activity':
+      projection.activities = upsert(
+        projection.activities || [],
+        operation.activity,
+        (activity) => activity.activity_id,
+      );
+      break;
+    case 'upsert_activity_relation':
+      projection.activity_relations = upsert(
+        projection.activity_relations || [],
+        operation.relation,
+        (relation) => relation.relation_id,
+      );
       break;
     case 'replace_strategy':
       projection.strategy = operation.strategy;
@@ -178,6 +198,14 @@ function validateUniqueKeys(projection: ExecutionProjection) {
   assertUnique(
     projection.child_executions.map((child) => child.execution_id),
     'child execution',
+  );
+  assertUnique(
+    (projection.activities || []).map((activity) => activity.activity_id),
+    'activity',
+  );
+  assertUnique(
+    (projection.activity_relations || []).map((relation) => relation.relation_id),
+    'activity relation',
   );
   const collections: ProjectionEntityCollection[] = [
     'goals',

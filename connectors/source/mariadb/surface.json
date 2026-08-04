@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "mariadb",
   "name": "MariaDB Source Connector",
-  "version": "0.9.632",
+  "version": "0.9.635",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",

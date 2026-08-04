@@ -18,6 +18,7 @@ const busy = ref(false);
 const error = ref('');
 const approvalScope = ref('once');
 const presentedInChat = new Set<string>();
+const approvalScopes = ['once', 'turn', 'task', 'session', 'global'] as const;
 
 const activeSessionId = computed(() => String(store.activeSessionId || ''));
 const orderedApprovals = computed(() => {
@@ -43,6 +44,14 @@ const activePosition = computed(() => orderedApprovals.value.length
 
 function approvalSessionId(approval: Record<string, any>) {
   return String(approval?.source?.session_id || approval?.session_id || '');
+}
+
+function approvalScopeLabel(scope: typeof approvalScopes[number]) {
+  if (scope === 'turn') return t('chat.approval.scope.turn');
+  if (scope === 'task') return t('chat.approval.scope.task');
+  if (scope === 'session') return t('chat.approval.scope.session');
+  if (scope === 'global') return t('chat.approval.scope.global');
+  return t('chat.approval.scope.once');
 }
 
 function approvalRows(payload: any) {
@@ -224,15 +233,18 @@ onBeforeUnmount(() => {
         <p v-if="typedOwnerRoute" class="approval-owner-note">
           {{ t('chat.approval.typedOwner') }}
         </p>
-        <label v-if="!typedOwnerRoute" class="field-line">
-          {{ t('chat.approval.scope') }}
-          <select v-model="approvalScope" :disabled="busy">
-            <option value="once">{{ t('chat.approval.scope.once') }}</option>
-            <option value="turn">{{ t('chat.approval.scope.turn') }}</option>
-            <option value="session">{{ t('chat.approval.scope.session') }}</option>
-            <option value="global">{{ t('chat.approval.scope.global') }}</option>
-          </select>
-        </label>
+        <fieldset v-if="!typedOwnerRoute" class="approval-scope-options" :disabled="busy">
+          <legend>{{ t('chat.approval.scope') }}</legend>
+          <button
+            v-for="scope in approvalScopes"
+            :key="scope"
+            type="button"
+            :class="{ active: approvalScope === scope }"
+            @click="approvalScope = scope"
+          >
+            {{ approvalScopeLabel(scope) }}
+          </button>
+        </fieldset>
         <p v-if="error" class="file-error" role="alert">{{ error }}</p>
       </div>
       <footer>

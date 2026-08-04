@@ -479,7 +479,7 @@ describe('chatSessions', () => {
       tool_call_id: 'call-child-search',
       id: 'call-child-search',
       name: 'web_search',
-      preview: '{"query":"WAIC"}',
+      preview: '{"query":"technical standard"}',
     }) } as MessageEvent);
     streamA?.onmessage?.({ data: JSON.stringify({
       type: 'ToolComplete',
@@ -518,7 +518,7 @@ describe('chatSessions', () => {
       tool_call_id: 'call-team-search',
       id: 'call-team-search',
       name: 'web_search',
-      preview: '{"query":"WAIC team"}',
+      preview: '{"query":"technical standard team"}',
     }) } as MessageEvent);
     streamA?.onmessage?.({ data: JSON.stringify({
       type: 'ToolComplete',

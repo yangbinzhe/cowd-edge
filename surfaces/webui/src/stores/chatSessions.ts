@@ -1305,7 +1305,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (!next) return false;
     if (state.executionGraphId === next) {
       if (hydrateProjection) {
-        projections.acquire(next, `chat:${sessionId}`, 'full', 'bounded', sessionId);
+        projections.acquire(next, `chat:${sessionId}`, 'summary', 'bounded', sessionId);
         refreshProjection(sessionId).catch(() => undefined);
       }
       return false;
@@ -1313,7 +1313,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     projections.release(`chat:${sessionId}`);
     state.executionGraphId = next;
     if (hydrateProjection) {
-      projections.acquire(next, `chat:${sessionId}`, 'full', 'bounded', sessionId);
+      projections.acquire(next, `chat:${sessionId}`, 'summary', 'bounded', sessionId);
       refreshProjection(sessionId).catch(() => undefined);
     }
     return true;
@@ -1330,7 +1330,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     projections.acquire(
       projectionId,
       `chat:${sessionId}`,
-      'full',
+      'summary',
       'bounded',
       sessionId,
     );

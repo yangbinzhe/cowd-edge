@@ -371,7 +371,7 @@ describe('Cowd Vue WebUI shell', () => {
     projections.entries['execution-graph-1'] = {
       executionId: 'execution-graph-1',
       projection: {
-        schema_version: 1,
+        schema_version: 2,
         kind: 'runtime.execution_projection',
         execution_id: 'execution-graph-1',
         revision: 1,
@@ -379,7 +379,7 @@ describe('Cowd Vue WebUI shell', () => {
         live: { status: 'running' },
         graph: {
           graph_id: 'execution-graph-1',
-          objective: 'Inspect WAIC evidence',
+          objective: 'Inspect technical standard evidence',
           status: 'running',
           nodes: [{
             node_id: 'research',
@@ -390,7 +390,7 @@ describe('Cowd Vue WebUI shell', () => {
               calls: [{
                 id: 'web-search-1',
                 name: 'WebSearch',
-                input: { query: 'WAIC' },
+                input: { query: 'technical standard' },
                 depends_on: [],
               }],
             }),
@@ -399,13 +399,68 @@ describe('Cowd Vue WebUI shell', () => {
               required_evidence: ['web'],
             },
             resource_scopes: ['network:read'],
-            summary: 'WAIC evidence is being collected',
-            result_ref: 'result://waic-research',
+            summary: 'Technical evidence is being collected',
+            result_ref: 'result://technical-research',
             evidence_refs: [],
             usage: {},
           }],
           edges: [],
         },
+        activities: [
+          {
+            schema_version: 1,
+            activity_id: 'activity:execution:execution-graph-1',
+            scope: {
+              workspace_id: 'workspace',
+              session_id: 'graph-session',
+              turn_id: 'turn-graph-1',
+              execution_id: 'execution-graph-1',
+            },
+            kind: 'execution',
+            visibility: ['narrative', 'operational', 'audit'],
+            causal_parent_ids: [],
+            dependency_ids: [],
+            status: 'running',
+            started_at_ms: 1,
+            sequence: 1,
+            commit_cursor: 1,
+            public_summary: 'Inspect technical standard evidence',
+            artifact_refs: [],
+            evidence_refs: [],
+          },
+          {
+            schema_version: 1,
+            activity_id: 'activity:execution:execution-graph-1:tool:web-search-1',
+            scope: {
+              workspace_id: 'workspace',
+              session_id: 'graph-session',
+              turn_id: 'turn-graph-1',
+              execution_id: 'execution-graph-1',
+            },
+            kind: 'tool',
+            visibility: ['narrative', 'operational', 'audit'],
+            parent_activity_id: 'activity:execution:execution-graph-1',
+            initiator_activity_id: 'activity:execution:execution-graph-1',
+            causal_parent_ids: [],
+            dependency_ids: [],
+            tool_call_id: 'web-search-1',
+            status: 'completed',
+            started_at_ms: 2,
+            completed_at_ms: 12,
+            duration_ms: 10,
+            sequence: 2,
+            commit_cursor: 2,
+            public_summary: 'WebSearch',
+            artifact_refs: ['result://technical-research'],
+            evidence_refs: ['evidence://technical-research'],
+          },
+        ],
+        activity_relations: [{
+          relation_id: 'relation:invoked:execution:web-search-1',
+          kind: 'invoked',
+          from_activity_id: 'activity:execution:execution-graph-1',
+          to_activity_id: 'activity:execution:execution-graph-1:tool:web-search-1',
+        }],
       } as any,
       cursor: 1,
       detailScope: 'full',
@@ -432,18 +487,18 @@ describe('Cowd Vue WebUI shell', () => {
       .get('.chat-execution-overlay .graph-toolbar [aria-label="列表视图"]')
       .trigger('click');
     await nextTick();
-    await wrapper.findAll('.chat-execution-overlay .data-table tbody tr')[1].trigger('click');
+    const toolRow = wrapper
+      .findAll('.chat-execution-overlay .data-table tbody tr')
+      .find((row) => row.text().includes('WebSearch'));
+    expect(toolRow).toBeTruthy();
+    await toolRow!.trigger('click');
     await nextTick();
-    expect(wrapper.get('.execution-node-tool-schedule').text()).toContain('1 次调用');
-    await wrapper.get('.execution-node-tool-schedule summary').trigger('click');
-    await nextTick();
-    expect(wrapper.get('.execution-node-tool-schedule').text()).toContain('WebSearch');
+    expect(wrapper.get('.execution-node-detail').text()).toContain('WebSearch');
     await wrapper
       .get('.execution-node-detail [aria-label="完整输出详情"]')
       .trigger('click');
     await nextTick();
-    expect(wrapper.get('.execution-node-detail').text()).toContain('WebSearch');
-    expect(wrapper.get('.execution-node-detail').text()).toContain('call count');
+    expect(wrapper.get('.execution-node-detail').text()).toContain('result://technical-research');
 
     await wrapper.get('.chat-execution-status').trigger('click');
     await settle();

@@ -3,10 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ActivityEvent } from '../../types';
 import { adaptExecutionGraph } from '../../adapters/graph/execution';
 import { activeExecutionNode } from '../../utils/executionNode';
-import {
-  applyExecutionActivityState,
-  expandExecutionToolBatches,
-} from '../../utils/executionToolGraph';
 import GraphSurface from '../graph/GraphSurface.vue';
 import ExecutionNodeDetail from './ExecutionNodeDetail.vue';
 
@@ -30,10 +26,7 @@ const emit = defineEmits<{
   expand: [];
 }>();
 const root = ref<HTMLElement | null>(null);
-const projectedGraph = computed(() => expandExecutionToolBatches(
-  applyExecutionActivityState(props.graph, props.activityEvents),
-  props.activityEvents,
-));
+const projectedGraph = computed(() => props.graph);
 const model = computed(() => adaptExecutionGraph(projectedGraph.value));
 const selectedNode = ref<Record<string, any> | null>(null);
 const detailOpen = ref(false);

@@ -2899,6 +2899,7 @@ export const zhCN: MessageCatalog = {
   "page.skills.governance.validate": "重新校验",
   "page.skills.governance.plan": "生成运行计划",
   "page.mission.schedules.title": "定时任务",
+  "page.mission.selector.label": "任务",
   "page.mission.schedules.description": "通过 Runtime 的持久化调度器定时或手动触发 Mission 工作。",
   "page.mission.schedules.fires": "次触发",
   "page.mission.schedules.objective": "任务目标",

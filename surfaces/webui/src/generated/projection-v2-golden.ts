@@ -11,7 +11,9 @@ export const PROJECTION_V2_GOLDEN = {
         "mission_id": "mission-golden",
         "op": "set_projection_header",
         "revision": 2,
-        "session_id": "session-golden"
+        "session_id": "session-golden",
+        "task_id": "task-golden",
+        "turn_id": "turn-golden"
       },
       {
         "commit_cursor": 2,
@@ -98,6 +100,95 @@ export const PROJECTION_V2_GOLDEN = {
       {
         "execution_id": "child-obsolete",
         "op": "remove_child_execution"
+      },
+      {
+        "activities": [
+          {
+            "activity_id": "activity:execution:execution-golden",
+            "artifact_refs": [
+              "result:node-a"
+            ],
+            "causal_parent_ids": [],
+            "commit_cursor": 2,
+            "completed_at_ms": 25,
+            "dependency_ids": [],
+            "duration_ms": 15,
+            "evidence_refs": [
+              "evidence:node-a"
+            ],
+            "kind": "execution",
+            "public_summary": "verify projection reducer",
+            "schema_version": 1,
+            "scope": {
+              "execution_id": "execution-golden",
+              "mission_id": "mission-golden",
+              "session_id": "session-golden",
+              "task_id": "task-golden",
+              "turn_id": "turn-golden",
+              "workspace_id": "workspace-golden"
+            },
+            "sequence": 1,
+            "started_at_ms": 10,
+            "status": "completed",
+            "visibility": [
+              "narrative",
+              "operational",
+              "audit"
+            ]
+          }
+        ],
+        "op": "replace_activities",
+        "relations": []
+      },
+      {
+        "activity": {
+          "activity_id": "activity:execution:execution-golden:tool:node-a",
+          "artifact_refs": [
+            "result:node-a"
+          ],
+          "causal_parent_ids": [
+            "activity:execution:execution-golden"
+          ],
+          "commit_cursor": 2,
+          "completed_at_ms": 22,
+          "dependency_ids": [],
+          "duration_ms": 12,
+          "evidence_refs": [
+            "evidence:node-a"
+          ],
+          "kind": "tool",
+          "parent_activity_id": "activity:execution:execution-golden",
+          "public_summary": "read projected evidence",
+          "schema_version": 1,
+          "scope": {
+            "execution_id": "execution-golden",
+            "mission_id": "mission-golden",
+            "session_id": "session-golden",
+            "task_id": "task-golden",
+            "turn_id": "turn-golden",
+            "workspace_id": "workspace-golden"
+          },
+          "sequence": 2,
+          "started_at_ms": 10,
+          "status": "completed",
+          "tool_call_id": "node-a",
+          "visibility": [
+            "narrative",
+            "operational",
+            "audit"
+          ]
+        },
+        "op": "upsert_activity"
+      },
+      {
+        "op": "upsert_activity_relation",
+        "relation": {
+          "evidence_ref": "evidence:node-a",
+          "from_activity_id": "activity:execution:execution-golden",
+          "kind": "contains",
+          "relation_id": "activity-relation:execution-tool",
+          "to_activity_id": "activity:execution:execution-golden:tool:node-a"
+        }
       },
       {
         "op": "replace_strategy",
@@ -242,7 +333,7 @@ export const PROJECTION_V2_GOLDEN = {
       }
     ],
     "redaction_revision": "sha256:golden",
-    "reducer_version": 1,
+    "reducer_version": 2,
     "resync_reason": null,
     "schema_version": 2,
     "source_health": "fresh",
@@ -250,6 +341,87 @@ export const PROJECTION_V2_GOLDEN = {
     "target_revision": 2
   },
   "expected": {
+    "activities": [
+      {
+        "activity_id": "activity:execution:execution-golden",
+        "artifact_refs": [
+          "result:node-a"
+        ],
+        "causal_parent_ids": [],
+        "commit_cursor": 2,
+        "completed_at_ms": 25,
+        "dependency_ids": [],
+        "duration_ms": 15,
+        "evidence_refs": [
+          "evidence:node-a"
+        ],
+        "kind": "execution",
+        "public_summary": "verify projection reducer",
+        "schema_version": 1,
+        "scope": {
+          "execution_id": "execution-golden",
+          "mission_id": "mission-golden",
+          "session_id": "session-golden",
+          "task_id": "task-golden",
+          "turn_id": "turn-golden",
+          "workspace_id": "workspace-golden"
+        },
+        "sequence": 1,
+        "started_at_ms": 10,
+        "status": "completed",
+        "visibility": [
+          "narrative",
+          "operational",
+          "audit"
+        ]
+      },
+      {
+        "activity_id": "activity:execution:execution-golden:tool:node-a",
+        "artifact_refs": [
+          "result:node-a"
+        ],
+        "causal_parent_ids": [
+          "activity:execution:execution-golden"
+        ],
+        "commit_cursor": 2,
+        "completed_at_ms": 22,
+        "dependency_ids": [],
+        "duration_ms": 12,
+        "evidence_refs": [
+          "evidence:node-a"
+        ],
+        "kind": "tool",
+        "parent_activity_id": "activity:execution:execution-golden",
+        "public_summary": "read projected evidence",
+        "schema_version": 1,
+        "scope": {
+          "execution_id": "execution-golden",
+          "mission_id": "mission-golden",
+          "session_id": "session-golden",
+          "task_id": "task-golden",
+          "turn_id": "turn-golden",
+          "workspace_id": "workspace-golden"
+        },
+        "sequence": 2,
+        "started_at_ms": 10,
+        "status": "completed",
+        "tool_call_id": "node-a",
+        "visibility": [
+          "narrative",
+          "operational",
+          "audit"
+        ]
+      }
+    ],
+    "activity_relations": [
+      {
+        "evidence_ref": "evidence:node-a",
+        "from_activity_id": "activity:execution:execution-golden",
+        "kind": "contains",
+        "relation_id": "activity-relation:execution-tool",
+        "to_activity_id": "activity:execution:execution-golden:tool:node-a"
+      }
+    ],
     "admissions": [
       {
         "evidence_refs": [
@@ -451,10 +623,14 @@ export const PROJECTION_V2_GOLDEN = {
     "schema_version": 2,
     "session_id": "session-golden",
     "strategy": null,
+    "task_id": "task-golden",
     "teams": [],
+    "turn_id": "turn-golden",
     "usage": []
   },
   "initial": {
+    "activities": [],
+    "activity_relations": [],
     "admissions": [],
     "agents": [],
     "approvals": [],
@@ -560,7 +736,9 @@ export const PROJECTION_V2_GOLDEN = {
     "schema_version": 2,
     "session_id": "session-golden",
     "strategy": null,
+    "task_id": "task-golden",
     "teams": [],
+    "turn_id": "turn-golden",
     "usage": []
   }
 } as const;

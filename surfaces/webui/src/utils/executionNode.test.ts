@@ -26,14 +26,14 @@ describe('execution node inspection', () => {
       kind: 'tool',
       title: 'WebSearch',
       refs: ['research'],
-      input: { query: 'WAIC 2026' },
+      input: { query: 'distributed runtime standard' },
       output: { sources: 4 },
     }]);
 
     expect(detail).toMatchObject({
       id: 'research',
       description: 'Investigate current evidence',
-      input: { query: 'WAIC 2026' },
+      input: { query: 'distributed runtime standard' },
       output: { sources: 4 },
     });
   });

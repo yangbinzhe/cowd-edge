@@ -109,7 +109,7 @@ if (
 if (
   projectionGolden?.initial?.schema_version !== 2
   || projectionGolden?.delta?.schema_version !== 2
-  || projectionGolden?.delta?.reducer_version !== 1
+  || projectionGolden?.delta?.reducer_version !== 2
   || projectionGolden?.expected?.schema_version !== 2
 ) {
   throw new Error('Gateway OpenAPI is missing the canonical projection v2 golden corpus');

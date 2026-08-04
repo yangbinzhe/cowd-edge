@@ -30,6 +30,7 @@ import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
+import ExecutionActivityTree from '../components/chat/ExecutionActivityTree.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
@@ -38,6 +39,11 @@ import { causalActivityTimeline } from '../utils/causalTimeline';
 import { mergeActivityEvent } from '../utils/turnSettlement';
 import { releaseProjection } from '../release';
 import { combineExecutionLineage, executionProjectionLinks } from '../utils/executionLineage';
+import {
+  canonicalActivityEvents,
+  canonicalActivityRelations,
+  type ActivityView,
+} from '../adapters/executionActivity';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
@@ -77,13 +83,18 @@ const requestedProjection = computed(() => requestedExecutionGraphId.value
   ? projections.projectionFor(requestedExecutionGraphId.value)
   : null);
 const linkedExecutionProjectionIds = computed(() => executionProjectionLinks(requestedProjection.value));
+const lineageProjections = computed(() => [
+  requestedProjection.value,
+  ...linkedExecutionProjectionIds.value.map((executionId) => projections.projectionFor(executionId)),
+]);
+const canonicalNarrativeActivities = computed(() => (
+  canonicalActivityEvents(lineageProjections.value, 'narrative')
+));
+const canonicalRelations = computed(() => canonicalActivityRelations(lineageProjections.value));
 const activeProjection = computed(() => requestedProjection.value);
 const executionGraph = computed(() => combineExecutionLineage(
   requestedExecutionGraphId.value,
-  [
-    requestedProjection.value,
-    ...linkedExecutionProjectionIds.value.map((executionId) => projections.projectionFor(executionId)),
-  ],
+  lineageProjections.value,
 ));
 const executionConnectionState = computed(() => {
   const states = [requestedExecutionGraphId.value, ...linkedExecutionProjectionIds.value]
@@ -106,6 +117,9 @@ const selectedExecutionEntry = computed(() => (
   )) || null
 ));
 const executionActivityEvents = computed(() => {
+  if (canonicalNarrativeActivities.value.length) {
+    return canonicalNarrativeActivities.value.slice(-500);
+  }
   const rows = new Map<string, ActivityEvent>();
   const lineageIds = new Set([
     requestedExecutionGraphId.value,
@@ -130,7 +144,13 @@ const executionActivityEvents = computed(() => {
   }
   return [...rows.values()].slice(-160);
 });
-const live = computed(() => currentProjection.value?.live || chat.active?.live || null);
+const live = computed(() => {
+  const local = chat.active?.live || null;
+  if (chat.active?.submitting || chat.active?.pending) {
+    return local || currentProjection.value?.live || null;
+  }
+  return currentProjection.value?.live || local;
+});
 const providerModelRows = computed(() => {
   const providers = store.providers as any;
   const control = store.controlPlane as any;
@@ -350,7 +370,27 @@ watch(
 );
 
 const executionGraphConsumer = 'chat:expanded-execution-graph';
+const activeExecutionSummaryConsumer = 'chat:active-execution-summary';
 const lineageExecutionConsumers = new Set<string>();
+watch(
+  [
+    currentExecutionProjectionId,
+    () => store.activeSessionId,
+    () => Boolean(chat.active?.pending),
+  ],
+  ([executionId, sessionId, pending]) => {
+    projections.release(activeExecutionSummaryConsumer);
+    if (!executionId || !sessionId) return;
+    projections.acquire(
+      executionId,
+      activeExecutionSummaryConsumer,
+      'summary',
+      pending ? 'bounded' : 'passive',
+      sessionId,
+    );
+  },
+  { immediate: true },
+);
 watch(
   [() => store.chatExecutionGraphExpanded, requestedExecutionGraphId],
   ([expanded, rootGraphId]) => {
@@ -396,6 +436,7 @@ watch(
   { immediate: true },
 );
 onBeforeUnmount(() => {
+  projections.release(activeExecutionSummaryConsumer);
   projections.release(executionGraphConsumer);
   for (const consumer of lineageExecutionConsumers) projections.release(consumer);
   lineageExecutionConsumers.clear();
@@ -516,8 +557,15 @@ async function submit() {
   }
   try {
     transcriptPinnedToTail.value = true;
-    await store.boot();
-    if (!store.activeSessionId) await store.createSession();
+    // An already selected Session is an actionable boundary even while the
+    // rest of shell boot or its live stream is still hydrating. The Session
+    // store projects `queued` immediately and performs its own readiness,
+    // writer-attachment and recovery checks without blocking the composer on
+    // unrelated global startup work.
+    if (!store.activeSessionId) {
+      await store.boot();
+      if (!store.activeSessionId) await store.createSession();
+    }
     const sessionId = store.activeSessionId;
     if (!sessionId) return;
     if (/^\/permissions(?:\s|$)/i.test(text)) {
@@ -647,6 +695,41 @@ function causalTurnTimelineActivities(turns: ChatTurn[], index: number) {
     });
   }
   return causalActivityTimeline(activities, 500);
+}
+
+function canonicalTurnActivities(turns: ChatTurn[], index: number) {
+  const turn = turns[index];
+  if (!isFinalAssistantAnswer(turns, index) && !isActiveStreamingTurn(turn)) return [];
+  const turnId = String(
+    turn.turn_id
+    || (isActiveStreamingTurn(turn) ? chat.active?.executionTurnId : '')
+    || '',
+  ).trim();
+  const executionEntry = turnId
+    ? (chat.active?.executionIndex?.executions || []).find((entry) => entry.turn_id === turnId)
+    : null;
+  return canonicalNarrativeActivities.value.filter((activity) => (
+    (!!turnId && activity.turn_id === turnId)
+    || (
+      !!executionEntry?.execution_id
+      && (
+        activity.execution_id === executionEntry.execution_id
+        || activity.parent_execution_id === executionEntry.execution_id
+      )
+    )
+  ));
+}
+
+function canonicalTurnRelations(turns: ChatTurn[], index: number) {
+  const ids = new Set(canonicalTurnActivities(turns, index).map((activity) => activity.id));
+  return canonicalRelations.value.filter((relation) => (
+    ids.has(relation.from_activity_id) && ids.has(relation.to_activity_id)
+  ));
+}
+
+function openCanonicalActivity(activity: ActivityView) {
+  store.selectedActivity = activity;
+  openChatCompanion('activity');
 }
 
 function compactActivityValue(value: unknown, depth = 0): string {
@@ -1085,8 +1168,14 @@ function chooseFirstCommand() {
                   </div>
                 </Transition>
               </div>
+              <ExecutionActivityTree
+                v-if="canonicalTurnActivities(chat.active?.turns || [], index).length"
+                :activities="canonicalTurnActivities(chat.active?.turns || [], index)"
+                :relations="canonicalTurnRelations(chat.active?.turns || [], index)"
+                @select="openCanonicalActivity"
+              />
               <ol
-                v-if="causalTurnTimelineActivities(chat.active?.turns || [], index).length"
+                v-else-if="causalTurnTimelineActivities(chat.active?.turns || [], index).length"
                 class="conversation-timeline"
               >
                 <li

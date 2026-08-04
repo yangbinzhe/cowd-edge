@@ -4,12 +4,17 @@ import type {
   MissionProjectionDelta,
 } from '../types';
 
+export const MISSION_CONTROL_SCHEMA_VERSION = 3;
+
 export function applyMissionProjectionDelta(
   current: MissionMaterializedSnapshot | null,
   delta: MissionProjectionDelta,
 ): MissionMaterializedSnapshot | null {
   if (
     !current
+    || current.schema_version !== MISSION_CONTROL_SCHEMA_VERSION
+    || current.projection.schema_version !== MISSION_CONTROL_SCHEMA_VERSION
+    || delta.schema_version !== MISSION_CONTROL_SCHEMA_VERSION
     || delta.needs_resync
     || delta.from_cursor !== current.cursor
     || delta.from_revision !== current.revision

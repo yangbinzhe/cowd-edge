@@ -18,6 +18,7 @@ import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/works
 import type { ActivityEvent } from '../types';
 import { activityIdentityKey, causalActivityTimeline } from '../utils/causalTimeline';
 import { combineExecutionLineage, executionProjectionLinks } from '../utils/executionLineage';
+import { canonicalActivityEvents } from '../adapters/executionActivity';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
@@ -27,6 +28,8 @@ const previewOpen = ref(false);
 const activityDetailOpen = ref(false);
 const activityEvidenceOpen = ref(false);
 const activityEvidenceOverride = ref<string[]>([]);
+const activityDetailLoading = ref(false);
+let activityDetailRequest = 0;
 const activityEvidenceDetails = ref<HTMLDetailsElement | null>(null);
 const selectedExecutionNode = ref<Record<string, any> | null>(null);
 const previewMode = ref<'render' | 'source'>('render');
@@ -48,27 +51,6 @@ const workspaceMetaEntries = computed(() => {
     value: typeof value === 'string' ? value : JSON.stringify(value),
   }));
 });
-const activityEvents = computed(() => {
-  const sessionActivity = chat.active?.activity || [];
-  const rows = new Map<string, ActivityEvent>();
-  for (const item of [...store.activity, ...sessionActivity]) {
-    const event = item as ActivityEvent;
-    const identity = activityIdentityKey(event);
-    const previous = rows.get(identity);
-    rows.set(identity, previous ? {
-      ...previous,
-      ...event,
-      detail: event.detail || previous.detail,
-      status: event.status || previous.status,
-      duration_ms: event.duration_ms ?? previous.duration_ms,
-      input: event.input ?? previous.input,
-      output: event.output ?? previous.output,
-      raw: { ...(previous.raw || {}), ...(event.raw || {}) },
-    } : event);
-  }
-  return causalActivityTimeline([...rows.values()], 2_000);
-});
-const inspectorEvents = computed(() => activityEvents.value.filter((event) => event.kind === 'error' || event.status === 'error'));
 const contextItems = computed(() => {
   const envelope = store.currentContextEnvelope || {};
   return (Array.isArray(envelope.selected) ? envelope.selected : []).slice(0, 100);
@@ -98,6 +80,29 @@ const lineageProjections = computed(() => [
   rootProjection.value,
   ...linkedProjectionIds.value.map((executionId) => projections.projectionFor(executionId)),
 ]);
+const activityEvents = computed(() => {
+  const canonical = canonicalActivityEvents(lineageProjections.value, 'audit');
+  if (canonical.length) return canonical;
+  const sessionActivity = chat.active?.activity || [];
+  const rows = new Map<string, ActivityEvent>();
+  for (const item of [...store.activity, ...sessionActivity]) {
+    const event = item as ActivityEvent;
+    const identity = activityIdentityKey(event);
+    const previous = rows.get(identity);
+    rows.set(identity, previous ? {
+      ...previous,
+      ...event,
+      detail: event.detail || previous.detail,
+      status: event.status || previous.status,
+      duration_ms: event.duration_ms ?? previous.duration_ms,
+      input: event.input ?? previous.input,
+      output: event.output ?? previous.output,
+      raw: { ...(previous.raw || {}), ...(event.raw || {}) },
+    } : event);
+  }
+  return causalActivityTimeline([...rows.values()], 2_000);
+});
+const inspectorEvents = computed(() => activityEvents.value.filter((event) => event.kind === 'error' || event.status === 'error'));
 const activeProjection = computed(() => rootProjection.value);
 const activeProjectionEntry = computed(() => rootProjectionId.value
   ? projections.entries[rootProjectionId.value]
@@ -489,11 +494,55 @@ function closePreview() {
   previewOpen.value = false;
 }
 
-function openActivityDetail(item: Record<string, unknown>) {
+async function openActivityDetail(item: Record<string, unknown>) {
   store.selectedActivity = item;
   activityEvidenceOverride.value = [];
   activityEvidenceOpen.value = false;
   activityDetailOpen.value = true;
+  const activityId = String(item.activity_id || item.id || '').trim();
+  const executionId = String(item.execution_id || '').trim();
+  if (!activityId || !executionId || !item.detail_capability) return;
+  const request = activityDetailRequest += 1;
+  activityDetailLoading.value = true;
+  try {
+    const detail = await api.executionActivity(
+      executionId,
+      activityId,
+      String(item.session_id || chat.active?.id || ''),
+    );
+    if (request !== activityDetailRequest) return;
+    activityEvidenceOverride.value = Array.from(new Set([
+      ...(detail.activity?.evidence_refs || []),
+      ...(detail.activity?.artifact_refs || []),
+    ])).slice(0, 100);
+    store.selectedActivity = {
+      ...item,
+      raw: {
+        activity: detail.activity,
+        relations: detail.relations,
+        related_entities: detail.related_entities,
+      },
+      output: detail.related_entities,
+    };
+  } catch (error) {
+    if (request !== activityDetailRequest) return;
+    store.selectedActivity = {
+      ...item,
+      raw: {
+        ...(typeof item.raw === 'object' && item.raw ? item.raw : {}),
+        detail_error: error instanceof Error ? error.message : String(error),
+      },
+    };
+  } finally {
+    if (request === activityDetailRequest) activityDetailLoading.value = false;
+  }
+}
+
+function openGraphNodeDetail(node: Record<string, unknown>) {
+  selectedExecutionNode.value = node;
+  const activityId = String(node.canonical_activity_id || node.node_id || '').trim();
+  const activity = activityEvents.value.find((candidate) => candidate.id === activityId);
+  void openActivityDetail(activity || node);
 }
 
 function openTurnEvidenceDetail(group: any) {
@@ -551,6 +600,8 @@ function turnStatus(status: string) {
 }
 
 function closeActivityDetail() {
+  activityDetailRequest += 1;
+  activityDetailLoading.value = false;
   activityDetailOpen.value = false;
   activityEvidenceOpen.value = false;
   activityEvidenceOverride.value = [];
@@ -587,6 +638,19 @@ async function stepPreview(delta: number) {
 watch(() => store.selectedFile, (path) => {
   if (path) openPreview();
 });
+watch(
+  () => String(store.selectedActivity?.id || ''),
+  (activityId) => {
+    if (
+      !activityId
+      || activityDetailOpen.value
+      || store.companionTab !== 'activity'
+      || !store.selectedActivity?.detail_capability
+    ) return;
+    void openActivityDetail(store.selectedActivity as Record<string, unknown>);
+  },
+  { immediate: true },
+);
 
 useEscapeKey(() => closePreview(), () => previewOpen.value);
 useEscapeKey(() => closeActivityDetail(), () => activityDetailOpen.value);
@@ -685,7 +749,7 @@ watch(
           :loading="!executionGraph"
           :activity-events="activityEvents"
           compact
-          @select="selectedExecutionNode = $event"
+          @select="openGraphNodeDetail"
           @expand="store.openChatExecutionGraph(rootProjectionId)"
         />
       </section>
@@ -917,6 +981,10 @@ watch(
           <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="closeActivityDetail"><X :size="16" /></button>
         </header>
         <div class="activity-detail-content">
+          <div v-if="activityDetailLoading" class="inline-loading" role="status">
+            <LoaderCircle class="spin" :size="15" />
+            <span>{{ t('common.loading') }}</span>
+          </div>
           <p v-if="selectedActivity.detail" class="activity-detail-summary">{{ selectedActivity.detail }}</p>
           <section v-if="selectedActivityInput !== null && selectedActivityInput !== undefined" class="activity-structured-section">
             <header><strong>{{ t('chat.activity.detail.input') }}</strong></header>

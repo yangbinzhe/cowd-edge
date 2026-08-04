@@ -72,6 +72,12 @@ async function installOfflineGatewayContract(page) {
 }
 
 async function expectSemanticNavigation(locator) {
+  await expect.poll(async () => {
+    const labels = (await locator.evaluateAll((items) => items.map((item) => (
+      item.getAttribute('aria-label') || item.textContent || ''
+    )).map((label) => label.trim()))).filter(Boolean);
+    return requiredNavigationLabels.every((label) => labels.includes(label));
+  }).toBe(true);
   const labels = (await locator.evaluateAll((items) => items.map((item) => (
     item.getAttribute('aria-label') || item.textContent || ''
   )).map((label) => label.trim()))).filter(Boolean);
@@ -764,6 +770,11 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
   const receipt = await admitted.json();
   const executionId = String(receipt?.execution?.graph_id || receipt?.execution_id || '');
   expect(executionId).toBeTruthy();
+  const effectiveDurationMs = (estimate) => (
+    Number(estimate?.estimated_critical_path_ms || 0)
+    + Number(estimate?.startup_overhead_ms || 0)
+    + Number(estimate?.merge_cost_ms || 0)
+  );
 
   let projection = null;
   let projectionStatus = 0;
@@ -791,7 +802,7 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
       const fastestAlternativeMs = Math.min(
         ...(strategy?.candidate_estimates || [])
           .filter((estimate) => estimate?.candidate !== 'team' && estimate?.eligible)
-          .map((estimate) => Number(estimate?.estimated_critical_path_ms)),
+          .map(effectiveDurationMs),
       );
       const materializedTopology = [
         ...projectedTeams,
@@ -806,7 +817,7 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
         projection?.schema_version === 2
         && projection?.execution_id === executionId
         && strategy?.schema_version === 1
-        && Number(teamEstimate?.estimated_critical_path_ms) > fastestAlternativeMs
+        && effectiveDurationMs(teamEstimate) > fastestAlternativeMs
         && Array.isArray(strategy?.cost_reason)
         && strategy.cost_reason.length > 0
         && teamId
@@ -838,9 +849,9 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
   const fastestAlternativeMs = Math.min(
     ...projection.strategy.candidate_estimates
       .filter((estimate) => estimate?.candidate !== 'team' && estimate?.eligible)
-      .map((estimate) => Number(estimate?.estimated_critical_path_ms)),
+      .map(effectiveDurationMs),
   );
-  expect(Number(teamEstimate?.estimated_critical_path_ms)).toBeGreaterThan(fastestAlternativeMs);
+  expect(effectiveDurationMs(teamEstimate)).toBeGreaterThan(fastestAlternativeMs);
   expect(teamEstimate?.quality_provenance).not.toBe('calibrated');
   expect(teamEstimate).not.toHaveProperty('net_benefit_score');
   expect(teamEstimate).not.toHaveProperty('assumed');
@@ -1339,6 +1350,28 @@ test('all shell controls remain interactive while a conversation is running', as
         offset,
         limit,
         has_more: false,
+      }),
+    });
+  });
+  await page.route(`**/api/sessions/${sessionId}/history-index?*`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        schema_version: 1,
+        session_id: sessionId,
+        projection_generation: 1,
+        durable_cursor: 0,
+        event_cursor: 0,
+        history_revision: 0,
+        total_messages: 0,
+        total_bytes: 0,
+        index_generation: 0,
+        index_card_count: 0,
+        index_complete: true,
+        recovery_state: 'ready',
+        recent_metadata: [],
+        cards: [],
       }),
     });
   });

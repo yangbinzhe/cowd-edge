@@ -25,6 +25,8 @@ import type { LiveSourceLease } from '../stores/liveTransport';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 import { applyMissionProjectionDelta } from '../adapters/missionProjection';
+import { adaptMissionControlGraph } from '../adapters/missionControlGraph';
+import { combineExecutionLineage } from '../utils/executionLineage';
 import type {
   MissionCommand,
   MissionControlProjection,
@@ -38,6 +40,7 @@ const route = useRoute();
 const loading = ref(false);
 const error = ref('');
 const showFullTrace = ref(true);
+const selectedMissionId = ref('');
 const selectedSessionId = ref('');
 const selectedTeamId = ref('');
 const selectedExecutionId = ref('');
@@ -70,6 +73,9 @@ const controlProjection = computed<MissionControlProjection | Record<string, nev
   () => missionSnapshot.value?.projection || {},
 );
 
+const missions = computed(() => Array.isArray(controlProjection.value?.missions)
+  ? controlProjection.value.missions
+  : []);
 const mission = computed<any>(() => controlProjection.value?.mission || {});
 const sessions = computed(() => Array.isArray(controlProjection.value?.sessions)
   ? controlProjection.value.sessions
@@ -238,7 +244,13 @@ const cleanCounters = computed(() => ({
   handoffs: relationCount.value,
 }));
 const executionProjection = computed(() => selectedExecutionId.value ? projections.projectionFor(selectedExecutionId.value) : null);
-const executionGraph = computed(() => executionProjection.value?.graph || null);
+const missionAggregateGraph = computed(() => adaptMissionControlGraph(
+  controlProjection.value as MissionControlProjection,
+));
+const executionGraph = computed(() => combineExecutionLineage(
+  selectedExecutionId.value,
+  [executionProjection.value],
+));
 const executionCommandRows = computed(() => executionProjection.value?.available_commands || []);
 const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
   id: node.node_id || '-',
@@ -329,13 +341,18 @@ async function refresh() {
   error.value = '';
   try {
     const [nextMission, nextApprovals, nextRelations, nextConflicts, nextSchedules] = await Promise.all([
-      api.missionControl(),
+      api.missionControl(selectedMissionId.value),
       api.missionApprovals().catch(() => ({})),
       api.missionRelations().catch(() => ({})),
       api.missionConflicts().catch(() => ({})),
       api.missionSchedules().catch(() => ({})),
     ]);
     missionSnapshot.value = nextMission.snapshot;
+    selectedMissionId.value = String(
+      nextMission.snapshot?.projection?.selected_mission_id
+      || selectedMissionId.value
+      || '',
+    );
     approvals.value = nextApprovals;
     relations.value = nextRelations;
     conflicts.value = nextConflicts;
@@ -642,6 +659,16 @@ async function setTraceMode(enabled: boolean) {
   await refreshSelectedSession();
 }
 
+async function selectMission() {
+  missionLiveSource?.close();
+  missionLiveSource = null;
+  selectedSessionId.value = '';
+  selectedTeamId.value = '';
+  selectExecutionProjection('');
+  await refresh();
+  attachMissionLiveSource();
+}
+
 onMounted(async () => {
   await refresh();
   attachMissionLiveSource();
@@ -678,6 +705,18 @@ onUnmounted(() => {
         <p>{{ t('page.mission.control.page.text.f7b12477b7') }}</p>
       </div>
       <div class="chat-top-actions">
+        <label v-if="missions.length > 1" class="mission-selector">
+          <span class="sr-only">{{ t('page.mission.selector.label') }}</span>
+          <select v-model="selectedMissionId" @change="selectMission">
+            <option
+              v-for="item in missions"
+              :key="item.mission_id"
+              :value="item.mission_id"
+            >
+              {{ item.objective || item.mission_id }}
+            </option>
+          </select>
+        </label>
         <label class="mode-switch" :title="t('page.mission.control.page.title.1d58605a7b')">
           <button type="button" :class="{ active: showFullTrace }" @click="setTraceMode(true)">{{ t('page.mission.control.page.text.3c1abbcbcf') }}</button>
           <button type="button" :class="{ active: !showFullTrace }" @click="setTraceMode(false)">{{ t('page.mission.control.page.text.f0c3c77173') }}</button>
@@ -763,6 +802,13 @@ onUnmounted(() => {
           <button class="danger-action" type="button" :disabled="!recoveryReport" @click="applyRecovery">{{ t('page.mission.control.page.text.56ca46aeea') }}</button>
         </div>
         <ExecutionGraphCanvas
+          :graph="missionAggregateGraph"
+          :selected-node-id="String(selectedExecutionNode?.node_id || '')"
+          :connection-state="loading ? 'connecting' : 'live'"
+          @select="selectedExecutionNode = $event"
+        />
+        <ExecutionGraphCanvas
+          v-if="executionGraph"
           :graph="executionGraph"
           :selected-node-id="String(selectedExecutionNode?.node_id || '')"
           :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"

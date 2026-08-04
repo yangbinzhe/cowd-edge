@@ -9,6 +9,7 @@ import type {
   MissionControlResponse,
   MissionProjectionDelta,
   ExecutionLiveUpdate,
+  ExecutionActivityDetailProjection,
   ExecutionProjection,
   SessionEvidenceProjection,
   SessionExecutionIndexProjection,
@@ -1003,6 +1004,23 @@ export const api = {
     recovery: [],
     available_commands: [],
   }, {}, authorizationSessionId),
+  executionActivity: (
+    executionId: string,
+    activityId: string,
+    authorizationSessionId = '',
+  ) => read<ExecutionActivityDetailProjection>(
+    `/api/runtime/executions/${encodeURIComponent(executionId)}/activity?activity_id=${encodeURIComponent(activityId)}`,
+    {
+      schema_version: 1,
+      execution_id: executionId,
+      activity: null as never,
+      relations: [],
+      related_entities: [],
+    },
+    {},
+    authorizationSessionId,
+    'interactive',
+  ),
   executeProjectionCommand: (executionId: string, request: Record<string, unknown>) => write(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
     method: 'POST', body: JSON.stringify(request),
   }),
@@ -1289,7 +1307,11 @@ export const api = {
   }),
   runtimeTurn: (id: string) => read(`/api/runtime/turns/${encodeURIComponent(id)}`, {}),
   cancelRuntimeTurn: (id: string) => writeWithReceipt(`/api/runtime/turns/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
-  missionControl: () => read<MissionControlResponse>('/api/mission/control', {
+  missionControl: (missionId = '') => {
+    const params = new URLSearchParams();
+    if (missionId.trim()) params.set('mission_id', missionId.trim());
+    const suffix = params.size ? `?${params.toString()}` : '';
+    return read<MissionControlResponse>(`/api/mission/control${suffix}`, {
     ok: true,
     snapshot: {
       schema_version: 1,
@@ -1323,10 +1345,12 @@ export const api = {
         health: {},
       },
     },
-  } as MissionControlResponse),
-  missionControlDelta: (cursor: number, revision?: number) => {
+    } as MissionControlResponse);
+  },
+  missionControlDelta: (cursor: number, revision?: number, missionId = '') => {
     const params = new URLSearchParams({ cursor: String(Math.max(0, cursor)) });
     if (Number.isFinite(revision)) params.set('revision', String(revision));
+    if (missionId.trim()) params.set('mission_id', missionId.trim());
     return read<MissionProjectionDelta>(`/api/mission/control/delta?${params.toString()}`, {
       schema_version: 1,
       kind: 'mission_control.projection_delta',

@@ -19,7 +19,7 @@ describe('ExecutionNodeDetail', () => {
           kind: 'tool',
           title: 'WebSearch',
           refs: ['node-search'],
-          input: { query: 'WAIC 2026', status: 'running' },
+          input: { query: 'distributed runtime standard', status: 'running' },
           output: { summary: 'Four sources', status: 'completed' },
         }],
       },
@@ -31,7 +31,7 @@ describe('ExecutionNodeDetail', () => {
 
     await actions[0]!.trigger('click');
     expect(wrapper.find('.execution-node-payload').exists()).toBe(true);
-    expect(wrapper.find('.structured-object').text()).toContain('WAIC 2026');
+    expect(wrapper.find('.structured-object').text()).toContain('distributed runtime standard');
     expect(wrapper.find('.structured-object').text()).not.toContain('"query"');
     expect(wrapper.get('.raw-payload').attributes('open')).toBeUndefined();
 
