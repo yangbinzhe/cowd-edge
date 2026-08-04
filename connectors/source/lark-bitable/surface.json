@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "lark-bitable",
   "name": "Lark Base Source Connector",
-  "version": "0.9.635",
+  "version": "0.9.636",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",

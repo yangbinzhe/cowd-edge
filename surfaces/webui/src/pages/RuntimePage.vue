@@ -230,6 +230,9 @@ async function loadSection(section = activeSection.value || 'overview', force = 
       effectiveConfig.value = nextEffectiveConfig;
       store.configReloadStatus = nextControl?.config_reload || {};
     } else if (section === 'runs') {
+      const routedExecutionId = typeof route.query.execution_id === 'string'
+        ? route.query.execution_id.trim()
+        : '';
       const [nextTurns, nextLeases, nextTasks, nextSessionExecution] = await Promise.all([
         api.runtimeTurns(controller.signal),
         api.runtimeSessionLeases(controller.signal),
@@ -242,6 +245,13 @@ async function loadSection(section = activeSection.value || 'overview', force = 
       tasks.value = nextTasks;
       sessionExecution.value = nextSessionExecution;
       selectedTurnId.value = selectedTurnId.value || turnRows.value[0]?.id || '';
+      const executionId = routedExecutionId
+        || String(nextSessionExecution?.latest_execution_id || '').trim()
+        || String(turnRows.value.find((turn: any) => turn.execution && turn.execution !== '-')?.execution || '').trim();
+      if (executionId) {
+        await projections.load(executionId, 'full', sessionId.value);
+        if (!current()) return;
+      }
     } else if (section === 'policy') {
       const [nextApprovals, nextGrants] = await Promise.all([
         api.approvalPending(controller.signal),
