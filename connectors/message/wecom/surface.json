@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "wecom",
   "name": "WeCom Message Connector",
-  "version": "0.9.638",
+  "version": "0.9.639",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",
