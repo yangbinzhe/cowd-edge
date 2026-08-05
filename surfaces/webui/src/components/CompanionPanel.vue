@@ -17,8 +17,16 @@ import ExecutionGraphCanvas from './mission/ExecutionGraphCanvas.vue';
 import { isWorkspaceEditablePreview, workspacePreviewKind } from '../utils/workspacePreview';
 import type { ActivityEvent } from '../types';
 import { activityIdentityKey, causalActivityTimeline } from '../utils/causalTimeline';
-import { combineExecutionLineage, executionProjectionLinks } from '../utils/executionLineage';
-import { canonicalActivityEvents } from '../adapters/executionActivity';
+import {
+  combineExecutionLineage,
+  executionProjectionLinks,
+  selectTurnExecutionEntry,
+} from '../utils/executionLineage';
+import {
+  activityEventViews,
+  businessGraphActivities,
+  canonicalActivityEvents,
+} from '../adapters/executionActivity';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
@@ -38,6 +46,7 @@ const imageZoom = ref(1);
 const resizing = ref(false);
 const executionHistoryLimit = ref(50);
 const collapsedTurnIds = ref(new Set<string>());
+const activityMode = ref<'business' | 'technical'>('business');
 
 const previewKind = computed(() => store.selectedFile ? workspacePreviewKind(store.selectedFile) : 'binary');
 const rawFileUrl = computed(() => store.rawWorkspaceFileUrl(store.selectedFile));
@@ -76,13 +85,9 @@ const rootProjection = computed(() => rootProjectionId.value
   ? projections.projectionFor(rootProjectionId.value)
   : null);
 const linkedProjectionIds = computed(() => executionProjectionLinks(rootProjection.value));
-const lineageProjections = computed(() => [
-  rootProjection.value,
-  ...linkedProjectionIds.value.map((executionId) => projections.projectionFor(executionId)),
-]);
+const lineageProjections = computed(() => [rootProjection.value]);
 const activityEvents = computed(() => {
   const canonical = canonicalActivityEvents(lineageProjections.value, 'audit');
-  if (canonical.length) return canonical;
   const sessionActivity = chat.active?.activity || [];
   const rows = new Map<string, ActivityEvent>();
   for (const item of [...store.activity, ...sessionActivity]) {
@@ -100,8 +105,46 @@ const activityEvents = computed(() => {
       raw: { ...(previous.raw || {}), ...(event.raw || {}) },
     } : event);
   }
+  // The current execution projection is fresher than the durable Turn
+  // projection, but it only covers one execution lineage. Merge it into the
+  // Session-wide history instead of replacing earlier Turn activity.
+  for (const event of canonical) {
+    const identity = activityIdentityKey(event);
+    const previous = rows.get(identity);
+    rows.set(identity, previous ? {
+      ...previous,
+      ...event,
+      detail: event.detail || previous.detail,
+      status: event.status || previous.status,
+      duration_ms: event.duration_ms ?? previous.duration_ms,
+      input: previous.input ?? event.input,
+      output: previous.output ?? event.output,
+      raw: { ...(previous.raw || {}), ...(event.raw || {}) },
+    } : event);
+  }
   return causalActivityTimeline([...rows.values()], 2_000);
 });
+const businessActivityEvents = computed(() => {
+  const views = activityEventViews(activityEvents.value, {
+    sessionId: store.activeSessionId,
+    executionId: rootProjectionId.value,
+  });
+  const preferred = new Map(
+    businessGraphActivities(views).map((activity) => [activity.id, activity]),
+  );
+  // Reasoning is part of the operator-visible business story even when the
+  // graph omits provider/model internals. Keep it in Activity while leaving
+  // context assembly and transport details to Technical mode.
+  for (const activity of views) {
+    if (['think', 'model'].includes(activity.kind)) {
+      preferred.set(activity.id, activity);
+    }
+  }
+  return causalActivityTimeline([...preferred.values()], 2_000);
+});
+const visibleActivityEvents = computed(() => (
+  activityMode.value === 'technical' ? activityEvents.value : businessActivityEvents.value
+));
 const inspectorEvents = computed(() => activityEvents.value.filter((event) => event.kind === 'error' || event.status === 'error'));
 const activeProjection = computed(() => rootProjection.value);
 const activeProjectionEntry = computed(() => rootProjectionId.value
@@ -112,7 +155,7 @@ const executionGraph = computed(() => combineExecutionLineage(
   lineageProjections.value,
 ));
 const executionConnectionState = computed(() => {
-  const states = [rootProjectionId.value, ...linkedProjectionIds.value]
+  const states = [rootProjectionId.value]
     .filter(Boolean)
     .map((executionId) => projections.stateFor(executionId));
   if (states.some((state) => state === 'error')) return 'error';
@@ -179,7 +222,7 @@ const executionTurnGroups = computed(() => {
   const canonicalTurns = canonicalExecutionTurns.value;
   const visibleTurns = canonicalTurns.slice(-executionHistoryLimit.value).reverse();
   return visibleTurns.map(({ turnId, projected, userTurns, order }) => {
-    const indexedEntry = entries.find((candidate) => candidate.turn_id === turnId);
+    const indexedEntry = selectTurnExecutionEntry(entries, turnId);
     const isActiveTurn = turnId === chat.active?.executionTurnId;
     const entry = indexedEntry || (isActiveTurn ? {
       execution_id: chat.active?.executionId || '',
@@ -188,7 +231,7 @@ const executionTurnGroups = computed(() => {
       status: chat.active?.live?.status || (chat.active?.pending ? 'running' : 'unknown'),
       updated_at_ms: chat.active?.lastEventAtMs || Date.now(),
     } : null);
-    const events = activityEvents.value.filter((event) => (
+    const events = visibleActivityEvents.value.filter((event) => (
       event.turn_id === turnId
       || (!!entry?.execution_id && event.execution_id === entry.execution_id)
       || (!!entry?.execution_id && event.parent_execution_id === entry.execution_id)
@@ -229,8 +272,8 @@ const executionTurnGroups = computed(() => {
       }),
       status: String(
         (isActiveTurn && chat.active?.pending ? chat.active?.live?.status : '')
-        || projected?.status
         || entry?.status
+        || projected?.status
         || transcriptInput?.status
         || 'unknown',
       ),
@@ -655,8 +698,6 @@ watch(
 useEscapeKey(() => closePreview(), () => previewOpen.value);
 useEscapeKey(() => closeActivityDetail(), () => activityDetailOpen.value);
 
-const lineageProjectionConsumers = new Set<string>();
-
 onMounted(() => {
   const savedWidth = Number(localStorage.getItem('cowd-webui-companion-width') || 0);
   if (savedWidth) applyCompanionWidth(savedWidth);
@@ -666,8 +707,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   projections.release('chat:companion-root-execution');
-  for (const consumer of lineageProjectionConsumers) projections.release(consumer);
-  lineageProjectionConsumers.clear();
   window.removeEventListener('mousemove', dragResize);
   window.removeEventListener('mouseup', stopResize);
 });
@@ -684,31 +723,6 @@ watch([rootProjectionId, () => store.companionTab], ([executionId, tab]) => {
   );
 }, { immediate: true });
 
-watch(
-  [() => linkedProjectionIds.value.join('\u0000'), () => store.companionTab],
-  ([, tab]) => {
-    const expected = new Set<string>();
-    if (tab === 'activity' && store.activeSessionId) {
-      for (const executionId of linkedProjectionIds.value) {
-        const consumer = `chat:companion-lineage:${executionId}`;
-        expected.add(consumer);
-        projections.acquire(
-          executionId,
-          consumer,
-          'full',
-          'bounded',
-          store.activeSessionId,
-        );
-      }
-    }
-    for (const consumer of lineageProjectionConsumers) {
-      if (!expected.has(consumer)) projections.release(consumer);
-    }
-    lineageProjectionConsumers.clear();
-    for (const consumer of expected) lineageProjectionConsumers.add(consumer);
-  },
-  { immediate: true },
-);
 </script>
 
 <template>
@@ -732,7 +746,15 @@ watch(
     <section v-if="store.companionTab === 'activity'" class="companion-body">
       <div class="panel-title">
         <h2>{{ t('component.companion.panel.text.97ab0e4ebb') }}</h2>
-        <span>{{ formatCount('events', activityEvents.length) }}</span>
+        <div class="segmented activity-mode-switch" role="group" :aria-label="t('chat.execution.activityMode')">
+          <button type="button" :class="{ active: activityMode === 'business' }" @click="activityMode = 'business'">
+            {{ t('chat.execution.businessMode') }}
+          </button>
+          <button type="button" :class="{ active: activityMode === 'technical' }" @click="activityMode = 'technical'">
+            {{ t('chat.execution.technicalMode') }}
+          </button>
+        </div>
+        <span>{{ formatCount('events', visibleActivityEvents.length) }}</span>
       </div>
       <section v-if="chat.active?.executionGraphId || chat.active?.executionId" class="companion-execution-graph">
         <header>
@@ -747,7 +769,7 @@ watch(
           :selected-node-id="String(selectedExecutionNode?.node_id || selectedExecutionNode?.id || '')"
           :connection-state="executionConnectionState"
           :loading="!executionGraph"
-          :activity-events="activityEvents"
+          :activity-events="businessActivityEvents"
           compact
           @select="openGraphNodeDetail"
           @expand="store.openChatExecutionGraph(rootProjectionId)"
@@ -840,7 +862,7 @@ watch(
       <TimelineList
         v-else
         class="companion-timeline"
-        :items="activityEvents"
+        :items="visibleActivityEvents"
         :filterable="false"
         live
         :selected-id="String(store.selectedActivity?.id || '')"

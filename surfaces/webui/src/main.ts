@@ -4,6 +4,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import App from './App.vue';
 import ChatPage from './pages/ChatPage.vue';
 import { configureEnabledAppPlugins, pluginRoutes } from './plugins/registry';
+import { claimWebuiObserverId } from './api/client';
 import { applyDocumentLocale } from './i18n';
 import './styles/tokens.css';
 import './styles/base.css';
@@ -34,6 +35,9 @@ async function configureGatewayApps() {
 }
 
 async function bootstrap() {
+  // sessionStorage is copied when a tab is duplicated. Claim a document-local
+  // observer identity before any Gateway request can attach this Surface.
+  await claimWebuiObserverId();
   await configureGatewayApps();
   const routes = [
     { path: '/', redirect: '/chat' },

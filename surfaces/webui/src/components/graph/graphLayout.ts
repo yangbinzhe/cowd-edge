@@ -1,4 +1,5 @@
 type LayoutGraph = Record<string, any>;
+const FAST_LAYOUT_NODE_THRESHOLD = 72;
 
 interface LayoutResponse {
   id: number;
@@ -74,6 +75,9 @@ function fallbackLayout(graph: LayoutGraph) {
 }
 
 export async function runGraphLayout(graph: LayoutGraph) {
+  if ((Array.isArray(graph.children) ? graph.children.length : 0) > FAST_LAYOUT_NODE_THRESHOLD) {
+    return fallbackLayout(graph);
+  }
   const activeWorker = layoutWorker();
   if (!activeWorker) return fallbackLayout(graph);
   const id = nextRequestId++;

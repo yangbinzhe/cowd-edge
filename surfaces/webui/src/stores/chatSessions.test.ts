@@ -1750,6 +1750,27 @@ describe('chatSessions', () => {
     expect(chat.states['ordered-detach'].attachmentRole).toBe('detached');
   });
 
+  it('atomically promotes a reader attachment without a detached race window', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    const attach = vi.spyOn(api, 'attachSession').mockResolvedValue({ ok: true } as any);
+    const detach = vi.spyOn(api, 'detachSession').mockResolvedValue({ ok: true } as any);
+    const acquire = vi.spyOn(api, 'acquireRuntimeLease').mockResolvedValue({ ok: true } as any);
+    vi.spyOn(api, 'releaseRuntimeLease').mockResolvedValue({ ok: true } as any);
+    chat.setDraft('atomic-role', '');
+    chat.states['atomic-role'].attachmentRole = 'reader';
+    chat.states['atomic-role'].writable = false;
+
+    expect(await chat.attachSurface('atomic-role')).toBe(true);
+
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(attach).toHaveBeenCalledWith('atomic-role', 'writer');
+    expect(acquire).toHaveBeenCalledWith('atomic-role', 'collaborative');
+    expect(detach).not.toHaveBeenCalled();
+    expect(chat.states['atomic-role'].attachmentRole).toBe('writer');
+    expect(chat.states['atomic-role'].writable).toBe(true);
+  });
+
   it('hydrates the newest durable page and can page backward without losing metadata', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();

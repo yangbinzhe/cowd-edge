@@ -44,7 +44,11 @@ const expectedHashes = ref<Record<string, string>>({});
 const selectedToolEvent = ref<Record<string, unknown> | null>(null);
 
 const tools = computed(() => Array.isArray(state.value.tools?.tools) ? state.value.tools.tools : []);
-const commands = computed(() => Array.isArray(state.value.commands?.commands) ? state.value.commands.commands : []);
+const commands = computed(() => (
+  Array.isArray(state.value.commands?.commands)
+    ? state.value.commands.commands.filter((command: any) => command.dispatchable === true)
+    : []
+));
 const history = computed(() => Array.isArray(state.value.history?.history) ? state.value.history.history : []);
 const checkpoints = computed(() => {
   const payload = state.value.checkpoints?.data || state.value.checkpoints || {};

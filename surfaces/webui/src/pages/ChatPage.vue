@@ -8,7 +8,6 @@ import {
   Brain,
   Check,
   CircleDot,
-  CircleX,
   Coins,
   Copy,
   Eye,
@@ -21,7 +20,6 @@ import {
   Search,
   Send,
   Square,
-  Users,
   Workflow,
   Wrench,
   X,
@@ -38,10 +36,16 @@ import type { ActivityEvent, ChatTurn } from '../types';
 import { causalActivityTimeline } from '../utils/causalTimeline';
 import { mergeActivityEvent } from '../utils/turnSettlement';
 import { releaseProjection } from '../release';
-import { combineExecutionLineage, executionProjectionLinks } from '../utils/executionLineage';
 import {
+  combineExecutionLineage,
+  executionProjectionLinks,
+  selectTurnExecutionEntry,
+} from '../utils/executionLineage';
+import {
+  activityEventViews,
   canonicalActivityEvents,
   canonicalActivityRelations,
+  mergeActivityViews,
   type ActivityView,
 } from '../adapters/executionActivity';
 
@@ -83,21 +87,17 @@ const requestedProjection = computed(() => requestedExecutionGraphId.value
   ? projections.projectionFor(requestedExecutionGraphId.value)
   : null);
 const linkedExecutionProjectionIds = computed(() => executionProjectionLinks(requestedProjection.value));
-const lineageProjections = computed(() => [
-  requestedProjection.value,
-  ...linkedExecutionProjectionIds.value.map((executionId) => projections.projectionFor(executionId)),
-]);
+const lineageProjections = computed(() => [requestedProjection.value]);
 const canonicalNarrativeActivities = computed(() => (
   canonicalActivityEvents(lineageProjections.value, 'narrative')
 ));
-const canonicalRelations = computed(() => canonicalActivityRelations(lineageProjections.value));
 const activeProjection = computed(() => requestedProjection.value);
 const executionGraph = computed(() => combineExecutionLineage(
   requestedExecutionGraphId.value,
   lineageProjections.value,
 ));
 const executionConnectionState = computed(() => {
-  const states = [requestedExecutionGraphId.value, ...linkedExecutionProjectionIds.value]
+  const states = [requestedExecutionGraphId.value]
     .filter(Boolean)
     .map((executionId) => projections.stateFor(executionId));
   if (states.some((state) => state === 'error')) return 'error';
@@ -371,7 +371,6 @@ watch(
 
 const executionGraphConsumer = 'chat:expanded-execution-graph';
 const activeExecutionSummaryConsumer = 'chat:active-execution-summary';
-const lineageExecutionConsumers = new Set<string>();
 watch(
   [
     currentExecutionProjectionId,
@@ -407,39 +406,9 @@ watch(
   },
   { immediate: true },
 );
-watch(
-  [
-    () => store.chatExecutionGraphExpanded,
-    () => linkedExecutionProjectionIds.value.join('\u0000'),
-  ],
-  ([expanded]) => {
-    const expected = new Set<string>();
-    if (expanded && store.activeSessionId) {
-      for (const executionId of linkedExecutionProjectionIds.value) {
-        const consumer = `chat:expanded-lineage:${executionId}`;
-        expected.add(consumer);
-        projections.acquire(
-          executionId,
-          consumer,
-          'full',
-          'bounded',
-          store.activeSessionId,
-        );
-      }
-    }
-    for (const consumer of lineageExecutionConsumers) {
-      if (!expected.has(consumer)) projections.release(consumer);
-    }
-    lineageExecutionConsumers.clear();
-    for (const consumer of expected) lineageExecutionConsumers.add(consumer);
-  },
-  { immediate: true },
-);
 onBeforeUnmount(() => {
   projections.release(activeExecutionSummaryConsumer);
   projections.release(executionGraphConsumer);
-  for (const consumer of lineageExecutionConsumers) projections.release(consumer);
-  lineageExecutionConsumers.clear();
   if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
 });
 
@@ -582,13 +551,23 @@ async function submit() {
       unboundDraft.value = '';
       return;
     }
-    chat.setDraft(sessionId, text);
+    chat.setDraft(sessionId, '');
     unboundDraft.value = '';
     const input = store.composeChatInput(text);
-    const accepted = await chat.send(sessionId, text, input);
+    let accepted = false;
+    try {
+      accepted = await chat.send(sessionId, text, input);
+    } catch (error) {
+      if (store.activeSessionId === sessionId && !chat.states[sessionId]?.draft) {
+        chat.setDraft(sessionId, text);
+      }
+      throw error;
+    }
+    if (!accepted && store.activeSessionId === sessionId && !chat.states[sessionId]?.draft) {
+      chat.setDraft(sessionId, text);
+    }
     if (accepted && store.activeSessionId === sessionId) {
       await store.ensureSessionTitleFromFirstMessage(sessionId, text);
-      chat.setDraft(sessionId, '');
       store.clearSubmittedResourceAttachments(input.resourceIds);
       if (supplementing) await store.refreshSessionInputs(sessionId);
     }
@@ -636,10 +615,7 @@ function visibleTranscriptTurn(turns: ChatTurn[], index: number) {
   const turn = turns[index];
   return turn.role === 'user'
     || turn.role === 'system'
-    || isFinalAssistantAnswer(turns, index)
-    || isActiveStreamingTurn(turn)
-    || (turn.role === 'assistant' && !!turn.content.trim())
-    || causalTurnTimelineActivities(turns, index).length > 0;
+    || isExecutionTranscriptTurn(turns, index);
 }
 
 function isActiveStreamingTurn(turn: ChatTurn) {
@@ -648,83 +624,159 @@ function isActiveStreamingTurn(turn: ChatTurn) {
     && turnRunning.value;
 }
 
-function causalTurnTimelineActivities(turns: ChatTurn[], index: number) {
+function isTerminalExecutionAnchor(turns: ChatTurn[], index: number) {
   const turn = turns[index];
-  const finalAnswer = isFinalAssistantAnswer(turns, index);
-  const priorActivityIds = new Set<string>();
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+  if (turn?.role !== 'assistant' || isActiveStreamingTurn(turn)) return false;
+  if (
+    !(turn.activity || []).length
+    && !turn.execution_id
+    && turn.status !== 'error'
+  ) return false;
+  for (let cursor = index + 1; cursor < turns.length; cursor += 1) {
     if (turns[cursor].role === 'user') break;
-    for (const event of turns[cursor].activity || []) priorActivityIds.add(event.id);
+    if (turns[cursor].role === 'assistant') return false;
   }
-  const activities = (turn.activity || [])
-    .filter((event) => (
-      ['agent', 'tool', 'think', 'approval', 'error'].includes(event.kind)
-      || (
-        event.kind === 'runtime'
-        && ['RuntimePolicyDecision', 'runtime.strategy.selected'].includes(String(event.event_kind || ''))
-      )
-    ))
-    .filter((event) => turn.role !== 'tool' || !priorActivityIds.has(event.id))
-    .map((event) => {
-      if (event.kind !== 'tool' || event.status !== 'started') return event;
-      for (let cursor = index + 1; cursor < turns.length; cursor += 1) {
-        if (turns[cursor].role === 'user') break;
-        const settled = (turns[cursor].activity || []).find((candidate) => candidate.id === event.id);
-        if (!settled) continue;
-        return {
-          ...event,
-          ...settled,
-          input: event.input ?? settled.input,
-          output: settled.output ?? event.output,
-          raw: {
-            ...(event.raw || {}),
-            ...(settled.raw || {}),
-          },
-        };
-      }
-      return event;
-    });
-  if (turn.role === 'assistant' && !finalAnswer && turn.content.trim()) {
-    activities.push({
-      id: `assistant-progress:${turn.id}`,
-      kind: 'think',
-      title: t('chat.activity.thinking'),
-      detail: turn.content.trim(),
-      status: turn.status || 'complete',
-      sequence: turn.sequence,
-    });
-  }
-  return causalActivityTimeline(activities, 500);
+  return true;
 }
 
-function canonicalTurnActivities(turns: ChatTurn[], index: number) {
+function isExecutionTranscriptTurn(turns: ChatTurn[], index: number) {
+  return isFinalAssistantAnswer(turns, index)
+    || isActiveStreamingTurn(turns[index])
+    || isTerminalExecutionAnchor(turns, index);
+}
+
+function exchangeActivityEvents(turns: ChatTurn[], index: number) {
   const turn = turns[index];
-  if (!isFinalAssistantAnswer(turns, index) && !isActiveStreamingTurn(turn)) return [];
+  if (!isExecutionTranscriptTurn(turns, index)) return [];
+  const activities = new Map<string, ActivityEvent>();
+  const start = exchangeStartIndex(turns, index);
+  for (let cursor = start; cursor <= index; cursor += 1) {
+    const exchangeTurn = turns[cursor];
+    for (const event of exchangeTurn.activity || []) {
+      const identity = activityEventIdentity(event);
+      activities.set(identity, mergeActivityEvent(activities.get(identity), event));
+    }
+    if (
+      exchangeTurn.role === 'assistant'
+      && cursor !== index
+      && exchangeTurn.content.trim()
+      && !(exchangeTurn.activity || []).some((event) => event.kind === 'think')
+    ) {
+      const event: ActivityEvent = {
+        id: `assistant-progress:${exchangeTurn.id}`,
+        kind: 'think',
+        title: t('chat.activity.thinking'),
+        detail: exchangeTurn.content.trim(),
+        status: exchangeTurn.status || 'complete',
+        sequence: exchangeTurn.sequence,
+        turn_id: exchangeTurn.turn_id,
+        execution_id: exchangeTurn.execution_id,
+      };
+      activities.set(event.id, event);
+    }
+  }
+  return causalActivityTimeline([...activities.values()], 500);
+}
+
+function activityEventIdentity(event: ActivityEvent) {
+  if (event.tool_call_id) return `tool:${event.tool_call_id}`;
+  return String(event.activity_id || event.id);
+}
+
+function exchangeProjectionLineage(turns: ChatTurn[], index: number) {
+  const turn = turns[index];
+  if (!isExecutionTranscriptTurn(turns, index)) return [];
+  const entry = exchangeExecutionEntry(turns, index);
+  const rootId = String(
+    entry?.graph_id
+    || entry?.execution_id
+    || (isActiveStreamingTurn(turn) ? currentExecutionProjectionId.value : '')
+    || '',
+  ).trim();
+  if (!rootId) return [];
+  const root = projections.projectionFor(rootId);
+  return [
+    root,
+    ...executionProjectionLinks(root).map((executionId) => projections.projectionFor(executionId)),
+  ];
+}
+
+function buildTurnExecutionActivities(turns: ChatTurn[], index: number) {
+  const turn = turns[index];
+  if (!isExecutionTranscriptTurn(turns, index)) return [];
+  const entry = exchangeExecutionEntry(turns, index);
   const turnId = String(
-    turn.turn_id
+    entry?.turn_id
+    || turn.turn_id
     || (isActiveStreamingTurn(turn) ? chat.active?.executionTurnId : '')
     || '',
   ).trim();
-  const executionEntry = turnId
-    ? (chat.active?.executionIndex?.executions || []).find((entry) => entry.turn_id === turnId)
-    : null;
-  return canonicalNarrativeActivities.value.filter((activity) => (
-    (!!turnId && activity.turn_id === turnId)
-    || (
-      !!executionEntry?.execution_id
-      && (
-        activity.execution_id === executionEntry.execution_id
-        || activity.parent_execution_id === executionEntry.execution_id
-      )
+  const executionId = String(
+    entry?.execution_id
+    || turn.execution_id
+    || (isActiveStreamingTurn(turn) ? chat.active?.executionId : '')
+    || '',
+  ).trim();
+  const lineage = exchangeProjectionLineage(turns, index);
+  const lineageExecutionIds = new Set(
+    lineage
+      .map((projection) => String(projection?.execution_id || '').trim())
+      .filter(Boolean),
+  );
+  const canonical = canonicalActivityEvents(lineage, 'narrative').filter((activity) => (
+    (!turnId || !activity.turn_id || activity.turn_id === turnId)
+    && (
+      !executionId
+      || !activity.execution_id
+      || lineageExecutionIds.has(activity.execution_id)
+      || activity.execution_id === executionId
+      || activity.parent_execution_id === executionId
     )
+  ));
+  const durable = activityEventViews(exchangeActivityEvents(turns, index), {
+    workspaceId: String(store.workspaceRoot || 'workspace'),
+    sessionId: store.activeSessionId,
+    turnId,
+    executionId,
+  });
+  return mergeActivityViews(canonical, durable);
+}
+
+function buildTurnExecutionRelations(
+  turns: ChatTurn[],
+  index: number,
+  activities: ActivityView[],
+) {
+  const ids = new Set(activities.map((activity) => activity.id));
+  return canonicalActivityRelations(exchangeProjectionLineage(turns, index)).filter((relation) => (
+    ids.has(relation.from_activity_id) && ids.has(relation.to_activity_id)
   ));
 }
 
-function canonicalTurnRelations(turns: ChatTurn[], index: number) {
-  const ids = new Set(canonicalTurnActivities(turns, index).map((activity) => activity.id));
-  return canonicalRelations.value.filter((relation) => (
-    ids.has(relation.from_activity_id) && ids.has(relation.to_activity_id)
-  ));
+const turnExecutionPresentations = computed(() => {
+  const turns = chat.active?.turns || [];
+  const presentations = new Map<string, {
+    activities: ActivityView[];
+    relations: ReturnType<typeof canonicalActivityRelations>;
+  }>();
+  for (let index = 0; index < turns.length; index += 1) {
+    const turn = turns[index];
+    if (!isExecutionTranscriptTurn(turns, index)) continue;
+    const activities = buildTurnExecutionActivities(turns, index);
+    presentations.set(turn.id, {
+      activities,
+      relations: buildTurnExecutionRelations(turns, index, activities),
+    });
+  }
+  return presentations;
+});
+
+function turnExecutionActivities(turns: ChatTurn[], index: number) {
+  return turnExecutionPresentations.value.get(turns[index]?.id)?.activities || [];
+}
+
+function turnExecutionRelations(turns: ChatTurn[], index: number) {
+  return turnExecutionPresentations.value.get(turns[index]?.id)?.relations || [];
 }
 
 function openCanonicalActivity(activity: ActivityView) {
@@ -793,7 +845,10 @@ function liveNow(turn: ChatTurn) {
       detail: chat.active?.degradedReason || '',
     };
   }
-  const events = causalTurnTimelineActivities(chat.active?.turns || [], (chat.active?.turns || []).indexOf(turn));
+  const events = exchangeActivityEvents(
+    chat.active?.turns || [],
+    (chat.active?.turns || []).indexOf(turn),
+  );
   const activeTool = [...events].reverse().find((event) => (
     event.kind === 'tool'
     && ['queued', 'pending', 'started', 'running'].includes(String(event.status || '').toLowerCase())
@@ -871,29 +926,35 @@ function exchangeUsageParts(turns: ChatTurn[], answerIndex: number) {
 }
 
 function exchangeExecutionEntry(turns: ChatTurn[], answerIndex: number) {
-  if (!isFinalAssistantAnswer(turns, answerIndex)) return null;
+  const active = isActiveStreamingTurn(turns[answerIndex]);
+  if (!isExecutionTranscriptTurn(turns, answerIndex)) return null;
   const start = exchangeStartIndex(turns, answerIndex);
   const exchange = turns.slice(start, answerIndex + 1);
   const executionId = [...exchange]
     .reverse()
     .map((turn) => String(turn.execution_id || '').trim())
-    .find(Boolean);
+    .find(Boolean)
+    || (active ? String(chat.active?.executionId || '').trim() : '');
   const turnId = [...exchange]
     .reverse()
     .map((turn) => String(turn.turn_id || '').trim())
-    .find(Boolean);
+    .find(Boolean)
+    || (active ? String(chat.active?.executionTurnId || '').trim() : '');
   const entries = chat.active?.executionIndex?.executions || [];
-  const canonical = entries.find((entry) => (
-    (executionId && entry.execution_id === executionId)
-    || (turnId && entry.turn_id === turnId)
-  ));
+  const canonical = selectTurnExecutionEntry(entries, turnId, executionId);
   if (canonical) return canonical;
   if (!executionId) return null;
   return {
     execution_id: executionId,
-    graph_id: executionId,
+    graph_id: active
+      ? String(chat.active?.executionGraphId || executionId)
+      : executionId,
     turn_id: turnId || null,
-    status: 'complete' as const,
+    status: active
+      ? 'thinking' as const
+      : turns[answerIndex]?.status === 'error'
+        ? 'error' as const
+        : 'complete' as const,
     updated_at_ms: Number(turns[answerIndex]?.created_at_ms || 0),
   };
 }
@@ -924,70 +985,6 @@ async function copyAnswer(turn: ChatTurn) {
   copiedAnswerResetTimer = setTimeout(() => {
     if (copiedAnswerId.value === turn.id) copiedAnswerId.value = '';
   }, 1_500);
-}
-
-function activityFailed(event: ActivityEvent) {
-  return event.kind === 'error'
-    || ['error', 'failed', 'denied', 'timed_out'].includes(String(event.status || '').toLowerCase());
-}
-
-function activityDuration(event: ActivityEvent) {
-  const value = Number(event.duration_ms ?? event.raw?.duration_ms);
-  if (!Number.isFinite(value) || value < 0) return '';
-  if (value < 1_000) return `${Math.round(value)} ms`;
-  return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1).replace(/\.0$/, '')} s`;
-}
-
-function activityIcon(event: ActivityEvent) {
-  if (activityFailed(event)) return CircleX;
-  if (event.kind === 'agent') return Users;
-  if (event.kind === 'think') return Brain;
-  if (event.kind === 'runtime') return Workflow;
-  if (event.kind === 'context') return Gauge;
-  if (event.kind === 'approval') return CircleDot;
-  return Wrench;
-}
-
-function activityTitle(event: ActivityEvent) {
-  if (event.kind === 'agent' && event.phase) {
-    return `${event.title} · ${displayStatus(event.phase)}`;
-  }
-  return event.title;
-}
-
-function activityDetail(event: ActivityEvent) {
-  if (event.kind !== 'tool') return String(event.detail || '').trim();
-  const input = truncateActivityText(compactActivityValue(event.input), 160);
-  const output = truncateActivityText(compactActivityValue(event.output), 220);
-  if (output && input) return `${input} → ${output}`;
-  return output || input || String(event.detail || '').trim();
-}
-
-function activityLane(event: ActivityEvent) {
-  const agent = String(event.agent_lane_label || event.role || event.agent_id || '').trim();
-  const agentLane = Number(event.agent_lane || 0) + 1;
-  const agentLaneCount = Number(event.agent_lane_count || 0);
-  const agentLabel = agent
-    ? (
-        agentLaneCount > 1
-          ? t('chat.timeline.agentParallelLane', {
-              agent: truncateActivityText(agent, 32),
-              lane: agentLane,
-              count: agentLaneCount,
-            })
-          : t('chat.timeline.agentLane', { agent: truncateActivityText(agent, 32) })
-      )
-    : '';
-  if (event.kind !== 'tool' && event.kind !== 'error') return agentLabel;
-  const wave = Number(event.wave || 0) + 1;
-  const lane = Number(event.lane || 0) + 1;
-  const laneCount = Number(event.lane_count || 0);
-  const executionLane = laneCount > 1
-    ? t('chat.timeline.parallelLane', { wave, lane, count: laneCount })
-    : wave > 1
-      ? t('chat.timeline.dependencyWave', { wave })
-      : '';
-  return [agentLabel, executionLane].filter(Boolean).join(' · ');
 }
 
 async function chooseCommand(command: any) {
@@ -1169,32 +1166,11 @@ function chooseFirstCommand() {
                 </Transition>
               </div>
               <ExecutionActivityTree
-                v-if="canonicalTurnActivities(chat.active?.turns || [], index).length"
-                :activities="canonicalTurnActivities(chat.active?.turns || [], index)"
-                :relations="canonicalTurnRelations(chat.active?.turns || [], index)"
+                v-if="turnExecutionActivities(chat.active?.turns || [], index).length"
+                :activities="turnExecutionActivities(chat.active?.turns || [], index)"
+                :relations="turnExecutionRelations(chat.active?.turns || [], index)"
                 @select="openCanonicalActivity"
               />
-              <ol
-                v-else-if="causalTurnTimelineActivities(chat.active?.turns || [], index).length"
-                class="conversation-timeline"
-              >
-                <li
-                  v-for="event in causalTurnTimelineActivities(chat.active?.turns || [], index)"
-                  :key="event.id"
-                  :data-kind="event.kind"
-                  :data-status="activityFailed(event) ? 'error' : event.status || 'complete'"
-                >
-                  <span class="conversation-timeline-node" :title="activityFailed(event) ? displayStatus(event.status || 'error') : event.title">
-                    <component :is="activityIcon(event)" :size="13" />
-                  </span>
-                  <div>
-                    <strong>{{ activityTitle(event) }}</strong>
-                    <p v-if="activityDetail(event)">{{ activityDetail(event) }}</p>
-                    <small v-if="activityLane(event)" class="conversation-timeline-lane">{{ activityLane(event) }}</small>
-                  </div>
-                  <time v-if="activityDuration(event)">{{ activityDuration(event) }}</time>
-                </li>
-              </ol>
               <div v-if="isFinalAssistantAnswer(chat.active?.turns || [], index)" class="conversation-answer">
                 <span class="conversation-answer-node" :title="t('chat.timeline.finalAnswer')"><Bot :size="14" /></span>
                 <div class="conversation-answer-content">

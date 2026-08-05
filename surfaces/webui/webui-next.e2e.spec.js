@@ -129,6 +129,400 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
   await expect(page.locator('.companion-panel')).toHaveCount(0);
 });
 
+test('duplicated tabs claim unique observers and cannot demote the active writer', async ({ page, context }) => {
+  const sessionId = 'duplicate-tab-session';
+  const title = 'Duplicate tab regression';
+  const attachments = new Map();
+  let messageSequence = 0;
+  const json = (route, body, status = 200) => route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+  const installSessionContract = async (target) => {
+    await target.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+      const observerId = request.headers()['x-cowd-observer-id'] || '';
+      if (path === '/api/sessions' && request.method() === 'GET') {
+        return json(route, {
+          sessions: [{
+            id: sessionId,
+            title,
+            status: 'idle',
+            model: 'browser-test',
+            message_count: 0,
+            updated_at: '2026-08-05T00:00:00Z',
+          }],
+        });
+      }
+      if (path === `/api/sessions/${sessionId}/attach` && request.method() === 'POST') {
+        const role = JSON.parse(request.postData() || '{}').role;
+        attachments.set(observerId, role);
+        return json(route, { ok: true, session_id: sessionId, role });
+      }
+      if (path === `/api/sessions/${sessionId}/detach` && request.method() === 'POST') {
+        attachments.delete(observerId);
+        return json(route, { ok: true });
+      }
+      if (path === `/api/sessions/${sessionId}/messages` && request.method() === 'GET') {
+        return json(route, { session_id: sessionId, messages: [], total: 0, offset: 0 });
+      }
+      if (path === `/api/sessions/${sessionId}/messages` && request.method() === 'POST') {
+        if (attachments.get(observerId) !== 'writer') {
+          return json(route, { error: 'reader session attachment cannot execute mutations' }, 403);
+        }
+        messageSequence += 1;
+        return json(route, {
+          message: {
+            message_id: `message-${messageSequence}`,
+            sequence: messageSequence,
+            turn_id: 'turn-1',
+          },
+          execution: {
+            graph_id: 'execution-1',
+            turn_id: 'turn-1',
+            status: 'queued',
+            materialization: { state: 'accepted' },
+          },
+          input: {
+            input_id: `input-${messageSequence}`,
+            decision: messageSequence === 1 ? 'start_new_turn' : 'supplement_current',
+          },
+        });
+      }
+      if (path === '/api/runtime/session-leases/acquire') return json(route, { ok: true });
+      if (path === '/api/runtime/session-leases/release') return json(route, { ok: true });
+      if (path === `/api/sessions/${sessionId}/execution`) {
+        return json(route, { session_id: sessionId, active_execution_ids: [] });
+      }
+      if (path === `/api/sessions/${sessionId}/history-index`) {
+        return json(route, {
+          schema_version: 1,
+          session_id: sessionId,
+          total_messages: 0,
+          recent_metadata: [],
+          cards: [],
+        });
+      }
+      if (path === `/api/sessions/${sessionId}/turns`) {
+        return json(route, {
+          kind: 'session.turn_projection',
+          session_id: sessionId,
+          turn_count: 0,
+          turns: [],
+        });
+      }
+      if ([
+        `/api/sessions/${sessionId}/attachments`,
+        `/api/sessions/${sessionId}/inputs`,
+        `/api/sessions/${sessionId}/turn-inbox`,
+      ].includes(path)) return json(route, {});
+      return route.fallback();
+    });
+  };
+  await installSessionContract(page);
+  await page.goto('/index.html#/chat');
+  await page.locator('.composer textarea').waitFor();
+  const firstObserver = await page.evaluate(() => sessionStorage.getItem('cowd.webui.observer_id'));
+
+  const firstSend = page.waitForResponse((response) => (
+    response.url().endsWith(`/api/sessions/${sessionId}/messages`)
+    && response.request().method() === 'POST'
+  ));
+  await page.locator('.composer textarea').fill('first');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.locator('.composer textarea')).toHaveValue('');
+  expect((await firstSend).status()).toBe(200);
+
+  const second = await context.newPage();
+  await second.addInitScript((observerId) => {
+    localStorage.setItem('cowd.webui.locale', 'en-US');
+    sessionStorage.setItem('cowd.webui.observer_id', observerId);
+  }, gatewayObserverId);
+  await installOfflineGatewayContract(second);
+  await installSessionContract(second);
+  await second.goto('/index.html#/chat');
+  await second.locator('.composer textarea').waitFor();
+  const secondObserver = await second.evaluate(() => sessionStorage.getItem('cowd.webui.observer_id'));
+  expect(secondObserver).not.toBe(firstObserver);
+
+  const supplement = page.waitForResponse((response) => (
+    response.url().endsWith(`/api/sessions/${sessionId}/messages`)
+    && response.request().method() === 'POST'
+  ));
+  await page.locator('.composer textarea').fill('supplement');
+  await page.getByRole('button', { name: 'Supplement current execution' }).click();
+  await expect(page.locator('.composer textarea')).toHaveValue('');
+  expect((await supplement).status()).toBe(200);
+  await expect(page.getByText('Restricted session')).toHaveCount(0);
+  await second.close();
+});
+
+test('historical turns hydrate their own execution trees after messages render', async ({ page }) => {
+  const sessionId = 'historical-turn-session';
+  let projectionRequestedFromStart = false;
+  const messages = [1, 2, 3].flatMap((number) => ([
+    {
+      id: `user-${number}`,
+      session_id: sessionId,
+      sequence: number * 2 - 2,
+      role: 'user',
+      blocks: [{
+        type: 'text',
+        text: `question ${number}`,
+        cowd_turn_id: `turn-${number}`,
+        cowd_turn_ingress_message_id: `user-${number}`,
+      }],
+    },
+    {
+      id: `assistant-${number}`,
+      session_id: sessionId,
+      sequence: number * 2 - 1,
+      role: 'assistant',
+      blocks: [{
+        type: 'text',
+        text: `answer ${number}`,
+        cowd_turn_id: `turn-${number}`,
+        cowd_turn_ingress_message_id: `user-${number}`,
+      }],
+    },
+  ]));
+  const json = (route, body, status = 200) => route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+  await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (path === '/api/sessions' && request.method() === 'GET') {
+      return json(route, {
+        sessions: [{
+          id: sessionId,
+          title: 'Historical turns',
+          status: 'complete',
+          model: 'browser-test',
+          message_count: messages.length,
+          updated_at: '2026-08-05T00:00:00Z',
+        }],
+      });
+    }
+    if (path === `/api/sessions/${sessionId}/messages`) {
+      return json(route, {
+        session_id: sessionId,
+        messages,
+        total: messages.length,
+        offset: 0,
+      });
+    }
+    if (path === `/api/sessions/${sessionId}/turns`) {
+      projectionRequestedFromStart = url.searchParams.has('from_seq');
+      return json(route, {
+        kind: 'session.turn_projection',
+        session_id: sessionId,
+        turn_count: 3,
+        turns: [1, 2, 3].map((number) => ({
+          turn_id: `turn-${number}`,
+          status: 'completed',
+          user_preview: `question ${number}`,
+          tool_calls: [],
+          approvals: [],
+          context_events: [],
+          usage: [],
+          evidence_refs: [],
+          event_sequences: [],
+          activity_events: [{
+            id: `agent-${number}`,
+            kind: 'agent',
+            title: `researcher ${number}`,
+            status: 'completed',
+            turn_id: `turn-${number}`,
+            execution_id: `execution-${number}`,
+            agent_id: `researcher-${number}`,
+            output: `result ${number}`,
+          }, {
+            id: `tool-${number}`,
+            kind: 'tool',
+            title: 'read_file',
+            status: 'completed',
+            turn_id: `turn-${number}`,
+            execution_id: `execution-${number}`,
+            tool_call_id: `tool-${number}`,
+          }],
+        })),
+      });
+    }
+    if (path === `/api/sessions/${sessionId}/execution`) {
+      return json(route, {
+        session_id: sessionId,
+        latest_execution_id: 'execution-3',
+        latest_graph_id: 'execution-3',
+        latest_status: 'complete',
+        active_execution_ids: [],
+        executions: [1, 2, 3].map((number) => ({
+          execution_id: `execution-${number}`,
+          graph_id: `execution-${number}`,
+          turn_id: `turn-${number}`,
+          status: 'complete',
+          updated_at_ms: number,
+        })),
+      });
+    }
+    const executionMatch = path.match(/^\/api\/runtime\/executions\/(execution-\d+)$/);
+    if (executionMatch) {
+      const executionId = executionMatch[1];
+      const number = Number(executionId.split('-').at(-1));
+      const rootActivityId = `activity:${executionId}:root`;
+      const toolActivityId = `activity:${executionId}:tool`;
+      return json(route, {
+        schema_version: 2,
+        kind: 'runtime.execution_projection',
+        execution_id: executionId,
+        revision: 3,
+        cursor: 3,
+        detail_scope: url.searchParams.get('detail_scope') || 'summary',
+        authorization_revision: 1,
+        redaction_revision: 'e2e',
+        live: { status: 'complete' },
+        graph: {
+          graph_id: executionId,
+          revision: 3,
+          objective: `Historical objective ${number}`,
+          nodes: [],
+          edges: [],
+          commit_cursor: 3,
+        },
+        child_executions: [],
+        goals: [],
+        agents: [],
+        teams: [],
+        relations: [],
+        approvals: [],
+        admissions: [],
+        outcomes: [],
+        interventions: [],
+        usage: [],
+        context: [],
+        evidence: [],
+        health: [],
+        recovery: [],
+        available_commands: [],
+        activities: [{
+          schema_version: 1,
+          activity_id: rootActivityId,
+          scope: {
+            workspace_id: 'workspace',
+            session_id: sessionId,
+            turn_id: `turn-${number}`,
+            execution_id: executionId,
+          },
+          kind: 'execution',
+          visibility: ['narrative', 'operational', 'audit'],
+          causal_parent_ids: [],
+          dependency_ids: [],
+          status: 'completed',
+          started_at_ms: number,
+          completed_at_ms: number + 2,
+          duration_ms: 2,
+          sequence: 1,
+          commit_cursor: 1,
+          public_summary: `Historical objective ${number}`,
+          artifact_refs: [],
+          evidence_refs: [],
+        }, {
+          schema_version: 1,
+          activity_id: toolActivityId,
+          scope: {
+            workspace_id: 'workspace',
+            session_id: sessionId,
+            turn_id: `turn-${number}`,
+            execution_id: executionId,
+          },
+          kind: 'tool',
+          visibility: ['narrative', 'operational', 'audit'],
+          parent_activity_id: rootActivityId,
+          initiator_activity_id: rootActivityId,
+          causal_parent_ids: [],
+          dependency_ids: [],
+          tool_call_id: `history-tool-${number}`,
+          status: 'completed',
+          started_at_ms: number + 1,
+          completed_at_ms: number + 2,
+          duration_ms: 1,
+          sequence: 2,
+          commit_cursor: 2,
+          public_summary: `history_tool_${number}`,
+          artifact_refs: [`artifact://history-${number}`],
+          evidence_refs: [`evidence://history-${number}`],
+        }],
+        activity_relations: [{
+          relation_id: `relation:${executionId}:tool`,
+          kind: 'invoked',
+          from_activity_id: rootActivityId,
+          to_activity_id: toolActivityId,
+        }],
+      });
+    }
+    if (path === `/api/sessions/${sessionId}/attach`) {
+      return json(route, { ok: true, session_id: sessionId, role: 'reader' });
+    }
+    if (path === `/api/sessions/${sessionId}/history-index`) {
+      return json(route, {
+        schema_version: 1,
+        session_id: sessionId,
+        total_messages: messages.length,
+        recent_metadata: [],
+        cards: [],
+      });
+    }
+    if ([
+      `/api/sessions/${sessionId}/attachments`,
+      `/api/sessions/${sessionId}/inputs`,
+      `/api/sessions/${sessionId}/turn-inbox`,
+    ].includes(path)) return json(route, {});
+    return route.fallback();
+  });
+
+  await page.goto('/index.html#/chat');
+  await expect(page.locator('.turn[data-role="user"]')).toHaveCount(3);
+  await expect(page.locator('.turn[data-role="assistant"] .conversation-execution > .execution-activity-tree')).toHaveCount(3);
+  expect(projectionRequestedFromStart).toBe(false);
+
+  await page.getByRole('button', { name: 'Open inspector' }).click();
+  await expect(page.locator('.execution-turn-group')).toHaveCount(3);
+  await expect(page.locator('.execution-turn-head').first()).toContainText('Turn 3');
+
+  const historicalTurn = page.locator('.execution-turn-group').filter({ hasText: 'Turn 1' });
+  await expect(historicalTurn).toContainText('researcher 1');
+  await historicalTurn.getByRole('button', { name: 'Execution graph' }).click();
+  const historicalGraph = page.locator('.chat-execution-overlay');
+  await expect(historicalGraph).toBeVisible();
+  await expect(historicalGraph.locator('.vue-flow__node')).toHaveCount(2);
+  await expect(historicalGraph).toContainText('Tool call · 1');
+  await historicalGraph.locator('.vue-flow__node').filter({ hasText: 'Tool call · 1' }).click();
+  await expect(historicalGraph.locator('.execution-node-detail')).toBeVisible();
+  await expect(historicalGraph.locator('.execution-node-detail')).toContainText('Tool call');
+  await expect.poll(async () => historicalGraph.locator('.vue-flow__node').evaluateAll((nodes) => {
+    const surface = document.querySelector('.chat-execution-overlay .vue-flow');
+    if (!surface) return 0;
+    const bounds = surface.getBoundingClientRect();
+    return nodes.filter((node) => {
+      const rect = node.getBoundingClientRect();
+      return (
+        rect.width > 0
+        && rect.height > 0
+        && rect.right > bounds.left
+        && rect.left < bounds.right
+        && rect.bottom > bounds.top
+        && rect.top < bounds.bottom
+      );
+    }).length;
+  })).toBe(2);
+});
+
 test('chat DOM keeps newest history, errors, drafts, scroll and effective telemetry isolated per session', async ({ page }) => {
   const browserErrors = [];
   const browserRequestFailures = [];

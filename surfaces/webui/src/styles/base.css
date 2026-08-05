@@ -210,25 +210,8 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .live-now-enter-active, .live-now-leave-active { transition: opacity 140ms ease, transform 140ms ease; }
 .live-now-enter-from { opacity: 0; transform: translateY(8px); }
 .live-now-leave-to { opacity: 0; transform: translateY(-8px); }
-.conversation-timeline { position: relative; width: 100%; max-width: 100%; min-width: 0; display: grid; gap: 3px; margin: 0 0 7px; overflow-x: hidden; padding: 0 0 0 28px; list-style: none; }
-.conversation-timeline::before { content: ""; position: absolute; left: 10px; top: 14px; bottom: 8px; width: 1px; background: var(--border-2); }
-.conversation-timeline li { position: relative; min-width: 0; min-height: 27px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: start; padding: 4px 0; color: var(--text-muted); }
-.conversation-timeline-node, .conversation-answer-node { position: absolute; left: -28px; top: 3px; width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid var(--border-2); border-radius: 50%; background: var(--surface); color: var(--text-faint); }
-.conversation-timeline li[data-kind="tool"] .conversation-timeline-node { color: var(--info); }
-.conversation-timeline li[data-kind="agent"] .conversation-timeline-node { color: var(--accent); }
-.conversation-timeline li[data-kind="think"] .conversation-timeline-node { color: var(--text-muted); }
-.conversation-timeline li[data-kind="runtime"] .conversation-timeline-node,
-.conversation-timeline li[data-kind="context"] .conversation-timeline-node { color: var(--accent); }
-.conversation-timeline li[data-kind="approval"] .conversation-timeline-node { color: var(--warn); }
-.conversation-timeline li[data-status="running"] .conversation-timeline-node,
-.conversation-timeline li[data-status="queued"] .conversation-timeline-node,
-.conversation-timeline li[data-status="pending"] .conversation-timeline-node { border-color: color-mix(in srgb, var(--info) 48%, var(--border)); }
-.conversation-timeline li[data-status="error"] .conversation-timeline-node { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 42%, var(--border)); }
-.conversation-timeline li > div { min-width: 0; max-width: 100%; overflow-x: hidden; }
-.conversation-timeline strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 12px; font-weight: 650; }
-.conversation-timeline p { width: 100%; max-width: 100%; min-width: 0; margin: 2px 0 0; overflow-x: hidden; overflow-wrap: anywhere; word-break: break-word; color: var(--text-faint); font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
-.conversation-timeline-lane, .timeline-lane { display: inline-flex; margin-top: 3px; color: var(--info); font-size: 10px; line-height: 1.4; }
-.conversation-timeline time { color: var(--text-faint); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.conversation-answer-node { position: absolute; left: -28px; top: 3px; width: 21px; height: 21px; display: grid; place-items: center; border: 1px solid var(--border-2); border-radius: 50%; background: var(--surface); color: var(--text-faint); }
+.timeline-lane { display: inline-flex; margin-top: 3px; color: var(--info); font-size: 10px; line-height: 1.4; }
 .conversation-answer { position: relative; min-width: 0; padding-left: 28px; }
 .conversation-answer::before { content: ""; position: absolute; left: 10px; top: 0; height: 14px; width: 1px; background: var(--border-2); }
 .conversation-answer-node { left: 0; top: 0; color: var(--accent); }
@@ -1062,6 +1045,16 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .segmented { display: inline-flex; gap: 6px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); width: fit-content; }
 .segmented button { min-height: 32px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-muted); padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; }
 .segmented button.active { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.activity-mode-switch {
+  margin-left: auto;
+  padding: 2px;
+  gap: 2px;
+}
+.activity-mode-switch button {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 0.75rem;
+}
 .security-note { display: flex; gap: 8px; color: var(--text-muted); align-items: center; }
 .evidence-object-detail { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--surface-muted); display: grid; gap: 10px; }
 .evidence-object-detail > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

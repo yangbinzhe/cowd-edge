@@ -34,6 +34,9 @@ const timelineEvidence = ref('');
 const timelineSurface = ref('');
 const selectedDetail = ref<Record<string, unknown> | null>(null);
 const evalReportDetail = ref<any>(null);
+const evalReportArtifacts = ref<any>(null);
+const evalReportGate = ref<any>(null);
+const evalReportLoading = ref(false);
 const evalActionResult = ref<any>(null);
 const evalLevel = ref<'quick' | 'full' | 'deep-real'>('quick');
 const evalProvider = ref('');
@@ -41,6 +44,11 @@ const evalBudget = ref('low');
 const evalAllowRealModel = ref(false);
 const evolutionActionResult = ref<any>(null);
 const evolutionDraft = ref<any>(null);
+const evolutionProposalDetail = ref<any>(null);
+const evolutionMissionDetail = ref<any>(null);
+const evolutionChainDetail = ref<any>(null);
+const evolutionReviewDetail = ref<any>(null);
+const evolutionDetailLoading = ref(false);
 const selectedEvolutionProposalId = ref('');
 const selectedEvolutionCandidateId = ref('');
 const selectedEvolutionReviewId = ref('');
@@ -281,6 +289,9 @@ const evolutionCandidateRows = computed(() => evolutionCandidates.value.slice(0,
 })));
 const selectedEvolutionProposal = computed(() => evolutionProposalRows.value.find((row: any) => row.id === selectedEvolutionProposalId.value) || null);
 const selectedEvolutionCandidate = computed(() => evolutionCandidateRows.value.find((row: any) => row.id === selectedEvolutionCandidateId.value) || null);
+const selectedEvolutionCandidateModel = computed(() => evolutionCandidates.value.find(
+  (candidate: any) => candidate.candidate_id === selectedEvolutionCandidateId.value,
+) || null);
 const evolutionReviewRows = computed(() => evolutionReviews.value.slice(0, 12).map((review: any) => ({
   id: review.review_id,
   class: review.class,
@@ -369,8 +380,15 @@ const auditEvidence = computed(() => [
 ]);
 const evalReport = computed(() => evalReportDetail.value?.detail?.report || evalReportDetail.value?.report || null);
 const evalReportSummary = computed(() => evalReportDetail.value?.detail?.summary || evalReportDetail.value?.summary || null);
-const evalReportGateItems = computed(() => items(evalReport.value?.report_gate, 'items'));
-const evalArtifacts = computed(() => items(evalReportDetail.value?.detail, 'artifacts'));
+const evalEffectiveGate = computed(() => (
+  evalReportGate.value?.report_gate || evalReport.value?.report_gate || {}
+));
+const evalReportGateItems = computed(() => items(evalEffectiveGate.value, 'items'));
+const evalArtifacts = computed(() => (
+  items(evalReportArtifacts.value, 'artifacts').length
+    ? items(evalReportArtifacts.value, 'artifacts')
+    : items(evalReportDetail.value?.detail, 'artifacts')
+));
 const evalArtifactRows = computed(() => evalArtifacts.value.map((path: string, index: number) => ({ index, path })));
 const evalProviderRounds = computed(() => items(evalReport.value?.execution_trace, 'rounds'));
 const evalRunModes = computed(() => [
@@ -481,7 +499,19 @@ async function runHarnessEval() {
 async function openHarnessEvalReport(row: Record<string, unknown>) {
   const id = String(row.id || '');
   if (!id) return;
-  evalReportDetail.value = await api.harnessEvalReport(id);
+  evalReportLoading.value = true;
+  error.value = '';
+  try {
+    [evalReportDetail.value, evalReportArtifacts.value, evalReportGate.value] = await Promise.all([
+      api.harnessEvalReport(id),
+      api.harnessEvalArtifacts(id),
+      api.harnessEvalReportGate(id),
+    ]);
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    evalReportLoading.value = false;
+  }
 }
 
 async function cancelHarnessEvalRun(row: Record<string, unknown>) {
@@ -529,12 +559,52 @@ async function openEvolutionDraft(row: Record<string, unknown>) {
   const id = String(row.id || '');
   if (!id) return;
   selectedEvolutionProposalId.value = id;
-  evolutionDraft.value = await api.evolutionSkillDraft(id);
+  evolutionDetailLoading.value = true;
+  error.value = '';
+  try {
+    [
+      evolutionProposalDetail.value,
+      evolutionDraft.value,
+      evolutionChainDetail.value,
+    ] = await Promise.all([
+      api.evolutionProposal(id),
+      api.evolutionSkillDraft(id),
+      api.evolutionChain(id),
+    ]);
+    selectedDetail.value = evolutionProposalDetail.value;
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    evolutionDetailLoading.value = false;
+  }
 }
 
-function selectEvolutionCandidate(row: Record<string, unknown>) {
+async function openEvolutionMission(row: Record<string, unknown>) {
+  const id = String(row.id || '');
+  if (!id) return;
+  evolutionDetailLoading.value = true;
+  error.value = '';
+  try {
+    evolutionMissionDetail.value = await api.evolutionMissionDetail(id);
+    selectedDetail.value = evolutionMissionDetail.value;
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    evolutionDetailLoading.value = false;
+  }
+}
+
+async function selectEvolutionCandidate(row: Record<string, unknown>) {
   selectedEvolutionCandidateId.value = String(row.id || '');
-  selectedDetail.value = { ...row, source: 'evolution.candidate', evidence: row.id, status: row.status };
+  evolutionDetailLoading.value = true;
+  error.value = '';
+  try {
+    selectedDetail.value = await api.evolutionCandidateDetail(selectedEvolutionCandidateId.value);
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    evolutionDetailLoading.value = false;
+  }
 }
 
 async function requestEvolutionEvaluation(row: Record<string, unknown>) {
@@ -558,10 +628,41 @@ async function requestEvolutionStableReview(row: Record<string, unknown>) {
   await refresh();
 }
 
-function selectEvolutionReview(row: Record<string, unknown>) {
+async function selectEvolutionReview(row: Record<string, unknown>) {
   selectedEvolutionReviewId.value = String(row.id || '');
   reviewReason.value = '';
-  selectedDetail.value = { ...row, source: 'evolution.release_review', evidence: row.id, status: row.status };
+  evolutionDetailLoading.value = true;
+  error.value = '';
+  try {
+    evolutionReviewDetail.value = await api.evolutionReview(selectedEvolutionReviewId.value);
+    selectedDetail.value = evolutionReviewDetail.value;
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    evolutionDetailLoading.value = false;
+  }
+}
+
+async function requestEvolutionSetLatestReview() {
+  const candidate = selectedEvolutionCandidateModel.value;
+  if (!candidate?.candidate_id || !candidate?.subject) return;
+  const evidenceRefs = Array.isArray(candidate.source_evidence_refs) && candidate.source_evidence_refs.length
+    ? candidate.source_evidence_refs
+    : [{
+        ref_type: 'operator_action',
+        id: `webui:audit:set-latest:${candidate.candidate_id}`,
+        source: 'webui.audit',
+        boundary: 'observed',
+      }];
+  evolutionActionResult.value = await api.evolutionCreateReleaseReview({
+    request_id: `webui-set-latest-${candidate.candidate_id}-${Date.now()}`,
+    subject: candidate.subject,
+    action: 'set_default_latest',
+    selector: null,
+    candidate_id: candidate.candidate_id,
+    evidence_refs: evidenceRefs,
+  });
+  await refresh();
 }
 
 async function decideEvolutionReview(row: Record<string, unknown>, decision: 'approve' | 'reject' | 'revise') {
@@ -801,10 +902,11 @@ onMounted(refresh);
         <DataTable v-if="harnessEvalRows.length" searchable copyable :rows="harnessEvalRows" :columns="['id', 'level', 'status', 'tokens', 'rounds', 'tools', 'scenarios', 'elapsed_ms']" row-key="id" @row-click="openHarnessEvalReport" />
         <EmptyState v-else :title="t('page.audit.page.title.6d80665780')" :detail="t('page.audit.page.detail.64a90473e7')" />
         <RequestReceipt v-if="evalActionResult" :receipt="evalActionResult" :title="t('page.audit.page.title.7e07abe625')" />
-        <section v-if="evalReportDetail" class="eval-report-drilldown">
+        <p v-if="evalReportLoading" class="empty-note">{{ t('common.loading') }}</p>
+        <section v-if="evalReportDetail && !evalReportLoading" class="eval-report-drilldown">
           <header>
             <h3>{{ evalReportSummary?.id || t('page.audit.harnessEval.reportTitle') }}</h3>
-            <span>{{ displayStatus(evalReport?.report_gate?.status || evalReportSummary?.status || 'unknown') }}</span>
+            <span>{{ displayStatus(evalEffectiveGate?.status || evalReportSummary?.status || 'unknown') }}</span>
           </header>
           <div class="metric-row compact">
             <article class="metric-card">
@@ -819,7 +921,7 @@ onMounted(refresh);
             </article>
             <article class="metric-card">
               <span>{{ t('page.audit.harnessEval.reportGate') }}</span>
-              <strong>{{ displayStatus(evalReport?.report_gate?.status || 'unknown') }}</strong>
+              <strong>{{ displayStatus(evalEffectiveGate?.status || 'unknown') }}</strong>
               <small>{{ formatCount('items', evalReportGateItems.length) }}</small>
             </article>
             <article class="metric-card">
@@ -908,7 +1010,7 @@ onMounted(refresh);
         />
         <DataTable v-if="evolutionSignalRows.length" searchable copyable :rows="evolutionSignalRows" :columns="['id', 'type', 'severity', 'owner', 'continue', 'summary']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.signal', evidence: $event.id, status: $event.severity, summary: $event.summary }" />
         <DataTable v-if="evolutionDiagnosisRows.length" searchable copyable :rows="evolutionDiagnosisRows" :columns="['id', 'cause', 'owner', 'recurrence', 'hypotheses', 'falsification', 'candidate', 'gates', 'impact']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.diagnosis', evidence: $event.id, status: $event.cause, summary: $event.impact }" />
-        <DataTable v-if="evolutionMissionRows.length" searchable copyable :rows="evolutionMissionRows" :columns="['id', 'status', 'owner', 'goals', 'signals', 'proposals', 'candidates']" row-key="id" @row-click="selectedDetail = { ...$event, source: 'evolution.mission', evidence: $event.id, status: $event.status }" />
+        <DataTable v-if="evolutionMissionRows.length" searchable copyable :rows="evolutionMissionRows" :columns="['id', 'status', 'owner', 'goals', 'signals', 'proposals', 'candidates']" row-key="id" @row-click="openEvolutionMission" />
         <DataTable v-if="evolutionProposalRows.length" searchable copyable :rows="evolutionProposalRows" :columns="['id', 'kind', 'diagnosis', 'owner', 'status', 'risk', 'approval', 'candidates', 'evidence', 'benefit']" row-key="id" @row-click="openEvolutionDraft" />
         <div v-if="evolutionProposalRows.length" class="button-row">
           <button class="ghost-action" type="button" :disabled="!selectedEvolutionProposal || selectedEvolutionProposal.status !== 'draft'" @click="selectedEvolutionProposal && decideEvolutionProposal(selectedEvolutionProposal, 'approved')">{{ t('page.audit.evolution.approve') }}</button>
@@ -919,6 +1021,7 @@ onMounted(refresh);
           <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate?.evaluateReady" @click="selectedEvolutionCandidate && requestEvolutionEvaluation(selectedEvolutionCandidate)">{{ t('page.audit.evolution.evaluateCandidate') }}</button>
           <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate?.canaryReady" @click="selectedEvolutionCandidate && requestEvolutionCanaryReview(selectedEvolutionCandidate)">{{ t('page.audit.evolution.requestCanaryReview') }}</button>
           <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidate?.stableReady" @click="selectedEvolutionCandidate && requestEvolutionStableReview(selectedEvolutionCandidate)">{{ t('page.audit.evolution.requestStableReview') }}</button>
+          <button class="ghost-action" type="button" :disabled="!selectedEvolutionCandidateModel" @click="requestEvolutionSetLatestReview">{{ t('page.audit.evolution.requestSetLatest') }}</button>
         </div>
         <DataTable v-if="evolutionReviewRows.length" searchable copyable :rows="evolutionReviewRows" :columns="['id', 'class', 'action', 'status', 'candidate', 'approval', 'observation']" row-key="id" @row-click="selectEvolutionReview" />
         <div v-if="evolutionReviewRows.length" class="button-row">
@@ -931,6 +1034,7 @@ onMounted(refresh);
         </div>
         <EmptyState v-if="!evolutionSignalRows.length && !evolutionDiagnosisRows.length && !evolutionProposalRows.length && !evolutionCandidateRows.length" :title="t('page.audit.evolution.emptyTitle')" :detail="t('page.audit.evolution.emptyDetail')" />
         <RequestReceipt v-if="evolutionActionResult" :receipt="evolutionActionResult" :title="t('page.audit.evolution.receipt')" />
+        <p v-if="evolutionDetailLoading" class="empty-note">{{ t('common.loading') }}</p>
         <section v-if="evolutionDraftSummary" class="inline-management-section">
           <header>
             <h3>{{ t('page.audit.evolution.skillDraft') }}</h3>
@@ -938,6 +1042,10 @@ onMounted(refresh);
           </header>
           <DataTable :rows="[evolutionDraftSummary]" :columns="['proposal', 'status', 'skill', 'version', 'evidence']" row-key="proposal" />
         </section>
+        <ObjectInspectorDrawer v-if="evolutionProposalDetail" :title="t('page.audit.evolution.proposalDetail')" :data="evolutionProposalDetail" />
+        <ObjectInspectorDrawer v-if="evolutionMissionDetail" :title="t('page.audit.evolution.missionDetail')" :data="evolutionMissionDetail" />
+        <ObjectInspectorDrawer v-if="evolutionChainDetail" :title="t('page.audit.evolution.chainDetail')" :data="evolutionChainDetail" />
+        <ObjectInspectorDrawer v-if="evolutionReviewDetail" :title="t('page.audit.evolution.reviewDetail')" :data="evolutionReviewDetail" />
       </section>
 
       <section class="management-panel gateway-panel wide" v-show="isSectionActive('evaluation-policy')" data-section="evaluation-policy">

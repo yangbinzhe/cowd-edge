@@ -5,8 +5,8 @@ import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
-  AlertTriangle, CalendarClock, CheckCircle2, Database, Pause, Play, RefreshCw, Route,
-  ShieldCheck, Square, Trash2, Users, Workflow,
+  AlertTriangle, CalendarClock, CheckCircle2, Database, Pause, Pencil, Play, RefreshCw, Route,
+  ShieldCheck, Square, Trash2, Users, Workflow, X,
 } from 'lucide-vue-next';
 import { api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
@@ -57,6 +57,10 @@ const realityFlow = ref<any>({});
 const actionResult = ref<any>(null);
 const recoveryReport = ref<any>(null);
 const teamRunDetail = ref<any>({});
+const teamExecutionPlan = ref<any>({});
+const teamEvidence = ref<any>({});
+const teamDetailLoading = ref(false);
+const teamDetailError = ref('');
 const scheduleResponse = ref<any>({});
 const scheduleTriggerKind = ref<'interval' | 'at' | 'cron'>('interval');
 const scheduleObjective = ref('');
@@ -66,6 +70,8 @@ const scheduleCron = ref('0 0 9 * * *');
 const scheduleTimezone = ref(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
 const schedulePermission = ref('read-only');
 const scheduleBusyId = ref('');
+const editingScheduleId = ref('');
+const editingScheduleRevision = ref(0);
 const selectedExecutionNode = ref<any>(null);
 const selectedTraceEvidence = ref<Record<string, unknown> | null>(null);
 let missionLiveSource: LiveSourceLease | null = null;
@@ -449,7 +455,23 @@ async function startTeam() {
 async function loadTeamRun(teamId = selectedTeamId.value, userSelected = false) {
   if (!teamId) return;
   selectedTeamId.value = teamId;
-  teamRunDetail.value = await api.collaborationRun(teamId);
+  teamDetailLoading.value = true;
+  teamDetailError.value = '';
+  try {
+    [teamRunDetail.value, teamExecutionPlan.value, teamEvidence.value] = await Promise.all([
+      api.collaborationRun(teamId),
+      api.teamExecutionPlan(teamId),
+      api.teamMissionEvidence(teamId),
+    ]);
+  } catch (reason) {
+    teamDetailError.value = reason instanceof Error ? reason.message : String(reason);
+    teamRunDetail.value = {};
+    teamExecutionPlan.value = {};
+    teamEvidence.value = {};
+    return;
+  } finally {
+    teamDetailLoading.value = false;
+  }
   const executionId = teamRunDetail.value?.execution_graph_id
     || teamRunDetail.value?.graph_id
     || teamRunDetail.value?.run?.execution_graph_id
@@ -510,24 +532,66 @@ function missionScheduleTrigger() {
   return { interval: { every_ms: everyMs } };
 }
 
-async function createSchedule() {
+function resetScheduleEditor() {
+  editingScheduleId.value = '';
+  editingScheduleRevision.value = 0;
+  scheduleObjective.value = '';
+  scheduleTriggerKind.value = 'interval';
+  scheduleIntervalMinutes.value = 60;
+  scheduleAt.value = '';
+  scheduleCron.value = '0 0 9 * * *';
+  scheduleTimezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  schedulePermission.value = 'read-only';
+}
+
+function editSchedule(schedule: any) {
+  editingScheduleId.value = String(schedule?.schedule_id || '');
+  editingScheduleRevision.value = Number(schedule?.revision || 0);
+  scheduleObjective.value = String(schedule?.objective || '');
+  schedulePermission.value = String(schedule?.permission_ceiling || 'read-only');
+  const trigger = schedule?.trigger || {};
+  if (trigger.at) {
+    scheduleTriggerKind.value = 'at';
+    const at = new Date(Number(trigger.at.at_ms || 0));
+    scheduleAt.value = Number.isNaN(at.getTime())
+      ? ''
+      : new Date(at.getTime() - at.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+  } else if (trigger.cron) {
+    scheduleTriggerKind.value = 'cron';
+    scheduleCron.value = String(trigger.cron.expression || '');
+    scheduleTimezone.value = String(trigger.cron.timezone || 'UTC');
+  } else {
+    scheduleTriggerKind.value = 'interval';
+    scheduleIntervalMinutes.value = Math.max(1, Math.round(Number(trigger.interval?.every_ms || 60_000) / 60_000));
+  }
+}
+
+async function saveSchedule() {
   error.value = '';
   const missionId = String(mission.value?.mission_id || '').trim();
-  if (!missionId || !activeSession.value || !scheduleObjective.value.trim()) {
+  if ((!editingScheduleId.value && (!missionId || !activeSession.value)) || !scheduleObjective.value.trim()) {
     error.value = t('page.mission.schedules.error.required');
     return;
   }
   try {
-    actionResult.value = await api.createMissionSchedule({
-      mission_id: missionId,
-      target_session_id: activeSession.value,
+    const editable = {
       objective: scheduleObjective.value.trim(),
       trigger: missionScheduleTrigger(),
       autonomy_profile: 'assisted',
       permission_ceiling: schedulePermission.value,
       priority: 64,
-    });
-    scheduleObjective.value = '';
+    };
+    actionResult.value = editingScheduleId.value
+      ? await api.updateMissionSchedule(editingScheduleId.value, {
+          expected_revision: editingScheduleRevision.value,
+          ...editable,
+        })
+      : await api.createMissionSchedule({
+          mission_id: missionId,
+          target_session_id: activeSession.value,
+          ...editable,
+        });
+    resetScheduleEditor();
     scheduleResponse.value = await api.missionSchedules();
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
@@ -905,7 +969,13 @@ onUnmounted(() => {
         <div class="button-row">
           <button class="danger-action" type="button" :disabled="!selectedTeamId" @click="cancelSelectedTeam">{{ t('page.mission.control.page.text.ed848a3a21') }}</button>
         </div>
-        <ObjectInspectorDrawer v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
+        <p v-if="teamDetailLoading" class="empty-note">{{ t('common.loading') }}</p>
+        <p v-else-if="teamDetailError" class="settings-alert">{{ teamDetailError }}</p>
+        <template v-else>
+          <ObjectInspectorDrawer v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
+          <ObjectInspectorDrawer v-if="Object.keys(teamExecutionPlan).length" :title="t('page.mission.team.executionPlan')" :data="teamExecutionPlan" />
+          <ObjectInspectorDrawer v-if="Object.keys(teamEvidence).length" :title="t('page.mission.team.evidence')" :data="teamEvidence" />
+        </template>
       </section>
 
       <section class="mission-panel wide" v-show="isSectionActive('agents')" data-section="agents">
@@ -992,9 +1062,14 @@ onUnmounted(() => {
               <option value="prompt">prompt</option>
             </select>
           </label>
-          <button class="primary-action" type="button" :disabled="!activeSession || !scheduleObjective.trim()" @click="createSchedule">
-            <CalendarClock :size="16" />{{ t('page.mission.schedules.create') }}
-          </button>
+          <div class="button-row">
+            <button class="primary-action" type="button" :disabled="(!editingScheduleId && !activeSession) || !scheduleObjective.trim()" @click="saveSchedule">
+              <CalendarClock :size="16" />{{ editingScheduleId ? t('page.mission.schedules.save') : t('page.mission.schedules.create') }}
+            </button>
+            <button v-if="editingScheduleId" class="ghost-action" type="button" @click="resetScheduleEditor">
+              <X :size="16" />{{ t('common.cancel') }}
+            </button>
+          </div>
         </div>
         <div class="mission-schedule-list">
           <article v-for="schedule in schedules" :key="schedule.schedule_id" class="mission-schedule-row">
@@ -1004,6 +1079,7 @@ onUnmounted(() => {
               <small>{{ schedule.target_session_id }} · {{ t('page.mission.schedules.next') }} {{ new Date(Number(schedule.next_at_ms || 0)).toLocaleString() }}</small>
             </div>
             <div class="icon-button-row">
+              <button class="icon-action" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.edit')" @click="editSchedule(schedule)"><Pencil :size="16" /></button>
               <button class="icon-action" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.runNow')" @click="controlSchedule(schedule, 'run')"><Play :size="16" /></button>
               <button v-if="String(schedule.status).toLowerCase() !== 'paused'" class="icon-action" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.pause')" @click="controlSchedule(schedule, 'pause')"><Pause :size="16" /></button>
               <button v-else class="icon-action" type="button" :disabled="scheduleBusyId === schedule.schedule_id" :aria-label="t('page.mission.schedules.resume')" @click="controlSchedule(schedule, 'resume')"><Play :size="16" /></button>

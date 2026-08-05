@@ -62,6 +62,23 @@ export interface SessionMessagesPage extends ApiReadState {
   has_more: boolean;
 }
 
+export interface SessionMessageSearchResult {
+  session_id: string;
+  sequence: number;
+  role: string;
+  blocks: Array<Record<string, unknown>>;
+  content_preview: string;
+  tool_use_id?: string | null;
+  tool_name?: string | null;
+  created_at_ms: number;
+}
+
+export interface SessionMessageSearchResponse extends ApiReadState {
+  query: string;
+  results: SessionMessageSearchResult[];
+  total: number;
+}
+
 export interface HarnessEvalRunOptions {
   level?: 'quick' | 'full' | 'deep' | 'deep-real';
   provider?: string;
@@ -350,8 +367,9 @@ function invalidateRejectedAuthorization(
   stamp: RequestAuthorizationStamp,
   status: number,
   reason: string,
+  invalidateSession = true,
 ) {
-  if (status === 403 && stamp.sessionId) {
+  if (status === 403 && stamp.sessionId && invalidateSession) {
     invalidateSessionAuthorization(stamp.sessionId, reason);
     return;
   }
@@ -571,6 +589,13 @@ function waitForSharedRead<T>(shared: SharedRead, signal?: AbortSignal | null): 
   });
 }
 
+function isAbortError(error: unknown) {
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  if (error instanceof Error && error.name === 'AbortError') return true;
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /\b(?:abort(?:ed)?|user aborted a request)\b/i.test(message);
+}
+
 async function readAtRevision<T>(
   path: string,
   fallback: T,
@@ -615,6 +640,13 @@ async function readAtRevision<T>(
   }
   try {
     let shared = inFlightReads.get(cacheKey);
+    // A cancelled shared transport may remain in the registry until its
+    // rejection microtask settles. Never let a new reader subscribe to that
+    // already-dead transport.
+    if (shared?.controller.signal.aborted) {
+      if (inFlightReads.get(cacheKey) === shared) inFlightReads.delete(cacheKey);
+      shared = undefined;
+    }
     if (!shared) {
       const { signal: _callerSignal, ...sharedInit } = init;
       const controller = new AbortController();
@@ -727,7 +759,7 @@ async function readAtRevision<T>(
     if (init.signal?.aborted) {
       throw error;
     }
-    if (error instanceof DOMException && error.name === 'AbortError') {
+    if (isAbortError(error)) {
       if (!authorizationStampIsCurrent(requestAuthorization)) {
         return withReadState(fallback, {
           __state: 'forbidden',
@@ -744,6 +776,20 @@ async function readAtRevision<T>(
         )
         && retryAfterInvalidation
       ) {
+        return readAtRevision(
+          path,
+          fallback,
+          init,
+          authorizationSessionId,
+          requestedReadClass,
+          false,
+        );
+      }
+      // Fetch implementations may cancel an idempotent request during a
+      // navigation/connection transition even though this caller did not
+      // abort it. Retry that transport once; explicit caller cancellation,
+      // authorization changes and governed deadlines are handled above.
+      if (retryAfterInvalidation) {
         return readAtRevision(
           path,
           fallback,
@@ -820,6 +866,7 @@ export async function writeWithMetadata<T>(
           requestAuthorization,
           response.status,
           body || `${response.status} ${response.statusText}`,
+          false,
         );
       }
     }
@@ -1088,7 +1135,14 @@ export const api = {
     `/api/sessions?limit=${limit}&offset=${offset}&include_execution=true${query ? `&q=${encodeURIComponent(query)}` : ''}`,
     { sessions: [] },
   ),
-  searchMessages: (query: string) => read(`/api/sessions/search?q=${encodeURIComponent(query)}`, { matches: [] }),
+  searchMessages: (query: string, limit = 100) => read<SessionMessageSearchResponse>(
+    `/api/sessions/search?q=${encodeURIComponent(query)}&limit=${Math.max(1, Math.min(100, limit))}`,
+    { query, results: [], total: 0 },
+  ),
+  session: (sessionId: string) => read<SessionSummary>(
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    { id: sessionId },
+  ),
   createSession: (model?: string) => write<SessionSummary>('/api/sessions', {
     method: 'POST',
     body: JSON.stringify({ model }),
@@ -1166,8 +1220,10 @@ export const api = {
     turns: [],
     freshness: 'unavailable',
   }),
-  sessionTurnProjection: (sessionId: string, fromSeq = 0, limit = 2000) => read<SessionTurnProjection>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/turns?from_seq=${fromSeq}&limit=${limit}`,
+  sessionTurnProjection: (sessionId: string, fromSeq?: number, limit = 2000) => read<SessionTurnProjection>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/turns?limit=${limit}${
+      fromSeq === undefined ? '' : `&from_seq=${Math.max(0, fromSeq)}`
+    }`,
     {
       kind: 'session.turn_projection',
       session_id: sessionId,

@@ -3,15 +3,19 @@ import { computed, ref, watch } from 'vue';
 import {
   Bot,
   Boxes,
+  Brain,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   CircleDot,
+  CircleX,
   FileCheck2,
   PackageCheck,
   ShieldCheck,
   Users,
   Wrench,
 } from 'lucide-vue-next';
+import { t } from '../../i18n';
 import { displayStatus } from '../../i18n/domain/status';
 import {
   activityAutoCollapsed,
@@ -35,13 +39,16 @@ const collapsed = computed(() => manualCollapsed.value ?? activityAutoCollapsed(
 watch(
   () => `${activity.value.status}:${activity.value.commit_cursor}`,
   () => {
-    if (activityNeedsAttention(activity.value)) manualCollapsed.value = false;
+    if (!activity.value.tool_summary && activityNeedsAttention(activity.value)) {
+      manualCollapsed.value = false;
+    }
   },
 );
 
 function activityIcon(kind: string) {
   if (kind === 'team') return Users;
   if (kind === 'agent') return Bot;
+  if (kind === 'think' || kind === 'model') return Brain;
   if (kind === 'tool' || kind === 'tool_batch') return Wrench;
   if (kind === 'approval') return ShieldCheck;
   if (kind === 'artifact' || kind === 'outcome') return PackageCheck;
@@ -86,13 +93,22 @@ function formatTime(value: unknown) {
         <span class="execution-activity-icon">
           <component :is="activityIcon(activity.kind)" :size="13" />
         </span>
-        <span class="execution-activity-copy">
+        <span
+          class="execution-activity-copy"
+          :class="{ 'has-tool-summary': activity.tool_summary }"
+        >
           <strong>{{ activity.title }}</strong>
+          <span v-if="activity.tool_summary" class="execution-tool-summary">
+            <small>{{ t('chat.activity.tools.executed') }} {{ activity.tool_summary.executed }}/{{ activity.tool_summary.total }}</small>
+            <small class="success"><CheckCircle2 :size="11" />{{ activity.tool_summary.succeeded }}</small>
+            <small v-if="activity.tool_summary.failed" class="failed"><CircleX :size="11" />{{ activity.tool_summary.failed }}</small>
+            <small v-if="activity.tool_summary.running" class="running"><CircleDot :size="11" />{{ activity.tool_summary.running }}</small>
+          </span>
           <small v-if="!collapsed && activity.detail && activity.detail !== activity.title">
             {{ activity.detail }}
           </small>
         </span>
-        <span class="execution-activity-meta">
+        <span v-if="!activity.tool_summary" class="execution-activity-meta">
           <small v-if="activity.evidence_refs?.length" :title="`${activity.evidence_refs.length} evidence`">
             <FileCheck2 :size="11" />{{ activity.evidence_refs.length }}
           </small>
@@ -156,8 +172,14 @@ function formatTime(value: unknown) {
   background: var(--surface-2);
 }
 .execution-activity-copy { min-width: 0; display: grid; gap: 2px; }
+.execution-activity-copy.has-tool-summary { display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .execution-activity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .execution-activity-copy small { color: var(--text-muted); line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+.execution-tool-summary { min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.execution-tool-summary small { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; }
+.execution-tool-summary .success { color: var(--success); }
+.execution-tool-summary .failed { color: var(--danger); }
+.execution-tool-summary .running { color: var(--info); }
 .execution-activity-meta { display: flex; align-items: center; justify-content: flex-end; gap: 7px; color: var(--text-muted); white-space: nowrap; font-size: 10px; }
 .execution-activity-meta small { display: inline-flex; align-items: center; gap: 2px; }
 .execution-activity-status { color: var(--text-muted); }
@@ -176,5 +198,7 @@ function formatTime(value: unknown) {
   .execution-activity-main { grid-template-columns: 20px minmax(80px, 1fr); }
   .execution-activity-meta { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
   .execution-activity-meta time:first-of-type { display: none; }
+  .execution-activity-copy.has-tool-summary { gap: 6px; }
+  .execution-tool-summary { flex: 0 0 auto; gap: 5px; overflow: hidden; }
 }
 </style>

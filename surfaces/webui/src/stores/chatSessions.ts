@@ -430,7 +430,25 @@ function projectedActivity(value: unknown): ActivityEvent | null {
   if (!value || typeof value !== 'object') return null;
   const event = value as ActivityEvent;
   const kind = String(event.kind || '');
-  if (!['tool', 'think', 'runtime', 'context', 'approval', 'error'].includes(kind)) return null;
+  if (![
+    'execution',
+    'goal',
+    'team',
+    'agent',
+    'model',
+    'tool_batch',
+    'tool',
+    'think',
+    'runtime',
+    'context',
+    'approval',
+    'verify',
+    'artifact',
+    'outcome',
+    'replan',
+    'recovery',
+    'error',
+  ].includes(kind)) return null;
   const detail = typeof event.detail === 'string'
     ? event.detail
     : event.detail == null
@@ -2165,7 +2183,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       const state = stateFor(sessionId);
       const epoch = state.attachmentEpoch;
       const invalidated = () => state.attachmentEpoch !== epoch || state.reconnectBlocked;
-      const compensate = async () => {
+      let writerAttached = false;
+      const compensateRevokedAttachment = async () => {
         try {
           await api.releaseRuntimeLease(sessionId);
         } catch {
@@ -2179,24 +2198,19 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       };
       if (state.attachmentRole === 'writer' && state.writable) return true;
       try {
-        if (state.attachmentRole !== 'detached') {
-          const detached: any = await api.detachSession(sessionId);
-          if (detached?.ok === false) throw new Error(String(detached.error || 'reader detach rejected'));
-          if (invalidated()) {
-            await compensate();
-            return false;
-          }
-        }
+        // Presence attachment replacement is atomic for one observer. Promote
+        // reader -> writer directly so there is no detached race window.
         const attached: any = await api.attachSession(sessionId, 'writer');
         if (attached?.ok === false) throw new Error(String(attached.error || 'writer attachment rejected'));
+        writerAttached = true;
         if (invalidated()) {
-          await compensate();
+          await compensateRevokedAttachment();
           return false;
         }
         const lease: any = await api.acquireRuntimeLease(sessionId, mode);
         if (lease?.ok === false) throw new Error(String(lease.error || 'writer lease rejected'));
         if (invalidated()) {
-          await compensate();
+          await compensateRevokedAttachment();
           return false;
         }
         state.attachmentRole = 'writer';
@@ -2204,17 +2218,30 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         state.degradedReason = '';
         return true;
       } catch (error: any) {
-        await compensate();
+        if (writerAttached) {
+          try {
+            await api.releaseRuntimeLease(sessionId);
+          } catch {
+            // The lease may not have been acquired.
+          }
+        }
         if (invalidated()) return false;
         try {
+          // Demotion is also an atomic role replacement. Keep a valid reader
+          // attachment when writer admission or lease acquisition fails.
           const reader: any = await api.attachSession(sessionId, 'reader');
           if (reader?.ok === false) throw new Error(String(reader.error || 'reader fallback rejected'));
           if (invalidated()) {
-            await compensate();
+            await compensateRevokedAttachment();
             return false;
           }
           state.attachmentRole = 'reader';
         } catch {
+          try {
+            await api.detachSession(sessionId);
+          } catch {
+            // The server may already have removed the attachment.
+          }
           state.attachmentRole = 'detached';
         }
         state.writable = false;
@@ -2239,9 +2266,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           const released: any = await api.releaseRuntimeLease(sessionId);
           if (released?.ok === false) throw new Error(String(released.error || 'writer lease release rejected'));
           if (invalidated()) return false;
-          const detached: any = await api.detachSession(sessionId);
-          if (detached?.ok === false) throw new Error(String(detached.error || 'writer detach rejected'));
-          if (invalidated()) return false;
+          // Keep the logical Surface attached while atomically demoting the
+          // observer from writer to reader.
           const reader: any = await api.attachSession(sessionId, 'reader');
           if (reader?.ok === false) throw new Error(String(reader.error || 'reader reattach rejected'));
           if (invalidated()) {
@@ -2288,10 +2314,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       }
     });
     let flight!: Promise<void>;
-    flight = Promise.all([
-      load(sessionId),
-      waitForSessionLiveReady(sessionId),
-    ]).then(() => undefined)
+    // Opening a Session is a durable-history operation. The live source is
+    // already connecting in parallel, but it must not hold transcript paint
+    // or historical turn hydration behind its readiness timeout. Mutations
+    // perform their own live-readiness check in `send`.
+    flight = load(sessionId)
       .finally(() => {
         if (openFlights.get(sessionId) === flight) openFlights.delete(sessionId);
       });

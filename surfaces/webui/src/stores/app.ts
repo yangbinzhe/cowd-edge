@@ -588,6 +588,10 @@ export const useAppStore = defineStore('app', () => {
     queueMicrotask(() => {
       if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
       chat.hydrateExecutionIndex(sessionId, false).catch(() => undefined);
+      // The transcript owns its per-turn narrative. Hydrate the bounded,
+      // durable turn projection after messages are visible instead of waiting
+      // for the optional companion panel to open.
+      chat.hydrateTurnProjection(sessionId).catch(() => undefined);
       Promise.allSettled([
         loadAttachments(sessionId, generation),
         refreshSessionInputs(sessionId, generation),
@@ -659,13 +663,45 @@ export const useAppStore = defineStore('app', () => {
   async function refreshSessions(query = sessionQuery.value, reset = true) {
     const generation = authorizationGeneration;
     const offset = reset ? 0 : sessionOffset.value;
-    const data = await api.searchSessions(query.trim(), sessionPageLimit.value, offset);
+    const normalizedQuery = query.trim();
+    const [data, messageMatches] = await Promise.all([
+      api.searchSessions(normalizedQuery, sessionPageLimit.value, offset),
+      normalizedQuery && reset
+        ? api.searchMessages(normalizedQuery, sessionPageLimit.value)
+        : Promise.resolve({ query: normalizedQuery, results: [], total: 0 }),
+    ]);
     if (generation !== authorizationGeneration) return data;
-    const nextSessions = visibleSessionRows(data.sessions)
+    const directSessions = visibleSessionRows(data.sessions)
       .filter((session) => !revokedSessionIds.has(session.id));
+    const directIds = new Set(directSessions.map((session) => session.id));
+    const matchedSessionIds = Array.from(new Set(
+      messageMatches.results
+        .map((result) => result.session_id)
+        .filter((sessionId) => sessionId && !directIds.has(sessionId)),
+    ));
+    const matchedSessions = normalizedQuery && reset
+      ? (await Promise.all(matchedSessionIds.map(async (sessionId) => {
+          try {
+            const session = await api.session(sessionId);
+            const match = messageMatches.results.find((result) => result.session_id === sessionId);
+            return {
+              ...session,
+              snippet: match?.content_preview || session.snippet,
+            };
+          } catch {
+            return null;
+          }
+        }))).filter((session): session is SessionSummary => Boolean(session))
+      : [];
+    if (generation !== authorizationGeneration) return data;
+    const nextSessions = [...directSessions, ...matchedSessions]
+      .filter((session, index, rows) => (
+        rows.findIndex((candidate) => candidate.id === session.id) === index
+      ))
+      .sort((left, right) => Number(right.updated_at || 0) - Number(left.updated_at || 0));
     sessions.value = reset ? nextSessions : [...sessions.value, ...nextSessions.filter((session) => !sessions.value.some((item) => item.id === session.id))];
     sessionOffset.value = sessions.value.length;
-    sessionHasMore.value = nextSessions.length >= sessionPageLimit.value;
+    sessionHasMore.value = directSessions.length >= sessionPageLimit.value;
     if (!activeSessionId.value && sessions.value[0]) activeSessionId.value = sessions.value[0].id;
     return data;
   }

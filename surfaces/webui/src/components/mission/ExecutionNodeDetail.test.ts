@@ -55,4 +55,44 @@ describe('ExecutionNodeDetail', () => {
     await wrapper.get('.execution-node-actions button:last-child').trigger('click');
     expect(wrapper.emitted('close')).toHaveLength(1);
   });
+
+  it('renders a semantic ToolGroup schedule without expanding every tool into graph nodes', () => {
+    const wrapper = mount(ExecutionNodeDetail, {
+      props: {
+        node: {
+          node_id: 'tool-group',
+          semantic_view: true,
+          kind: 'tool_batch',
+          executor_kind: 'tool',
+          status: 'completed',
+          summary: 'Tool call · 2',
+          output: {
+            tool_execution: {
+              call_count: 2,
+              batch_count: 1,
+              max_parallel_width: 2,
+              batches: [{ node_id: 'batch-1', status: 'completed' }],
+              calls: [{
+                id: 'call-1',
+                name: 'glob_search',
+                status: 'completed',
+                batch_node_id: 'batch-1',
+                depends_on: [],
+              }, {
+                id: 'call-2',
+                name: 'read_file',
+                status: 'completed',
+                batch_node_id: 'batch-1',
+                depends_on: [],
+              }],
+            },
+          },
+        },
+      },
+    });
+
+    expect(wrapper.get('.execution-node-tool-schedule').text()).toContain('2');
+    expect(wrapper.get('.execution-node-tool-schedule').text()).toContain('glob_search');
+    expect(wrapper.get('.execution-node-tool-schedule').text()).toContain('read_file');
+  });
 });

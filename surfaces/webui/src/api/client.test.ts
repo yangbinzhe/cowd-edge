@@ -59,6 +59,26 @@ describe('API authorization epoch', () => {
     expect(secondResult.__state).toBe('ready');
   });
 
+  it('loads the latest turn projection unless an explicit event offset is requested', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      kind: 'session.turn_projection',
+      session_id: 'history-session',
+      turn_count: 0,
+      turns: [],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.sessionTurnProjection('history-session');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/sessions/history-session/turns?limit=2000',
+      expect.any(Object),
+    );
+  });
+
   it('coalesces signalled reads while allowing one caller to cancel independently', async () => {
     let finish!: (response: Response) => void;
     const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
@@ -102,6 +122,23 @@ describe('API authorization epoch', () => {
     await expect(second).rejects.toMatchObject({ name: 'AbortError' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchAborted).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries one unexpected transport abort without converting history into an empty failure', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new DOMException('The user aborted a request.', 'AbortError'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ messages: [{ id: 'durable' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(read('/api/sessions/session-A/messages?limit=50&tail=true', { messages: [] }))
+      .resolves.toMatchObject({
+        messages: [{ id: 'durable' }],
+        __state: 'ready',
+      });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('classifies a shared transport deadline as timeout without cancelling callers independently', async () => {
@@ -324,7 +361,7 @@ describe('API authorization epoch', () => {
     window.removeEventListener('cowd:session-authorization-invalidated', invalidated);
   });
 
-  it('keeps browser authentication when one session write loses authorization', async () => {
+  it('keeps browser and session authorization when writer admission rejects one mutation', async () => {
     const globalInvalidated = vi.fn();
     const sessionInvalidated = vi.fn();
     window.addEventListener('cowd:authorization-invalidated', globalInvalidated);
@@ -338,8 +375,7 @@ describe('API authorization epoch', () => {
     });
 
     expect(globalInvalidated).not.toHaveBeenCalled();
-    expect(sessionInvalidated).toHaveBeenCalledTimes(1);
-    expect((sessionInvalidated.mock.calls[0][0] as CustomEvent).detail.sessionId).toBe('session-A');
+    expect(sessionInvalidated).not.toHaveBeenCalled();
     window.removeEventListener('cowd:authorization-invalidated', globalInvalidated);
     window.removeEventListener('cowd:session-authorization-invalidated', sessionInvalidated);
   });

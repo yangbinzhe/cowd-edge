@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Panel, VueFlow } from '@vue-flow/core';
 import {
   ArrowDown,
@@ -73,6 +73,10 @@ const graphNodeLimit = 220;
 const layoutCache = new Map<string, Array<{ id: string; x: number; y: number }>>();
 let lastLayoutIdentity = '';
 let fitFrame = 0;
+let fitTimer = 0;
+let layoutTimer = 0;
+let resizeObserver: ResizeObserver | null = null;
+let lastObservedSize = '';
 
 const nodeDescriptionKeys: Record<string, string> = {
   'agent': 'graph.nodeType.agent',
@@ -215,15 +219,20 @@ async function layout() {
       edges: canvasEdges.value.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
     });
   if (epoch !== layoutEpoch) return;
-  const byId = new Map(canvasNodes.value.map((node) => [node.id, node]));
+  const currentNodes = [...canvasNodes.value];
   const positions = cached || (graph?.children || []).map((position) => ({ id: position.id, x: position.x || 0, y: position.y || 0 }));
   if (!cached) {
     layoutCache.set(signature, positions);
     if (layoutCache.size > 24) layoutCache.delete(layoutCache.keys().next().value as string);
   }
+  const positionById = new Map(positions.map((position) => [String(position.id), position]));
   const previousViewport = flow.value?.getViewport?.();
-  laidOutNodes.value = positions.map((position) => {
-    const node = byId.get(position.id)!;
+  laidOutNodes.value = currentNodes.map((node, index) => {
+    const position = positionById.get(node.id) || (
+      direction.value === 'DOWN'
+        ? { x: (index % 6) * 238, y: Math.floor(index / 6) * 158 }
+        : { x: Math.floor(index / 6) * 278, y: (index % 6) * 118 }
+    );
     return {
       id: node.id,
       position: { x: position.x || 0, y: position.y || 0 },
@@ -247,6 +256,11 @@ async function layout() {
   if (lastLayoutIdentity === layoutIdentity && previousViewport) flow.value?.setViewport?.(previousViewport, { duration: 0 });
   else scheduleFit();
   lastLayoutIdentity = layoutIdentity;
+}
+
+function scheduleLayout() {
+  window.clearTimeout(layoutTimer);
+  layoutTimer = window.setTimeout(layout, 80);
 }
 
 function exportGraph() {
@@ -291,14 +305,23 @@ async function paneReady(instance: any) {
 
 function scheduleFit(instance = flow.value) {
   if (!instance || showList.value || !laidOutNodes.value.length) return;
-  const fit = () => instance.fitView?.({ padding: 0.2, duration: 0 });
+  const fit = () => instance.fitView?.({
+    padding: props.compact ? 0.08 : 0.2,
+    duration: 0,
+  });
   if (typeof requestAnimationFrame !== 'function') {
     fit();
     return;
   }
   cancelAnimationFrame(fitFrame);
+  window.clearTimeout(fitTimer);
   fitFrame = requestAnimationFrame(() => {
-    fitFrame = requestAnimationFrame(fit);
+    fitFrame = requestAnimationFrame(() => {
+      fit();
+      // Side panels and modal graphs can finish sizing after VueFlow initializes.
+      // Refit once after that layout settles; subsequent user zoom remains untouched.
+      fitTimer = window.setTimeout(fit, 120);
+    });
   });
 }
 
@@ -339,9 +362,35 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-watch([canvasNodes, canvasEdges, direction, showList, () => props.model.revision], layout, { immediate: true, deep: true });
+watch(
+  [canvasNodes, canvasEdges, direction, showList, () => props.model.revision],
+  scheduleLayout,
+  { immediate: true, deep: true },
+);
 watch(() => props.searchQuery, (value) => { if (value !== search.value) search.value = value; });
 watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) statusFilter.value = value || 'all'; });
+
+onMounted(() => {
+  if (!root.value || typeof ResizeObserver === 'undefined') return;
+  resizeObserver = new ResizeObserver(([entry]) => {
+    const width = Math.round(entry?.contentRect.width || 0);
+    const height = Math.round(entry?.contentRect.height || 0);
+    if (width < 1 || height < 1) return;
+    const size = `${width}:${height}`;
+    if (size === lastObservedSize) return;
+    lastObservedSize = size;
+    scheduleFit();
+  });
+  resizeObserver.observe(root.value);
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  window.clearTimeout(layoutTimer);
+  cancelAnimationFrame(fitFrame);
+  window.clearTimeout(fitTimer);
+});
 </script>
 
 <template>
@@ -440,7 +489,7 @@ watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) st
       :elements-selectable="true"
       :nodes-focusable="true"
       :edges-focusable="true"
-      :min-zoom="0.18"
+      :min-zoom="compact ? 0.04 : 0.18"
       @pane-ready="paneReady"
       @nodes-initialized="scheduleFit()"
       @node-click="selectNode"

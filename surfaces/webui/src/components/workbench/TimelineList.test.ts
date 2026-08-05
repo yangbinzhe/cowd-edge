@@ -44,4 +44,24 @@ describe('TimelineList', () => {
     expect(wrapper.find('details').attributes('open')).toBeUndefined();
     expect(wrapper.find('summary').text()).toHaveLength(120);
   });
+
+  it('renders canonical agent instance IDs as readable lane labels', () => {
+    const wrapper = mount(TimelineList, {
+      props: {
+        filterable: false,
+        items: [{
+          id: 'agent-1',
+          kind: 'agent',
+          title: 'Research Agent',
+          status: 'completed',
+          agent_lane_label: 'researcher-1',
+          agent_lane: 0,
+          agent_lane_count: 3,
+        }],
+      },
+    });
+
+    expect(wrapper.text()).toContain('researcher 1');
+    expect(wrapper.text()).not.toContain('researcher-1');
+  });
 });

@@ -36,7 +36,10 @@ import { canonicalMfgMutationResponse } from './testing/mfgReceiptMock';
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
 vi.mock('vue-echarts', () => ({ default: { template: '<div class="chart"></div>' } }));
 
-afterEach(() => resetLiveTransportForTests());
+afterEach(() => {
+  vi.restoreAllMocks();
+  resetLiveTransportForTests();
+});
 
 function mountApp(path = '/chat') {
   const router = createRouter({
@@ -234,6 +237,25 @@ describe('Cowd Vue WebUI shell', () => {
 
     resolveLoad();
     await selection;
+    wrapper.unmount();
+  });
+
+  it('hydrates durable turn narratives after the transcript becomes available', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.sessions = [{ id: 'history-session', title: 'History' }] as any;
+    const open = vi.spyOn(chat, 'open').mockResolvedValue(undefined);
+    const execution = vi.spyOn(chat, 'hydrateExecutionIndex').mockResolvedValue(undefined);
+    const turns = vi.spyOn(chat, 'hydrateTurnProjection').mockResolvedValue(undefined);
+
+    await store.loadMessages('history-session');
+    await settle();
+
+    expect(open).toHaveBeenCalledWith('history-session');
+    expect(execution).toHaveBeenCalledWith('history-session', false);
+    expect(turns).toHaveBeenCalledWith('history-session');
     wrapper.unmount();
   });
 
@@ -489,11 +511,11 @@ describe('Cowd Vue WebUI shell', () => {
     await nextTick();
     const toolRow = wrapper
       .findAll('.chat-execution-overlay .data-table tbody tr')
-      .find((row) => row.text().includes('WebSearch'));
+      .find((row) => row.text().includes('工具调用'));
     expect(toolRow).toBeTruthy();
     await toolRow!.trigger('click');
     await nextTick();
-    expect(wrapper.get('.execution-node-detail').text()).toContain('WebSearch');
+    expect(wrapper.get('.execution-node-detail').text()).toContain('工具调用');
     await wrapper
       .get('.execution-node-detail [aria-label="完整输出详情"]')
       .trigger('click');
@@ -537,6 +559,40 @@ describe('Cowd Vue WebUI shell', () => {
     expect(send.attributes('disabled')).toBeUndefined();
     expect(send.attributes('title')).toBe('补充当前执行');
     expect(wrapper.get('.composer-input-actions [aria-label="停止"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('clears a submitted draft immediately and never overwrites newer input on failure', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'draft-submit-session';
+    chat.activeSessionId = 'draft-submit-session';
+    chat.setDraft('draft-submit-session', '');
+    let finishSend!: (accepted: boolean) => void;
+    const send = vi.spyOn(chat, 'send').mockImplementation(() => (
+      new Promise<boolean>((resolve) => { finishSend = resolve; })
+    ));
+    await nextTick();
+
+    const composer = wrapper.get('.composer textarea');
+    await composer.setValue('第一条内容');
+    void wrapper.get('.composer-input-actions [aria-label="发送"]').trigger('click');
+    await nextTick();
+
+    expect(send).toHaveBeenCalledWith(
+      'draft-submit-session',
+      '第一条内容',
+      expect.objectContaining({ transportContent: '第一条内容' }),
+    );
+    expect((composer.element as HTMLTextAreaElement).value).toBe('');
+
+    await composer.setValue('发送等待期间的新内容');
+    finishSend(false);
+    await settle();
+
+    expect((composer.element as HTMLTextAreaElement).value).toBe('发送等待期间的新内容');
     wrapper.unmount();
   });
 
@@ -637,16 +693,20 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.composer-runtime-summary').text()).toContain('工具调用1');
     expect(wrapper.get('.composer-runtime-summary').text()).toContain('记忆召回1');
     expect(wrapper.get('.composer-runtime-summary').text()).toContain('总 Token3.6K');
-    expect(wrapper.findAll('.turn[data-role="assistant"]')).toHaveLength(3);
+    expect(wrapper.findAll('.turn[data-role="assistant"]')).toHaveLength(1);
     expect(wrapper.findAll('.conversation-answer')).toHaveLength(1);
-    expect(wrapper.findAll('.conversation-timeline li')).toHaveLength(2);
+    expect(wrapper.findAll('.execution-activity-tree')).toHaveLength(1);
+    expect(wrapper.findAll('.conversation-timeline')).toHaveLength(0);
     expect(wrapper.get('.conversation-answer').text()).toContain('最终分析结果');
-    const timelineText = wrapper.findAll('.conversation-timeline')
-      .map((timeline) => timeline.text())
-      .join(' ');
-    expect(timelineText).toContain('workspace.read');
-    expect(timelineText).toContain('README.md');
-    expect(timelineText).toContain('正在比对现有说明');
+    const activityTree = wrapper.get('.execution-activity-tree');
+    expect(activityTree.text()).toContain('工具调用');
+    expect(activityTree.text()).toContain('已执行 1/1');
+    expect(activityTree.text()).toContain('正在比对现有说明');
+    expect(activityTree.findAll('.execution-activity-node[data-kind="tool_batch"]')).toHaveLength(1);
+    await activityTree
+      .get('.execution-activity-node[data-kind="tool_batch"] .execution-activity-toggle')
+      .trigger('click');
+    expect(activityTree.text()).toContain('workspace.read');
     expect(wrapper.get('.answer-usage').text()).toContain('3.5K');
     expect(wrapper.get('.answer-usage').text()).toContain('140');
     expect(wrapper.get('.answer-execution-link').attributes('title')).toBe('查看本次执行图');
@@ -695,7 +755,7 @@ describe('Cowd Vue WebUI shell', () => {
     await nextTick();
 
     expect(wrapper.get('.conversation-live-now').text()).toContain('正在整理上下文');
-    expect(wrapper.findAll('.conversation-timeline li')).toHaveLength(0);
+    expect(wrapper.findAll('.execution-activity-tree')).toHaveLength(0);
 
     chat.active!.live = {
       ...chat.active!.live,
@@ -734,13 +794,108 @@ describe('Cowd Vue WebUI shell', () => {
     const liveNow = wrapper.get('.conversation-live-now');
     expect(liveNow.text()).toContain('正在调用 workspace.read');
     expect(liveNow.text()).toContain('README.md');
-    const timeline = wrapper.get('.conversation-timeline');
+    const timeline = wrapper.get('.execution-activity-tree');
     expect(timeline.text()).toContain('先读取项目说明');
-    expect(timeline.text()).toContain('workspace.read');
-    expect(timeline.text()).toContain('README.md');
+    expect(timeline.text()).toContain('工具调用');
     expect(timeline.text()).not.toContain('{"path"');
     expect(timeline.text()).not.toContain('执行阶段');
     expect(timeline.text()).not.toContain('memory recall');
+    await timeline
+      .get('.execution-activity-node[data-kind="tool_batch"] .execution-activity-toggle')
+      .trigger('click');
+    expect(timeline.text()).toContain('workspace.read');
+    wrapper.unmount();
+  });
+
+  it('keeps completed execution trees after a newer turn becomes current', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'historical-tree-session';
+    chat.activeSessionId = 'historical-tree-session';
+    chat.active!.executionId = 'execution-2';
+    chat.active!.turns = [
+      { id: 'u1', role: 'user', content: '先检查配置' },
+      {
+        id: 'work-1',
+        role: 'assistant',
+        content: '',
+        activity: [{
+          id: 'tool-1',
+          kind: 'tool',
+          title: 'read_config',
+          status: 'complete',
+          execution_id: 'execution-1',
+          turn_id: 'turn-1',
+        }],
+      },
+      {
+        id: 'answer-1',
+        role: 'assistant',
+        content: '配置检查完成。',
+        execution_id: 'execution-1',
+        turn_id: 'turn-1',
+      },
+      { id: 'u2', role: 'user', content: '再检查服务' },
+      {
+        id: 'answer-2',
+        role: 'assistant',
+        content: '服务检查完成。',
+        execution_id: 'execution-2',
+        turn_id: 'turn-2',
+        activity: [{
+          id: 'tool-2',
+          kind: 'tool',
+          title: 'check_service',
+          status: 'complete',
+          execution_id: 'execution-2',
+          turn_id: 'turn-2',
+        }],
+      },
+    ] as any;
+    await nextTick();
+
+    const trees = wrapper.findAll('.execution-activity-tree');
+    expect(trees).toHaveLength(2);
+    expect(trees[0].text()).toContain('工具调用');
+    expect(trees[1].text()).toContain('工具调用');
+    expect(wrapper.findAll('.conversation-timeline')).toHaveLength(0);
+    expect(wrapper.findAll('.turn[data-role="assistant"]')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it('keeps a failed execution tree even when no final answer was produced', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'failed-tree-session';
+    chat.activeSessionId = 'failed-tree-session';
+    chat.active!.turns = [
+      { id: 'u-failed', role: 'user', content: '执行检查' },
+      {
+        id: 'failed-execution',
+        role: 'assistant',
+        content: '',
+        status: 'error',
+        execution_id: 'execution-failed',
+        turn_id: 'turn-failed',
+        activity: [{
+          id: 'tool-failed',
+          kind: 'tool',
+          title: 'check_service',
+          status: 'failed',
+          execution_id: 'execution-failed',
+          turn_id: 'turn-failed',
+        }],
+      },
+    ] as any;
+    await nextTick();
+
+    expect(wrapper.findAll('.turn[data-role="assistant"]')).toHaveLength(1);
+    expect(wrapper.get('.execution-activity-tree').text()).toContain('工具调用');
+    expect(wrapper.find('.conversation-answer').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -936,6 +1091,46 @@ describe('Cowd Vue WebUI shell', () => {
     expect(statuses).toContain('完成');
     expect(statuses).toContain('错误');
     expect(wrapper.text()).not.toContain('Deleted');
+    wrapper.unmount();
+  });
+
+  it('extends Session search with message matches and hydrates only matched Sessions', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const sessionSearch = vi.spyOn(api, 'searchSessions').mockResolvedValue({
+      sessions: [],
+    } as any);
+    const messageSearch = vi.spyOn(api, 'searchMessages').mockResolvedValue({
+      query: 'needle',
+      total: 1,
+      results: [{
+        session_id: 'message-match',
+        message_id: 'message-1',
+        content_preview: 'needle in durable history',
+        created_at_ms: 42,
+      }],
+    });
+    const sessionRead = vi.spyOn(api, 'session').mockResolvedValue({
+      id: 'message-match',
+      title: 'Matched by message',
+      updated_at: 42,
+    } as any);
+
+    await store.refreshSessions('needle');
+
+    expect(sessionSearch).toHaveBeenCalledWith('needle', 50, 0);
+    expect(messageSearch).toHaveBeenCalledWith('needle', 50);
+    expect(sessionRead).toHaveBeenCalledWith('message-match');
+    expect(store.sessions).toEqual([
+      expect.objectContaining({
+        id: 'message-match',
+        snippet: 'needle in durable history',
+      }),
+    ]);
+    sessionSearch.mockRestore();
+    messageSearch.mockRestore();
+    sessionRead.mockRestore();
     wrapper.unmount();
   });
 
@@ -1230,6 +1425,175 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('Harness 评测');
     expect(wrapper.text()).toContain('审计证据链');
     expect(wrapper.text()).toContain('审计选中证据');
+  });
+
+  it('hydrates Team execution evidence and updates an existing Mission schedule', async () => {
+    const missionControl = vi.spyOn(api, 'missionControl').mockResolvedValue({
+      snapshot: {
+        projection: {
+          mission: { mission_id: 'mission-1' },
+          sessions: [{ session_id: 'session-1' }],
+          workspace: { active_session_id: 'session-1' },
+          team_projection: {
+            runs: [{
+              team: { team_id: 'team-1', status: 'running' },
+              agent_runs: [],
+            }],
+          },
+        },
+      },
+    } as any);
+    const teamRun = vi.spyOn(api, 'collaborationRun').mockResolvedValue({
+      run: { team_id: 'team-1' },
+    } as any);
+    const teamPlan = vi.spyOn(api, 'teamExecutionPlan').mockResolvedValue({
+      plan_id: 'plan-1',
+    } as any);
+    const teamEvidence = vi.spyOn(api, 'teamMissionEvidence').mockResolvedValue({
+      evidence: [{ id: 'evidence-1' }],
+    } as any);
+    const schedules = vi.spyOn(api, 'missionSchedules').mockResolvedValue({
+      schedules: {
+        schedules: [{
+          schedule_id: 'schedule-1',
+          revision: 3,
+          objective: 'Original objective',
+          status: 'active',
+          target_session_id: 'session-1',
+          trigger: { interval: { every_ms: 60_000 } },
+        }],
+        fires: [],
+      },
+    } as any);
+    const updateSchedule = vi.spyOn(api, 'updateMissionSchedule').mockResolvedValue({
+      ok: true,
+    } as any);
+
+    const wrapper = await mountApp('/mission?section=schedules');
+    await settleAsync();
+
+    expect(teamRun).toHaveBeenCalledWith('team-1');
+    expect(teamPlan).toHaveBeenCalledWith('team-1');
+    expect(teamEvidence).toHaveBeenCalledWith('team-1');
+    await wrapper.get('button[aria-label="编辑计划"]').trigger('click');
+    await settle();
+    await wrapper.get('[data-section="schedules"] textarea').setValue('Updated objective');
+    const save = wrapper
+      .get('[data-section="schedules"]')
+      .findAll('button')
+      .find((button) => button.text().includes('保存计划'));
+    expect(save).toBeTruthy();
+    await save!.trigger('click');
+    await settleAsync();
+
+    expect(updateSchedule).toHaveBeenCalledWith('schedule-1', expect.objectContaining({
+      expected_revision: 3,
+      objective: 'Updated objective',
+    }));
+    missionControl.mockRestore();
+    teamRun.mockRestore();
+    teamPlan.mockRestore();
+    teamEvidence.mockRestore();
+    schedules.mockRestore();
+    updateSchedule.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('loads Harness Eval and Evolution drilldowns from their owning workbench', async () => {
+    const reports = vi.spyOn(api, 'harnessEvalReports').mockResolvedValue({
+      reports: [{ id: 'report-live', status: 'passed' }],
+    } as any);
+    const report = vi.spyOn(api, 'harnessEvalReport').mockResolvedValue({
+      report: { id: 'report-live', status: 'passed' },
+    } as any);
+    const artifacts = vi.spyOn(api, 'harnessEvalArtifacts').mockResolvedValue({
+      artifacts: ['report.md'],
+    } as any);
+    const gate = vi.spyOn(api, 'harnessEvalReportGate').mockResolvedValue({
+      status: 'passed',
+      gates: [],
+    } as any);
+    const missions = vi.spyOn(api, 'evolutionMissionsSummary').mockResolvedValue({
+      missions: [{ mission_id: 'evolution-mission-1', status: 'active' }],
+    } as any);
+    const missionDetail = vi.spyOn(api, 'evolutionMissionDetail').mockResolvedValue({
+      mission_id: 'evolution-mission-1',
+    } as any);
+    const proposals = vi.spyOn(api, 'evolutionProposals').mockResolvedValue({
+      proposals: [{ proposal_id: 'proposal-live', status: 'draft' }],
+    } as any);
+    const proposal = vi.spyOn(api, 'evolutionProposal').mockResolvedValue({
+      proposal_id: 'proposal-live',
+    } as any);
+    const chain = vi.spyOn(api, 'evolutionChain').mockResolvedValue({
+      proposal_id: 'proposal-live',
+      nodes: [],
+    } as any);
+    const candidates = vi.spyOn(api, 'evolutionCandidates').mockResolvedValue({
+      candidates: [{
+        candidate_id: 'candidate-live',
+        proposal_id: 'proposal-live',
+        lifecycle: 'validated',
+        subject: {
+          kind: 'agent_definition',
+          revision_ref: { definition_id: 'agent-1', revision: 2 },
+        },
+        source_evidence_refs: [{ ref_type: 'eval', id: 'report-live', boundary: 'observed' }],
+      }],
+    } as any);
+    const candidate = vi.spyOn(api, 'evolutionCandidateDetail').mockResolvedValue({
+      candidate_id: 'candidate-live',
+    } as any);
+    const reviews = vi.spyOn(api, 'evolutionReviews').mockResolvedValue({
+      reviews: [{ review_id: 'review-live', status: 'pending' }],
+    } as any);
+    const review = vi.spyOn(api, 'evolutionReview').mockResolvedValue({
+      review_id: 'review-live',
+      status: 'pending',
+    } as any);
+    const createReview = vi.spyOn(api, 'evolutionCreateReleaseReview').mockResolvedValue({
+      ok: true,
+    } as any);
+
+    const wrapper = await mountApp('/audit?section=evolution');
+    await settleAsync();
+    const clickRow = async (text: string) => {
+      const row = wrapper.findAll('.data-table tbody tr').find(
+        (node) => node.find('td').text().trim() === text,
+      );
+      expect(row, `missing row ${text}`).toBeTruthy();
+      await row!.trigger('click');
+      await settleAsync();
+    };
+
+    await clickRow('report-live');
+    expect(report).toHaveBeenCalledWith('report-live');
+    expect(artifacts).toHaveBeenCalledWith('report-live');
+    expect(gate).toHaveBeenCalledWith('report-live');
+    await clickRow('evolution-mission-1');
+    expect(missionDetail).toHaveBeenCalledWith('evolution-mission-1');
+    await clickRow('proposal-live');
+    expect(proposal).toHaveBeenCalledWith('proposal-live');
+    expect(chain).toHaveBeenCalledWith('proposal-live');
+    await clickRow('candidate-live');
+    expect(candidate).toHaveBeenCalledWith('candidate-live');
+    const setLatest = wrapper.findAll('button')
+      .find((button) => button.text().includes('申请设为最新稳定版'));
+    expect(setLatest).toBeTruthy();
+    await setLatest!.trigger('click');
+    await settleAsync();
+    expect(createReview).toHaveBeenCalledWith(expect.objectContaining({
+      candidate_id: 'candidate-live',
+      action: 'set_default_latest',
+    }));
+    await clickRow('review-live');
+    expect(review).toHaveBeenCalledWith('review-live');
+
+    [
+      reports, report, artifacts, gate, missions, missionDetail, proposals, proposal,
+      chain, candidates, candidate, reviews, review, createReview,
+    ].forEach((spy) => spy.mockRestore());
+    wrapper.unmount();
   });
 
   it('calls harness eval report and smoke run endpoints', async () => {

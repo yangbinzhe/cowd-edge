@@ -95,7 +95,9 @@ function itemDetailPreview(item: Record<string, unknown>) {
 }
 
 function itemLane(item: Record<string, unknown>) {
-  const agent = String(item.agent_lane_label || item.role || item.agent_id || '').trim();
+  const agent = String(item.agent_lane_label || item.role || item.agent_id || '')
+    .trim()
+    .replace(/[_-]+/g, ' ');
   const agentLane = Number(item.agent_lane || 0) + 1;
   const agentCount = Number(item.agent_lane_count || 0);
   const agentLabel = agent

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import {
-  activityTree,
+  conversationActivityTree,
   type ActivityView,
 } from '../../adapters/executionActivity';
 import type { ExecutionActivityRelation } from '../../types';
@@ -15,7 +15,7 @@ const emit = defineEmits<{
   select: [activity: ActivityView];
 }>();
 
-const roots = computed(() => activityTree(props.activities, props.relations));
+const roots = computed(() => conversationActivityTree(props.activities, props.relations));
 </script>
 
 <template>
