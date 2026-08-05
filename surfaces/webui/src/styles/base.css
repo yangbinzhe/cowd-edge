@@ -605,6 +605,10 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .graph-node.status-complete, .graph-node.status-succeeded { border-color: color-mix(in srgb, var(--success) 54%, var(--border)); }
 .graph-node.status-failed, .graph-node.status-error, .graph-node.status-blocked { border-color: color-mix(in srgb, var(--danger) 58%, var(--border)); }
 .graph-edge path { stroke: var(--border-2); }
+.graph-flow .vue-flow__edge-text { opacity: 0; transition: opacity 120ms ease; pointer-events: none; }
+.graph-flow .vue-flow__edge:hover .vue-flow__edge-text,
+.graph-flow .vue-flow__edge.selected .vue-flow__edge-text,
+.graph-flow .vue-flow__edge:focus-within .vue-flow__edge-text { opacity: 1; }
 .graph-surface:fullscreen { width: 100vw; height: 100vh; border-radius: 0; }
 .execution-graph-canvas:fullscreen { width: 100vw; height: 100vh; margin: 0; grid-template-rows: minmax(0, 1fr) minmax(180px, auto); border: 0; border-radius: 0; background: var(--bg); }
 .execution-graph-canvas:fullscreen > .graph-surface { min-height: 0; }
@@ -822,6 +826,14 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .timeline-toolbar select { min-height: 30px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 0 8px; }
 .timeline-list { min-width: 0; max-width: 100%; list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; overflow-x: hidden; }
 .timeline-list li { min-width: 0; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 10px; display: grid; gap: 4px; overflow-x: hidden; }
+.timeline-shell[data-causal="true"] .timeline-list li {
+  margin-left: calc(var(--timeline-depth, 0) * 12px);
+  width: calc(100% - (var(--timeline-depth, 0) * 12px));
+}
+.timeline-shell[data-causal="true"] .timeline-list li[data-kind="team"],
+.timeline-shell[data-causal="true"] .timeline-list li[data-kind="agent"] {
+  background: var(--surface-2);
+}
 .timeline-item-head { min-width: 0; display: flex; align-items: center; gap: 6px; }
 .timeline-item-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .timeline-item-head time { flex: 0 0 auto; }

@@ -345,6 +345,13 @@ const recoveryPreview = computed(() => {
 async function refresh() {
   loading.value = true;
   error.value = '';
+  const requestedExecutionId = typeof route.query.execution_id === 'string'
+    ? route.query.execution_id.trim()
+    : '';
+  // Execution deep links are an independent canonical projection. Acquire
+  // them before loading Mission dashboard auxiliaries so one aborted
+  // best-effort read cannot hide a valid execution strategy.
+  if (requestedExecutionId) selectExecutionProjection(requestedExecutionId);
   try {
     const [nextMission, nextApprovals, nextRelations, nextConflicts, nextSchedules] = await Promise.all([
       api.missionControl(selectedMissionId.value),
@@ -370,7 +377,6 @@ async function refresh() {
     const requestedTeamId = typeof route.query.team_id === 'string' ? route.query.team_id.trim() : '';
     if (requestedTeamId) selectedTeamId.value = requestedTeamId;
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
-    const requestedExecutionId = typeof route.query.execution_id === 'string' ? route.query.execution_id.trim() : '';
     const executionId = requestedExecutionId || executionGraphRows.value[0]?.graph;
     selectExecutionProjection(executionId);
     await refreshSelectedSession();
@@ -835,6 +841,16 @@ onUnmounted(() => {
       <span><strong>{{ cleanCounters.handoffs }}</strong>{{ t('unit.relations') }}</span>
     </div>
 
+    <StrategyDecisionSummary
+      v-if="executionProjection?.strategy"
+      class="mission-panel governed-wide mission-strategy-summary"
+      :strategy="executionProjection.strategy"
+      :agents="executionProjection.agents"
+      :execution-id="selectedExecutionId"
+      :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
+      surface="mission"
+    />
+
     <div class="mission-grid">
       <section class="mission-panel governed-wide" v-show="isSectionActive('overview')" data-section="overview">
         <header>
@@ -877,14 +893,6 @@ onUnmounted(() => {
           :selected-node-id="String(selectedExecutionNode?.node_id || '')"
           :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
           @select="selectedExecutionNode = $event"
-        />
-        <StrategyDecisionSummary
-          v-if="executionProjection?.strategy"
-          :strategy="executionProjection.strategy"
-          :agents="executionProjection.agents"
-          :execution-id="selectedExecutionId"
-          :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
-          surface="mission"
         />
         <ExecutionTruthSummary
           v-if="executionProjection"

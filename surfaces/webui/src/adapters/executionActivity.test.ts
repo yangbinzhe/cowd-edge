@@ -9,9 +9,9 @@ import {
   activityAutoCollapsed,
   activityEventViews,
   activityTree,
+  businessGraphActivities,
   canonicalActivityEvents,
   conversationActivityTree,
-  mergeActivityViews,
 } from './executionActivity';
 
 function activity(
@@ -80,36 +80,72 @@ describe('canonical execution activity adapter', () => {
     expect(events[0].status).toBe('failed');
   });
 
-  it('uses one compact tool aggregate while retaining every tool for drill-down', () => {
+  it('renders Runtime-owned tool batches without creating a frontend aggregate', () => {
     const root = activity('execution', 'execution');
     const agent = activity('agent:research', 'agent', root.activity_id);
+    const batch = activity('tool-batch:research', 'tool_batch', agent.activity_id);
     const tools = Array.from({ length: 12 }, (_, index) => ({
-      ...activity(`tool:${index}`, 'tool', agent.activity_id),
+      ...activity(`tool:${index}`, 'tool', batch.activity_id),
       tool_call_id: `call:${index}`,
       status: index === 10 ? 'failed' : index === 11 ? 'running' : 'completed',
       public_summary: `tool_${index}`,
     } satisfies ExecutionActivityProjection));
     const events = canonicalActivityEvents([{
       execution_id: 'execution',
-      activities: [root, agent, ...tools],
+      activities: [root, agent, batch, ...tools],
     } as unknown as ExecutionProjection]);
     const tree = conversationActivityTree(events, []);
-    const toolGroup = tree[0].children.find((node) => node.activity.kind === 'tool_batch');
+    const executionNode = tree.find((node) => node.activity.id === root.activity_id);
+    const agentNode = executionNode?.children.find((node) => node.activity.id === agent.activity_id);
+    const toolGroup = agentNode?.children.find((node) => node.activity.kind === 'tool_batch');
 
-    expect(toolGroup?.activity.tool_summary).toEqual({
-      total: 12,
-      executed: 12,
-      succeeded: 10,
-      failed: 1,
-      running: 1,
-      pending: 0,
-    });
+    expect(toolGroup?.activity.id).toBe(batch.activity_id);
+    expect(toolGroup?.activity.tool_summary).toBeUndefined();
     expect(toolGroup?.children).toHaveLength(12);
-    expect(tree.flatMap((node) => node.children).filter((node) => node.activity.kind === 'tool'))
-      .toHaveLength(0);
   });
 
-  it('merges durable history into the same business tree and prunes internal nodes', () => {
+  it('keeps tools under the exact canonical parent without owner inference', () => {
+    const root = activity('execution', 'execution');
+    const research = activity('agent:research', 'agent', root.activity_id);
+    const verify = activity('agent:verify', 'agent', root.activity_id);
+    const tools = [
+      {
+        ...activity('tool:search-a', 'tool', research.activity_id),
+        tool_call_id: 'call:search-a',
+        parallel_group_id: 'research-batch',
+      },
+      {
+        ...activity('tool:search-b', 'tool', research.activity_id),
+        tool_call_id: 'call:search-b',
+        parallel_group_id: 'research-batch',
+      },
+      {
+        ...activity('tool:read', 'tool', verify.activity_id),
+        tool_call_id: 'call:read',
+        parallel_group_id: 'verify-batch',
+      },
+    ] satisfies ExecutionActivityProjection[];
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [root, research, verify, ...tools],
+    } as unknown as ExecutionProjection]), []);
+    const execution = tree.find((node) => node.activity.id === root.activity_id);
+    const researchNode = execution?.children.find((node) => node.activity.id === research.activity_id);
+    const verifyNode = execution?.children.find((node) => node.activity.id === verify.activity_id);
+    const researchBatch = researchNode?.children[0];
+    const verifyBatch = verifyNode?.children[0];
+
+    expect(researchBatch?.activity.kind).toBe('tool_batch');
+    expect(researchBatch?.activity.parent_activity_id).toBe(research.activity_id);
+    expect(researchBatch?.children.map((node) => node.activity.id))
+      .toEqual(['tool:search-a', 'tool:search-b']);
+    expect(verifyNode?.children).toHaveLength(1);
+    expect(verifyBatch?.activity.kind).toBe('tool_batch');
+    expect(verifyBatch?.activity.parent_activity_id).toBe(verify.activity_id);
+    expect(verifyBatch?.children[0].activity.id).toBe('tool:read');
+  });
+
+  it('keeps Session activity events in the technical view instead of merging business topology', () => {
     const durable: ActivityEvent[] = [
       {
         id: 'context',
@@ -151,13 +187,12 @@ describe('canonical execution activity adapter', () => {
         status: 'completed',
       }],
     } as unknown as ExecutionProjection]);
-    const merged = mergeActivityViews(canonical, observed);
-    const tree = conversationActivityTree(merged, []);
+    const tree = conversationActivityTree(canonical, []);
     const text = JSON.stringify(tree);
 
-    expect(merged.filter((event) => event.tool_call_id === 'call')).toHaveLength(1);
-    expect(text).toContain('分析问题');
-    expect(text).toContain('工具调用');
+    expect(observed).toHaveLength(4);
+    expect(canonical.filter((event) => event.tool_call_id === 'call')).toHaveLength(1);
+    expect(text).not.toContain('分析问题');
     expect(text).not.toContain('Context assembled');
     expect(text).not.toContain('session-ingress-graph:abc:tool-results:4');
   });
@@ -209,10 +244,55 @@ describe('canonical execution activity adapter', () => {
     expect(approvalNodes).toHaveLength(1);
   });
 
+  it('removes internal session routing artifacts from the body tree', () => {
+    const execution = activity('execution', 'execution');
+    const artifact = {
+      ...activity('session-routing-artifact', 'artifact', execution.activity_id),
+      display_label: 'session-ingress-confirmed:webui:request',
+      public_summary: 'Session input was routed to the target execution graph',
+    };
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [execution, artifact],
+    } as unknown as ExecutionProjection]), []);
+
+    expect(JSON.stringify(tree)).not.toContain('session-ingress-confirmed');
+    expect(JSON.stringify(tree)).not.toContain('Session input was routed');
+  });
+
+  it('keeps audit-only tool policy events out of business projections', () => {
+    const policyEvent = {
+      ...activity('tool-policy', 'tool'),
+      visibility: ['operational', 'audit'] as ExecutionActivityProjection['visibility'],
+      phase: 'lease_transition',
+    };
+    const views = canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [policyEvent],
+    } as unknown as ExecutionProjection], 'audit');
+
+    expect(businessGraphActivities(views)).toEqual([]);
+  });
+
+  it('keeps legacy target-guard details out of business projections', () => {
+    const targetGuard = {
+      ...activity('legacy-target-guard', 'verify'),
+      display_label: '结果验证',
+      detail: 'Target guard accepted the execution target',
+      visibility: ['narrative', 'audit'] as ExecutionActivityProjection['visibility'],
+    };
+    const views = canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [targetGuard],
+    } as unknown as ExecutionProjection], 'audit');
+
+    expect(businessGraphActivities(views)).toEqual([]);
+  });
+
   it('humanizes agent instance identifiers without changing canonical evidence', () => {
     const agent = {
       ...activity('agent:researcher-1', 'agent'),
-      agent_id: 'researcher-1',
+      agent_instance_id: 'researcher-1',
       public_summary: 'Agent researcher-1 · lane 1/3',
     };
     const tree = conversationActivityTree(canonicalActivityEvents([{
@@ -221,6 +301,6 @@ describe('canonical execution activity adapter', () => {
     } as unknown as ExecutionProjection]), []);
 
     expect(tree[0].activity.detail).toContain('researcher 1');
-    expect(tree[0].activity.canonical.agent_id).toBe('researcher-1');
+    expect(tree[0].activity.canonical.agent_instance_id).toBe('researcher-1');
   });
 });

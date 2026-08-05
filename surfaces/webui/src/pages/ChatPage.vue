@@ -42,16 +42,15 @@ import {
   selectTurnExecutionEntry,
 } from '../utils/executionLineage';
 import {
-  activityEventViews,
   canonicalActivityEvents,
   canonicalActivityRelations,
-  mergeActivityViews,
   type ActivityView,
 } from '../adapters/executionActivity';
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
+const historicalExecutionConsumers = new Set<string>();
 const release = computed(() => releaseProjection(store.health));
 const releaseTitle = computed(() => t('release.versions', {
   edge: release.value.edge,
@@ -316,6 +315,15 @@ useEscapeKey(() => store.closeModal(), () => !!store.activeModal);
 useEscapeKey(() => store.closeChatExecutionGraph(), () => store.chatExecutionGraphExpanded);
 watch(() => store.activeSessionId, async (sessionId, previousSessionId) => {
   if (sessionId !== previousSessionId) store.closeChatExecutionGraph();
+  if (
+    sessionId
+    && !previousSessionId
+    && unboundDraft.value
+    && !chat.states[sessionId]?.draft
+  ) {
+    chat.setDraft(sessionId, unboundDraft.value);
+    unboundDraft.value = '';
+  }
   if (previousSessionId && transcript.value) {
     chat.setScrollTop(previousSessionId, transcript.value.scrollTop);
   }
@@ -391,6 +399,44 @@ watch(
   { immediate: true },
 );
 watch(
+  [
+    () => store.activeSessionId,
+    () => (chat.active?.turns || [])
+      .map((turn) => String(turn.turn_id || '').trim())
+      .filter(Boolean),
+    () => (chat.active?.executionIndex?.executions || []).map((entry) => ({
+      executionId: String(entry.graph_id || entry.execution_id || '').trim(),
+      turnId: String(entry.turn_id || '').trim(),
+    })),
+  ],
+  ([sessionId, turnIds, executions]) => {
+    const visibleTurnIds = new Set(turnIds);
+    const desiredConsumers = new Set<string>();
+    if (sessionId) {
+      for (const execution of executions) {
+        if (!execution.executionId || !visibleTurnIds.has(execution.turnId)) continue;
+        const consumer = `chat:history:${sessionId}:${execution.executionId}`;
+        desiredConsumers.add(consumer);
+        if (historicalExecutionConsumers.has(consumer)) continue;
+        projections.acquire(
+          execution.executionId,
+          consumer,
+          'summary',
+          'passive',
+          sessionId,
+        );
+      }
+    }
+    for (const consumer of historicalExecutionConsumers) {
+      if (desiredConsumers.has(consumer)) continue;
+      projections.release(consumer);
+      historicalExecutionConsumers.delete(consumer);
+    }
+    for (const consumer of desiredConsumers) historicalExecutionConsumers.add(consumer);
+  },
+  { immediate: true },
+);
+watch(
   [() => store.chatExecutionGraphExpanded, requestedExecutionGraphId],
   ([expanded, rootGraphId]) => {
     projections.release(executionGraphConsumer);
@@ -409,6 +455,8 @@ watch(
 onBeforeUnmount(() => {
   projections.release(activeExecutionSummaryConsumer);
   projections.release(executionGraphConsumer);
+  for (const consumer of historicalExecutionConsumers) projections.release(consumer);
+  historicalExecutionConsumers.clear();
   if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
 });
 
@@ -733,13 +781,7 @@ function buildTurnExecutionActivities(turns: ChatTurn[], index: number) {
       || activity.parent_execution_id === executionId
     )
   ));
-  const durable = activityEventViews(exchangeActivityEvents(turns, index), {
-    workspaceId: String(store.workspaceRoot || 'workspace'),
-    sessionId: store.activeSessionId,
-    turnId,
-    executionId,
-  });
-  return mergeActivityViews(canonical, durable);
+  return canonical;
 }
 
 function buildTurnExecutionRelations(

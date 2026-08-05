@@ -80,6 +80,133 @@ async function settleAsync() {
   await settle();
 }
 
+function installCanonicalExecutionProjection(
+  executionId: string,
+  turnId: string,
+  rows: Array<Record<string, any>>,
+) {
+  const registry = useProjectionRegistryStore();
+  const rootActivityId = `activity:execution:${executionId}`;
+  const activities = [
+    {
+      schema_version: 3,
+      activity_id: rootActivityId,
+      scope: {
+        workspace_id: 'workspace',
+        session_id: useAppStore().activeSessionId,
+        turn_id: turnId,
+        execution_id: executionId,
+      },
+      kind: 'execution',
+      display_label: '本轮执行',
+      visibility: ['narrative', 'operational', 'audit'],
+      causal_parent_ids: [],
+      dependency_ids: [],
+      status: rows.some((row) => ['running', 'started', 'pending'].includes(row.status))
+        ? 'running'
+        : rows.some((row) => ['failed', 'error'].includes(row.status))
+          ? 'failed'
+          : 'completed',
+      required: true,
+      sequence: 0,
+      commit_cursor: 1,
+      artifact_refs: [],
+      evidence_refs: [],
+      definition_refs: [],
+    },
+    ...rows.map((row, index) => ({
+      schema_version: 3,
+      activity_id: row.activity_id || `activity:execution:${executionId}:${row.kind}:${row.id}`,
+      scope: {
+        workspace_id: 'workspace',
+        session_id: useAppStore().activeSessionId,
+        turn_id: turnId,
+        execution_id: executionId,
+      },
+      kind: row.kind === 'think' ? 'model' : row.kind,
+      display_label: row.title,
+      visibility: ['narrative', 'operational', 'audit'],
+      parent_activity_id: row.parent_activity_id || rootActivityId,
+      initiator_activity_id: rootActivityId,
+      causal_parent_ids: [],
+      dependency_ids: [],
+      tool_call_id: row.tool_call_id || (row.kind === 'tool' ? row.id : undefined),
+      status: row.status || 'completed',
+      required: true,
+      started_at_ms: index + 2,
+      completed_at_ms: ['complete', 'completed', 'failed', 'error'].includes(row.status)
+        ? index + 3
+        : undefined,
+      duration_ms: row.duration_ms,
+      sequence: index + 1,
+      commit_cursor: index + 2,
+      public_summary: row.detail || row.title,
+      result_summary: typeof row.output === 'string' ? row.output : undefined,
+      artifact_refs: row.artifact_refs || [],
+      evidence_refs: row.evidence_refs || [],
+      definition_refs: row.definition_refs || [],
+    })),
+  ];
+  registry.entries[executionId] = {
+    executionId,
+    projection: {
+      schema_version: 2,
+      execution_id: executionId,
+      revision: 1,
+      cursor: activities.length,
+      detail_scope: 'summary',
+      authorization_revision: 1,
+      redaction_revision: 'test',
+      session_id: useAppStore().activeSessionId,
+      turn_id: turnId,
+      activities,
+      activity_relations: activities.slice(1).map((activity: any, index: number) => ({
+        relation_id: `relation:${executionId}:${index}`,
+        kind: activity.kind === 'tool' || activity.kind === 'skill' ? 'invoked' : 'contains',
+        from_activity_id: activity.parent_activity_id,
+        to_activity_id: activity.activity_id,
+      })),
+      graph: {
+        graph_id: executionId,
+        revision: 1,
+        objective: 'canonical execution test',
+        nodes: [],
+        edges: [],
+        commit_cursor: activities.length,
+        terminal_result_ref: null,
+      },
+      child_executions: [],
+      goals: [],
+      agents: [],
+      teams: [],
+      relations: [],
+      approvals: [],
+      admissions: [],
+      outcomes: [],
+      interventions: [],
+      usage: [],
+      context: [],
+      evidence: [],
+      health: [],
+      recovery: [],
+      available_commands: [],
+    } as any,
+    cursor: activities.length,
+    detailScope: 'summary',
+    connectionState: 'live',
+    lastUpdatedAt: Date.now(),
+    lastEventAt: Date.now(),
+    lastError: '',
+    degradedReason: '',
+    resyncCount: 0,
+    requestEpoch: 1,
+    reconnectBlocked: false,
+    authorizationSessionId: useAppStore().activeSessionId,
+    consumers: {},
+    materializingConsumers: {},
+  };
+}
+
 function mfgIntent(action: string, resource: string, payload: unknown = {}) {
   return createMfgMutationIntent(action, resource, payload);
 }
@@ -286,6 +413,61 @@ describe('Cowd Vue WebUI shell', () => {
     expect(chat.activeSessionId).toBe('new-session');
     expect(create).toHaveBeenCalledTimes(1);
     create.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('does not keep a newly created session blocked behind transcript hydration', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    let releaseOpen!: () => void;
+    vi.spyOn(api, 'createSession').mockResolvedValue({
+      id: 'actionable-session',
+      title: 'Actionable session',
+      model: 'deepseek-v4-pro',
+    } as any);
+    vi.spyOn(chat, 'open').mockImplementation(() => (
+      new Promise<void>((resolve) => { releaseOpen = resolve; })
+    ));
+
+    await store.createSession();
+
+    expect(store.sessionCreating).toBe(false);
+    expect(store.activeSessionId).toBe('actionable-session');
+    expect(chat.activeSessionId).toBe('actionable-session');
+    releaseOpen();
+    await settle();
+    wrapper.unmount();
+  });
+
+  it('moves a draft typed during creation into the newly created session', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    let resolveCreate!: (session: any) => void;
+    vi.spyOn(api, 'createSession').mockImplementation(() => (
+      new Promise((resolve) => { resolveCreate = resolve; })
+    ));
+    vi.spyOn(chat, 'open').mockImplementation(() => new Promise<void>(() => undefined));
+
+    const creating = store.createSession();
+    await wrapper.get('.composer textarea').setValue('draft during creation');
+    resolveCreate({
+      id: 'draft-session',
+      title: 'Draft session',
+      model: 'deepseek-v4-pro',
+    });
+    await creating;
+    await settle();
+
+    expect(store.activeSessionId).toBe('draft-session');
+    expect(chat.states['draft-session'].draft).toBe('draft during creation');
+    expect((wrapper.get('.composer textarea').element as HTMLTextAreaElement).value)
+      .toBe('draft during creation');
+    expect(wrapper.get('.composer-input-actions [aria-label="发送"]').attributes('disabled'))
+      .toBeUndefined();
     wrapper.unmount();
   });
 
@@ -511,11 +693,11 @@ describe('Cowd Vue WebUI shell', () => {
     await nextTick();
     const toolRow = wrapper
       .findAll('.chat-execution-overlay .data-table tbody tr')
-      .find((row) => row.text().includes('工具调用'));
+      .find((row) => row.text().includes('WebSearch'));
     expect(toolRow).toBeTruthy();
     await toolRow!.trigger('click');
     await nextTick();
-    expect(wrapper.get('.execution-node-detail').text()).toContain('工具调用');
+    expect(wrapper.get('.execution-node-detail').text()).toContain('WebSearch');
     await wrapper
       .get('.execution-node-detail [aria-label="完整输出详情"]')
       .trigger('click');
@@ -686,6 +868,23 @@ describe('Cowd Vue WebUI shell', () => {
         turn_id: 'turn-1',
       },
     ];
+    installCanonicalExecutionProjection('graph-turn-1', 'turn-1', [
+      {
+        id: 'think-1',
+        kind: 'think',
+        title: '思考',
+        detail: '正在比对现有说明',
+        status: 'completed',
+      },
+      {
+        id: 'tool-1',
+        kind: 'tool',
+        title: 'workspace.read',
+        status: 'completed',
+        duration_ms: 125,
+        output: '读取 42 行',
+      },
+    ]);
     await nextTick();
 
     expect(wrapper.get('.composer-runtime-chip.model').text()).toContain('deepseek-v4');
@@ -721,10 +920,14 @@ describe('Cowd Vue WebUI shell', () => {
 
     store.openCompanion('activity');
     await settleAsync();
-    await wrapper.get('.execution-turn-group .timeline-list li').trigger('click');
+    const toolTimelineItem = wrapper
+      .findAll('.execution-turn-group .timeline-list li')
+      .find((item) => item.text().includes('workspace.read'));
+    expect(toolTimelineItem).toBeTruthy();
+    await toolTimelineItem!.trigger('click');
     expect(wrapper.get('.activity-detail-modal').text()).toContain('workspace.read');
     expect(wrapper.get('.activity-detail-modal').text()).toContain('125 ms');
-    expect(wrapper.findAll('.activity-detail-modal .activity-structured-section')).toHaveLength(2);
+    expect(wrapper.findAll('.activity-detail-modal .activity-structured-section')).toHaveLength(1);
     expect(wrapper.findAll('.activity-detail-modal .raw-payload')).toHaveLength(1);
   });
 
@@ -738,6 +941,23 @@ describe('Cowd Vue WebUI shell', () => {
     chat.activeSessionId = 'live-now-session';
     chat.active!.pending = true;
     chat.active!.streamTurnId = 'stream:live-now-session:1';
+    chat.active!.executionId = 'execution-live-now';
+    chat.active!.executionGraphId = 'execution-live-now';
+    chat.active!.executionTurnId = 'turn-live-now';
+    chat.active!.executionIndex = {
+      session_id: 'live-now-session',
+      active_execution_ids: ['execution-live-now'],
+      latest_execution_id: 'execution-live-now',
+      latest_graph_id: 'execution-live-now',
+      latest_status: 'running',
+      executions: [{
+        execution_id: 'execution-live-now',
+        graph_id: 'execution-live-now',
+        turn_id: 'turn-live-now',
+        status: 'running',
+        updated_at_ms: Date.now(),
+      }],
+    };
     chat.active!.live = {
       status: 'preparing_context',
       status_detail: 'durable input committed',
@@ -752,10 +972,11 @@ describe('Cowd Vue WebUI shell', () => {
         activity: [],
       },
     ] as any;
+    installCanonicalExecutionProjection('execution-live-now', 'turn-live-now', []);
     await nextTick();
 
     expect(wrapper.get('.conversation-live-now').text()).toContain('正在整理上下文');
-    expect(wrapper.findAll('.execution-activity-tree')).toHaveLength(0);
+    expect(wrapper.findAll('.execution-activity-tree')).toHaveLength(1);
 
     chat.active!.live = {
       ...chat.active!.live,
@@ -789,6 +1010,21 @@ describe('Cowd Vue WebUI shell', () => {
         status: 'running',
       },
     ] as any;
+    installCanonicalExecutionProjection('execution-live-now', 'turn-live-now', [
+      {
+        id: 'think-1',
+        kind: 'think',
+        title: '思考',
+        detail: '先读取项目说明，再核对目标。',
+        status: 'running',
+      },
+      {
+        id: 'tool-live',
+        kind: 'tool',
+        title: 'workspace.read',
+        status: 'running',
+      },
+    ]);
     await nextTick();
 
     const liveNow = wrapper.get('.conversation-live-now');
@@ -854,6 +1090,18 @@ describe('Cowd Vue WebUI shell', () => {
         }],
       },
     ] as any;
+    installCanonicalExecutionProjection('execution-1', 'turn-1', [{
+      id: 'tool-1',
+      kind: 'tool',
+      title: 'read_config',
+      status: 'completed',
+    }]);
+    installCanonicalExecutionProjection('execution-2', 'turn-2', [{
+      id: 'tool-2',
+      kind: 'tool',
+      title: 'check_service',
+      status: 'completed',
+    }]);
     await nextTick();
 
     const trees = wrapper.findAll('.execution-activity-tree');
@@ -891,6 +1139,12 @@ describe('Cowd Vue WebUI shell', () => {
         }],
       },
     ] as any;
+    installCanonicalExecutionProjection('execution-failed', 'turn-failed', [{
+      id: 'tool-failed',
+      kind: 'tool',
+      title: 'check_service',
+      status: 'failed',
+    }]);
     await nextTick();
 
     expect(wrapper.findAll('.turn[data-role="assistant"]')).toHaveLength(1);
@@ -930,6 +1184,7 @@ describe('Cowd Vue WebUI shell', () => {
     const originalWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     const wrapper = await mountApp('/chat');
+    const store = useAppStore();
     await settle();
     expect(wrapper.get('.chat-page').exists()).toBe(true);
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
@@ -937,11 +1192,11 @@ describe('Cowd Vue WebUI shell', () => {
     await wrapper.get('.companion-toggle').trigger('click');
     await settleAsync();
     expect(wrapper.find('.companion-panel').exists()).toBe(true);
-    expect(useAppStore().companionCollapsed).toBe(false);
+    expect(store.companionCollapsed).toBe(false);
     await wrapper.get('.companion-toggle').trigger('click');
     await settle();
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
-    expect(useAppStore().companionCollapsed).toBe(true);
+    expect(store.companionCollapsed).toBe(true);
     wrapper.unmount();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
   });
@@ -1945,7 +2200,7 @@ describe('Cowd Vue WebUI shell', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
   });
 
-  it('does not open a projection stream when Gateway cannot materialize its initial snapshot', async () => {
+  it('keeps a missing initial projection materializing without opening a stream', async () => {
     const closed: string[] = [];
     class FakeEventSource {
       constructor(readonly url: string) {}
@@ -1960,7 +2215,7 @@ describe('Cowd Vue WebUI shell', () => {
     registry.acquire('missing-execution', 'chat:missing-session', 'full');
 
     await vi.waitFor(() => {
-      expect(registry.entries['missing-execution'].connectionState).toBe('error');
+      expect(registry.entries['missing-execution'].connectionState).toBe('materializing');
       expect(registry.activeSourceCount).toBe(0);
     });
     expect(closed).toEqual([]);

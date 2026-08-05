@@ -255,9 +255,8 @@ describe('Companion projection contract visibility', () => {
     });
 
     expect(wrapper.text()).toContain('检查最新执行链');
-    expect(wrapper.text()).toContain('分析目标');
-    expect(wrapper.text()).toContain('glob_search');
-    expect(wrapper.text()).toContain('12 matching files');
+    expect(wrapper.text()).not.toContain('分析目标');
+    expect(wrapper.text()).not.toContain('glob_search');
     expect(wrapper.find('.activity-metric-grid').text()).toContain('5');
     expect(wrapper.find('.activity-metric-grid').text()).toContain('8');
     expect(wrapper.find('.activity-metric-grid').text()).toContain('120');
@@ -269,6 +268,10 @@ describe('Companion projection contract visibility', () => {
     expect(wrapper.findAll('.companion-tabs button')).toHaveLength(3);
     expect(wrapper.text()).not.toContain('思考过程');
     expect(wrapper.text()).not.toContain('证据与状态');
+    await wrapper.findAll('.activity-mode-switch button')[1].trigger('click');
+    expect(wrapper.text()).toContain('分析目标');
+    expect(wrapper.text()).toContain('glob_search');
+    expect(wrapper.text()).toContain('12 matching files');
     const turnInput = wrapper.get('.execution-turn-head');
     const firstActivity = wrapper.get('.execution-turn-group .timeline-list li');
     expect(
@@ -337,6 +340,7 @@ describe('Companion projection contract visibility', () => {
       },
     });
 
+    await wrapper.findAll('.activity-mode-switch button')[1].trigger('click');
     await wrapper.get('.companion-timeline li').trigger('click');
     expect(evidence).not.toHaveBeenCalled();
     expect(wrapper.findAll('.activity-detail-content .activity-structured-section')).toHaveLength(2);

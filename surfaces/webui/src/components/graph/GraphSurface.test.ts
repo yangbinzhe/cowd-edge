@@ -1,7 +1,20 @@
 import { defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GraphSurface from './GraphSurface.vue';
+
+const { runGraphLayout } = vi.hoisted(() => ({
+  runGraphLayout: vi.fn(async (graph: any) => ({
+    ...graph,
+    children: graph.children.map((node: any, index: number) => ({
+      ...node,
+      x: index * 240,
+      y: 0,
+    })),
+  })),
+}));
+
+vi.mock('./graphLayout', () => ({ runGraphLayout }));
 
 const VueFlowStub = defineComponent({
   props: {
@@ -18,6 +31,10 @@ const VueFlowStub = defineComponent({
 });
 
 describe('GraphSurface', () => {
+  beforeEach(() => {
+    runGraphLayout.mockClear();
+  });
+
   it('keeps icon controls visible and gives every node a short localized description', async () => {
     const wrapper = mount(GraphSurface, {
       props: {
@@ -86,6 +103,53 @@ describe('GraphSurface', () => {
     expect(wrapper.find('.graph-icon-select').exists()).toBe(true);
     await wrapper.get('[aria-label="全屏"]').trigger('click');
     expect(wrapper.emitted('toggleFullscreen')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('updates live node status without re-running the topology layout', async () => {
+    const wrapper = mount(GraphSurface, {
+      props: {
+        model: {
+          id: 'stable-live-graph',
+          revision: 1,
+          nodes: [{
+            id: 'agent',
+            type: 'agent_task',
+            label: 'Research',
+            status: 'running',
+          }],
+          edges: [],
+        },
+      },
+      global: {
+        stubs: {
+          VueFlow: VueFlowStub,
+          Panel: { template: '<div><slot /></div>' },
+          RouterLink: { template: '<a><slot /></a>' },
+        },
+      },
+    });
+
+    await vi.waitFor(() => expect(runGraphLayout).toHaveBeenCalledTimes(1));
+    await wrapper.setProps({
+      model: {
+        id: 'stable-live-graph',
+        revision: 2,
+        nodes: [{
+          id: 'agent',
+          type: 'agent_task',
+          label: 'Research',
+          status: 'completed',
+        }],
+        edges: [],
+      },
+    });
+    await vi.waitFor(() => {
+      expect(wrapper.get('.graph-node-status').text()).toBe('完成');
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+
+    expect(runGraphLayout).toHaveBeenCalledTimes(1);
     wrapper.unmount();
   });
 });

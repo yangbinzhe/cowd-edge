@@ -172,28 +172,27 @@ describe('execution lineage', () => {
       'execution',
       'team',
       'agent',
-      'activity:view:tool-group:agent',
+      'tool',
     ]);
     expect(graph?.nodes.map((node) => node.kind)).not.toContain('context');
     expect(graph?.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({ from: 'execution', to: 'team', kind: 'delegates' }),
       expect.objectContaining({
         from: 'agent',
-        to: 'activity:view:tool-group:agent',
+        to: 'tool',
         kind: 'invokes',
       }),
     ]));
-    expect(graph?.nodes.find((node) => node.node_id === 'activity:view:tool-group:agent')).toEqual(
+    expect(graph?.nodes.find((node) => node.node_id === 'tool')).toEqual(
       expect.objectContaining({
         parallel_group_id: 'parallel-search',
         evidence_refs: ['evidence'],
         artifact_refs: ['artifact'],
-        grouped_activity_ids: ['tool'],
       }),
     );
   });
 
-  it('derives parent edges when old projections omitted canonical relations', () => {
+  it('does not derive missing canonical parent edges', () => {
     const execution = activity('execution', 'execution', 'root');
     const team = activity('team', 'team', 'root', 'execution');
     const agent = activity('agent', 'agent', 'root', 'team');
@@ -203,27 +202,9 @@ describe('execution lineage', () => {
       projection('root', [execution, team, agent, tool]),
     ]);
 
-    expect(graph?.edges).toEqual(expect.arrayContaining([
-      expect.objectContaining({ from: 'execution', to: 'team', kind: 'contains' }),
-      expect.objectContaining({ from: 'team', to: 'agent', kind: 'contains' }),
-      expect.objectContaining({
-        from: 'agent',
-        to: 'activity:view:tool-group:agent',
-        kind: 'invokes',
-      }),
-    ]));
-    const toolGroup = graph?.nodes.find((node) => node.kind === 'tool_batch');
-    expect(toolGroup?.output.tool_execution).toMatchObject({
-      call_count: 1,
-      batch_count: 1,
-      max_parallel_width: 1,
-      calls: [expect.objectContaining({
-        id: 'tool',
-        name: 'tool',
-        status: 'completed',
-      })],
-    });
-    expect(toolGroup?.semantic_view).toBe(true);
+    expect(graph?.nodes.map((node) => node.node_id))
+      .toEqual(['execution', 'team', 'agent', 'tool']);
+    expect(graph?.edges).toEqual([]);
   });
 
   it('does not invent a graph when canonical activities are absent', () => {
@@ -238,6 +219,46 @@ describe('execution lineage', () => {
     expect(combineExecutionLineage('root', [root])?.nodes[0]?.status).toBe('error');
   });
 
+  it('preserves a canonical completed-with-warnings root status', () => {
+    const execution = {
+      ...activity('execution', 'execution', 'root'),
+      status: 'completed_with_warnings',
+    };
+    const root = projection('root', [execution]);
+    root.live = { status: 'completed' } as any;
+
+    expect(combineExecutionLineage('root', [root])?.status)
+      .toBe('completed_with_warnings');
+    expect(combineExecutionLineage('root', [root])?.nodes[0]?.status)
+      .toBe('completed_with_warnings');
+  });
+
+  it('preserves separate canonical tool activities and parallel groups', () => {
+    const execution = activity('execution', 'execution', 'root');
+    const agent = activity('agent', 'agent', 'root', 'execution');
+    const first = {
+      ...activity('tool:first', 'tool', 'root', 'agent'),
+      tool_call_id: 'call:first',
+      parallel_group_id: 'batch:first',
+    };
+    const second = {
+      ...activity('tool:second', 'tool', 'root', 'agent'),
+      tool_call_id: 'call:second',
+      parallel_group_id: 'batch:second',
+    };
+
+    const graph = combineExecutionLineage('root', [
+      projection('root', [execution, agent, first, second]),
+    ]);
+    const tools = graph?.nodes.filter((node) => node.kind === 'tool') || [];
+    expect(tools.map((node) => node.node_id)).toEqual([
+      'tool:first',
+      'tool:second',
+    ]);
+    expect(tools.map((node) => node.parallel_group_id))
+      .toEqual(['batch:first', 'batch:second']);
+  });
+
   it('does not present internal event codes as business output summaries', () => {
     const execution = activity('execution', 'execution', 'root');
     const agent = {
@@ -250,7 +271,7 @@ describe('execution lineage', () => {
     expect(graph?.nodes.find((node) => node.node_id === 'agent')?.output_summary).toBe('');
   });
 
-  it('keeps a session ingress execution while hiding its internal result artifacts', () => {
+  it('keeps canonical tool batches while hiding internal result artifacts', () => {
     const executionId = 'session-ingress-graph:root';
     const execution = {
       ...activity(`activity:execution:${executionId}`, 'execution', executionId),
@@ -266,12 +287,36 @@ describe('execution lineage', () => {
     };
 
     const graph = combineExecutionLineage(executionId, [
-      projection(executionId, [execution, toolBatch, result]),
+      projection(executionId, [execution, toolBatch, result], [{
+        relation_id: 'execution-tools',
+        kind: 'invoked',
+        from_activity_id: execution.activity_id,
+        to_activity_id: toolBatch.activity_id,
+      }]),
     ]);
 
     expect(graph?.nodes.map((node) => node.node_id)).toEqual([
       execution.activity_id,
+      toolBatch.activity_id,
     ]);
+    expect(graph?.edges).toContainEqual(expect.objectContaining({
+      from: execution.activity_id,
+      to: toolBatch.activity_id,
+      kind: 'invokes',
+    }));
+  });
+
+  it('does not nest a synthetic tool group under a canonical tool batch', () => {
+    const execution = activity('execution', 'execution', 'root');
+    const batch = activity('batch', 'tool_batch', 'root', 'execution');
+    const tool = activity('tool', 'tool', 'root', 'batch');
+
+    const graph = combineExecutionLineage('root', [
+      projection('root', [execution, batch, tool]),
+    ]);
+
+    expect(graph?.nodes.filter((node) => node.kind === 'tool_batch').map((node) => node.node_id))
+      .toEqual(['batch']);
   });
 
   it('removes provider mechanics and internal result references from the business graph', () => {

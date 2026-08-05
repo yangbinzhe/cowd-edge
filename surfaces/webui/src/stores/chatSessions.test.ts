@@ -1771,6 +1771,41 @@ describe('chatSessions', () => {
     expect(chat.states['atomic-role'].writable).toBe(true);
   });
 
+  it('keeps writer promotion and message admission atomic against queued detach', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    const attach = vi.spyOn(api, 'attachSession');
+    const acquire = vi.spyOn(api, 'acquireRuntimeLease');
+    let finishMessage: ((value: any) => void) | undefined;
+    const sendMessage = vi.spyOn(api, 'sendMessage').mockImplementation(
+      () => new Promise((resolve) => { finishMessage = resolve; }) as any,
+    );
+    const detach = vi.spyOn(api, 'detachSession');
+
+    await chat.open('atomic-message');
+    await chat.attachSurface('atomic-message');
+    attach.mockClear();
+    acquire.mockClear();
+    const sending = chat.send('atomic-message', 'keep the mutation in the writer lane');
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(attach).toHaveBeenCalledWith('atomic-message', 'writer');
+    expect(acquire).toHaveBeenCalledWith('atomic-message', 'collaborative');
+
+    const closing = chat.close('atomic-message');
+    await Promise.resolve();
+    expect(detach).not.toHaveBeenCalled();
+
+    finishMessage?.({
+      message: { message_id: 'message-1', sequence: 1, turn_id: 'turn-1' },
+      execution: { graph_id: 'execution-1', turn_id: 'turn-1', status: 'queued' },
+    });
+    await sending;
+    await closing;
+    expect(detach).toHaveBeenCalledWith('atomic-message');
+  });
+
   it('hydrates the newest durable page and can page backward without losing metadata', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();

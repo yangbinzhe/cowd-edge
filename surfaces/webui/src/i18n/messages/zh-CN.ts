@@ -2220,6 +2220,7 @@ export const zhCN: MessageCatalog = {
   "status.safe": "安全",
   "status.sending": "发送中",
   "status.warning": "警告",
+  "status.completedWithWarnings": "完成，有警告",
   "status.ok": "正常",
   "status.policy": "策略",
   "status.policyBlocked": "被策略阻断",

@@ -23,10 +23,23 @@ import {
   selectTurnExecutionEntry,
 } from '../utils/executionLineage';
 import {
-  activityEventViews,
   businessGraphActivities,
   canonicalActivityEvents,
 } from '../adapters/executionActivity';
+
+const BUSINESS_TIMELINE_KINDS = new Set([
+  'execution',
+  'goal',
+  'team',
+  'agent',
+  'tool_batch',
+  'tool',
+  'approval',
+  'verify',
+  'artifact',
+  'outcome',
+  'replan',
+]);
 
 const store = useAppStore();
 const chat = useChatSessionsStore();
@@ -79,13 +92,27 @@ const runtimeInputItems = computed(() => {
   });
 });
 const rootProjectionId = computed(() => (
-  chat.active?.executionGraphId || chat.active?.executionId || ''
+  chat.active?.executionGraphId
+  || chat.active?.executionId
+  || chat.active?.executionIndex?.latest_graph_id
+  || chat.active?.executionIndex?.latest_execution_id
+  || ''
 ));
 const rootProjection = computed(() => rootProjectionId.value
   ? projections.projectionFor(rootProjectionId.value)
   : null);
 const linkedProjectionIds = computed(() => executionProjectionLinks(rootProjection.value));
-const lineageProjections = computed(() => [rootProjection.value]);
+const lineageProjections = computed(() => {
+  const ids = new Set<string>([
+    rootProjectionId.value,
+    ...linkedProjectionIds.value,
+    ...(chat.active?.executionIndex?.executions || []).flatMap((entry) => [
+      String(entry.graph_id || '').trim(),
+      String(entry.execution_id || '').trim(),
+    ]),
+  ].filter(Boolean));
+  return [...ids].map((executionId) => projections.projectionFor(executionId));
+});
 const activityEvents = computed(() => {
   const canonical = canonicalActivityEvents(lineageProjections.value, 'audit');
   const sessionActivity = chat.active?.activity || [];
@@ -125,22 +152,11 @@ const activityEvents = computed(() => {
   return causalActivityTimeline([...rows.values()], 2_000);
 });
 const businessActivityEvents = computed(() => {
-  const views = activityEventViews(activityEvents.value, {
-    sessionId: store.activeSessionId,
-    executionId: rootProjectionId.value,
-  });
-  const preferred = new Map(
-    businessGraphActivities(views).map((activity) => [activity.id, activity]),
+  return causalActivityTimeline(
+    businessGraphActivities(canonicalActivityEvents(lineageProjections.value, 'narrative'))
+      .filter((activity) => BUSINESS_TIMELINE_KINDS.has(activity.kind)),
+    2_000,
   );
-  // Reasoning is part of the operator-visible business story even when the
-  // graph omits provider/model internals. Keep it in Activity while leaving
-  // context assembly and transport details to Technical mode.
-  for (const activity of views) {
-    if (['think', 'model'].includes(activity.kind)) {
-      preferred.set(activity.id, activity);
-    }
-  }
-  return causalActivityTimeline([...preferred.values()], 2_000);
 });
 const visibleActivityEvents = computed(() => (
   activityMode.value === 'technical' ? activityEvents.value : businessActivityEvents.value
@@ -711,17 +727,21 @@ onBeforeUnmount(() => {
   window.removeEventListener('mouseup', stopResize);
 });
 
-watch([rootProjectionId, () => store.companionTab], ([executionId, tab]) => {
+watch(
+  [rootProjectionId, () => store.companionTab, activityMode],
+  ([executionId, tab, mode]) => {
   projections.release('chat:companion-root-execution');
   if (tab !== 'activity' || !executionId || !store.activeSessionId) return;
   projections.acquire(
     executionId,
     'chat:companion-root-execution',
-    'full',
+    mode === 'technical' ? 'full' : 'summary',
     'bounded',
     store.activeSessionId,
   );
-}, { immediate: true });
+  },
+  { immediate: true },
+);
 
 </script>
 
@@ -844,6 +864,7 @@ watch([rootProjectionId, () => store.companionTab], ([executionId, tab]) => {
               v-if="group.events.length"
               :items="group.events"
               :filterable="false"
+              causal
               :selected-id="String(store.selectedActivity?.id || '')"
               @select="openActivityDetail"
             />
@@ -865,6 +886,7 @@ watch([rootProjectionId, () => store.companionTab], ([executionId, tab]) => {
         :items="visibleActivityEvents"
         :filterable="false"
         live
+        causal
         :selected-id="String(store.selectedActivity?.id || '')"
         @select="openActivityDetail"
       />

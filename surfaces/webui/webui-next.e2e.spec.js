@@ -255,7 +255,16 @@ test('duplicated tabs claim unique observers and cannot demote the active writer
   await page.locator('.composer textarea').fill('supplement');
   await page.getByRole('button', { name: 'Supplement current execution' }).click();
   await expect(page.locator('.composer textarea')).toHaveValue('');
-  expect((await supplement).status()).toBe(200);
+  const supplementResponse = await supplement;
+  expect(
+    supplementResponse.status(),
+    JSON.stringify({
+      firstObserver,
+      secondObserver,
+      requestObserver: supplementResponse.request().headers()['x-cowd-observer-id'],
+      attachments: [...attachments.entries()],
+    }),
+  ).toBe(200);
   await expect(page.getByText('Restricted session')).toHaveCount(0);
   await second.close();
 });
@@ -496,15 +505,15 @@ test('historical turns hydrate their own execution trees after messages render',
   await expect(page.locator('.execution-turn-head').first()).toContainText('Turn 3');
 
   const historicalTurn = page.locator('.execution-turn-group').filter({ hasText: 'Turn 1' });
-  await expect(historicalTurn).toContainText('researcher 1');
+  await expect(historicalTurn).toContainText('history_tool_1');
   await historicalTurn.getByRole('button', { name: 'Execution graph' }).click();
   const historicalGraph = page.locator('.chat-execution-overlay');
   await expect(historicalGraph).toBeVisible();
   await expect(historicalGraph.locator('.vue-flow__node')).toHaveCount(2);
-  await expect(historicalGraph).toContainText('Tool call · 1');
-  await historicalGraph.locator('.vue-flow__node').filter({ hasText: 'Tool call · 1' }).click();
+  await expect(historicalGraph).toContainText('history_tool_1');
+  await historicalGraph.locator('.vue-flow__node').filter({ hasText: 'history_tool_1' }).click();
   await expect(historicalGraph.locator('.execution-node-detail')).toBeVisible();
-  await expect(historicalGraph.locator('.execution-node-detail')).toContainText('Tool call');
+  await expect(historicalGraph.locator('.execution-node-detail')).toContainText('history_tool_1');
   await expect.poll(async () => historicalGraph.locator('.vue-flow__node').evaluateAll((nodes) => {
     const surface = document.querySelector('.chat-execution-overlay .vue-flow');
     if (!surface) return 0;

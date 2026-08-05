@@ -578,6 +578,7 @@ export const useAppStore = defineStore('app', () => {
     clearActiveSessionDerivedState();
     openTurnActivity.value = loadTurnActivityState(sessionId);
     const chat = chatSessions;
+    chat.activeSessionId = sessionId;
     await chat.open(sessionId);
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     markSessionViewed(sessionId);
@@ -776,7 +777,18 @@ export const useAppStore = defineStore('app', () => {
       sessions.value = [session, ...sessions.value.filter((item) => item.id !== session.id)];
       selectedModel.value = session.model || selectedModel.value;
       if (activeSessionLoadGeneration === creationGeneration && !activeSessionId.value) {
-        await loadMessages(session.id);
+        // Creation is the mutation boundary: once the Gateway returns the
+        // Session, it is immediately actionable. Transcript/live projection
+        // hydration continues independently and must not keep the composer
+        // disabled behind history or projection latency.
+        void loadMessages(session.id).catch((error) => {
+          const state = chatSessions.states[session.id];
+          if (state) {
+            state.lastError = String(
+              (error as any)?.message || error || 'new Session hydration failed',
+            );
+          }
+        });
       }
       return session;
     })().finally(() => {

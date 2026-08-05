@@ -62,6 +62,11 @@ type LiveSubscription = {
   stream_url: string;
 };
 
+type PendingCreate = {
+  request_fingerprint: string;
+  idempotency_key: string;
+};
+
 const sources = new Map<string, SourceOwner>();
 const physical = reactive({
   state: 'offline' as 'offline' | 'connecting' | 'connected' | 'reconnecting' | 'degraded',
@@ -90,6 +95,7 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectTimerGeneration = 0;
 let physicalGeneration = 0;
 let pendingDelete: LiveSubscription | null = null;
+let pendingCreate: PendingCreate | null = null;
 
 export function parseLiveEnvelope(data: string): LiveEnvelope {
   const envelope = JSON.parse(data) as LiveEnvelope;
@@ -146,6 +152,24 @@ function selectorPayload() {
   return [...sources.values()]
     .map((owner) => normalizedSelector(owner.selector))
     .sort((left, right) => sourceKey(left).localeCompare(sourceKey(right)));
+}
+
+function liveCreateRequest(surfaceInstance: string, selected: LiveSourceSelector[]) {
+  const requestFingerprint = JSON.stringify({
+    surface_instance: surfaceInstance,
+    selector: { sources: selected },
+  });
+  if (pendingCreate?.request_fingerprint !== requestFingerprint) {
+    pendingCreate = {
+      request_fingerprint: requestFingerprint,
+      idempotency_key: `webui-live:${surfaceInstance}:${randomId()}`,
+    };
+  }
+  return {
+    surface_instance: surfaceInstance,
+    selector: { sources: selected },
+    idempotency_key: pendingCreate.idempotency_key,
+  };
 }
 
 function closePhysical() {
@@ -364,15 +388,12 @@ async function synchronize() {
           idempotency_key: `webui-live-patch:${subscription.id}:${subscription.revision}`,
           selector: { sources: selected },
         })
-        : await api.createLiveSubscription({
-          surface_instance: surfaceInstance,
-          selector: { sources: selected },
-          idempotency_key: `webui-live:${surfaceInstance}`,
-        });
+        : await api.createLiveSubscription(liveCreateRequest(surfaceInstance, selected));
       if (response?.__state && response.__state !== 'ready') {
         throw new Error(String(response.__error || response.__state));
       }
       const changedIdentity = !subscription || subscription.id !== String(response.id);
+      pendingCreate = null;
       subscription = {
         id: String(response.id),
         revision: Number(response.revision),
@@ -515,6 +536,7 @@ export function resetLiveTransportForTests() {
   syncedGeneration = 0;
   syncFlight = null;
   pendingDelete = null;
+  pendingCreate = null;
   readyRevision = 0;
   pendingRevisionEnvelopes = [];
   physicalGeneration = 0;

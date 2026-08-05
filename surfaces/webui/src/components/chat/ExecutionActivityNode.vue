@@ -11,6 +11,7 @@ import {
   CircleX,
   FileCheck2,
   PackageCheck,
+  Sparkles,
   ShieldCheck,
   Users,
   Wrench,
@@ -48,6 +49,7 @@ watch(
 function activityIcon(kind: string) {
   if (kind === 'team') return Users;
   if (kind === 'agent') return Bot;
+  if (kind === 'skill') return Sparkles;
   if (kind === 'think' || kind === 'model') return Brain;
   if (kind === 'tool' || kind === 'tool_batch') return Wrench;
   if (kind === 'approval') return ShieldCheck;
@@ -106,6 +108,18 @@ function formatTime(value: unknown) {
           </span>
           <small v-if="!collapsed && activity.detail && activity.detail !== activity.title">
             {{ activity.detail }}
+          </small>
+          <small
+            v-if="!collapsed && activity.result_summary && activity.result_summary !== activity.detail"
+            class="execution-activity-result"
+          >
+            {{ activity.result_summary }}
+          </small>
+          <small
+            v-if="activity.status_reason && activityNeedsAttention(activity)"
+            class="execution-activity-reason"
+          >
+            {{ activity.status_reason }}
           </small>
         </span>
         <span v-if="!activity.tool_summary" class="execution-activity-meta">
@@ -175,6 +189,8 @@ function formatTime(value: unknown) {
 .execution-activity-copy.has-tool-summary { display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .execution-activity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .execution-activity-copy small { color: var(--text-muted); line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+.execution-activity-copy .execution-activity-result { color: var(--text); }
+.execution-activity-copy .execution-activity-reason { color: var(--danger); }
 .execution-tool-summary { min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .execution-tool-summary small { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; }
 .execution-tool-summary .success { color: var(--success); }

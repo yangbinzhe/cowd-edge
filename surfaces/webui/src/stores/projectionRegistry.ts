@@ -160,6 +160,11 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       if (entry.requestEpoch !== epoch) return entry.projection;
       if (projection.__state && projection.__state !== 'ready') {
         const message = String(projection.__error || projection.__state);
+        if (projection.__state === 'not_found' && !entry.projection) {
+          entry.connectionState = 'materializing';
+          entry.lastError = '';
+          return null;
+        }
         if (['forbidden', 'unauthorized'].includes(String(projection.__state))) {
           failClosed(entry, message);
           return null;

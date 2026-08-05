@@ -143,6 +143,78 @@ describe('WebUI multiplex live transport', () => {
     expect(liveTransportHealth().physicalConnectionCount.value).toBe(0);
   });
 
+  it('does not reuse a create idempotency key for a different selector after reload', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const requests: any[] = [];
+    vi.spyOn(api, 'createLiveSubscription').mockImplementation(async (request: any) => {
+      requests.push(structuredClone(request));
+      return {
+        schema_version: 1,
+        id: `live-${requests.length}`,
+        surface_instance: request.surface_instance,
+        revision: 1,
+        selector: request.selector,
+        selector_hash: `selector-${requests.length}`,
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: `/api/runtime/live/live-${requests.length}`,
+      } as any;
+    });
+    vi.spyOn(api, 'deleteLiveSubscription').mockResolvedValue({} as any);
+
+    openLiveSource(
+      { kind: 'session', id: 'session-before-reload' },
+      { envelope: vi.fn() },
+    );
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+
+    // A document reload loses the in-memory subscription before it can issue
+    // DELETE, while sessionStorage intentionally preserves the observer ID.
+    resetLiveTransportForTests();
+    const current = openLiveSource(
+      { kind: 'execution', id: 'execution-after-reload', detail_scope: 'full' },
+      { envelope: vi.fn() },
+    );
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+
+    expect(requests[0].surface_instance).toBe(requests[1].surface_instance);
+    expect(requests[0].selector).not.toEqual(requests[1].selector);
+    expect(requests[0].idempotency_key).not.toBe(requests[1].idempotency_key);
+    current.close();
+  });
+
+  it('retains the create idempotency key while retrying the same selector', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const requests: any[] = [];
+    vi.spyOn(api, 'createLiveSubscription').mockImplementation(async (request: any) => {
+      requests.push(structuredClone(request));
+      if (requests.length === 1) throw new Error('response lost after request dispatch');
+      return {
+        schema_version: 1,
+        id: 'live-retried',
+        surface_instance: request.surface_instance,
+        revision: 1,
+        selector: request.selector,
+        selector_hash: 'selector-retried',
+        expires_at_ms: Date.now() + 60_000,
+        stream_url: '/api/runtime/live/live-retried',
+      } as any;
+    });
+    vi.spyOn(api, 'deleteLiveSubscription').mockResolvedValue({} as any);
+
+    const lease = openLiveSource(
+      { kind: 'session', id: 'session-retry' },
+      { envelope: vi.fn() },
+    );
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+
+    expect(requests[1].selector).toEqual(requests[0].selector);
+    expect(requests[1].idempotency_key).toBe(requests[0].idempotency_key);
+    lease.close();
+  });
+
   it('drops late envelopes from an old selector revision', async () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     const subscriptionApi = mockSubscriptionApi();

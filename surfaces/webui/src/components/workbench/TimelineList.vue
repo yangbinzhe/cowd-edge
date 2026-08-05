@@ -9,11 +9,13 @@ const props = withDefaults(defineProps<{
   title?: string;
   filterable?: boolean;
   live?: boolean;
+  causal?: boolean;
   selectedId?: string;
 }>(), {
   title: '',
   filterable: true,
   live: false,
+  causal: false,
   selectedId: '',
 });
 
@@ -145,10 +147,18 @@ function itemEvidenceCount(item: Record<string, unknown>) {
   });
   return new Set([...direct, ...typed].map(String).filter(Boolean)).size;
 }
+
+function itemDepth(item: Record<string, unknown>) {
+  if (!props.causal) return 0;
+  const kind = String(item.kind || '');
+  if (kind === 'tool' || kind === 'tool_batch') return 2;
+  if (kind === 'agent' || kind === 'approval' || kind === 'verify') return 1;
+  return 0;
+}
 </script>
 
 <template>
-  <section class="timeline-shell">
+  <section class="timeline-shell" :data-causal="causal">
     <header v-if="title || (filterable && statuses.length > 1)" class="timeline-toolbar">
       <strong v-if="title">{{ title }}</strong>
       <span v-if="live" class="timeline-live">{{ t('component.workbench.timeline.live') }}</span>
@@ -165,7 +175,9 @@ function itemEvidenceCount(item: Record<string, unknown>) {
     <li
       v-for="(item, index) in filteredItems"
       :key="String(item.id || index)"
+      :data-kind="String(item.kind || 'event')"
       :data-selected="String(item.id || index) === selectedId"
+      :style="{ '--timeline-depth': String(itemDepth(item)) }"
       role="button"
       tabindex="0"
       @click="emit('select', item)"

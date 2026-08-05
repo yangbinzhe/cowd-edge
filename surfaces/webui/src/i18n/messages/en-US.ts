@@ -2220,6 +2220,7 @@ export const enUS: MessageCatalog = {
   "status.safe": "safe",
   "status.sending": "sending",
   "status.warning": "warning",
+  "status.completedWithWarnings": "completed with warnings",
   "status.ok": "ok",
   "status.policy": "policy",
   "status.policyBlocked": "blocked by policy",

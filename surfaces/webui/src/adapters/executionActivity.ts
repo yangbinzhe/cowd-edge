@@ -9,6 +9,7 @@ import { t } from '../i18n';
 const TERMINAL = new Set([
   'complete',
   'completed',
+  'completed_with_warnings',
   'succeeded',
   'failed',
   'blocked',
@@ -134,17 +135,26 @@ export function activityEventViews(
         parent_execution_id: event.parent_execution_id || undefined,
       },
       kind: canonicalKind(event),
+      display_label: event.display_label || event.title || undefined,
+      phase: event.phase || undefined,
       visibility: event.visibility || ['narrative', 'operational', 'audit'],
       parent_activity_id: event.parent_activity_id || undefined,
       initiator_activity_id: event.initiator_activity_id || undefined,
       causal_parent_ids: event.causal_parent_ids || [],
       dependency_ids: event.dependency_ids || [],
       parallel_group_id: event.parallel_group_id || undefined,
-      team_id: event.team_id || undefined,
-      agent_id: event.agent_id || undefined,
+      team_run_id: event.team_run_id || event.team_id || undefined,
+      agent_instance_id: event.agent_instance_id || event.agent_id || undefined,
+      agent_run_id: event.agent_run_id || undefined,
+      skill_id: event.skill_id || undefined,
+      skill_revision: event.skill_revision || undefined,
+      skill_activation_id: event.skill_activation_id || undefined,
+      tool_contract_id: event.tool_contract_id || undefined,
       tool_call_id: event.tool_call_id || undefined,
       approval_id: event.approval_id || undefined,
       status,
+      status_reason: event.status_reason || undefined,
+      required: event.required !== false,
       started_at_ms: startedAt,
       completed_at_ms: event.completed_at_ms || (
         TERMINAL.has(status) && startedAt ? startedAt + Number(event.duration_ms || 0) : undefined
@@ -153,8 +163,12 @@ export function activityEventViews(
       sequence: numericSequence(event.sequence, index),
       commit_cursor: Number(event.commit_cursor || 0),
       public_summary: event.title || event.detail || undefined,
+      result_summary: event.result_summary || (
+        typeof event.output === 'string' ? event.output : undefined
+      ),
       artifact_refs: event.artifact_refs || [],
       evidence_refs: event.evidence_refs || [],
+      definition_refs: event.definition_refs || [],
       detail_capability: event.detail_capability || undefined,
     } satisfies ExecutionActivityProjection;
     return {
@@ -174,59 +188,21 @@ export function activityEventViews(
   });
 }
 
-export function mergeActivityViews(
-  canonical: ActivityView[],
-  observed: ActivityView[],
-): ActivityView[] {
-  const rows = new Map<string, ActivityView>();
-  const identity = (activity: ActivityView) => (
-    activity.tool_call_id
-      ? `tool:${activity.tool_call_id}`
-      : activity.activity_id || activity.id
-  );
-  for (const activity of observed) rows.set(identity(activity), activity);
-  for (const activity of canonical) {
-    const key = identity(activity);
-    const previous = rows.get(key);
-    rows.set(key, previous ? {
-      ...previous,
-      ...activity,
-      input: previous.input ?? activity.input,
-      output: previous.output ?? activity.output,
-      detail: activity.detail || previous.detail,
-      raw: {
-        ...(previous.raw || {}),
-        ...(activity.raw || {}),
-      },
-    } : activity);
-  }
-  return [...rows.values()].sort(compareActivityViews);
-}
-
 export function conversationActivityTree(
   activities: ActivityView[],
   relations: ExecutionActivityRelation[],
 ): ActivityTreeNode[] {
-  const localized = compactBusinessActivities(activities.map(localizedActivity));
-  const tools = deduplicatedTools(localized);
-  const roots = activityTree(localized, relations)
-    .flatMap(pruneConversationNode);
-  if (tools.length) {
-    const group = toolGroupNode(tools);
-    const root = roots.find((node) => ['execution', 'goal'].includes(node.activity.kind));
-    if (root) {
-      root.children.push(group);
-      sortActivityNodes(root.children);
-    } else {
-      roots.push(group);
-      sortActivityNodes(roots);
-    }
-  }
+  const roots = activityTree(
+    compactBusinessActivities(activities.map(localizedActivity)),
+    relations,
+  ).flatMap(compactConversationNode);
+  sortActivityNodes(roots);
   return roots;
 }
 
 export function businessGraphActivities(activities: ActivityView[]) {
   return compactBusinessActivities(activities.map(localizedActivity))
+    .filter((activity) => activity.canonical.visibility.includes('narrative'))
     .filter(isBusinessGraphActivity);
 }
 
@@ -234,7 +210,7 @@ export function activityAutoCollapsed(activity: ActivityView) {
   if (activity.tool_summary) return true;
   const status = normalizedStatus(activity.status);
   if (!TERMINAL.has(status) || ATTENTION.has(status)) return false;
-  if (activity.kind === 'tool') return true;
+  if (activity.kind === 'tool' || activity.kind === 'tool_batch') return true;
   return activity.kind === 'agent' && Boolean(activity.artifact_refs?.length);
 }
 
@@ -252,6 +228,7 @@ export function isBusinessGraphActivity(activity: ActivityView) {
   return !internalReference([
     activity.title,
     activity.detail,
+    activity.canonical.detail,
     activity.canonical.public_summary,
   ].join(' '));
 }
@@ -268,8 +245,14 @@ function activityView(activity: ExecutionActivityProjection): ActivityView {
     id: activity.activity_id,
     activity_id: activity.activity_id,
     kind: activity.kind,
-    title: activity.public_summary || activity.kind.replaceAll('_', ' '),
+    title: activity.display_label || activity.public_summary || activity.kind.replaceAll('_', ' '),
+    display_label: activity.display_label || undefined,
     detail: activity.public_summary || '',
+    result_summary: activity.result_summary || undefined,
+    status_reason: activity.status_reason || undefined,
+    required: activity.required !== false,
+    output: activity.result_summary || undefined,
+    phase: activity.phase || undefined,
     status,
     at: activity.started_at_ms || undefined,
     duration_ms: activity.duration_ms || undefined,
@@ -281,8 +264,15 @@ function activityView(activity: ExecutionActivityProjection): ActivityView {
     parent_execution_id: activity.scope.parent_execution_id || undefined,
     session_id: activity.scope.session_id || undefined,
     turn_id: activity.scope.turn_id || undefined,
-    team_id: activity.team_id || undefined,
-    agent_id: activity.agent_id || undefined,
+    team_id: activity.team_run_id || undefined,
+    agent_id: activity.agent_instance_id || activity.agent_run_id || undefined,
+    team_run_id: activity.team_run_id || undefined,
+    agent_instance_id: activity.agent_instance_id || undefined,
+    agent_run_id: activity.agent_run_id || undefined,
+    skill_id: activity.skill_id || undefined,
+    skill_revision: activity.skill_revision || undefined,
+    skill_activation_id: activity.skill_activation_id || undefined,
+    tool_contract_id: activity.tool_contract_id || undefined,
     tool_call_id: activity.tool_call_id || undefined,
     approval_id: activity.approval_id || undefined,
     parent_activity_id: activity.parent_activity_id || undefined,
@@ -306,6 +296,23 @@ function activityView(activity: ExecutionActivityProjection): ActivityView {
       },
       artifact_refs: activity.artifact_refs,
       evidence_refs: activity.evidence_refs,
+      definition_refs: activity.definition_refs,
+      identity: {
+        node_id: activity.node_id,
+        team_run_id: activity.team_run_id,
+        agent_instance_id: activity.agent_instance_id,
+        agent_run_id: activity.agent_run_id,
+        skill_id: activity.skill_id,
+        skill_revision: activity.skill_revision,
+        skill_activation_id: activity.skill_activation_id,
+        tool_contract_id: activity.tool_contract_id,
+        tool_call_id: activity.tool_call_id,
+      },
+      display_label: activity.display_label,
+      phase: activity.phase,
+      result_summary: activity.result_summary,
+      status_reason: activity.status_reason,
+      required: activity.required,
       detail_capability: activity.detail_capability,
     },
     canonical: activity,
@@ -346,6 +353,7 @@ function humanizeActivityDetail(activity: ActivityView, detail: string) {
 
 function businessTitle(activity: ActivityView, rawTitle: string) {
   const lowered = `${activity.id} ${rawTitle}`.toLowerCase();
+  const explicit = String(activity.canonical.display_label || '').trim();
   if (activity.kind === 'execution' || activity.kind === 'goal') {
     return containsCjk(rawTitle) && !internalReference(rawTitle)
       ? rawTitle
@@ -353,14 +361,20 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
   }
   if (activity.kind === 'team') return t('execution.kind.team');
   if (activity.kind === 'agent') {
-    const role = String(activity.role || activity.agent_id || '').toLowerCase();
+    const role = String(
+      activity.role
+      || activity.agent_instance_id
+      || activity.agent_run_id
+      || activity.agent_id
+      || '',
+    ).toLowerCase();
     if (role.includes('research')) return t('execution.agentRole.researcher');
     if (role.includes('synth')) return t('execution.agentRole.synthesizer');
     if (role.includes('primary')) return t('execution.agentRole.primary');
     return t('execution.kind.agentTask');
   }
   if (activity.kind === 'model') {
-    return lowered.includes('synthesize')
+    return lowered.includes('synth')
       ? t('execution.kind.synthesize')
       : t('execution.kind.model');
   }
@@ -374,14 +388,31 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
   if (activity.kind === 'replan') return t('execution.kind.replan');
   if (activity.kind === 'recovery') return t('execution.kind.recovery');
   if (activity.kind === 'error') return t('execution.kind.error');
+  if (explicit && !internalReference(explicit) && !protocolIdentifier(explicit)) {
+    return humanizeIdentifier(explicit);
+  }
   return rawTitle || String(activity.kind).replaceAll('_', ' ');
 }
 
-function pruneConversationNode(node: ActivityTreeNode): ActivityTreeNode[] {
-  const children = node.children.flatMap(pruneConversationNode);
+function compactConversationNode(node: ActivityTreeNode): ActivityTreeNode[] {
   const activity = node.activity;
-  if (isToolActivity(activity) || activity.kind === 'tool_batch') return children;
+  if (isToolActivity(activity)) return [];
+  if (activity.kind === 'tool_batch') {
+    const tools = deduplicatedTools(node.children.map((child) => child.activity));
+    const children = node.children
+      .filter((child) => !isToolActivity(child.activity))
+      .flatMap(compactConversationNode);
+    children.push(...tools.map((tool) => ({ activity: tool, children: [] })));
+    sortActivityNodes(children);
+    return isBusinessGraphActivity(activity) ? [{ activity, children }] : children;
+  }
+  const tools = deduplicatedTools(node.children.map((child) => child.activity));
+  const children = node.children
+    .filter((child) => !isToolActivity(child.activity))
+    .flatMap(compactConversationNode);
+  if (tools.length) children.push(toolGroupNode(tools, activity.id));
   if (!isBusinessGraphActivity(activity)) return children;
+  sortActivityNodes(children);
   return [{ activity, children }];
 }
 
@@ -416,7 +447,7 @@ function deduplicatedTools(activities: ActivityView[]) {
   return [...tools.values()].sort(compareActivityViews);
 }
 
-function toolGroupNode(tools: ActivityView[]): ActivityTreeNode {
+function toolGroupNode(tools: ActivityView[], parentActivityId: string): ActivityTreeNode {
   const summary = toolSummary(tools);
   const first = tools[0].canonical;
   const starts = tools.map((tool) => timestamp(tool.at)).filter((value) => value > 0);
@@ -436,13 +467,14 @@ function toolGroupNode(tools: ActivityView[]): ActivityTreeNode {
         : 'completed';
   const canonical = {
     ...first,
-    activity_id: `activity:view:tool-group:${first.scope.turn_id || first.scope.execution_id}`,
+    activity_id: `activity:view:tool-group:${parentActivityId}`,
     kind: 'tool_batch',
-    parent_activity_id: undefined,
-    initiator_activity_id: undefined,
+    parent_activity_id: parentActivityId,
+    initiator_activity_id: parentActivityId,
     causal_parent_ids: [],
     dependency_ids: [],
     parallel_group_id: undefined,
+    tool_contract_id: undefined,
     tool_call_id: undefined,
     status,
     started_at_ms: startedAt,
@@ -453,6 +485,9 @@ function toolGroupNode(tools: ActivityView[]): ActivityTreeNode {
     public_summary: t('execution.kind.toolBatch'),
     artifact_refs: Array.from(new Set(tools.flatMap((tool) => tool.artifact_refs || []))),
     evidence_refs: Array.from(new Set(tools.flatMap((tool) => tool.evidence_refs || []))),
+    definition_refs: Array.from(new Set(tools.flatMap(
+      (tool) => tool.canonical.definition_refs || [],
+    ))),
     detail_capability: undefined,
   } satisfies ExecutionActivityProjection;
   const activity: ActivityView = {
@@ -467,6 +502,7 @@ function toolGroupNode(tools: ActivityView[]): ActivityTreeNode {
     duration_ms: canonical.duration_ms,
     turn_id: canonical.scope.turn_id || undefined,
     execution_id: canonical.scope.execution_id,
+    parent_activity_id: parentActivityId,
     evidence_refs: canonical.evidence_refs,
     artifact_refs: canonical.artifact_refs,
     refs: [...canonical.evidence_refs, ...canonical.artifact_refs],
@@ -489,7 +525,7 @@ function toolSummary(tools: ActivityView[]): ToolActivitySummary {
   let running = 0;
   for (const tool of tools) {
     const status = normalizedStatus(tool.status);
-    if (['completed'].includes(status)) {
+    if (status === 'completed') {
       executed += 1;
       succeeded += 1;
     } else if (ATTENTION.has(status) || ['cancelled', 'denied'].includes(status)) {
@@ -514,6 +550,15 @@ function isToolActivity(activity: ActivityView) {
   return activity.kind === 'tool' || Boolean(activity.tool_call_id);
 }
 
+function protocolIdentifier(value: string) {
+  return /^(?:runtime|provider|authorization|context|projection|session|execution)\.[a-z0-9_.:-]+$/i
+    .test(value);
+}
+
+function humanizeIdentifier(value: string) {
+  return value.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function internalArtifact(activity: ActivityView) {
   const value = [
     activity.title,
@@ -533,7 +578,13 @@ function technicalModelActivity(activity: ActivityView) {
 }
 
 function internalOperationalActivity(activity: ActivityView) {
-  const value = `${activity.id} ${activity.canonical.public_summary || ''}`.toLowerCase();
+  const value = [
+    activity.id,
+    activity.title,
+    activity.detail,
+    activity.canonical.detail,
+    activity.canonical.public_summary,
+  ].join(' ').toLowerCase();
   return [
     'authorization.',
     'runtime.outcome.recorded',
@@ -545,6 +596,8 @@ function internalOperationalActivity(activity: ActivityView) {
     'budget_decision',
     'compile-target-guard',
     'target guard accepted',
+    'session input was routed',
+    'session-ingress-confirmed:',
     'lease.',
     'cache.',
     'projection.',
@@ -556,6 +609,7 @@ function internalOperationalActivity(activity: ActivityView) {
 function internalReference(value: string) {
   const normalized = value.toLowerCase();
   return normalized.includes('session-ingress-graph:')
+    || normalized.includes('session-ingress-confirmed:')
     || normalized.includes(':tool-results:')
     || normalized.includes(':model-result')
     || normalized.includes('turn-result:');

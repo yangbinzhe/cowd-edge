@@ -2175,79 +2175,99 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     });
   }
 
+  async function attachWriterLocked(
+    sessionId: string,
+    mode: 'collaborative' | 'exclusive' = 'collaborative',
+    forceServerReaffirmation = false,
+  ) {
+    const state = stateFor(sessionId);
+    const epoch = state.attachmentEpoch;
+    const invalidated = () => state.attachmentEpoch !== epoch || state.reconnectBlocked;
+    let writerAttached = false;
+    const compensateRevokedAttachment = async () => {
+      try {
+        await api.releaseRuntimeLease(sessionId);
+      } catch {
+        // A lease may not have been acquired yet.
+      }
+      try {
+        await api.detachSession(sessionId);
+      } catch {
+        // Server-side revocation may have detached the observer already.
+      }
+    };
+    if (!forceServerReaffirmation && state.attachmentRole === 'writer' && state.writable) return true;
+    try {
+      // Presence attachment replacement is atomic for one observer. Promote
+      // reader -> writer directly so there is no detached race window.
+      const attached: any = await api.attachSession(sessionId, 'writer');
+      if (attached?.ok === false) throw new Error(String(attached.error || 'writer attachment rejected'));
+      writerAttached = true;
+      if (invalidated()) {
+        await compensateRevokedAttachment();
+        return false;
+      }
+      const lease: any = await api.acquireRuntimeLease(sessionId, mode);
+      if (lease?.ok === false) throw new Error(String(lease.error || 'writer lease rejected'));
+      if (invalidated()) {
+        await compensateRevokedAttachment();
+        return false;
+      }
+      state.attachmentRole = 'writer';
+      state.writable = true;
+      state.degradedReason = '';
+      return true;
+    } catch (error: any) {
+      if (writerAttached) {
+        try {
+          await api.releaseRuntimeLease(sessionId);
+        } catch {
+          // The lease may not have been acquired.
+        }
+      }
+      if (invalidated()) return false;
+      try {
+        // Demotion is also an atomic role replacement. Keep a valid reader
+        // attachment when writer admission or lease acquisition fails.
+        const reader: any = await api.attachSession(sessionId, 'reader');
+        if (reader?.ok === false) throw new Error(String(reader.error || 'reader fallback rejected'));
+        if (invalidated()) {
+          await compensateRevokedAttachment();
+          return false;
+        }
+        state.attachmentRole = 'reader';
+      } catch {
+        try {
+          await api.detachSession(sessionId);
+        } catch {
+          // The server may already have removed the attachment.
+        }
+        state.attachmentRole = 'detached';
+      }
+      state.writable = false;
+      state.degradedReason = String(error?.message || error || 'writer attachment unavailable');
+      return false;
+    }
+  }
+
   async function attachSurface(
     sessionId: string,
     mode: 'collaborative' | 'exclusive' = 'collaborative',
   ) {
+    return serializeAttachment(sessionId, () => attachWriterLocked(sessionId, mode));
+  }
+
+  async function withWriterMutation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+    mode: 'collaborative' | 'exclusive' = 'collaborative',
+  ): Promise<{ attached: true; value: T } | { attached: false }> {
     return serializeAttachment(sessionId, async () => {
-      const state = stateFor(sessionId);
-      const epoch = state.attachmentEpoch;
-      const invalidated = () => state.attachmentEpoch !== epoch || state.reconnectBlocked;
-      let writerAttached = false;
-      const compensateRevokedAttachment = async () => {
-        try {
-          await api.releaseRuntimeLease(sessionId);
-        } catch {
-          // A lease may not have been acquired yet.
-        }
-        try {
-          await api.detachSession(sessionId);
-        } catch {
-          // Server-side revocation may have detached the observer already.
-        }
-      };
-      if (state.attachmentRole === 'writer' && state.writable) return true;
-      try {
-        // Presence attachment replacement is atomic for one observer. Promote
-        // reader -> writer directly so there is no detached race window.
-        const attached: any = await api.attachSession(sessionId, 'writer');
-        if (attached?.ok === false) throw new Error(String(attached.error || 'writer attachment rejected'));
-        writerAttached = true;
-        if (invalidated()) {
-          await compensateRevokedAttachment();
-          return false;
-        }
-        const lease: any = await api.acquireRuntimeLease(sessionId, mode);
-        if (lease?.ok === false) throw new Error(String(lease.error || 'writer lease rejected'));
-        if (invalidated()) {
-          await compensateRevokedAttachment();
-          return false;
-        }
-        state.attachmentRole = 'writer';
-        state.writable = true;
-        state.degradedReason = '';
-        return true;
-      } catch (error: any) {
-        if (writerAttached) {
-          try {
-            await api.releaseRuntimeLease(sessionId);
-          } catch {
-            // The lease may not have been acquired.
-          }
-        }
-        if (invalidated()) return false;
-        try {
-          // Demotion is also an atomic role replacement. Keep a valid reader
-          // attachment when writer admission or lease acquisition fails.
-          const reader: any = await api.attachSession(sessionId, 'reader');
-          if (reader?.ok === false) throw new Error(String(reader.error || 'reader fallback rejected'));
-          if (invalidated()) {
-            await compensateRevokedAttachment();
-            return false;
-          }
-          state.attachmentRole = 'reader';
-        } catch {
-          try {
-            await api.detachSession(sessionId);
-          } catch {
-            // The server may already have removed the attachment.
-          }
-          state.attachmentRole = 'detached';
-        }
-        state.writable = false;
-        state.degradedReason = String(error?.message || error || 'writer attachment unavailable');
-        return false;
-      }
+      // A different document can replace the server-side presence role while
+      // this document still has a locally cached writer state. Reaffirm the
+      // server role at the mutation boundary before sending the request.
+      if (!await attachWriterLocked(sessionId, mode, true)) return { attached: false };
+      return { attached: true, value: await operation() };
     });
   }
 
@@ -2363,7 +2383,15 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       if (!await waitForSessionLiveReady(sessionId)) {
         state.degradedReason = 'live Session source was not ready before submission; canonical recovery remains active';
       }
-      if (!state.writable && !(await attachSurface(sessionId))) {
+      // Writer promotion and the mutation share one attachment lane. A
+      // terminal-event demotion cannot interleave between admission and POST.
+      const mutation = await withWriterMutation(sessionId, () => api.sendMessage(
+        sessionId,
+        options.transportContent || content,
+        options.resourceIds || [],
+        idempotencyKey,
+      ));
+      if (!mutation.attached) {
         throw new Error(state.degradedReason || 'this WebUI tab is attached read-only');
       }
       if (state.submissionEpoch !== epoch || state.reconnectBlocked) return false;
@@ -2375,12 +2403,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           last_progress_at_ms: Date.now(),
         };
       }
-      const receipt: any = await api.sendMessage(
-        sessionId,
-        options.transportContent || content,
-        options.resourceIds || [],
-        idempotencyKey,
-      );
+      const receipt: any = mutation.value;
       if (state.submissionEpoch !== epoch || state.reconnectBlocked) return false;
       const canonicalMessageId = String(receipt?.message?.message_id || '');
       const canonicalSequence = Number(receipt?.message?.sequence);
@@ -2446,11 +2469,15 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   async function stop(sessionId: string) {
     const state = stateFor(sessionId);
-    if (!state.writable && !(await attachSurface(sessionId))) {
+    const mutation = await withWriterMutation(
+      sessionId,
+      () => api.cancelSessionTurn(sessionId),
+    );
+    if (!mutation.attached) {
       state.lastError = state.degradedReason || 'this WebUI tab is attached read-only';
       return false;
     }
-    const receipt: any = await api.cancelSessionTurn(sessionId);
+    const receipt: any = mutation.value;
     if (!receipt?.ok) {
       const status = Number(receipt?.status);
       const prefix = Number.isFinite(status) && status > 0 ? `HTTP ${status} ` : '';

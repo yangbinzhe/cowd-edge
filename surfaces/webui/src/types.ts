@@ -77,11 +77,15 @@ export interface ChatTurn {
 
 export interface ActivityEvent {
   id: string;
-  kind: 'execution' | 'goal' | 'team' | 'agent' | 'model' | 'tool_batch' | 'tool'
+  kind: 'execution' | 'goal' | 'team' | 'agent' | 'skill' | 'model' | 'tool_batch' | 'tool'
     | 'think' | 'runtime' | 'context' | 'approval' | 'verify' | 'artifact' | 'outcome'
     | 'replan' | 'recovery' | 'error';
   title: string;
+  display_label?: string;
   detail?: string;
+  result_summary?: string;
+  status_reason?: string;
+  required?: boolean;
   status?: string;
   phase?: string;
   role?: string;
@@ -103,6 +107,13 @@ export interface ActivityEvent {
   node_id?: string;
   team_id?: string;
   agent_id?: string;
+  team_run_id?: string;
+  agent_instance_id?: string;
+  agent_run_id?: string;
+  skill_id?: string;
+  skill_revision?: string;
+  skill_activation_id?: string;
+  tool_contract_id?: string;
   turn_id?: string;
   model_step_id?: string;
   item_id?: string;
@@ -126,13 +137,20 @@ export interface ActivityEvent {
   approval_id?: string;
   artifact_refs?: string[];
   evidence_refs?: string[];
+  definition_refs?: string[];
   visibility?: Array<'narrative' | 'operational' | 'audit'>;
   completed_at_ms?: number;
   detail_capability?: string;
 }
 
 export type ExecutionScopeProjection = GatewayComponents['schemas']['ExecutionScopeProjection'];
-export type ExecutionActivityProjection = GatewayComponents['schemas']['ExecutionActivityProjection'];
+export type ExecutionActivityProjection = GatewayComponents['schemas']['ExecutionActivityProjection'] & {
+  display_label?: string | null;
+  phase?: string | null;
+  result_summary?: string | null;
+  status_reason?: string | null;
+  required?: boolean;
+};
 export type ExecutionActivityRelation = GatewayComponents['schemas']['ExecutionActivityRelation'];
 export type ExecutionActivityDetailProjection = GatewayComponents['schemas']['ExecutionActivityDetailProjection'];
 

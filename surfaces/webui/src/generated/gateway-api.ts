@@ -11499,10 +11499,11 @@ export interface components {
             schema_version: number;
         };
         /** @enum {string} */
-        ExecutionActivityKind: "execution" | "goal" | "team" | "agent" | "model" | "tool_batch" | "tool" | "approval" | "verify" | "artifact" | "outcome" | "replan" | "recovery" | "runtime";
+        ExecutionActivityKind: "execution" | "goal" | "team" | "agent" | "skill" | "model" | "tool_batch" | "tool" | "approval" | "verify" | "artifact" | "outcome" | "replan" | "recovery" | "runtime";
         ExecutionActivityProjection: {
             activity_id: string;
-            agent_id?: string | null;
+            agent_instance_id?: string | null;
+            agent_run_id?: string | null;
             approval_id?: string | null;
             /** @default [] */
             artifact_refs: string[];
@@ -11513,27 +11514,61 @@ export interface components {
             /** Format: uint64 */
             completed_at_ms?: number | null;
             /** @default [] */
+            definition_refs: string[];
+            /** @default [] */
             dependency_ids: string[];
             detail_capability?: string | null;
+            /**
+             * @description Stable, bounded label for human-facing surfaces. This is separate from
+             *     process and result summaries so clients do not infer names from event
+             *     protocol identifiers.
+             */
+            display_label?: string | null;
             /** Format: uint64 */
             duration_ms?: number | null;
             /** @default [] */
             evidence_refs: string[];
             initiator_activity_id?: string | null;
             kind: components["schemas"]["ExecutionActivityKind"];
+            node_id?: string | null;
             parallel_group_id?: string | null;
             parent_activity_id?: string | null;
+            /**
+             * @description Business phase or lifecycle phase, when Runtime can state it without
+             *     exposing a private prompt or provider transcript.
+             */
+            phase?: string | null;
             public_summary?: string | null;
+            /**
+             * @description Whether failure of this activity contributes to root execution
+             *     failure. Unknown legacy/event activities are required by default.
+             * @default true
+             */
+            required: boolean;
+            /**
+             * @description Bounded semantic output. This remains distinct from the label and from
+             *     a public in-progress reasoning summary.
+             */
+            result_summary?: string | null;
             /** Format: uint32 */
             schema_version: number;
             scope: components["schemas"]["ExecutionScopeProjection"];
             /** Format: uint64 */
             sequence: number;
+            skill_activation_id?: string | null;
+            skill_id?: string | null;
+            skill_revision?: string | null;
             /** Format: uint64 */
             started_at_ms?: number | null;
             status: string;
-            team_id?: string | null;
+            /**
+             * @description Safe explanation for a waiting, warning, blocked, failed or cancelled
+             *     status. Surfaces must not derive this from raw evidence.
+             */
+            status_reason?: string | null;
+            team_run_id?: string | null;
             tool_call_id?: string | null;
+            tool_contract_id?: string | null;
             /** @default [] */
             visibility: components["schemas"]["ActivityVisibility"][];
         };
@@ -38971,7 +39006,10 @@ export interface operations {
     };
     runtime_execution_projection_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Summary is suitable for the chat timeline; full adds audit entities for an opened inspector. */
+                detail_scope?: "summary" | "full";
+            };
             header?: never;
             path: {
                 id: string;
@@ -39014,7 +39052,10 @@ export interface operations {
     };
     runtime_execution_activity_get: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Stable canonical activity identity from ExecutionProjection.activities. */
+                activity_id: string;
+            };
             header?: never;
             path: {
                 id: string;

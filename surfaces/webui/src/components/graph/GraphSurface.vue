@@ -139,6 +139,10 @@ const canvasNodes = computed(() => graphIsAggregated.value ? [] : visibleNodes.v
 const canvasNodeIds = computed(() => new Set(canvasNodes.value.map((node) => node.id)));
 const canvasEdges = computed(() => visibleEdges.value.filter((edge) => canvasNodeIds.value.has(edge.source) && canvasNodeIds.value.has(edge.target)));
 const showList = computed(() => listMode.value || graphIsAggregated.value);
+const topologySignature = computed(() => [
+  showList.value ? 'list' : 'graph',
+  graphLayoutSignature(props.model.id, direction.value, canvasNodes.value, canvasEdges.value),
+].join('|'));
 const nextDirection = computed<GraphDirection>(() => direction.value === 'RIGHT' ? 'DOWN' : 'RIGHT');
 const nextDirectionLabel = computed(() => (
   nextDirection.value === 'DOWN' ? t('graph.direction.down') : t('graph.direction.right')
@@ -156,7 +160,28 @@ const listRows = computed(() => visibleNodes.value.map((node) => ({
   evidence: node.evidenceRefs?.length || 0,
   summary: node.summary || node.label,
 })));
-const laidOutNodeIds = computed(() => new Set(laidOutNodes.value.map((node) => node.id)));
+const flowNodes = computed(() => {
+  const currentById = new Map(canvasNodes.value.map((node) => [node.id, node]));
+  return laidOutNodes.value.flatMap((layoutNode) => {
+    const node = currentById.get(layoutNode.id);
+    if (!node) return [];
+    return [{
+      ...layoutNode,
+      data: {
+        label: node.label,
+        description: nodeDescription(node),
+        task: node.description,
+        summary: node.summary,
+        outputSummary: node.outputSummary,
+        metrics: node.metrics || [],
+        node,
+        status: node.status,
+      },
+      class: `graph-node graph-node-${node.type} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}${props.activeNodeId === node.id ? ' active-runtime-node' : ''}`,
+    }];
+  });
+});
+const laidOutNodeIds = computed(() => new Set(flowNodes.value.map((node) => node.id)));
 const flowEdges = computed(() => canvasEdges.value
   .filter((edge) => laidOutNodeIds.value.has(edge.source) && laidOutNodeIds.value.has(edge.target))
   .map((edge) => ({
@@ -363,9 +388,9 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 watch(
-  [canvasNodes, canvasEdges, direction, showList, () => props.model.revision],
+  topologySignature,
   scheduleLayout,
-  { immediate: true, deep: true },
+  { immediate: true },
 );
 watch(() => props.searchQuery, (value) => { if (value !== search.value) search.value = value; });
 watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) statusFilter.value = value || 'all'; });
@@ -482,7 +507,7 @@ onBeforeUnmount(() => {
     <VueFlow
       v-else
       class="graph-flow"
-      :nodes="laidOutNodes"
+      :nodes="flowNodes"
       :edges="flowEdges"
       :nodes-draggable="false"
       :nodes-connectable="false"
