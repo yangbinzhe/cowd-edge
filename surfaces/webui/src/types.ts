@@ -153,6 +153,7 @@ export type ExecutionActivityProjection = GatewayComponents['schemas']['Executio
   required?: boolean;
 };
 export type ExecutionActivityRelation = GatewayComponents['schemas']['ExecutionActivityRelation'];
+export type ExecutionActivityContentProjection = GatewayComponents['schemas']['ExecutionActivityContentProjection'];
 export type ExecutionActivityDetailProjection = GatewayComponents['schemas']['ExecutionActivityDetailProjection'];
 
 export type ExecutionProjectionEntity = GatewayComponents['schemas']['ExecutionProjectionEntity'];

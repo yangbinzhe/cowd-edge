@@ -44,7 +44,7 @@ const activityReasoning = computed(() => props.reasoningGroups?.[activity.value.
 watch(
   () => `${activity.value.status}:${activity.value.commit_cursor}`,
   () => {
-    if (!activity.value.tool_summary && activityNeedsAttention(activity.value)) {
+    if (activityNeedsAttention(activity.value)) {
       manualCollapsed.value = false;
     }
   },
@@ -213,7 +213,7 @@ function formatTime(value: unknown) {
   white-space: normal;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
 }
 .execution-activity-copy .execution-activity-result { color: var(--text); }
 .execution-activity-copy .execution-activity-reason { color: var(--danger); }

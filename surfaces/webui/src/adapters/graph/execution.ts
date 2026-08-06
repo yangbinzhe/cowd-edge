@@ -11,6 +11,13 @@ function evidenceRefs(value: unknown) {
 
 function metricLabels(node: any) {
   const values: string[] = [];
+  const tools = node?.tool_summary;
+  if (tools && Number(tools.total || 0) > 0) {
+    values.push(
+      `${t('chat.activity.tools.executed')} ${Number(tools.completed || 0)}/${Number(tools.total || 0)}`,
+    );
+    if (Number(tools.failed || 0) > 0) values.push(`! ${Number(tools.failed)}`);
+  }
   const duration = Number(node?.duration_ms || node?.usage?.duration_ms || 0);
   if (duration > 0) values.push(formatDuration(duration));
   const expectedDuration = Number(node?.work?.expected_duration_ms || 0);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Panel, VueFlow } from '@vue-flow/core';
+import { MarkerType, Panel, VueFlow } from '@vue-flow/core';
 import {
   ArrowDown,
   ArrowRight,
@@ -24,7 +24,12 @@ import DataTable from '../workbench/DataTable.vue';
 import StatusPill from '../workbench/StatusPill.vue';
 import EvidenceInspector from '../evidence/EvidenceInspector.vue';
 import { runGraphLayout } from './graphLayout';
-import { graphDiagnostics, graphExportPayload, graphLayoutSignature } from './graphRuntime';
+import {
+  graphDiagnostics,
+  graphExportPayload,
+  graphLayoutSignature,
+  semanticToolColumnLayoutEdges,
+} from './graphRuntime';
 
 const props = withDefaults(defineProps<{
   model: GraphViewModel;
@@ -62,7 +67,7 @@ const root = ref<HTMLElement | null>(null);
 const flow = ref<any>(null);
 const search = ref(props.searchQuery);
 const statusFilter = ref(props.statusQuery);
-const direction = ref<GraphDirection>('RIGHT');
+const direction = ref<GraphDirection>('DOWN');
 const listMode = ref(false);
 const compactSearchOpen = ref(false);
 const inspectorOpen = ref(false);
@@ -190,6 +195,7 @@ const flowEdges = computed(() => canvasEdges.value
   target: edge.target,
   label: edge.label,
   type: 'smoothstep',
+  markerEnd: { type: MarkerType.ArrowClosed },
   class: `graph-edge graph-edge-${edge.type}`,
   data: { edge },
 })));
@@ -224,13 +230,19 @@ async function layout() {
   }
   const signature = graphLayoutSignature(props.model.id, direction.value, canvasNodes.value, canvasEdges.value);
   const cached = layoutCache.get(signature);
+  const layoutOnlyEdges = semanticToolColumnLayoutEdges(
+    props.model.id,
+    direction.value,
+    canvasNodes.value,
+    canvasEdges.value,
+  );
   const graph = cached ? null : await runGraphLayout({
       id: props.model.id,
       layoutOptions: {
         'elk.algorithm': 'layered',
         'elk.direction': direction.value,
-        'elk.spacing.nodeNode': '42',
-        'elk.layered.spacing.nodeNodeBetweenLayers': '82',
+        'elk.spacing.nodeNode': '32',
+        'elk.layered.spacing.nodeNodeBetweenLayers': '56',
         ...(props.model.id.startsWith('semantic-lineage:') ? {
           'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
           'elk.layered.crossingMinimization.forceNodeModelOrder': 'true',
@@ -238,10 +250,13 @@ async function layout() {
       },
       children: canvasNodes.value.map((node) => ({
         id: node.id,
-        width: node.raw?.semantic_view ? 228 : 196,
-        height: node.raw?.semantic_view ? 118 : 76,
+        ...graphNodeSize(node),
       })),
-      edges: canvasEdges.value.map((edge) => ({ id: edge.id, sources: [edge.source], targets: [edge.target] })),
+      edges: [...canvasEdges.value, ...layoutOnlyEdges].map((edge) => ({
+        id: edge.id,
+        sources: [edge.source],
+        targets: [edge.target],
+      })),
     });
   if (epoch !== layoutEpoch) return;
   const currentNodes = [...canvasNodes.value];
@@ -258,9 +273,14 @@ async function layout() {
         ? { x: (index % 6) * 238, y: Math.floor(index / 6) * 158 }
         : { x: Math.floor(index / 6) * 278, y: (index % 6) * 118 }
     );
+    const size = graphNodeSize(node);
     return {
       id: node.id,
       position: { x: position.x || 0, y: position.y || 0 },
+      style: {
+        width: `${size.width}px`,
+        minHeight: `${size.height}px`,
+      },
       data: {
         label: node.label,
         description: nodeDescription(node),
@@ -348,6 +368,17 @@ function scheduleFit(instance = flow.value) {
       fitTimer = window.setTimeout(fit, 120);
     });
   });
+}
+
+function graphNodeSize(node: GraphNodeView) {
+  const labelLength = Array.from(String(node.label || '')).length;
+  const semantic = Boolean(node.raw?.semantic_view);
+  return {
+    width: Math.max(164, Math.min(236, 138 + labelLength * 5)),
+    height: semantic
+      ? (node.outputSummary || node.metrics?.length ? 94 : 76)
+      : 70,
+  };
 }
 
 function selectListRow(row: Record<string, unknown>) {
@@ -514,7 +545,7 @@ onBeforeUnmount(() => {
       :elements-selectable="true"
       :nodes-focusable="true"
       :edges-focusable="true"
-      :min-zoom="compact ? 0.04 : 0.18"
+      :min-zoom="compact ? 0.12 : 0.45"
       @pane-ready="paneReady"
       @nodes-initialized="scheduleFit()"
       @node-click="selectNode"

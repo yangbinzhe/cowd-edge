@@ -11487,10 +11487,20 @@ export interface components {
             minimum_score_basis_points?: number | null;
             required_evidence: string[];
         };
+        ExecutionActivityContentProjection: {
+            content_ref?: string | null;
+            kind: string;
+            structured?: unknown;
+            summary?: string | null;
+            /** @default false */
+            truncated: boolean;
+        };
         /** ExecutionActivityDetailProjection */
         ExecutionActivityDetailProjection: {
             activity: components["schemas"]["ExecutionActivityProjection"];
             execution_id: string;
+            input?: components["schemas"]["ExecutionActivityContentProjection"] | null;
+            output?: components["schemas"]["ExecutionActivityContentProjection"] | null;
             /** @default [] */
             related_entities: components["schemas"]["ProjectionEntity"][];
             /** @default [] */

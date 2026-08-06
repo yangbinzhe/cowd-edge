@@ -3,6 +3,10 @@ import { t } from '../../i18n';
 import { computed, ref } from 'vue';
 import { FileCheck2 } from 'lucide-vue-next';
 import { displayStatus } from '../../i18n/domain/status';
+import {
+  activityDisplaySummary,
+  activityEvidenceReferenceCount,
+} from '../../adapters/executionActivity';
 
 const props = withDefaults(defineProps<{
   items: Array<Record<string, unknown>>;
@@ -66,29 +70,8 @@ function itemDuration(item: Record<string, unknown>) {
     : `${(duration / 1_000).toFixed(duration >= 10_000 ? 0 : 1).replace(/\.0$/, '')} s`;
 }
 
-function compactStructuredDetail(value: string) {
-  const text = value.replace(/\s+/g, ' ').trim();
-  if (!text) return '';
-  if (/^(?:\{|\[)/.test(text)) {
-    try {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) return t('component.workbench.timeline.items', { count: parsed.length });
-      for (const key of ['summary', 'message', 'error', 'status', 'result', 'decision']) {
-        if (typeof parsed?.[key] === 'string' && parsed[key].trim()) return parsed[key].trim();
-      }
-      return t('component.workbench.timeline.fields', { count: Object.keys(parsed || {}).length });
-    } catch {
-      return t('component.workbench.timeline.structuredDetail');
-    }
-  }
-  const starts = [text.indexOf(' {'), text.indexOf(' [')].filter((index) => index >= 0);
-  const jsonStart = starts.length ? Math.min(...starts) : -1;
-  const summary = jsonStart >= 0 ? text.slice(0, jsonStart) : text;
-  return summary;
-}
-
 function itemDetail(item: Record<string, unknown>) {
-  return compactStructuredDetail(String(item.detail || item.summary || item.message || ''));
+  return activityDisplaySummary(item);
 }
 
 function itemDetailPreview(item: Record<string, unknown>) {
@@ -126,26 +109,7 @@ function itemLane(item: Record<string, unknown>) {
 }
 
 function itemEvidenceCount(item: Record<string, unknown>) {
-  const raw = (item.raw || {}) as Record<string, unknown>;
-  const direct = [
-    ...(Array.isArray((item as any).evidence_refs) ? (item as any).evidence_refs : []),
-    ...(Array.isArray(raw.evidence_refs) ? raw.evidence_refs : []),
-    raw.full_output_ref,
-    raw.output_ref,
-  ];
-  const typed = [
-    ...(Array.isArray(item.refs) ? item.refs : []),
-    ...(Array.isArray(raw.refs) ? raw.refs : []),
-  ].flatMap((reference: any) => {
-    if (typeof reference === 'string') {
-      return /^(?:evidence|tool|memory|matrix|audit):\/\//.test(reference) ? [reference] : [];
-    }
-    const kind = String(reference?.type || reference?.kind || '').toLowerCase();
-    return kind.includes('evidence') || ['tool_output', 'memory', 'matrix', 'audit'].includes(kind)
-      ? [reference?.ref || reference?.id]
-      : [];
-  });
-  return new Set([...direct, ...typed].map(String).filter(Boolean)).size;
+  return activityEvidenceReferenceCount(item);
 }
 
 function itemDepth(item: Record<string, unknown>) {

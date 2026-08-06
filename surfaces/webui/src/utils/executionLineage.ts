@@ -109,9 +109,7 @@ export function combineExecutionLineage(
   const allActivities = canonicalActivityEvents(activitySources, 'audit');
   const graphActivities = businessGraphActivities(allActivities)
     .filter((activity) => BUSINESS_ACTIVITY_KINDS.has(activity.kind));
-  const activities = graphActivities.filter((activity) => (
-    activity.execution_id === root.execution_id
-  ));
+  const activities = graphActivities;
   if (!activities.length) return null;
   const activityIds = new Set(activities.map((activity) => activity.id));
   const relations = canonicalActivityRelations(activitySources)
@@ -159,6 +157,7 @@ export function combineExecutionLineage(
       duration_ms: activity.duration_ms || 0,
     },
     duration_ms: activity.duration_ms,
+    sequence: activity.canonical.sequence,
     started_at_ms: activity.canonical.started_at_ms,
     completed_at_ms: activity.completed_at_ms,
     parallel_group_id: activity.parallel_group_id,

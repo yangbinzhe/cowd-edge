@@ -69,9 +69,9 @@ describe('GraphSurface', () => {
     expect(wrapper.get('.graph-node-content strong').text()).toBe('WebSearch');
     expect(wrapper.get('.graph-node-content small').text()).toBe('工具调用');
     expect(wrapper.findAll('.graph-toolbar .graph-icon-action').length).toBe(5);
-    expect(wrapper.findAll('[aria-label="从上到下"]')).toHaveLength(1);
-    await wrapper.get('[aria-label="从上到下"]').trigger('click');
     expect(wrapper.findAll('[aria-label="从左到右"]')).toHaveLength(1);
+    await wrapper.get('[aria-label="从左到右"]').trigger('click');
+    expect(wrapper.findAll('[aria-label="从上到下"]')).toHaveLength(1);
 
     await wrapper.get('[aria-label="全屏"]').trigger('click');
     expect(wrapper.emitted('toggleFullscreen')).toHaveLength(1);

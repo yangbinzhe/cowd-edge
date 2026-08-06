@@ -12,6 +12,7 @@ import {
   businessGraphActivities,
   canonicalActivityEvents,
   conversationActivityTree,
+  presentActivityDetail,
 } from './executionActivity';
 
 function activity(
@@ -143,6 +144,27 @@ describe('canonical execution activity adapter', () => {
     expect(verifyBatch?.activity.kind).toBe('tool_batch');
     expect(verifyBatch?.activity.parent_activity_id).toBe(verify.activity_id);
     expect(verifyBatch?.children[0].activity.id).toBe('tool:read');
+  });
+
+  it('keeps running and failed tool groups open but folds successful terminal groups', () => {
+    const agent = activity('agent:worker', 'agent');
+    const tool = {
+      ...activity('tool:worker', 'tool', agent.activity_id),
+      tool_call_id: 'call:worker',
+      status: 'running',
+      completed_at_ms: undefined,
+    } satisfies ExecutionActivityProjection;
+    const treeFor = (status: string) => conversationActivityTree(
+      canonicalActivityEvents([{
+        execution_id: 'execution',
+        activities: [agent, { ...tool, status }],
+      } as unknown as ExecutionProjection]),
+      [],
+    )[0].children[0].activity;
+
+    expect(activityAutoCollapsed(treeFor('running'))).toBe(false);
+    expect(activityAutoCollapsed(treeFor('failed'))).toBe(false);
+    expect(activityAutoCollapsed(treeFor('completed'))).toBe(true);
   });
 
   it('keeps Session activity events in the technical view instead of merging business topology', () => {
@@ -302,5 +324,43 @@ describe('canonical execution activity adapter', () => {
 
     expect(tree[0].activity.detail).toContain('researcher 1');
     expect(tree[0].activity.canonical.agent_instance_id).toBe('researcher-1');
+  });
+
+  it('presents typed Activity input and output while keeping raw facts behind one drill-down', () => {
+    const canonical = activity('tool:render', 'tool', 'agent:writer');
+    const detail = presentActivityDetail({
+      schema_version: 1,
+      execution_id: 'execution',
+      activity: canonical,
+      input: {
+        kind: 'object',
+        summary: '2 fields',
+        structured: { source: 'artifact://report', format: 'markdown' },
+        truncated: false,
+      },
+      output: {
+        kind: 'object',
+        summary: 'Report generated',
+        structured: { path: 'workspace://report.md', status: 'completed' },
+        truncated: false,
+      },
+      relations: [],
+      related_entities: [],
+    } as any, { id: 'tool:render', title: 'Render report' });
+
+    expect(detail.input).toEqual({
+      source: 'artifact://report',
+      format: 'markdown',
+    });
+    expect(detail.output).toEqual({
+      path: 'workspace://report.md',
+      status: 'completed',
+    });
+    expect(detail.detail).toBe('Report generated');
+    expect(detail.raw).toMatchObject({
+      activity: { activity_id: 'tool:render' },
+      input: { kind: 'object' },
+      output: { kind: 'object' },
+    });
   });
 });

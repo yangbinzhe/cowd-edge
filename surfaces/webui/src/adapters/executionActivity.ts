@@ -1,6 +1,7 @@
 import type {
   ActivityEvent,
   ExecutionActivityProjection,
+  ExecutionActivityDetailProjection,
   ExecutionActivityRelation,
   ExecutionProjection,
 } from '../types';
@@ -36,6 +37,114 @@ export interface ToolActivitySummary {
   failed: number;
   running: number;
   pending: number;
+}
+
+export function presentActivityDetail(
+  detail: ExecutionActivityDetailProjection,
+  fallback: Record<string, any>,
+) {
+  const input = activityContentValue(detail.input);
+  const output = activityContentValue(detail.output);
+  const summary = activityContentSummary(detail.output)
+    || activityContentSummary(detail.input)
+    || String(detail.activity?.result_summary || detail.activity?.public_summary || fallback.detail || '');
+  return {
+    ...fallback,
+    detail: summary,
+    input,
+    output,
+    raw: {
+      activity: detail.activity,
+      relations: detail.relations,
+      related_entities: detail.related_entities,
+      input: detail.input,
+      output: detail.output,
+    },
+  };
+}
+
+export function activityDisplaySummary(item: Record<string, any>) {
+  const value = item.result_summary
+    || item.detail
+    || item.summary
+    || item.message
+    || item.output
+    || '';
+  return compactStructuredSummary(value);
+}
+
+export function activityEvidenceReferenceCount(item: Record<string, any>) {
+  const raw = (item.raw || {}) as Record<string, any>;
+  const direct = [
+    ...(Array.isArray(item.evidence_refs) ? item.evidence_refs : []),
+    ...(Array.isArray(raw.evidence_refs) ? raw.evidence_refs : []),
+    raw.full_output_ref,
+    raw.output_ref,
+  ];
+  const typed = [
+    ...(Array.isArray(item.refs) ? item.refs : []),
+    ...(Array.isArray(raw.refs) ? raw.refs : []),
+  ].flatMap((reference: any) => {
+    if (typeof reference === 'string') {
+      return /^(?:evidence|tool|memory|matrix|audit):\/\//.test(reference)
+        ? [reference]
+        : [];
+    }
+    const kind = String(reference?.type || reference?.kind || '').toLowerCase();
+    return kind.includes('evidence')
+      || ['tool_output', 'memory', 'matrix', 'audit'].includes(kind)
+      ? [reference?.ref || reference?.id]
+      : [];
+  });
+  return new Set([...direct, ...typed].map(String).filter(Boolean)).size;
+}
+
+export function compactStructuredSummary(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return structuredValueSummary(value);
+  const text = String(value).replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  if (/^(?:\{|\[)/.test(text)) {
+    try {
+      return structuredValueSummary(JSON.parse(text));
+    } catch {
+      return t('component.workbench.timeline.structuredDetail');
+    }
+  }
+  const starts = [text.indexOf(' {'), text.indexOf(' [')].filter((index) => index >= 0);
+  const jsonStart = starts.length ? Math.min(...starts) : -1;
+  return jsonStart >= 0 ? text.slice(0, jsonStart) : text;
+}
+
+function activityContentValue(content: any) {
+  if (!content) return null;
+  return content.structured ?? content.summary ?? content.content_ref ?? null;
+}
+
+function activityContentSummary(content: any) {
+  if (!content) return '';
+  return String(content.summary || compactStructuredSummary(content.structured) || '').trim();
+}
+
+function structuredValueSummary(value: any): string {
+  if (Array.isArray(value)) {
+    return t('component.workbench.timeline.items', { count: value.length });
+  }
+  if (!value || typeof value !== 'object') return String(value || '');
+  for (const key of [
+    'summary',
+    'message',
+    'error',
+    'result_summary',
+    'output_preview',
+    'outcome',
+    'result',
+    'decision',
+    'status',
+  ]) {
+    if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim();
+  }
+  return t('component.workbench.timeline.fields', { count: Object.keys(value).length });
 }
 
 export function canonicalActivityEvents(
@@ -207,7 +316,11 @@ export function businessGraphActivities(activities: ActivityView[]) {
 }
 
 export function activityAutoCollapsed(activity: ActivityView) {
-  if (activity.tool_summary) return true;
+  if (activity.tool_summary) {
+    return activity.tool_summary.running === 0
+      && activity.tool_summary.pending === 0
+      && activity.tool_summary.failed === 0;
+  }
   const status = normalizedStatus(activity.status);
   if (!TERMINAL.has(status) || ATTENTION.has(status)) return false;
   if (activity.kind === 'tool' || activity.kind === 'tool_batch') return true;

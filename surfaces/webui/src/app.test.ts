@@ -1114,9 +1114,6 @@ describe('Cowd Vue WebUI shell', () => {
     expect(timeline.text()).not.toContain('{"path"');
     expect(timeline.text()).not.toContain('执行阶段');
     expect(timeline.text()).not.toContain('memory recall');
-    await timeline
-      .get('.execution-activity-node[data-kind="tool_batch"] .execution-activity-toggle')
-      .trigger('click');
     expect(timeline.text()).toContain('workspace.read');
     wrapper.unmount();
   });
@@ -1786,7 +1783,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('审计选中证据');
   });
 
-  it('hydrates Team execution evidence and updates an existing Mission schedule', async () => {
+  it('loads Mission schedule and Team evidence only when their owning section is opened', async () => {
     const missionControl = vi.spyOn(api, 'missionControl').mockResolvedValue({
       snapshot: {
         projection: {
@@ -1831,9 +1828,9 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/mission?section=schedules');
     await settleAsync();
 
-    expect(teamRun).toHaveBeenCalledWith('team-1');
-    expect(teamPlan).toHaveBeenCalledWith('team-1');
-    expect(teamEvidence).toHaveBeenCalledWith('team-1');
+    expect(teamRun).not.toHaveBeenCalled();
+    expect(teamPlan).not.toHaveBeenCalled();
+    expect(teamEvidence).not.toHaveBeenCalled();
     await wrapper.get('button[aria-label="编辑计划"]').trigger('click');
     await settle();
     await wrapper.get('[data-section="schedules"] textarea').setValue('Updated objective');
@@ -1849,13 +1846,21 @@ describe('Cowd Vue WebUI shell', () => {
       expected_revision: 3,
       objective: 'Updated objective',
     }));
+    wrapper.unmount();
+
+    const teamWrapper = await mountApp('/mission?section=teams');
+    await settleAsync();
+    expect(teamRun).toHaveBeenCalledWith('team-1');
+    expect(teamPlan).toHaveBeenCalledWith('team-1');
+    expect(teamEvidence).toHaveBeenCalledWith('team-1');
+    teamWrapper.unmount();
+
     missionControl.mockRestore();
     teamRun.mockRestore();
     teamPlan.mockRestore();
     teamEvidence.mockRestore();
     schedules.mockRestore();
     updateSchedule.mockRestore();
-    wrapper.unmount();
   });
 
   it('loads Harness Eval and Evolution drilldowns from their owning workbench', async () => {
@@ -3256,7 +3261,9 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     expect(wrapper.text()).toContain('治理动作');
     expect(wrapper.text()).toContain('运行时恢复');
-    expect(wrapper.text()).toContain('Need tool access');
+    expect(wrapper.text()).not.toContain('Need tool access');
+    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/mission/approvals'))
+      .toBe(false);
     expect(wrapper.get('button.danger-action[disabled]').text()).toContain('应用恢复');
     await wrapper.findAll('button.ghost-action').find((button) => button.text().includes('加载恢复报告'))?.trigger('click');
     await settleAsync();

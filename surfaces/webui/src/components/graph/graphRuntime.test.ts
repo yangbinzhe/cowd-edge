@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/graph';
-import { graphDiagnostics, graphExportPayload, graphLayoutSignature } from './graphRuntime';
+import {
+  graphDiagnostics,
+  graphExportPayload,
+  graphLayoutSignature,
+  semanticToolColumnLayoutEdges,
+} from './graphRuntime';
 
 const nodes: GraphNodeView[] = [
   { id: 'a', type: 'mission', label: 'Mission A', status: 'running' },
@@ -48,5 +53,56 @@ describe('graph runtime contracts', () => {
     }));
     expect(graphDiagnostics(large, []).duplicateNodeIds).toEqual([]);
     expect(graphExportPayload({ id: 'large', title: 'Large', nodes: large, edges: [] }, large, [], 'RIGHT', graphDiagnostics(large, [])).nodes).toHaveLength(500);
+  });
+
+  it('adds layout-only ordering for tools under one Agent without exporting a false relation', () => {
+    const semanticNodes: GraphNodeView[] = [{
+      id: 'agent',
+      type: 'agent_task',
+      label: 'Agent',
+      status: 'running',
+      raw: { executor_kind: 'agent' },
+    }, {
+      id: 'tool-b',
+      type: 'tool',
+      label: 'Tool B',
+      status: 'running',
+      raw: { executor_kind: 'tool', sequence: 2 },
+    }, {
+      id: 'tool-a',
+      type: 'tool',
+      label: 'Tool A',
+      status: 'completed',
+      raw: { executor_kind: 'tool', sequence: 1 },
+    }];
+    const semanticEdges: GraphEdgeView[] = [{
+      id: 'agent-a',
+      source: 'agent',
+      target: 'tool-a',
+      type: 'invokes',
+    }, {
+      id: 'agent-b',
+      source: 'agent',
+      target: 'tool-b',
+      type: 'invokes',
+    }];
+
+    expect(semanticToolColumnLayoutEdges(
+      'activity-lineage:execution',
+      'DOWN',
+      semanticNodes,
+      semanticEdges,
+    )).toEqual([expect.objectContaining({
+      source: 'tool-a',
+      target: 'tool-b',
+      type: 'layout_only',
+    })]);
+    expect(graphExportPayload(
+      { id: 'activity-lineage:execution', title: 'Execution', nodes: semanticNodes, edges: semanticEdges },
+      semanticNodes,
+      semanticEdges,
+      'DOWN',
+      graphDiagnostics(semanticNodes, semanticEdges),
+    ).edges).toHaveLength(2);
   });
 });

@@ -25,6 +25,7 @@ import {
 import {
   businessGraphActivities,
   canonicalActivityEvents,
+  presentActivityDetail,
 } from '../adapters/executionActivity';
 
 const BUSINESS_TIMELINE_KINDS = new Set([
@@ -574,15 +575,7 @@ async function openActivityDetail(item: Record<string, unknown>) {
       ...(detail.activity?.evidence_refs || []),
       ...(detail.activity?.artifact_refs || []),
     ])).slice(0, 100);
-    store.selectedActivity = {
-      ...item,
-      raw: {
-        activity: detail.activity,
-        relations: detail.relations,
-        related_entities: detail.related_entities,
-      },
-      output: detail.related_entities,
-    };
+    store.selectedActivity = presentActivityDetail(detail, item);
   } catch (error) {
     if (request !== activityDetailRequest) return;
     store.selectedActivity = {

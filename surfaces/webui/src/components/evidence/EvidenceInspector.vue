@@ -4,7 +4,6 @@ import { GitCompare, Link, Pin, RotateCcw, X } from 'lucide-vue-next';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
 import StatusPill from '../workbench/StatusPill.vue';
-import RawPayload from '../workbench/RawPayload.vue';
 import { evidenceBacklinks, evidenceComparison, evidenceDisplayState, evidenceSourceRoute } from './evidenceRuntime';
 
 const props = withDefaults(defineProps<{
@@ -57,8 +56,8 @@ watch([normalizedRefs, () => props.sessionId], resolveAll, { immediate: true });
         <small>{{ t('graph.evidence.summary', { count: normalizedRefs.length }) }}</small>
       </div>
       <div class="button-row">
-        <button class="ghost-action" type="button" :disabled="loading || !normalizedRefs.length" @click="resolveAll"><RotateCcw :size="14" />{{ t('graph.action.retry') }}</button>
-        <button class="ghost-action" type="button" @click="emit('close')"><X :size="14" />{{ t('graph.action.close') }}</button>
+        <button class="icon-action" type="button" :disabled="loading || !normalizedRefs.length" :aria-label="t('graph.action.retry')" :title="t('graph.action.retry')" @click="resolveAll"><RotateCcw :size="14" /></button>
+        <button class="icon-action" type="button" :aria-label="t('graph.action.close')" :title="t('graph.action.close')" @click="emit('close')"><X :size="14" /></button>
       </div>
     </header>
     <p v-if="loading" class="empty-note">{{ t('graph.state.loadingEvidence') }}</p>
@@ -91,6 +90,5 @@ watch([normalizedRefs, () => props.sessionId], resolveAll, { immediate: true });
         </table>
       </div>
     </section>
-    <RawPayload v-if="subject" :title="t('graph.inspector.raw')" :data="subject" />
   </aside>
 </template>

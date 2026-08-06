@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useCapabilitySection } from "../composables/useCapabilitySection";
-const { isSectionActive } = useCapabilitySection();
+const { activeSection, isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
@@ -26,7 +26,6 @@ import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 import { applyMissionProjectionDelta } from '../adapters/missionProjection';
 import { adaptMissionControlGraph } from '../adapters/missionControlGraph';
-import { combineExecutionLineage } from '../utils/executionLineage';
 import type {
   MissionCommand,
   MissionControlProjection,
@@ -39,7 +38,7 @@ const projections = useProjectionRegistryStore();
 const route = useRoute();
 const loading = ref(false);
 const error = ref('');
-const showFullTrace = ref(true);
+const showFullTrace = ref(false);
 const selectedMissionId = ref('');
 const selectedSessionId = ref('');
 const selectedTeamId = ref('');
@@ -75,6 +74,7 @@ const editingScheduleRevision = ref(0);
 const selectedExecutionNode = ref<any>(null);
 const selectedTraceEvidence = ref<Record<string, unknown> | null>(null);
 let missionLiveSource: LiveSourceLease | null = null;
+const loadedAuxiliarySections = new Set<string>();
 const controlProjection = computed<MissionControlProjection | Record<string, never>>(
   () => missionSnapshot.value?.projection || {},
 );
@@ -252,10 +252,7 @@ const cleanCounters = computed(() => ({
 const executionProjection = computed(() => selectedExecutionId.value ? projections.projectionFor(selectedExecutionId.value) : null);
 const missionAggregateGraph = computed(() => adaptMissionControlGraph(
   controlProjection.value as MissionControlProjection,
-));
-const executionGraph = computed(() => combineExecutionLineage(
-  selectedExecutionId.value,
-  [executionProjection.value],
+  executionProjection.value ? [executionProjection.value] : [],
 ));
 const executionCommandRows = computed(() => executionProjection.value?.available_commands || []);
 const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
@@ -353,23 +350,13 @@ async function refresh() {
   // best-effort read cannot hide a valid execution strategy.
   if (requestedExecutionId) selectExecutionProjection(requestedExecutionId);
   try {
-    const [nextMission, nextApprovals, nextRelations, nextConflicts, nextSchedules] = await Promise.all([
-      api.missionControl(selectedMissionId.value),
-      api.missionApprovals().catch(() => ({})),
-      api.missionRelations().catch(() => ({})),
-      api.missionConflicts().catch(() => ({})),
-      api.missionSchedules().catch(() => ({})),
-    ]);
+    const nextMission = await api.missionControl(selectedMissionId.value);
     missionSnapshot.value = nextMission.snapshot;
     selectedMissionId.value = String(
       nextMission.snapshot?.projection?.selected_mission_id
       || selectedMissionId.value
       || '',
     );
-    approvals.value = nextApprovals;
-    relations.value = nextRelations;
-    conflicts.value = nextConflicts;
-    scheduleResponse.value = nextSchedules;
     if (!selectedSessionId.value && declaredActiveSessionId.value && missionSessionIds.value.has(declaredActiveSessionId.value)) {
       selectedSessionId.value = declaredActiveSessionId.value;
     }
@@ -377,15 +364,66 @@ async function refresh() {
     const requestedTeamId = typeof route.query.team_id === 'string' ? route.query.team_id.trim() : '';
     if (requestedTeamId) selectedTeamId.value = requestedTeamId;
     if (!selectedTeamId.value) selectedTeamId.value = teamRunRows.value[0]?.id || '';
-    const executionId = requestedExecutionId || executionGraphRows.value[0]?.graph;
+    const executionId = requestedExecutionId || (
+      activeSection.value === 'runtime-v2' ? executionGraphRows.value[0]?.graph : ''
+    );
     selectExecutionProjection(executionId);
-    await refreshSelectedSession();
-    if (selectedTeamId.value) await loadTeamRun(selectedTeamId.value, false);
+    await refreshAuxiliarySection(activeSection.value || 'overview', true);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     loading.value = false;
   }
+}
+
+async function refreshAuxiliarySection(section: string, force = false) {
+  const sectionId = section || 'overview';
+  if (!force && loadedAuxiliarySections.has(sectionId)) return;
+  switch (sectionId) {
+    case 'approvals':
+      approvals.value = await api.missionApprovals();
+      break;
+    case 'relations':
+    case 'routes':
+      relations.value = await api.missionRelations();
+      break;
+    case 'runtime-v2':
+      if (!selectedExecutionId.value) {
+        selectExecutionProjection(executionGraphRows.value[0]?.graph);
+      }
+      [conflicts.value] = await Promise.all([
+        api.missionConflicts(),
+        refreshSelectedSession(),
+      ]);
+      break;
+    case 'schedules':
+      scheduleResponse.value = await api.missionSchedules();
+      break;
+    case 'sessions':
+      await refreshSelectedSession();
+      break;
+    case 'teams':
+      if (selectedTeamId.value) await loadTeamRun(selectedTeamId.value, false);
+      break;
+    case 'trace':
+      if (!showFullTrace.value) {
+        showFullTrace.value = true;
+        const missionId = String(mission.value?.mission_id || '').trim();
+        if (missionId) {
+          missionLiveSource?.update({
+            kind: 'mission',
+            id: missionId,
+            cursor: missionSnapshot.value?.cursor || 0,
+            detail_scope: 'full',
+          });
+        }
+      }
+      await refreshSelectedSession();
+      break;
+    default:
+      break;
+  }
+  loadedAuxiliarySections.add(sectionId);
 }
 
 async function refreshSelectedSession() {
@@ -734,6 +772,7 @@ async function selectMission() {
   missionLiveSource = null;
   selectedSessionId.value = '';
   selectedTeamId.value = '';
+  loadedAuxiliarySections.clear();
   selectExecutionProjection('');
   await refresh();
   attachMissionLiveSource();
@@ -758,6 +797,22 @@ watch(
     }
     const requestedTeamId = typeof teamId === 'string' ? teamId.trim() : '';
     if (requestedTeamId && requestedTeamId !== selectedTeamId.value) await loadTeamRun(requestedTeamId, false);
+  },
+);
+watch(
+  activeSection,
+  async (section) => {
+    try {
+      const requestedExecutionId = typeof route.query.execution_id === 'string'
+        ? route.query.execution_id.trim()
+        : '';
+      if (!requestedExecutionId && !['runtime-v2', 'teams'].includes(section || 'overview')) {
+        selectExecutionProjection('');
+      }
+      await refreshAuxiliarySection(section || 'overview');
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err);
+    }
   },
 );
 onUnmounted(() => {
@@ -832,24 +887,21 @@ onUnmounted(() => {
       </article>
     </div>
 
-    <div class="clean-counts" v-show="isSectionActive('overview')" data-section="overview">
-      <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
-      <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
-      <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
-      <span><strong>{{ executionGraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.executionGraph') }}</span>
-      <span><strong>{{ conflictItems.length }}</strong>{{ t('page.mission.control.runtimeV2.conflicts') }}</span>
-      <span><strong>{{ cleanCounters.handoffs }}</strong>{{ t('unit.relations') }}</span>
+    <div v-show="isSectionActive('runtime-v2')" class="runtime-v2-stack" data-section="runtime-v2">
+      <StrategyDecisionSummary
+        v-if="executionProjection?.strategy"
+        :strategy="executionProjection.strategy"
+        :agents="executionProjection.agents"
+        :execution-id="selectedExecutionId"
+        :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
+        surface="mission"
+      />
+      <ExecutionTruthSummary
+        v-if="executionProjection"
+        :projection="executionProjection"
+        :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
+      />
     </div>
-
-    <StrategyDecisionSummary
-      v-if="executionProjection?.strategy"
-      class="mission-panel governed-wide mission-strategy-summary"
-      :strategy="executionProjection.strategy"
-      :agents="executionProjection.agents"
-      :execution-id="selectedExecutionId"
-      :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
-      surface="mission"
-    />
 
     <div class="mission-grid">
       <section class="mission-panel governed-wide" v-show="isSectionActive('overview')" data-section="overview">
@@ -887,28 +939,6 @@ onUnmounted(() => {
           :connection-state="loading ? 'connecting' : 'live'"
           @select="selectedExecutionNode = $event"
         />
-        <ExecutionGraphCanvas
-          v-if="executionGraph"
-          :graph="executionGraph"
-          :selected-node-id="String(selectedExecutionNode?.node_id || '')"
-          :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
-          @select="selectedExecutionNode = $event"
-        />
-        <ExecutionTruthSummary
-          v-if="executionProjection"
-          :projection="executionProjection"
-          :connection-state="selectedExecutionId ? projections.stateFor(selectedExecutionId) : 'idle'"
-        />
-        <div v-if="executionCommandRows.length" class="button-row" :aria-label="t('runtime.execution.commandGroup')">
-          <button
-            v-for="command in executionCommandRows"
-            :key="command.command"
-            class="ghost-action"
-            type="button"
-            :disabled="!command.available"
-            @click="executeProjectionCommand(command.command)"
-          >{{ executionCommandLabel(command.command) }}</button>
-        </div>
         <dl v-if="selectedExecutionNode" class="detail-list">
           <dt>{{ t('runtime.execution.node.field.node') }}</dt><dd>{{ selectedExecutionNode.node_id }}</dd>
           <dt>{{ t('runtime.execution.node.field.status') }}</dt><dd>{{ displayStatus(selectedExecutionNode.status || 'planned') }}</dd>
@@ -1108,6 +1138,24 @@ onUnmounted(() => {
           <span class="mini-chip"><AlertTriangle :size="14" />{{ t('page.mission.control.runtimeV2.conflicts') }} {{ conflictItems.length }}</span>
           <span class="mini-chip"><Database :size="14" />{{ t('page.mission.control.runtimeV2.evidence') }} {{ missionEvidenceRows.length }}</span>
         </div>
+        <div class="clean-counts">
+          <span><strong>{{ cleanCounters.tools }}</strong>{{ t('page.mission.control.page.text.d9eab38096') }}</span>
+          <span><strong>{{ cleanCounters.memory }}</strong>{{ t('page.mission.control.page.text.0910f37f8f') }}</span>
+          <span><strong>{{ relationCount }}</strong>{{ t('unit.relations') }}</span>
+          <span><strong>{{ executionGraphRows.length }}</strong>{{ t('page.mission.control.runtimeV2.executionGraph') }}</span>
+          <span><strong>{{ conflictItems.length }}</strong>{{ t('page.mission.control.runtimeV2.conflicts') }}</span>
+          <span><strong>{{ cleanCounters.handoffs }}</strong>{{ t('unit.relations') }}</span>
+        </div>
+        <div v-if="executionCommandRows.length" class="button-row" :aria-label="t('runtime.execution.commandGroup')">
+          <button
+            v-for="command in executionCommandRows"
+            :key="command.command"
+            class="ghost-action"
+            type="button"
+            :disabled="!command.available"
+            @click="executeProjectionCommand(command.command)"
+          >{{ executionCommandLabel(command.command) }}</button>
+        </div>
         <DataTable
           v-if="taskRows.length"
           searchable
@@ -1212,3 +1260,11 @@ onUnmounted(() => {
     <ObjectInspectorDrawer :title="t('page.mission.control.page.title.7ac6ef49a7')" :data="missionSnapshot" />
   </section>
 </template>
+
+<style scoped>
+.runtime-v2-stack {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+</style>
