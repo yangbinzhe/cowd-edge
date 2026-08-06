@@ -241,6 +241,92 @@ describe('WebUI multiplex live transport', () => {
     second.close();
   });
 
+  it('buffers the next subscription revision until its PATCH acknowledgement arrives', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    let resolvePatch!: (response: any) => void;
+    vi.spyOn(api, 'createLiveSubscription').mockResolvedValue({
+      schema_version: 1,
+      id: 'live-race',
+      surface_instance: 'webui:test',
+      revision: 1,
+      selector: { sources: [{ kind: 'session', id: 'A' }] },
+      selector_hash: 'selector-1',
+      expires_at_ms: Date.now() + 60_000,
+      stream_url: '/api/runtime/live/live-race',
+    } as any);
+    const patch = vi.spyOn(api, 'patchLiveSubscription').mockImplementation(
+      async () => new Promise((resolve) => { resolvePatch = resolve; }),
+    );
+    vi.spyOn(api, 'deleteLiveSubscription').mockResolvedValue({} as any);
+
+    const first = openLiveSource({ kind: 'session', id: 'A' }, { envelope: vi.fn() });
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    const second = openLiveSource({ kind: 'session', id: 'B' }, { envelope: vi.fn() });
+    await vi.waitFor(() => expect(patch).toHaveBeenCalledTimes(1));
+
+    FakeEventSource.instances[0].emit({
+      schema_version: 1,
+      subscription_id: 'live-race',
+      subscription_revision: 2,
+      source_kind: 'subscription',
+      source_id: 'live-race',
+      detail_scope: 'summary',
+      delivery_class: 'snapshot_reconstructable',
+      source_health: 'baseline',
+      event: 'subscription.revision.changed',
+      payload: { revision: 2 },
+    });
+    expect(liveTransportHealth().physical.error).toBe('');
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    resolvePatch({
+      schema_version: 1,
+      id: 'live-race',
+      surface_instance: 'webui:test',
+      revision: 2,
+      selector: { sources: [{ kind: 'session', id: 'A' }, { kind: 'session', id: 'B' }] },
+      selector_hash: 'selector-2',
+      expires_at_ms: Date.now() + 60_000,
+      stream_url: '/api/runtime/live/live-race',
+    });
+    await vi.waitFor(() => expect(liveTransportHealth().subscription.revision).toBe(2));
+    expect(liveTransportHealth().subscription.state).toBe('ready');
+    expect(liveTransportHealth().physical.error).toBe('');
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    first.close();
+    second.close();
+  });
+
+  it('still rejects an unacknowledged future revision without an active selector mutation', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('EventSource', FakeEventSource);
+    mockSubscriptionApi();
+    const lease = openLiveSource(
+      { kind: 'session', id: 'session-strict-revision' },
+      { envelope: vi.fn() },
+    );
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+
+    FakeEventSource.instances[0].emit({
+      schema_version: 1,
+      subscription_id: 'live-test',
+      subscription_revision: 2,
+      source_kind: 'subscription',
+      source_id: 'live-test',
+      detail_scope: 'summary',
+      delivery_class: 'snapshot_reconstructable',
+      source_health: 'baseline',
+      event: 'subscription.revision.changed',
+      payload: { revision: 2 },
+    });
+
+    expect(liveTransportHealth().subscription.state).toBe('degraded');
+    expect(liveTransportHealth().physical.error)
+      .toBe('Gateway live stream advanced beyond the acknowledged subscription revision');
+    lease.close();
+  });
+
   it('applies baselines before the revision barrier but withholds live deltas', async () => {
     vi.stubGlobal('EventSource', FakeEventSource);
     const subscriptionApi = mockSubscriptionApi();

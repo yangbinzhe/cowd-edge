@@ -1296,7 +1296,7 @@ export const useAppStore = defineStore('app', () => {
     if (!path) return;
     const link = document.createElement('a');
     link.href = api.workspaceDownloadUrl(path);
-    link.download = kind === 'dir' ? `${path.split('/').filter(Boolean).at(-1) || 'workspace'}.tar` : path.split('/').filter(Boolean).at(-1) || 'download';
+    link.download = kind === 'dir' ? `${path.split('/').filter(Boolean).at(-1) || 'workspace'}.zip` : path.split('/').filter(Boolean).at(-1) || 'download';
     link.rel = 'noopener';
     document.body.appendChild(link);
     link.click();
@@ -1916,6 +1916,33 @@ export const useAppStore = defineStore('app', () => {
     return result;
   }
 
+  async function executeSessionCommand(
+    command: string,
+    args: Record<string, unknown> = {},
+  ) {
+    const sessionId = String(args.session_id || activeSessionId.value || '').trim();
+    if (!sessionId) throw new Error('Session command requires an active Session');
+    commandError.value = '';
+    const chat = useChatSessionsStore();
+    try {
+      const mutation = await chat.runSessionCommandMutation(
+        sessionId,
+        () => executeCommand(command, { ...args, session_id: sessionId }),
+      );
+      if (!mutation.attached) {
+        throw new Error(
+          chat.states[sessionId]?.degradedReason
+          || chat.states[sessionId]?.lastError
+          || 'this WebUI tab could not acquire the Session writer',
+        );
+      }
+      return mutation.value;
+    } catch (error) {
+      commandError.value = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  }
+
   return {
     booted,
     sessionCreating,
@@ -2074,6 +2101,7 @@ export const useAppStore = defineStore('app', () => {
     failClosedAuthorization,
     refreshCommands,
     executeCommand,
+    executeSessionCommand,
     sessionTitle,
     sessionSnippet,
     compactTime,

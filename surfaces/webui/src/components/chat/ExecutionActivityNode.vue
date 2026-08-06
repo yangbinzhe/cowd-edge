@@ -24,10 +24,13 @@ import {
   type ActivityTreeNode,
   type ActivityView,
 } from '../../adapters/executionActivity';
+import type { ReasoningGroupView } from '../../adapters/reasoningPresentation';
+import ReasoningGroup from './ReasoningGroup.vue';
 
 const props = defineProps<{
   node: ActivityTreeNode;
   depth?: number;
+  reasoningGroups?: Record<string, ReasoningGroupView>;
 }>();
 const emit = defineEmits<{
   select: [activity: ActivityView];
@@ -36,6 +39,7 @@ const emit = defineEmits<{
 const manualCollapsed = ref<boolean | null>(null);
 const activity = computed(() => props.node.activity);
 const collapsed = computed(() => manualCollapsed.value ?? activityAutoCollapsed(activity.value));
+const activityReasoning = computed(() => props.reasoningGroups?.[activity.value.id]);
 
 watch(
   () => `${activity.value.status}:${activity.value.commit_cursor}`,
@@ -70,6 +74,7 @@ function formatTime(value: unknown) {
   const timestamp = Number(value || 0);
   return timestamp > 0 ? new Date(timestamp).toLocaleTimeString() : '';
 }
+
 </script>
 
 <template>
@@ -91,7 +96,11 @@ function formatTime(value: unknown) {
         <ChevronDown v-else :size="13" />
       </button>
       <span v-else class="execution-activity-rail" aria-hidden="true" />
-      <button class="execution-activity-main" type="button" @click="emit('select', activity)">
+      <button
+        class="execution-activity-main"
+        type="button"
+        @click="emit('select', activity)"
+      >
         <span class="execution-activity-icon">
           <component :is="activityIcon(activity.kind)" :size="13" />
         </span>
@@ -106,7 +115,9 @@ function formatTime(value: unknown) {
             <small v-if="activity.tool_summary.failed" class="failed"><CircleX :size="11" />{{ activity.tool_summary.failed }}</small>
             <small v-if="activity.tool_summary.running" class="running"><CircleDot :size="11" />{{ activity.tool_summary.running }}</small>
           </span>
-          <small v-if="!collapsed && activity.detail && activity.detail !== activity.title">
+          <small
+            v-if="!collapsed && activity.detail && activity.detail !== activity.title"
+          >
             {{ activity.detail }}
           </small>
           <small
@@ -135,12 +146,18 @@ function formatTime(value: unknown) {
         </span>
       </button>
     </div>
+    <ReasoningGroup
+      v-if="activity.kind === 'agent' && activityReasoning"
+      :group="activityReasoning"
+      variant="agent"
+    />
     <ol v-if="node.children.length && !collapsed" class="execution-activity-children">
       <ExecutionActivityNode
         v-for="child in node.children"
         :key="child.activity.id"
         :node="child"
         :depth="(depth || 0) + 1"
+        :reasoning-groups="reasoningGroups || {}"
         @select="emit('select', $event)"
       />
     </ol>
@@ -188,7 +205,16 @@ function formatTime(value: unknown) {
 .execution-activity-copy { min-width: 0; display: grid; gap: 2px; }
 .execution-activity-copy.has-tool-summary { display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .execution-activity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.execution-activity-copy small { color: var(--text-muted); line-height: 1.45; white-space: normal; overflow-wrap: anywhere; }
+.execution-activity-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
 .execution-activity-copy .execution-activity-result { color: var(--text); }
 .execution-activity-copy .execution-activity-reason { color: var(--danger); }
 .execution-tool-summary { min-width: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }

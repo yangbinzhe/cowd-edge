@@ -4,12 +4,14 @@ import {
   conversationActivityTree,
   type ActivityView,
 } from '../../adapters/executionActivity';
+import type { ReasoningGroupView } from '../../adapters/reasoningPresentation';
 import type { ExecutionActivityRelation } from '../../types';
 import ExecutionActivityNode from './ExecutionActivityNode.vue';
 
 const props = defineProps<{
   activities: ActivityView[];
   relations: ExecutionActivityRelation[];
+  reasoningGroups?: Record<string, ReasoningGroupView>;
 }>();
 const emit = defineEmits<{
   select: [activity: ActivityView];
@@ -24,6 +26,7 @@ const roots = computed(() => conversationActivityTree(props.activities, props.re
       v-for="node in roots"
       :key="node.activity.id"
       :node="node"
+      :reasoning-groups="reasoningGroups || {}"
       @select="emit('select', $event)"
     />
   </ol>

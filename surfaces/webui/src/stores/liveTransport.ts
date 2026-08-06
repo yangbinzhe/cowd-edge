@@ -96,6 +96,9 @@ let reconnectTimerGeneration = 0;
 let physicalGeneration = 0;
 let pendingDelete: LiveSubscription | null = null;
 let pendingCreate: PendingCreate | null = null;
+let subscriptionMutationInFlight = false;
+let pendingAcknowledgementEnvelopes: LiveEnvelope[] = [];
+let activeEnvelopeConsumer: ((envelope: LiveEnvelope) => void) | null = null;
 
 export function parseLiveEnvelope(data: string): LiveEnvelope {
   const envelope = JSON.parse(data) as LiveEnvelope;
@@ -176,6 +179,7 @@ function closePhysical() {
   physicalGeneration += 1;
   stream?.close();
   stream = null;
+  activeEnvelopeConsumer = null;
   physicalConnectionCount.value = 0;
 }
 
@@ -245,16 +249,7 @@ function openPhysical(expected: LiveSubscription) {
       for (const callbacks of owner.consumers.values()) callbacks.open?.();
     }
   };
-  const handleLiveEvent = (event: MessageEvent) => {
-    if (stream !== next || generation !== physicalGeneration) return;
-    let envelope: LiveEnvelope;
-    try {
-      envelope = parseLiveEnvelope(event.data);
-    } catch {
-      notifyError('Gateway live stream emitted invalid JSON');
-      scheduleRecreate();
-      return;
-    }
+  const consumeEnvelope = (envelope: LiveEnvelope) => {
     if (envelope.schema_version !== 1 || envelope.subscription_id !== expected.id) {
       notifyError('Gateway live stream identity or revision mismatch');
       scheduleRecreate();
@@ -263,6 +258,18 @@ function openPhysical(expected: LiveSubscription) {
     const currentRevision = Number(subscription?.revision || 0);
     if (envelope.subscription_revision < currentRevision) return;
     if (envelope.subscription_revision > currentRevision) {
+      if (
+        subscriptionMutationInFlight
+        && envelope.subscription_revision === currentRevision + 1
+      ) {
+        if (pendingAcknowledgementEnvelopes.length >= 1_024) {
+          notifyError('Gateway live acknowledgement buffer exceeded its safety bound');
+          scheduleRecreate();
+          return;
+        }
+        pendingAcknowledgementEnvelopes.push(envelope);
+        return;
+      }
       notifyError('Gateway live stream advanced beyond the acknowledged subscription revision');
       scheduleRecreate();
       return;
@@ -306,6 +313,19 @@ function openPhysical(expected: LiveSubscription) {
     }
     deliverEnvelope(envelope);
   };
+  activeEnvelopeConsumer = consumeEnvelope;
+  const handleLiveEvent = (event: MessageEvent) => {
+    if (stream !== next || generation !== physicalGeneration) return;
+    let envelope: LiveEnvelope;
+    try {
+      envelope = parseLiveEnvelope(event.data);
+    } catch {
+      notifyError('Gateway live stream emitted invalid JSON');
+      scheduleRecreate();
+      return;
+    }
+    consumeEnvelope(envelope);
+  };
   next.addEventListener('live', handleLiveEvent as EventListener);
   next.onerror = () => {
     if (stream !== next || generation !== physicalGeneration) return;
@@ -330,6 +350,7 @@ function scheduleRecreate(generation = physicalGeneration) {
     subscription = null;
     readyRevision = 0;
     pendingRevisionEnvelopes = [];
+    pendingAcknowledgementEnvelopes = [];
     physical.subscriptionId = '';
     physical.revision = 0;
     subscriptionHealth.state = 'syncing';
@@ -382,6 +403,7 @@ async function synchronize() {
         }
       }
       const previousRevision = subscription?.revision || 0;
+      subscriptionMutationInFlight = true;
       const response: any = subscription
         ? await api.patchLiveSubscription(subscription.id, {
           expected_revision: subscription.revision,
@@ -403,14 +425,20 @@ async function synchronize() {
       physical.subscriptionId = subscription.id;
       physical.revision = subscription.revision;
       physical.selectorHash = subscription.selector_hash;
+      subscriptionMutationInFlight = false;
       if (previousRevision !== subscription.revision) {
         readyRevision = 0;
         pendingRevisionEnvelopes = [];
         subscriptionHealth.revision = subscription.revision;
       }
+      const acknowledged = pendingAcknowledgementEnvelopes;
+      pendingAcknowledgementEnvelopes = [];
+      for (const envelope of acknowledged) activeEnvelopeConsumer?.(envelope);
       syncedGeneration = targetGeneration;
       if (changedIdentity || !stream) openPhysical(subscription);
     } catch (error) {
+      subscriptionMutationInFlight = false;
+      pendingAcknowledgementEnvelopes = [];
       physical.state = 'degraded';
       notifyError(error instanceof Error ? error.message : String(error));
       scheduleRecreate();
@@ -537,6 +565,9 @@ export function resetLiveTransportForTests() {
   syncFlight = null;
   pendingDelete = null;
   pendingCreate = null;
+  subscriptionMutationInFlight = false;
+  pendingAcknowledgementEnvelopes = [];
+  activeEnvelopeConsumer = null;
   readyRevision = 0;
   pendingRevisionEnvelopes = [];
   physicalGeneration = 0;

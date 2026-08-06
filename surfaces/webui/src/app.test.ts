@@ -295,6 +295,53 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.chat-page').exists()).toBe(true);
   });
 
+  it('opens the existing global Mission graph in place from the observer status', async () => {
+    vi.spyOn(api, 'missionControl').mockResolvedValue({
+      ok: true,
+      snapshot: {
+        schema_version: 1,
+        kind: 'mission_control.materialized_snapshot',
+        cursor: 4,
+        revision: 2,
+        needs_resync: false,
+        projection: {
+          missions: [{
+            mission_id: 'mission-global',
+            objective: 'Coordinate all active work',
+            status: 'active',
+            revision: 2,
+          }],
+          mission: { mission_id: 'mission-global' },
+          mission_graph: {
+            schema_version: 1,
+            mission_id: 'mission-global',
+            nodes: [{
+              node_id: 'mission:mission-global',
+              kind: 'mission',
+              label: 'Coordinate all active work',
+              status: 'active',
+              mission_id: 'mission-global',
+            }],
+            edges: [],
+          },
+        },
+      },
+    } as any);
+    const wrapper = await mountApp('/chat');
+    await settle();
+
+    const observer = wrapper.get('.mission-observer-entry');
+    expect(observer.attributes('aria-label')).toBe('打开全局 Mission 运行图');
+    await observer.trigger('click');
+    await settleAsync();
+
+    expect(wrapper.vm.$route.path).toBe('/chat');
+    expect(wrapper.get('.global-mission-graph-dialog').text())
+      .toContain('Coordinate all active work');
+    expect(wrapper.get('.global-mission-graph-dialog .execution-graph-canvas').exists())
+      .toBe(true);
+  });
+
   it('opens the unified command palette from slash and fills the selected command without executing it', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
@@ -320,6 +367,36 @@ describe('Cowd Vue WebUI shell', () => {
     expect(store.activeModal).toBeNull();
     expect((wrapper.get('.composer textarea').element as HTMLTextAreaElement).value).toBe('/status ');
     expect(execute).not.toHaveBeenCalled();
+    execute.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('dispatches the permissions slash through the Session writer command boundary', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.activeSessionId = 'permissions-session';
+    store.sessionCreating = false;
+    useChatSessionsStore().activeSessionId = 'permissions-session';
+    const execute = vi.spyOn(store, 'executeSessionCommand').mockResolvedValue({
+      ok: true,
+      data: {
+        permission_mode: 'danger-full-access',
+        persisted: true,
+      },
+    } as any);
+    const composer = wrapper.get('.composer textarea');
+
+    await composer.setValue('/permissions yolo');
+    await composer.trigger('keydown', { key: 'Enter' });
+    await settle();
+
+    expect(execute).toHaveBeenCalledWith('/permissions', {
+      session_id: 'permissions-session',
+      input: '/permissions yolo',
+      mode: 'yolo',
+    });
+    expect((composer.element as HTMLTextAreaElement).value).toBe('');
     execute.mockRestore();
     wrapper.unmount();
   });
@@ -827,6 +904,11 @@ describe('Cowd Vue WebUI shell', () => {
         token_usage: { input_tokens: 1_000, output_tokens: 20 },
       },
       {
+        id: 'structured-progress',
+        role: 'assistant',
+        content: '{"summary":"STRUCTURED AGENT RESULT SHOULD NOT BE A THOUGHT"}',
+      },
+      {
         id: 'answer',
         role: 'assistant',
         content: '最终分析结果。',
@@ -901,6 +983,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(activityTree.text()).toContain('工具调用');
     expect(activityTree.text()).toContain('已执行 1/1');
     expect(activityTree.text()).toContain('正在比对现有说明');
+    expect(activityTree.text()).not.toContain('STRUCTURED AGENT RESULT SHOULD NOT BE A THOUGHT');
     expect(activityTree.findAll('.execution-activity-node[data-kind="tool_batch"]')).toHaveLength(1);
     await activityTree
       .get('.execution-activity-node[data-kind="tool_batch"] .execution-activity-toggle')
@@ -1012,13 +1095,6 @@ describe('Cowd Vue WebUI shell', () => {
     ] as any;
     installCanonicalExecutionProjection('execution-live-now', 'turn-live-now', [
       {
-        id: 'think-1',
-        kind: 'think',
-        title: '思考',
-        detail: '先读取项目说明，再核对目标。',
-        status: 'running',
-      },
-      {
         id: 'tool-live',
         kind: 'tool',
         title: 'workspace.read',
@@ -1030,8 +1106,10 @@ describe('Cowd Vue WebUI shell', () => {
     const liveNow = wrapper.get('.conversation-live-now');
     expect(liveNow.text()).toContain('正在调用 workspace.read');
     expect(liveNow.text()).toContain('README.md');
+    const reasoning = wrapper.get('.reasoning-group.is-global');
+    expect(reasoning.text()).toContain('先读取项目说明');
     const timeline = wrapper.get('.execution-activity-tree');
-    expect(timeline.text()).toContain('先读取项目说明');
+    expect(timeline.text()).not.toContain('先读取项目说明');
     expect(timeline.text()).toContain('工具调用');
     expect(timeline.text()).not.toContain('{"path"');
     expect(timeline.text()).not.toContain('执行阶段');
@@ -1040,6 +1118,32 @@ describe('Cowd Vue WebUI shell', () => {
       .get('.execution-activity-node[data-kind="tool_batch"] .execution-activity-toggle')
       .trigger('click');
     expect(timeline.text()).toContain('workspace.read');
+    wrapper.unmount();
+  });
+
+  it('keeps a failed optimistic message in the transcript without rendering assistant execution UI', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'optimistic-error-session';
+    chat.activeSessionId = 'optimistic-error-session';
+    chat.active!.turns = [
+      {
+        id: 'local:failed',
+        role: 'user',
+        content: '保留这条已发送消息',
+        status: 'error',
+        submission_error: 'writer lease rejected',
+      },
+    ];
+    await nextTick();
+
+    expect(wrapper.get('.turn[data-role="user"] .markdown-body').text())
+      .toContain('保留这条已发送消息');
+    expect(wrapper.get('.turn-submission-error').text()).toContain('writer lease rejected');
+    expect(wrapper.find('.conversation-execution').exists()).toBe(false);
+    expect(wrapper.find('textarea').element.value).toBe('');
     wrapper.unmount();
   });
 

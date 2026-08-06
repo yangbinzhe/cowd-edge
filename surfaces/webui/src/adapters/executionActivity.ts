@@ -221,7 +221,10 @@ export function activityNeedsAttention(activity: ActivityView) {
 export function isBusinessGraphActivity(activity: ActivityView) {
   if (activity.kind === 'runtime' || activity.kind === 'context') return false;
   if (activity.kind === 'approval' && !activity.approval_id) return false;
-  if (activity.kind === 'model' && technicalModelActivity(activity)) return false;
+  if (
+    activity.kind === 'model'
+    && (technicalModelActivity(activity) || publicReasoningModelActivity(activity))
+  ) return false;
   if (['execution', 'goal', 'team', 'agent'].includes(activity.kind)) return true;
   if (internalOperationalActivity(activity)) return false;
   if (activity.kind === 'artifact' && internalArtifact(activity)) return false;
@@ -575,6 +578,18 @@ function technicalModelActivity(activity: ActivityView) {
     || value.includes('model_step')
     || value.includes('provider.call')
     || value.includes('provider_call');
+}
+
+function publicReasoningModelActivity(activity: ActivityView) {
+  const marker = [
+    activity.id,
+    activity.phase,
+    activity.canonical.phase,
+    activity.canonical.display_label,
+  ].join(' ').toLowerCase();
+  return marker.includes('public_reasoning')
+    || marker.includes('reasoning_summary')
+    || marker.includes('reasoning summary');
 }
 
 function internalOperationalActivity(activity: ActivityView) {

@@ -351,6 +351,39 @@ describe('chatSessions', () => {
     });
   });
 
+  it('publishes the user turn and loading placeholder before transport admission completes', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    const chat = useChatSessionsStore();
+    let resolveSend!: (value: unknown) => void;
+    vi.spyOn(api, 'sendMessage').mockImplementation(() => new Promise((resolve) => {
+      resolveSend = resolve;
+    }) as any);
+
+    const sending = chat.send('optimistic-session', '立即显示');
+
+    expect(chat.states['optimistic-session'].turns).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '立即显示',
+        status: 'streaming',
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+      }),
+    ]);
+    expect(chat.states['optimistic-session'].pending).toBe(true);
+
+    await vi.waitFor(() => expect(api.sendMessage).toHaveBeenCalledOnce());
+    resolveSend({
+      message: { message_id: 'message-now', sequence: 1, turn_id: 'turn-now' },
+      execution: { graph_id: 'execution-now', turn_id: 'turn-now', status: 'running' },
+    });
+    expect(await sending).toBe(true);
+  });
+
   it('batches one session stream without allowing transport resync to alter another session', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();
@@ -1967,7 +2000,7 @@ describe('chatSessions', () => {
     expect(chat.states['session-b'].draft).toBe('draft B');
   });
 
-  it('does not create a phantom user turn when writer attachment is rejected', async () => {
+  it('keeps the submitted user turn and attaches the writer error below it', async () => {
     setActivePinia(createPinia());
     const chat = useChatSessionsStore();
     vi.spyOn(api, 'attachSession')
@@ -1977,10 +2010,38 @@ describe('chatSessions', () => {
     vi.spyOn(api, 'sendMessage').mockResolvedValue({} as any);
 
     expect(await chat.send('read-only', 'must not appear')).toBe(false);
-    expect(chat.states['read-only'].turns).toEqual([]);
+    expect(chat.states['read-only'].turns).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: 'must not appear',
+        status: 'error',
+        submission_error: expect.stringContaining('writer lease rejected'),
+      }),
+    ]);
     expect(chat.states['read-only'].pending).toBe(false);
     expect(chat.states['read-only'].lastError).toContain('writer lease rejected');
     expect(api.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('admits an idle Session command through the writer lane and releases it afterwards', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    mockWriterAttachment();
+    const operation = vi.fn(async () => ({ ok: true, permission_mode: 'danger-full-access' }));
+
+    const result = await chat.runSessionCommandMutation('command-session', operation);
+
+    expect(result).toEqual({
+      attached: true,
+      value: { ok: true, permission_mode: 'danger-full-access' },
+    });
+    expect(operation).toHaveBeenCalledOnce();
+    expect(api.attachSession).toHaveBeenNthCalledWith(1, 'command-session', 'writer');
+    expect(api.acquireRuntimeLease).toHaveBeenCalledWith('command-session', 'collaborative');
+    expect(api.releaseRuntimeLease).toHaveBeenCalledWith('command-session');
+    expect(api.attachSession).toHaveBeenNthCalledWith(2, 'command-session', 'reader');
+    expect(chat.states['command-session'].attachmentRole).toBe('reader');
+    expect(chat.states['command-session'].writable).toBe(false);
   });
 
   it('fails closed on session authorization revocation and fences queued callbacks from the old stream', async () => {

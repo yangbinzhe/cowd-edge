@@ -60,6 +60,7 @@ export interface ChatTurn {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   status?: 'streaming' | 'complete' | 'error';
+  submission_error?: string;
   activity?: ActivityEvent[];
   activity_open?: boolean;
   blocks?: Array<Record<string, unknown>>;

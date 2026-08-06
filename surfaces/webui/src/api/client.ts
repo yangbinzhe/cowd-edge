@@ -871,6 +871,7 @@ export async function writeWithMetadata<T>(
       }
     }
     let apiError: CowdApiError | null = null;
+    let parsedErrorMessage = '';
     try {
       const parsed = JSON.parse(body) as Record<string, unknown>;
       if (parsed && typeof parsed.code === 'string' && typeof parsed.message === 'string') {
@@ -883,11 +884,19 @@ export async function writeWithMetadata<T>(
           recovery_actions: Array.isArray(parsed.recovery_actions) ? parsed.recovery_actions.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object')) : [],
           request_id: typeof parsed.request_id === 'string' ? parsed.request_id : null,
         };
+      } else if (typeof parsed?.error === 'string') {
+        parsedErrorMessage = parsed.error;
+      } else if (
+        parsed?.error
+        && typeof parsed.error === 'object'
+        && typeof (parsed.error as Record<string, unknown>).message === 'string'
+      ) {
+        parsedErrorMessage = String((parsed.error as Record<string, unknown>).message);
       }
     } catch {
       apiError = null;
     }
-    throw new ApiWriteError(apiError?.message || body || (response.status + ' ' + response.statusText), {
+    throw new ApiWriteError(apiError?.message || parsedErrorMessage || body || (response.status + ' ' + response.statusText), {
       endpoint: path,
       method: init.method || 'POST',
       payload_summary: payloadSummary(init.body),

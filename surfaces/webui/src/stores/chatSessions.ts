@@ -608,6 +608,7 @@ function reconcileOptimisticUserTurn(
   if (optimistic) {
     optimistic.id = canonical.messageId;
     optimistic.status = 'complete';
+    optimistic.submission_error = undefined;
     optimistic.sequence = canonical.sequence;
     optimistic.execution_id = canonical.executionId;
     optimistic.turn_id = canonical.turnId;
@@ -2271,6 +2272,37 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     });
   }
 
+  async function runSessionCommandMutation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<{ attached: true; value: T } | { attached: false }> {
+    const state = stateFor(sessionId);
+    const retainedWriter = state.attachmentRole === 'writer' && state.writable;
+    const retainedActiveTurn = hasActivePrimaryTurn(state);
+    state.lastError = '';
+    try {
+      const mutation = await withWriterMutation(sessionId, operation);
+      if (!mutation.attached) {
+        state.lastError = state.degradedReason || 'this WebUI tab could not acquire the Session writer';
+      }
+      return mutation;
+    } catch (error: any) {
+      state.lastError = String(error?.message || error || 'Session command failed');
+      throw error;
+    } finally {
+      // A command mutates Session state but does not start a turn. Do not let
+      // an idle one-shot command retain the writer lease after it completes.
+      if (
+        !retainedWriter
+        && !retainedActiveTurn
+        && !hasActivePrimaryTurn(state)
+        && state.attachmentRole === 'writer'
+      ) {
+        await releaseWriter(sessionId);
+      }
+    }
+  }
+
   async function releaseWriter(sessionId: string) {
     return serializeAttachment(sessionId, async () => {
       const state = stateFor(sessionId);
@@ -2442,8 +2474,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     } catch (error: any) {
       if (state.submissionEpoch !== epoch || state.reconnectBlocked) return false;
       state.lastError = String(error?.message || error || 'send failed');
+      const localTurn = state.turns.find((turn) => turn.id === localId);
+      if (localTurn) {
+        localTurn.status = 'error';
+        localTurn.submission_error = state.lastError;
+      }
       if (supplementing) {
-        state.turns = state.turns.filter((turn) => turn.id !== localId);
         upsertSessionActivity(sessionId, {
           id: `session-input:${idempotencyKey}:error`,
           kind: 'error',
@@ -2456,7 +2492,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       state.pending = false;
       stopProgressRecovery(sessionId);
       state.live = { ...(state.live || {}), status: 'error', status_detail: state.lastError, error: state.lastError };
-      state.turns = state.turns.filter((turn) => turn.id !== localId && turn.id !== state.streamTurnId);
+      state.turns = state.turns.filter((turn) => turn.id !== state.streamTurnId);
       state.streamTurnId = '';
       void releaseWriter(sessionId);
       return false;
@@ -2644,6 +2680,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     close,
     refreshProjection,
     attachSurface,
+    runSessionCommandMutation,
     detachSurface,
     failClosedAllSessionAuthorization,
     refreshAuthorization,

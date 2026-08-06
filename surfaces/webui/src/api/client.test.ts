@@ -468,6 +468,24 @@ describe('API authorization epoch', () => {
     });
   });
 
+  it('extracts a readable message from a legacy JSON write error envelope', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: 'writer lease rejected',
+    }), {
+      status: 409,
+      statusText: 'Conflict',
+      headers: { 'content-type': 'application/json' },
+    })));
+
+    await expect(writeWithMetadata('/api/sessions/session-1/messages', {
+      method: 'POST',
+    })).rejects.toMatchObject({
+      message: 'writer lease rejected',
+      status: 409,
+      body: '{"error":"writer lease rejected"}',
+    });
+  });
+
   it('returns immutable business data alongside readable write response metadata', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       receipt: { receipt_id: 'receipt-1' },

@@ -42,6 +42,37 @@ async function installOfflineGatewayContract(page) {
     ['/api/profiles', { profiles: [], active_profile: 'default' }],
     ['/api/slash', { commands: [] }],
     ['/api/sessions', { sessions: [] }],
+    ['/api/mission/control', {
+      ok: true,
+      snapshot: {
+        schema_version: 1,
+        kind: 'mission_control.materialized_snapshot',
+        cursor: 4,
+        revision: 2,
+        needs_resync: false,
+        projection: {
+          missions: [{
+            mission_id: 'mission-browser',
+            objective: 'Global mission browser proof',
+            status: 'active',
+            revision: 2,
+          }],
+          mission: { mission_id: 'mission-browser' },
+          mission_graph: {
+            schema_version: 1,
+            mission_id: 'mission-browser',
+            nodes: [{
+              node_id: 'mission:mission-browser',
+              kind: 'mission',
+              label: 'Global mission browser proof',
+              status: 'active',
+              mission_id: 'mission-browser',
+            }],
+            edges: [],
+          },
+        },
+      },
+    }],
     ['/api/workspace', {
       workspace_root: '/workspace',
       workspace_canonical: '/workspace',
@@ -127,6 +158,17 @@ test('new shell uses icon rail and right Activity/Workspace companion tabs', asy
   await page.getByRole('button', { name: 'Collapse inspector' }).click();
   await expect(page.locator('.run-panorama')).toHaveCount(0);
   await expect(page.locator('.companion-panel')).toHaveCount(0);
+});
+
+test('observer status opens the global Mission graph without leaving Chat', async ({ page }) => {
+  await page.goto('/index.html#/chat');
+  await page.getByRole('button', { name: 'Open the global Mission execution graph' }).click();
+  await expect(page).toHaveURL(/#\/chat$/);
+  const dialog = page.getByRole('dialog', { name: 'Global Mission execution graph' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Global mission browser proof');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveCount(0);
 });
 
 test('duplicated tabs claim unique observers and cannot demote the active writer', async ({ page, context }) => {

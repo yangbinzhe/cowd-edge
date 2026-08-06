@@ -184,6 +184,8 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .chat-execution-overlay > header span { color: var(--text-faint); font-size: 11px; }
 .chat-execution-overlay > header .icon-action { width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; }
 .chat-execution-overlay > .execution-graph-canvas { min-height: 0; height: 100%; margin: 0; border: 0; border-radius: 0; }
+.global-mission-graph-state { min-height: 0; display: grid; place-items: center; margin: 0; padding: 24px; text-align: center; }
+.global-mission-graph-dialog .spinning { animation: session-loading-spin 900ms linear infinite; }
 .app-shell[data-shell="chat-clean"] .transcript { --assistant-content-max: min(1040px, 100%); --system-content-max: min(1040px, 100%); }
 .turn { display: grid; gap: 5px; width: 100%; max-width: min(1320px, 100%); min-width: 0; margin: 0 auto 18px; content-visibility: auto; contain-intrinsic-size: auto 160px; contain: layout paint style; }
 .app-shell[data-shell="chat-clean"] .turn { max-width: min(1080px, 100%); }
@@ -222,6 +224,9 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .answer-execution-link, .answer-copy-link { width: 25px; height: 25px; display: inline-grid; place-items: center; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .answer-execution-link:hover, .answer-copy-link:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .turn[data-role="user"] .markdown-body { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; }
+.turn-submission-error { width: min(var(--user-content-max), 100%); margin: 0; display: flex; justify-content: flex-end; align-items: flex-start; gap: 5px; color: var(--danger); font-size: 11px; line-height: 1.45; text-align: right; }
+.turn-submission-error svg { flex: 0 0 auto; margin-top: 1px; }
+.turn-submission-error span { min-width: 0; overflow-wrap: anywhere; }
 .turn[data-role="system"] .markdown-body { background: color-mix(in srgb, var(--info) 8%, var(--surface)); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; color: var(--text-muted); }
 .turn[data-role="tool"] .markdown-body { background: var(--surface); border-left: 2px solid var(--border-2); padding: 7px 10px; color: var(--text-muted); }
 .turn-evidence-drawer { margin: 0 auto 16px; width: min(1120px, calc(100% - 56px)); max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 14px; display: grid; gap: 12px; }

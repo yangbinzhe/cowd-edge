@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import {
   Bot,
   ArrowDown,
   Boxes,
   Brain,
   Check,
+  CircleAlert,
   CircleDot,
   Coins,
   Copy,
@@ -29,6 +30,7 @@ import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import ExecutionActivityTree from '../components/chat/ExecutionActivityTree.vue';
+import ReasoningGroup from '../components/chat/ReasoningGroup.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
@@ -46,10 +48,18 @@ import {
   canonicalActivityRelations,
   type ActivityView,
 } from '../adapters/executionActivity';
+import {
+  reasoningPresentation,
+  type ReasoningPresentation,
+} from '../adapters/reasoningPresentation';
 
+const GlobalMissionGraphDialog = defineAsyncComponent(
+  () => import('../components/mission/GlobalMissionGraphDialog.vue'),
+);
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
+const globalMissionGraphOpen = ref(false);
 const historicalExecutionConsumers = new Set<string>();
 const release = computed(() => releaseProjection(store.health));
 const releaseTitle = computed(() => t('release.versions', {
@@ -519,6 +529,10 @@ function toggleCurrentExecutionGraph() {
   store.openChatExecutionGraph(chat.active?.executionGraphId || chat.active?.executionId || '');
 }
 
+function openGlobalMissionGraph() {
+  globalMissionGraphOpen.value = true;
+}
+
 function commandName(command: any) {
   const name = String(command?.name || command || '').trim();
   return name.startsWith('/') ? name : `/${name}`;
@@ -587,7 +601,7 @@ async function submit() {
     if (!sessionId) return;
     if (/^\/permissions(?:\s|$)/i.test(text)) {
       const mode = text.split(/\s+/)[1] || '';
-      const result: any = await store.executeCommand('/permissions', {
+      const result: any = await store.executeSessionCommand('/permissions', {
         session_id: sessionId,
         input: text,
         mode,
@@ -603,17 +617,7 @@ async function submit() {
     unboundDraft.value = '';
     const input = store.composeChatInput(text);
     let accepted = false;
-    try {
-      accepted = await chat.send(sessionId, text, input);
-    } catch (error) {
-      if (store.activeSessionId === sessionId && !chat.states[sessionId]?.draft) {
-        chat.setDraft(sessionId, text);
-      }
-      throw error;
-    }
-    if (!accepted && store.activeSessionId === sessionId && !chat.states[sessionId]?.draft) {
-      chat.setDraft(sessionId, text);
-    }
+    accepted = await chat.send(sessionId, text, input);
     if (accepted && store.activeSessionId === sessionId) {
       await store.ensureSessionTitleFromFirstMessage(sessionId, text);
       store.clearSubmittedResourceAttachments(input.resourceIds);
@@ -693,6 +697,25 @@ function isExecutionTranscriptTurn(turns: ChatTurn[], index: number) {
     || isTerminalExecutionAnchor(turns, index);
 }
 
+function assistantProgressThought(value: string) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const fenced = text.match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
+  const candidate = fenced?.[1]?.trim() || text;
+  if (
+    (candidate.startsWith('{') && candidate.endsWith('}'))
+    || (candidate.startsWith('[') && candidate.endsWith(']'))
+  ) {
+    try {
+      const structured = JSON.parse(candidate);
+      if (structured && typeof structured === 'object') return '';
+    } catch {
+      // A prose message containing braces remains a useful public progress note.
+    }
+  }
+  return text;
+}
+
 function exchangeActivityEvents(turns: ChatTurn[], index: number) {
   const turn = turns[index];
   if (!isExecutionTranscriptTurn(turns, index)) return [];
@@ -710,11 +733,13 @@ function exchangeActivityEvents(turns: ChatTurn[], index: number) {
       && exchangeTurn.content.trim()
       && !(exchangeTurn.activity || []).some((event) => event.kind === 'think')
     ) {
+      const detail = assistantProgressThought(exchangeTurn.content);
+      if (!detail) continue;
       const event: ActivityEvent = {
         id: `assistant-progress:${exchangeTurn.id}`,
         kind: 'think',
         title: t('chat.activity.thinking'),
-        detail: exchangeTurn.content.trim(),
+        detail,
         status: exchangeTurn.status || 'complete',
         sequence: exchangeTurn.sequence,
         turn_id: exchangeTurn.turn_id,
@@ -784,6 +809,18 @@ function buildTurnExecutionActivities(turns: ChatTurn[], index: number) {
   return canonical;
 }
 
+function turnRootExecutionId(turns: ChatTurn[], index: number) {
+  const turn = turns[index];
+  const entry = exchangeExecutionEntry(turns, index);
+  return String(
+    entry?.graph_id
+    || entry?.execution_id
+    || turn?.execution_id
+    || (isActiveStreamingTurn(turn) ? chat.active?.executionId : '')
+    || '',
+  ).trim();
+}
+
 function buildTurnExecutionRelations(
   turns: ChatTurn[],
   index: number,
@@ -800,6 +837,7 @@ const turnExecutionPresentations = computed(() => {
   const presentations = new Map<string, {
     activities: ActivityView[];
     relations: ReturnType<typeof canonicalActivityRelations>;
+    reasoning: ReasoningPresentation;
   }>();
   for (let index = 0; index < turns.length; index += 1) {
     const turn = turns[index];
@@ -808,6 +846,11 @@ const turnExecutionPresentations = computed(() => {
     presentations.set(turn.id, {
       activities,
       relations: buildTurnExecutionRelations(turns, index, activities),
+      reasoning: reasoningPresentation(
+        exchangeActivityEvents(turns, index),
+        activities,
+        turnRootExecutionId(turns, index),
+      ),
     });
   }
   return presentations;
@@ -819,6 +862,14 @@ function turnExecutionActivities(turns: ChatTurn[], index: number) {
 
 function turnExecutionRelations(turns: ChatTurn[], index: number) {
   return turnExecutionPresentations.value.get(turns[index]?.id)?.relations || [];
+}
+
+function turnGlobalReasoning(turns: ChatTurn[], index: number) {
+  return turnExecutionPresentations.value.get(turns[index]?.id)?.reasoning.global || null;
+}
+
+function turnAgentReasoning(turns: ChatTurn[], index: number) {
+  return turnExecutionPresentations.value.get(turns[index]?.id)?.reasoning.byOwner || {};
 }
 
 function openCanonicalActivity(activity: ActivityView) {
@@ -1060,10 +1111,17 @@ function chooseFirstCommand() {
           <span v-if="release.mismatch" class="chat-release-warning">{{ t('release.mismatch') }}</span>
         </div>
         <div class="chat-session-facts">
-          <span class="chat-fact observer" :data-role="chat.active?.attachmentRole">
+          <button
+            type="button"
+            class="chat-fact observer mission-observer-entry"
+            :data-role="chat.active?.attachmentRole"
+            :title="t('chat.execution.openGlobalMission')"
+            :aria-label="t('chat.execution.openGlobalMission')"
+            @click="openGlobalMissionGraph"
+          >
             <Eye :size="13" />
             <strong>{{ attachmentLabel }}</strong>
-          </span>
+          </button>
           <button
             v-if="chat.active"
             type="button"
@@ -1191,7 +1249,18 @@ function chooseFirstCommand() {
               v-if="turn.role === 'user' || turn.role === 'system'"
               :content="turn.content"
             />
-            <section v-else class="conversation-execution">
+            <p
+              v-if="turn.role === 'user' && turn.submission_error"
+              class="turn-submission-error"
+              role="alert"
+            >
+              <CircleAlert :size="13" />
+              <span>{{ turn.submission_error }}</span>
+            </p>
+            <section
+              v-if="turn.role !== 'user' && turn.role !== 'system'"
+              class="conversation-execution"
+            >
               <div
                 v-if="isActiveStreamingTurn(turn) && currentLiveNow"
                 class="conversation-live-now"
@@ -1207,10 +1276,16 @@ function chooseFirstCommand() {
                   </div>
                 </Transition>
               </div>
+              <ReasoningGroup
+                v-if="turnGlobalReasoning(chat.active?.turns || [], index)"
+                :group="turnGlobalReasoning(chat.active?.turns || [], index)!"
+                variant="global"
+              />
               <ExecutionActivityTree
                 v-if="turnExecutionActivities(chat.active?.turns || [], index).length"
                 :activities="turnExecutionActivities(chat.active?.turns || [], index)"
                 :relations="turnExecutionRelations(chat.active?.turns || [], index)"
+                :reasoning-groups="turnAgentReasoning(chat.active?.turns || [], index)"
                 @select="openCanonicalActivity"
               />
               <div v-if="isFinalAssistantAnswer(chat.active?.turns || [], index)" class="conversation-answer">
@@ -1428,5 +1503,9 @@ function chooseFirstCommand() {
         </button>
       </section>
     </div>
+    <GlobalMissionGraphDialog
+      v-if="globalMissionGraphOpen"
+      @close="globalMissionGraphOpen = false"
+    />
   </section>
 </template>
