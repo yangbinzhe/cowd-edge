@@ -27,6 +27,7 @@ import { runGraphLayout } from './graphLayout';
 import {
   graphDiagnostics,
   graphExportPayload,
+  semanticHierarchyLayoutEdges,
   graphLayoutSignature,
   semanticToolColumnLayoutEdges,
 } from './graphRuntime';
@@ -140,6 +141,9 @@ const visibleNodes = computed(() => {
 const visibleNodeIds = computed(() => new Set(visibleNodes.value.map((node) => node.id)));
 const visibleEdges = computed(() => props.model.edges.filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target)));
 const graphIsAggregated = computed(() => visibleNodes.value.length > graphNodeLimit);
+const minimumZoom = computed(() => (
+  props.compact || visibleNodes.value.length > 28 ? 0.12 : 0.32
+));
 const canvasNodes = computed(() => graphIsAggregated.value ? [] : visibleNodes.value);
 const canvasNodeIds = computed(() => new Set(canvasNodes.value.map((node) => node.id)));
 const canvasEdges = computed(() => visibleEdges.value.filter((edge) => canvasNodeIds.value.has(edge.source) && canvasNodeIds.value.has(edge.target)));
@@ -228,14 +232,20 @@ async function layout() {
     laidOutNodes.value = [];
     return;
   }
-  const signature = graphLayoutSignature(props.model.id, direction.value, canvasNodes.value, canvasEdges.value);
-  const cached = layoutCache.get(signature);
+  const hierarchyEdges = semanticHierarchyLayoutEdges(props.model.id, canvasEdges.value);
   const layoutOnlyEdges = semanticToolColumnLayoutEdges(
     props.model.id,
     direction.value,
     canvasNodes.value,
-    canvasEdges.value,
+    hierarchyEdges,
   );
+  const signature = graphLayoutSignature(
+    props.model.id,
+    direction.value,
+    canvasNodes.value,
+    [...hierarchyEdges, ...layoutOnlyEdges],
+  );
+  const cached = layoutCache.get(signature);
   const graph = cached ? null : await runGraphLayout({
       id: props.model.id,
       layoutOptions: {
@@ -243,7 +253,7 @@ async function layout() {
         'elk.direction': direction.value,
         'elk.spacing.nodeNode': '32',
         'elk.layered.spacing.nodeNodeBetweenLayers': '56',
-        ...(props.model.id.startsWith('semantic-lineage:') ? {
+        ...(props.model.id.startsWith('activity-lineage:') ? {
           'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
           'elk.layered.crossingMinimization.forceNodeModelOrder': 'true',
         } : {}),
@@ -252,7 +262,7 @@ async function layout() {
         id: node.id,
         ...graphNodeSize(node),
       })),
-      edges: [...canvasEdges.value, ...layoutOnlyEdges].map((edge) => ({
+      edges: [...hierarchyEdges, ...layoutOnlyEdges].map((edge) => ({
         id: edge.id,
         sources: [edge.source],
         targets: [edge.target],
@@ -545,7 +555,7 @@ onBeforeUnmount(() => {
       :elements-selectable="true"
       :nodes-focusable="true"
       :edges-focusable="true"
-      :min-zoom="compact ? 0.12 : 0.45"
+      :min-zoom="minimumZoom"
       @pane-ready="paneReady"
       @nodes-initialized="scheduleFit()"
       @node-click="selectNode"

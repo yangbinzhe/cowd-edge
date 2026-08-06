@@ -3,6 +3,7 @@ import type {
   ExecutionProjection,
   MissionControlProjection,
 } from '../types';
+import { t } from '../i18n';
 
 const STRATEGIC_KINDS = new Set([
   'mission',
@@ -10,7 +11,6 @@ const STRATEGIC_KINDS = new Set([
   'execution',
   'team',
   'agent',
-  'outcome',
 ]);
 
 export function adaptMissionControlGraph(
@@ -22,18 +22,60 @@ export function adaptMissionControlGraph(
   const mission = projection.missions?.find(
     (candidate) => candidate.mission_id === graph.mission_id,
   );
-  const nodes = graph.nodes.filter((node) => STRATEGIC_KINDS.has(node.kind));
-  const nodeIds = new Set(nodes.map((node) => node.node_id));
+  const canonicalNodes = new Map(graph.nodes.map((node) => [node.node_id, node]));
+  const canonicalParents = new Map<string, string>();
+  for (const edge of graph.edges) {
+    if (!['contains', 'delegated_to'].includes(edge.kind)) continue;
+    if (!canonicalParents.has(edge.to_node_id)) {
+      canonicalParents.set(edge.to_node_id, edge.from_node_id);
+    }
+  }
+  const internalTaskIds = new Set(graph.nodes.flatMap((node) => (
+    ['team', 'agent'].includes(node.kind)
+      && node.task_id
+      && isInternalTeamRoleTask(String(node.task_id), String(node.team_id || ''))
+      ? [`task:${node.task_id}`]
+      : []
+  )));
+  const retainedIds = new Set(graph.nodes.flatMap((node) => {
+    if (!STRATEGIC_KINDS.has(node.kind)) return [];
+    if (node.kind === 'task' && internalTaskIds.has(node.node_id)) return [];
+    if (node.kind === 'execution' && canonicalParents.has(node.node_id)) return [];
+    return [node.node_id];
+  }));
+  const presentationId = new Map<string, string>();
+  for (const node of graph.nodes) {
+    const resolved = resolveStrategicHost(
+      node.node_id,
+      retainedIds,
+      canonicalParents,
+    );
+    if (resolved) presentationId.set(node.node_id, resolved);
+  }
+  const candidateNodes = graph.nodes.filter((node) => (
+    retainedIds.has(node.node_id)
+  ));
+  const candidateIds = new Set(candidateNodes.map((node) => node.node_id));
   const agentMetrics = agentToolMetrics(executions);
   const strategicEdges = graph.edges
-    .filter((edge) => nodeIds.has(edge.from_node_id) && nodeIds.has(edge.to_node_id))
-    .map((edge) => ({
-      from: edge.from_node_id,
-      to: edge.to_node_id,
+    .flatMap((edge) => {
+      const from = presentationId.get(edge.from_node_id);
+      const to = presentationId.get(edge.to_node_id);
+      if (!from || !to || from === to || !candidateIds.has(from) || !candidateIds.has(to)) {
+        return [];
+      }
+      return [{
+      from,
+      to,
       kind: edge.kind,
       canonical_relation_id: edge.edge_id,
       evidence_refs: [],
-    }));
+      }];
+    });
+  const rootId = `mission:${graph.mission_id}`;
+  const reachableIds = reachableStrategicNodes(rootId, strategicEdges);
+  const nodes = candidateNodes.filter((node) => reachableIds.has(node.node_id));
+  const nodeIds = new Set(nodes.map((node) => node.node_id));
   const executionRelations = agentExecutionRelations(executions, nodes)
     .filter((edge) => nodeIds.has(edge.from) && nodeIds.has(edge.to));
   const edges = new Map<string, any>();
@@ -46,7 +88,7 @@ export function adaptMissionControlGraph(
   }
   return {
     graph_id: `mission:${graph.mission_id}`,
-    objective: mission?.objective || graph.mission_id,
+    objective: missionLabel(mission?.objective || graph.mission_id),
     status: mission?.status || 'unknown',
     revision: Number(mission?.revision || 0),
     nodes: nodes.map((node) => {
@@ -58,8 +100,8 @@ export function adaptMissionControlGraph(
         kind: node.kind === 'agent' ? 'agent_task' : node.kind,
         executor_kind: node.kind,
         status: node.status,
-        summary: node.label,
-        description: node.label,
+        summary: missionNodeLabel(node),
+        description: missionNodeDescription(node),
         input: {
           mission_id: node.mission_id,
           session_id: node.session_id,
@@ -84,7 +126,81 @@ export function adaptMissionControlGraph(
     semantic_view: true,
     strategic_view: true,
     canonical_graph_id: `mission:${graph.mission_id}`,
+    diagnostics: {
+      omitted_orphan_nodes: candidateNodes.length - nodes.length,
+      folded_execution_nodes: graph.nodes.filter((node) => (
+        node.kind === 'execution' && !retainedIds.has(node.node_id)
+      )).length,
+      folded_internal_task_nodes: internalTaskIds.size,
+    },
   };
+}
+
+function resolveStrategicHost(
+  nodeId: string,
+  retainedIds: Set<string>,
+  parents: Map<string, string>,
+) {
+  let current = nodeId;
+  const visited = new Set<string>();
+  while (current && !visited.has(current)) {
+    if (retainedIds.has(current)) return current;
+    visited.add(current);
+    current = parents.get(current) || '';
+  }
+  return '';
+}
+
+function missionLabel(value: string) {
+  return /^workspace mission for /i.test(value)
+    ? t('chat.execution.globalMissionGraph')
+    : value;
+}
+
+function missionNodeLabel(node: Record<string, any>) {
+  if (node.kind === 'mission') return missionLabel(String(node.label || ''));
+  if (node.kind === 'team') return t('execution.kind.team');
+  if (node.kind === 'agent') {
+    const identity = String(node.agent_id || node.label || '').toLowerCase();
+    const ordinal = identity.match(/:run:[^:]+:(\d+)/)?.[1] || '';
+    const role = identity.includes('synth')
+      ? t('execution.agentRole.synthesizer')
+      : identity.includes('research')
+        ? t('execution.agentRole.researcher')
+        : t('execution.kind.agentTask');
+    return ordinal ? `${role} ${ordinal}` : role;
+  }
+  return String(node.label || node.node_id);
+}
+
+function missionNodeDescription(node: Record<string, any>) {
+  if (['mission', 'team', 'agent'].includes(node.kind)) return '';
+  return String(node.label || '');
+}
+
+function isInternalTeamRoleTask(taskId: string, teamId: string) {
+  return taskId.includes(':task:')
+    && (
+      taskId.startsWith('runtime-team:')
+      || (teamId && taskId.startsWith(`${teamId}:task:`))
+    );
+}
+
+function reachableStrategicNodes(
+  rootId: string,
+  edges: Array<{ from: string; to: string }>,
+) {
+  const reachable = new Set<string>([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const edge of edges) {
+      if (!reachable.has(edge.from) || reachable.has(edge.to)) continue;
+      reachable.add(edge.to);
+      changed = true;
+    }
+  }
+  return reachable;
 }
 
 function agentToolMetrics(executions: Array<ExecutionProjection | null>) {

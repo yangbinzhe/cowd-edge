@@ -101,6 +101,24 @@ export function semanticToolColumnLayoutEdges(
   return layoutEdges;
 }
 
+export function semanticHierarchyLayoutEdges(
+  modelId: string,
+  edges: GraphEdgeView[],
+) {
+  if (
+    !modelId.startsWith('activity-lineage:')
+    && !modelId.startsWith('mission:')
+  ) return edges;
+  const hierarchy = new Set([
+    'contains',
+    'delegates',
+    'delegated_to',
+    'invokes',
+    'owns',
+  ]);
+  return edges.filter((edge) => hierarchy.has(edge.type));
+}
+
 export function graphExportPayload(
   model: GraphViewModel,
   nodes: GraphNodeView[],

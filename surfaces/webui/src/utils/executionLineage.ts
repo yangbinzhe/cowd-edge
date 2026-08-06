@@ -11,19 +11,14 @@ import {
 const MAX_LINEAGE_PROJECTIONS = 64;
 const BUSINESS_ACTIVITY_KINDS = new Set([
   'execution',
-  'goal',
   'team',
   'agent',
   'skill',
-  'model',
-  'tool_batch',
   'tool',
   'approval',
-  'verify',
-  'artifact',
-  'outcome',
-  'replan',
 ]);
+const HIERARCHY_RELATION_KINDS = new Set(['contains', 'delegated_to', 'invoked']);
+const FOLDED_OUTPUT_KINDS = new Set(['artifact', 'outcome']);
 
 function text(value: unknown) {
   return String(value || '').trim();
@@ -107,16 +102,61 @@ export function combineExecutionLineage(
   // root graph or force all children to load eagerly.
   const activitySources = root.activities?.length ? [root] : available;
   const allActivities = canonicalActivityEvents(activitySources, 'audit');
-  const graphActivities = businessGraphActivities(allActivities)
-    .filter((activity) => BUSINESS_ACTIVITY_KINDS.has(activity.kind));
-  const activities = graphActivities;
+  const canonicalRelations = canonicalActivityRelations(activitySources);
+  const canonicalById = new Map(allActivities.map((activity) => [activity.id, activity]));
+  const canonicalParent = canonicalParentIndex(allActivities, canonicalRelations);
+  const graphCandidates = businessGraphActivities(allActivities)
+    .filter((activity) => BUSINESS_ACTIVITY_KINDS.has(activity.kind))
+    .filter((activity) => (
+      activity.kind !== 'execution'
+      || activity.execution_id === root.execution_id
+    ));
+  const candidateIds = new Set(graphCandidates.map((activity) => activity.id));
+  const rootActivityId = graphCandidates.find((activity) => (
+    activity.kind === 'execution' && activity.execution_id === root.execution_id
+  ))?.id || '';
+  const parentByActivity = new Map<string, string>();
+  for (const activity of graphCandidates) {
+    const parent = nearestVisibleAncestor(
+      activity.id,
+      candidateIds,
+      canonicalById,
+      canonicalParent,
+    );
+    if (parent) parentByActivity.set(activity.id, parent);
+  }
+  const reachableIds = reachableBusinessActivities(rootActivityId, parentByActivity);
+  const activities = graphCandidates.filter((activity) => reachableIds.has(activity.id));
   if (!activities.length) return null;
   const activityIds = new Set(activities.map((activity) => activity.id));
-  const relations = canonicalActivityRelations(activitySources)
+  const directRelations = canonicalRelations
     .filter((relation) => (
       activityIds.has(relation.from_activity_id)
       && activityIds.has(relation.to_activity_id)
+      && !HIERARCHY_RELATION_KINDS.has(relation.kind)
     ));
+  const hierarchyRelations = activities.flatMap((activity) => {
+    const parent = parentByActivity.get(activity.id);
+    if (!parent || !activityIds.has(parent)) return [];
+    return [{
+      relation_id: `business-hierarchy:${parent}:${activity.id}`,
+      kind: hierarchyRelationKind(activity.kind),
+      from_activity_id: parent,
+      to_activity_id: activity.id,
+    } satisfies ExecutionActivityRelation];
+  });
+  const outputFolds = foldCanonicalOutputs(
+    allActivities,
+    canonicalRelations,
+    activityIds,
+    canonicalById,
+    canonicalParent,
+  );
+  const relations = deduplicateRelations([
+    ...hierarchyRelations,
+    ...directRelations,
+    ...outputFolds.dataRelations,
+  ]);
   const orderedActivities = flattenActivityTree(activityTree(activities, relations));
   const rootActivity = orderedActivities.find((activity) => (
     activity.kind === 'execution' && activity.execution_id === root.execution_id
@@ -130,7 +170,17 @@ export function combineExecutionLineage(
       : activityRootStatus === 'planned'
         ? liveRootStatus
         : activityRootStatus;
-  const nodes = orderedActivities.map((activity) => ({
+  const nodes = orderedActivities.map((activity) => {
+    const folded = outputFolds.byProducer.get(activity.id);
+    const artifactRefs = unique([
+      ...(activity.artifact_refs || []),
+      ...(folded?.artifactRefs || []),
+    ]);
+    const evidenceRefs = unique([
+      ...(activity.evidence_refs || []),
+      ...(folded?.evidenceRefs || []),
+    ]);
+    return ({
     node_id: activity.id,
     semantic_view: true,
     kind: graphNodeKind(activity.kind),
@@ -140,9 +190,9 @@ export function combineExecutionLineage(
       root.execution_id,
       effectiveRootStatus,
     ),
-    summary: activity.title,
-    description: activity.detail || '',
-    output_summary: graphOutputSummary(activity),
+    summary: graphActivitySummary(activity),
+    description: graphActivityDescription(activity),
+    output_summary: graphOutputSummary(activity, folded?.summaries || []),
     input: {
       mission_id: activity.canonical.scope.mission_id,
       task_id: activity.canonical.scope.task_id,
@@ -150,8 +200,8 @@ export function combineExecutionLineage(
       turn_id: activity.turn_id,
     },
     output: {
-      artifact_refs: activity.artifact_refs || [],
-      evidence_refs: activity.evidence_refs || [],
+      artifact_refs: artifactRefs,
+      evidence_refs: evidenceRefs,
     },
     usage: {
       duration_ms: activity.duration_ms || 0,
@@ -173,8 +223,8 @@ export function combineExecutionLineage(
     definition_refs: activity.canonical.definition_refs,
     tool_call_id: activity.tool_call_id,
     approval_id: activity.approval_id,
-    evidence_refs: activity.evidence_refs || [],
-    artifact_refs: activity.artifact_refs || [],
+    evidence_refs: evidenceRefs,
+    artifact_refs: artifactRefs,
     execution_id: activity.execution_id,
     parent_execution_id: activity.parent_execution_id,
     session_id: activity.session_id,
@@ -182,7 +232,8 @@ export function combineExecutionLineage(
     task_id: activity.canonical.scope.task_id,
     mission_id: activity.canonical.scope.mission_id,
     canonical_activity_id: activity.id,
-  }));
+    });
+  });
   const edges = relations.map((relation) => ({
     from: relation.from_activity_id,
     to: relation.to_activity_id,
@@ -227,16 +278,284 @@ function isTerminalStatus(status: string) {
 
 function graphOutputSummary(
   activity: ReturnType<typeof businessGraphActivities>[number],
+  foldedSummaries: string[] = [],
 ) {
-  const value = typeof activity.output === 'string'
-    ? activity.output.replace(/\s+/g, ' ').trim()
-    : '';
+  const value = concisePublicText(activity.output);
   const internalCode = /^(?:runtime|provider|authorization|context|projection|session)\.[a-z0-9_.:-]+$/i
     .test(value);
-  if (!value || value === activity.title || internalCode) {
-    return activity.artifact_refs?.length ? `${activity.artifact_refs.length} artifact` : '';
+  if (value && value !== activity.title && !internalCode && !isOpaqueReference(value)) {
+    if (activity.kind === 'team' && /completed child graph revision/i.test(value)) {
+      return '团队已汇总成员执行状态与产出';
+    }
+    return value;
   }
-  return value.length > 240 ? `${value.slice(0, 237)}...` : value;
+  const folded = foldedSummaries
+    .map(concisePublicText)
+    .find((summary) => summary && !isOpaqueReference(summary));
+  if (folded) return folded;
+  const artifactCount = activity.artifact_refs?.length || foldedSummaries.length;
+  return artifactCount ? `${artifactCount} 项产出` : '';
+}
+
+function graphActivitySummary(
+  activity: ReturnType<typeof businessGraphActivities>[number],
+) {
+  if (activity.kind === 'team') return '协作团队';
+  if (activity.kind === 'agent') {
+    const role = text(activity.agent_instance_id)
+      || text(activity.agent_run_id);
+    if (role) return humanizeAgentRole(role);
+  }
+  return sanitizeInternalIdentifiers(activity.title);
+}
+
+function graphActivityDescription(
+  activity: ReturnType<typeof businessGraphActivities>[number],
+) {
+  if (activity.kind === 'tool') return text(activity.tool_contract_id) || activity.title;
+  const detail = concisePublicText(activity.detail);
+  if (!detail || isOpaqueReference(detail)) return '';
+  if (activity.kind === 'team' && /completed child graph revision/i.test(detail)) {
+    return '团队已汇总成员执行状态与产出';
+  }
+  return detail;
+}
+
+function concisePublicText(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value !== 'string') {
+    if (Array.isArray(value)) {
+      return concisePublicText(value.find((entry) => typeof entry === 'string') || '');
+    }
+    if (typeof value === 'object') return conciseJsonRecord(value as Record<string, unknown>);
+    return '';
+  }
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (
+    (normalized.startsWith('{') && normalized.endsWith('}'))
+    || (normalized.startsWith('[') && normalized.endsWith(']'))
+  ) {
+    try {
+      const parsed = JSON.parse(normalized);
+      const concise = Array.isArray(parsed)
+        ? concisePublicText(parsed)
+        : conciseJsonRecord(parsed as Record<string, unknown>);
+      if (concise) return concise;
+    } catch {
+      // Some providers emit incomplete JSON-looking summaries. Keep a
+      // bounded public summary instead of dropping the result.
+    }
+  }
+  const sanitized = sanitizeInternalIdentifiers(normalized);
+  return sanitized.length > 180 ? `${sanitized.slice(0, 177)}...` : sanitized;
+}
+
+function conciseJsonRecord(record: Record<string, unknown>) {
+  for (const key of [
+    'summary',
+    'result_summary',
+    'answer',
+    'conclusion',
+    'overview',
+    'message',
+    'findings',
+  ]) {
+    const candidate = record[key];
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return concisePublicText(candidate);
+    }
+    if (Array.isArray(candidate)) {
+      const first = candidate.find((entry) => (
+        typeof entry === 'string'
+        || (entry && typeof entry === 'object')
+      ));
+      if (typeof first === 'string') return concisePublicText(first);
+      if (first && typeof first === 'object') {
+        const nested = conciseJsonRecord(first as Record<string, unknown>);
+        if (nested) return nested;
+      }
+    }
+  }
+  for (const candidate of Object.values(record)) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return concisePublicText(candidate);
+    }
+  }
+  return '';
+}
+
+function sanitizeInternalIdentifiers(value: string) {
+  return value
+    .replace(/Team\s+`runtime-team:[^`]+`/gi, '团队')
+    .replace(/`?runtime-team:[a-z0-9:._-]+`?/gi, '团队')
+    .replace(/`?session-ingress-graph:[a-z0-9:._-]+`?/gi, '当前执行')
+    .replace(/`?input-[0-9a-f-]{8,}`?/gi, '当前输入')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function humanizeAgentRole(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (/researcher/.test(normalized)) return '研究智能体';
+  if (/review|critic|audit/.test(normalized)) return '审查智能体';
+  if (/synth|report|writer/.test(normalized)) return '综合智能体';
+  return value.replace(/[_-]+/g, ' ').trim() || '执行智能体';
+}
+
+function isOpaqueReference(value: string) {
+  return /^(?:tool|artifact|evidence|memory|file|session):\/\//i.test(value);
+}
+
+function canonicalParentIndex(
+  activities: ReturnType<typeof canonicalActivityEvents>,
+  relations: ExecutionActivityRelation[],
+) {
+  const parents = new Map<string, string>();
+  for (const activity of activities) {
+    if (activity.parent_activity_id) parents.set(activity.id, activity.parent_activity_id);
+  }
+  for (const relation of relations) {
+    if (
+      HIERARCHY_RELATION_KINDS.has(relation.kind)
+      && !parents.has(relation.to_activity_id)
+    ) {
+      parents.set(relation.to_activity_id, relation.from_activity_id);
+    }
+  }
+  return parents;
+}
+
+function nearestVisibleAncestor(
+  activityId: string,
+  visibleIds: Set<string>,
+  activities: Map<string, ReturnType<typeof canonicalActivityEvents>[number]>,
+  parents: Map<string, string>,
+) {
+  let current = parents.get(activityId) || '';
+  const visited = new Set<string>([activityId]);
+  while (current && !visited.has(current)) {
+    if (visibleIds.has(current)) return current;
+    visited.add(current);
+    current = parents.get(current)
+      || activities.get(current)?.parent_activity_id
+      || '';
+  }
+  return '';
+}
+
+function reachableBusinessActivities(rootId: string, parents: Map<string, string>) {
+  if (!rootId) return new Set<string>();
+  const reachable = new Set<string>([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [child, parent] of parents) {
+      if (!reachable.has(parent) || reachable.has(child)) continue;
+      reachable.add(child);
+      changed = true;
+    }
+  }
+  return reachable;
+}
+
+function foldCanonicalOutputs(
+  activities: ReturnType<typeof canonicalActivityEvents>,
+  relations: ExecutionActivityRelation[],
+  visibleIds: Set<string>,
+  activityById: Map<string, ReturnType<typeof canonicalActivityEvents>[number]>,
+  parents: Map<string, string>,
+) {
+  const byProducer = new Map<string, {
+    artifactRefs: string[];
+    evidenceRefs: string[];
+    summaries: string[];
+  }>();
+  const producersByOutput = new Map<string, string[]>();
+  for (const output of activities.filter((activity) => FOLDED_OUTPUT_KINDS.has(activity.kind))) {
+    const explicitProducers = relations
+      .filter((relation) => (
+        relation.kind === 'produced'
+        && relation.to_activity_id === output.id
+      ))
+      .map((relation) => relation.from_activity_id);
+    const candidates = explicitProducers.length
+      ? explicitProducers
+      : [output.parent_activity_id || ''];
+    const producers = unique(candidates.map((candidate) => (
+      visibleIds.has(candidate)
+        ? candidate
+        : nearestVisibleAncestor(candidate, visibleIds, activityById, parents)
+    )).filter(Boolean));
+    producersByOutput.set(output.id, producers);
+    for (const producer of producers) {
+      const folded = byProducer.get(producer) || {
+        artifactRefs: [],
+        evidenceRefs: [],
+        summaries: [],
+      };
+      folded.artifactRefs = unique([
+        ...folded.artifactRefs,
+        ...(output.artifact_refs || []),
+      ]);
+      folded.evidenceRefs = unique([
+        ...folded.evidenceRefs,
+        ...(output.evidence_refs || []),
+      ]);
+      folded.summaries = unique([
+        ...folded.summaries,
+        text(output.result_summary || output.detail || output.title),
+      ].filter(Boolean));
+      byProducer.set(producer, folded);
+    }
+  }
+  const dataRelations: ExecutionActivityRelation[] = [];
+  for (const relation of relations.filter((candidate) => candidate.kind === 'consumed')) {
+    const consumer = visibleIds.has(relation.to_activity_id)
+      ? relation.to_activity_id
+      : nearestVisibleAncestor(
+        relation.to_activity_id,
+        visibleIds,
+        activityById,
+        parents,
+      );
+    if (!consumer) continue;
+    for (const producer of producersByOutput.get(relation.from_activity_id) || []) {
+      if (producer === consumer) continue;
+      dataRelations.push({
+        relation_id: `business-consumed:${producer}:${consumer}:${relation.relation_id}`,
+        kind: 'consumed',
+        from_activity_id: producer,
+        to_activity_id: consumer,
+        evidence_ref: relation.evidence_ref,
+      });
+    }
+  }
+  return { byProducer, dataRelations };
+}
+
+function hierarchyRelationKind(kind: string): ExecutionActivityRelation['kind'] {
+  if (kind === 'team' || kind === 'agent') return 'delegated_to';
+  if (kind === 'skill' || kind === 'tool') return 'invoked';
+  return 'contains';
+}
+
+function deduplicateRelations(relations: ExecutionActivityRelation[]) {
+  const rows = new Map<string, ExecutionActivityRelation>();
+  for (const relation of relations) {
+    const key = [
+      relation.kind,
+      relation.from_activity_id,
+      relation.to_activity_id,
+      relation.evidence_ref || '',
+    ].join(':');
+    if (!rows.has(key)) rows.set(key, relation);
+  }
+  return [...rows.values()];
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.map(text).filter(Boolean))];
 }
 
 function graphActivityStatus(

@@ -3,6 +3,7 @@ import type { GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/g
 import {
   graphDiagnostics,
   graphExportPayload,
+  semanticHierarchyLayoutEdges,
   graphLayoutSignature,
   semanticToolColumnLayoutEdges,
 } from './graphRuntime';
@@ -104,5 +105,29 @@ describe('graph runtime contracts', () => {
       'DOWN',
       graphDiagnostics(semanticNodes, semanticEdges),
     ).edges).toHaveLength(2);
+  });
+
+  it('uses only organization edges to lay out semantic graphs', () => {
+    const semanticEdges: GraphEdgeView[] = [{
+      id: 'owns',
+      source: 'team',
+      target: 'agent',
+      type: 'delegates',
+    }, {
+      id: 'data',
+      source: 'tool',
+      target: 'agent',
+      type: 'consumed',
+    }, {
+      id: 'dependency',
+      source: 'agent',
+      target: 'agent-2',
+      type: 'depends_on',
+    }];
+    expect(semanticHierarchyLayoutEdges(
+      'activity-lineage:execution',
+      semanticEdges,
+    )).toEqual([semanticEdges[0]]);
+    expect(semanticHierarchyLayoutEdges('generic', semanticEdges)).toEqual(semanticEdges);
   });
 });

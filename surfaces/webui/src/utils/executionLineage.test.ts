@@ -192,7 +192,7 @@ describe('execution lineage', () => {
     );
   });
 
-  it('does not derive missing canonical parent edges', () => {
+  it('projects canonical parent identities into a connected business hierarchy', () => {
     const execution = activity('execution', 'execution', 'root');
     const team = activity('team', 'team', 'root', 'execution');
     const agent = activity('agent', 'agent', 'root', 'team');
@@ -204,7 +204,11 @@ describe('execution lineage', () => {
 
     expect(graph?.nodes.map((node) => node.node_id))
       .toEqual(['execution', 'team', 'agent', 'tool']);
-    expect(graph?.edges).toEqual([]);
+    expect(graph?.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'execution', to: 'team', kind: 'delegates' }),
+      expect.objectContaining({ from: 'team', to: 'agent', kind: 'delegates' }),
+      expect.objectContaining({ from: 'agent', to: 'tool', kind: 'invokes' }),
+    ]));
   });
 
   it('does not invent a graph when canonical activities are absent', () => {
@@ -271,7 +275,7 @@ describe('execution lineage', () => {
     expect(graph?.nodes.find((node) => node.node_id === 'agent')?.output_summary).toBe('');
   });
 
-  it('keeps canonical tool batches while hiding internal result artifacts', () => {
+  it('folds canonical tool batches and internal result artifacts out of the business graph', () => {
     const executionId = 'session-ingress-graph:root';
     const execution = {
       ...activity(`activity:execution:${executionId}`, 'execution', executionId),
@@ -297,16 +301,11 @@ describe('execution lineage', () => {
 
     expect(graph?.nodes.map((node) => node.node_id)).toEqual([
       execution.activity_id,
-      toolBatch.activity_id,
     ]);
-    expect(graph?.edges).toContainEqual(expect.objectContaining({
-      from: execution.activity_id,
-      to: toolBatch.activity_id,
-      kind: 'invokes',
-    }));
+    expect(graph?.edges).toEqual([]);
   });
 
-  it('does not nest a synthetic tool group under a canonical tool batch', () => {
+  it('connects a real tool through a folded canonical tool batch', () => {
     const execution = activity('execution', 'execution', 'root');
     const batch = activity('batch', 'tool_batch', 'root', 'execution');
     const tool = activity('tool', 'tool', 'root', 'batch');
@@ -315,8 +314,142 @@ describe('execution lineage', () => {
       projection('root', [execution, batch, tool]),
     ]);
 
-    expect(graph?.nodes.filter((node) => node.kind === 'tool_batch').map((node) => node.node_id))
-      .toEqual(['batch']);
+    expect(graph?.nodes.map((node) => node.node_id)).toEqual(['execution', 'tool']);
+    expect(graph?.edges).toContainEqual(expect.objectContaining({
+      from: 'execution',
+      to: 'tool',
+      kind: 'invokes',
+    }));
+  });
+
+  it('folds output nodes into the producer and preserves proven cross-Agent data delivery', () => {
+    const execution = activity('execution', 'execution', 'root');
+    const team = activity('team', 'team', 'root', 'execution');
+    const researcher = activity('researcher', 'agent', 'root', 'team');
+    const search = {
+      ...activity('search', 'tool', 'root', 'researcher'),
+      artifact_refs: ['artifact://research'],
+      evidence_refs: ['evidence://search'],
+      result_summary: '完成供应链风险调查',
+    };
+    const artifact = {
+      ...activity('artifact', 'artifact', 'root', 'search'),
+      artifact_refs: ['artifact://research'],
+      evidence_refs: ['evidence://search'],
+      result_summary: '供应链风险清单',
+    };
+    const synthesizer = activity('synthesizer', 'agent', 'root', 'team');
+    const relations: ExecutionActivityRelation[] = [{
+      relation_id: 'produced',
+      kind: 'produced',
+      from_activity_id: 'search',
+      to_activity_id: 'artifact',
+      evidence_ref: 'artifact://research',
+    }, {
+      relation_id: 'consumed',
+      kind: 'consumed',
+      from_activity_id: 'artifact',
+      to_activity_id: 'synthesizer',
+      evidence_ref: 'artifact://research',
+    }];
+
+    const graph = combineExecutionLineage('root', [
+      projection('root', [
+        execution,
+        team,
+        researcher,
+        search,
+        artifact,
+        synthesizer,
+      ], relations),
+    ]);
+
+    expect(graph?.nodes.map((node) => node.node_id)).not.toContain('artifact');
+    expect(graph?.nodes.find((node) => node.node_id === 'search')).toMatchObject({
+      artifact_refs: ['artifact://research'],
+      evidence_refs: ['evidence://search'],
+      output_summary: '完成供应链风险调查',
+    });
+    expect(graph?.edges).toContainEqual(expect.objectContaining({
+      from: 'search',
+      to: 'synthesizer',
+      kind: 'consumed',
+      evidence_refs: ['artifact://research'],
+    }));
+  });
+
+  it('keeps raw output references and internal runtime ids out of graph cards', () => {
+    const execution = activity('execution', 'execution', 'root');
+    const team = {
+      ...activity('team', 'team', 'root', 'execution'),
+      public_summary: 'Team `runtime-team:private:1` completed child graph revision 4',
+      result_summary: 'Team `runtime-team:private:1` completed child graph revision 4',
+      artifact_refs: ['artifact://team-result'],
+    };
+    const researcher = {
+      ...activity('researcher', 'agent', 'root', 'team'),
+      agent_instance_id: 'runtime-team:private:1:run:researcher:1',
+      result_summary: JSON.stringify({
+        findings: [{
+          observation: '确认供应链约束与交付路径',
+          evidence: 'evidence://research',
+        }],
+        summary: '研究结果已经交付综合智能体',
+      }),
+    };
+    const tool = {
+      ...activity('tool', 'tool', 'root', 'researcher'),
+      result_summary: 'tool://tool-raw-private',
+      artifact_refs: ['artifact://tool-result'],
+    };
+
+    const graph = combineExecutionLineage('root', [
+      projection('root', [execution, team, researcher, tool]),
+    ]);
+
+    expect(graph?.nodes.find((node) => node.node_id === 'team')).toMatchObject({
+      summary: '协作团队',
+      output_summary: '团队已汇总成员执行状态与产出',
+    });
+    expect(graph?.nodes.find((node) => node.node_id === 'researcher')).toMatchObject({
+      summary: '研究智能体',
+      output_summary: '研究结果已经交付综合智能体',
+    });
+    expect(graph?.nodes.find((node) => node.node_id === 'tool')).toMatchObject({
+      output_summary: '1 项产出',
+    });
+    const visibleText = graph?.nodes.flatMap((node) => [
+      node.summary,
+      node.description,
+      node.output_summary,
+    ]).join(' ');
+    expect(visibleText).not.toContain('runtime-team:private');
+    expect(graph?.nodes.find((node) => node.node_id === 'tool')?.output_summary).not.toContain('tool://');
+  });
+
+  it('keeps a high-cardinality business graph connected without output-node expansion', () => {
+    const execution = activity('execution', 'execution', 'root');
+    const team = activity('team', 'team', 'root', 'execution');
+    const rows: ExecutionActivityProjection[] = [execution, team];
+    for (let index = 0; index < 20; index += 1) {
+      const agentId = `agent-${index}`;
+      rows.push(activity(agentId, 'agent', 'root', 'team'));
+      for (let tool = 0; tool < 5; tool += 1) {
+        const toolId = `${agentId}:tool-${tool}`;
+        rows.push(activity(toolId, 'tool', 'root', agentId));
+        rows.push({
+          ...activity(`${toolId}:artifact`, 'artifact', 'root', toolId),
+          artifact_refs: [`artifact://${toolId}`],
+        });
+      }
+    }
+    const graph = combineExecutionLineage('root', [projection('root', rows)]);
+    const nodeIds = new Set(graph?.nodes.map((node) => node.node_id));
+    const connected = new Set(graph?.edges.flatMap((edge) => [edge.from, edge.to]));
+
+    expect(graph?.nodes).toHaveLength(122);
+    expect(graph?.nodes.some((node) => node.kind === 'artifact')).toBe(false);
+    expect([...nodeIds].filter((id) => id !== 'execution' && !connected.has(id))).toEqual([]);
   });
 
   it('removes provider mechanics and internal result references from the business graph', () => {
