@@ -281,7 +281,7 @@ describe('adaptMissionControlGraph', () => {
         }, {
           node_id: `execution:${executionId}`,
           kind: 'execution',
-          label: 'technical execution',
+          label: '完成跨角色调查并汇总证据',
           status: 'running',
           mission_id: 'mission-1',
           task_id: taskB,
@@ -341,10 +341,12 @@ describe('adaptMissionControlGraph', () => {
       'agent:researcher',
     ]);
     expect(graph?.nodes.map((node) => node.summary)).toEqual([
-      '全局 Mission 运行图',
+      '任务目标',
       '协作团队',
       '研究智能体 1',
     ]);
+    expect(graph?.objective).toContain('完成跨角色调查');
+    expect(graph?.nodes[0]?.description).toContain('完成跨角色调查');
     expect(graph?.edges).toEqual(expect.arrayContaining([
       expect.objectContaining({
         from: 'mission:mission-1',
@@ -359,5 +361,88 @@ describe('adaptMissionControlGraph', () => {
       folded_execution_nodes: 1,
       folded_internal_task_nodes: 2,
     });
+  });
+
+  it('projects a proven tool output handoff as an Agent relationship', () => {
+    const graph = adaptMissionControlGraph({
+      missions: [{
+        mission_id: 'mission-1',
+        objective: '完成研究并交由审查智能体复核',
+        status: 'active',
+        revision: 2,
+      }],
+      mission_graph: {
+        schema_version: 1,
+        mission_id: 'mission-1',
+        nodes: [{
+          node_id: 'mission:mission-1',
+          kind: 'mission',
+          label: '完成研究并交由审查智能体复核',
+          status: 'active',
+          mission_id: 'mission-1',
+        }, {
+          node_id: 'agent:researcher',
+          kind: 'agent',
+          label: 'researcher',
+          status: 'completed',
+          mission_id: 'mission-1',
+          agent_id: 'agent-run-researcher',
+        }, {
+          node_id: 'agent:reviewer',
+          kind: 'agent',
+          label: 'reviewer',
+          status: 'running',
+          mission_id: 'mission-1',
+          agent_id: 'agent-run-reviewer',
+        }],
+        edges: [{
+          edge_id: 'mission-researcher',
+          kind: 'delegated_to',
+          from_node_id: 'mission:mission-1',
+          to_node_id: 'agent:researcher',
+        }, {
+          edge_id: 'mission-reviewer',
+          kind: 'delegated_to',
+          from_node_id: 'mission:mission-1',
+          to_node_id: 'agent:reviewer',
+        }],
+      },
+    } as any, [{
+      activities: [{
+        activity_id: 'tool:research',
+        kind: 'tool',
+        status: 'completed',
+        agent_run_id: 'agent-run-researcher',
+      }, {
+        activity_id: 'artifact:research',
+        kind: 'artifact',
+        status: 'completed',
+        parent_activity_id: 'tool:research',
+      }, {
+        activity_id: 'tool:review',
+        kind: 'tool',
+        status: 'running',
+        agent_run_id: 'agent-run-reviewer',
+      }],
+      activity_relations: [{
+        relation_id: 'produced',
+        kind: 'produced',
+        from_activity_id: 'tool:research',
+        to_activity_id: 'artifact:research',
+      }, {
+        relation_id: 'consumed',
+        kind: 'consumed',
+        from_activity_id: 'artifact:research',
+        to_activity_id: 'tool:review',
+        evidence_ref: 'evidence:handoff',
+      }],
+    } as any]);
+
+    expect(graph?.edges).toContainEqual(expect.objectContaining({
+      from: 'agent:researcher',
+      to: 'agent:reviewer',
+      kind: 'consumed',
+      evidence_refs: ['evidence:handoff'],
+    }));
   });
 });

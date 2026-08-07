@@ -177,11 +177,14 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .session-transcript-loading span { max-width: 320px; color: var(--text-faint); font-size: 12px; }
 @keyframes session-loading-spin { to { transform: rotate(360deg); } }
 .chat-execution-modal-scrim { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; background: rgb(0 0 0 / 42%); padding: clamp(12px, 3vw, 40px); }
-.chat-execution-overlay { width: min(1320px, 96vw); height: min(860px, 92vh); min-height: 380px; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-2); border-radius: 10px; background: var(--surface); box-shadow: 0 24px 72px rgb(0 0 0 / 42%); }
+.chat-execution-overlay { width: min(1320px, 96vw); height: min(860px, 92vh); min-height: 380px; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border: 1px solid var(--border-2); border-radius: 10px; background: var(--surface); box-shadow: 0 24px 72px rgb(0 0 0 / 42%); }
+.chat-execution-overlay > * { min-width: 0; }
 .chat-execution-overlay > header { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); padding: 6px 8px 6px 12px; }
 .chat-execution-overlay > header > div { min-width: 0; display: flex; align-items: center; gap: 7px; }
+.chat-execution-overlay > header > div:first-child { flex: 1 1 auto; overflow: hidden; }
+.chat-execution-overlay > header > .button-row { flex: none; }
 .chat-execution-overlay > header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.chat-execution-overlay > header span { color: var(--text-faint); font-size: 11px; }
+.chat-execution-overlay > header span { min-width: 0; overflow: hidden; color: var(--text-faint); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .chat-execution-overlay > header .icon-action { width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; }
 .chat-execution-overlay > .execution-graph-canvas { min-height: 0; height: 100%; margin: 0; border: 0; border-radius: 0; }
 .global-mission-graph-state { min-height: 0; display: grid; place-items: center; margin: 0; padding: 24px; text-align: center; }
@@ -580,17 +583,42 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .evidence-compare { display: grid; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
 .evidence-compare > header { display: flex; align-items: center; gap: 7px; }
 .evidence-compare .data-table-shell { max-height: 300px; }
+.graph-surface {
+  --graph-agent: #2fb7a9;
+  --graph-tool: #d99a36;
+  --graph-skill: #9b78db;
+  --graph-team: #4e8fd5;
+  --graph-mission: #d76868;
+  --graph-edge-hierarchy: #738092;
+  --graph-edge-delegates: #4e9ed8;
+  --graph-edge-invokes: #c88b32;
+  --graph-edge-transfer: #2aa897;
+  --graph-edge-approval: #bb76c6;
+}
 .graph-node { width: 196px; min-height: 70px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--surface); color: var(--text); padding: 9px; box-shadow: 0 3px 8px rgba(0,0,0,.14); }
 .graph-node:has(.semantic-node-content) { min-height: 76px; }
 .graph-node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
 .graph-node.active-runtime-node { border-color: var(--info); background: color-mix(in srgb, var(--info) 7%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 20%, transparent); }
+.graph-node-visual-agent { border-color: color-mix(in srgb, var(--graph-agent) 64%, var(--border)); background: color-mix(in srgb, var(--graph-agent) 8%, var(--surface)); }
+.graph-node-visual-tool { border-color: color-mix(in srgb, var(--graph-tool) 56%, var(--border)); background: color-mix(in srgb, var(--graph-tool) 7%, var(--surface)); }
+.graph-node-visual-skill { border-color: color-mix(in srgb, var(--graph-skill) 58%, var(--border)); background: color-mix(in srgb, var(--graph-skill) 7%, var(--surface)); }
+.graph-node-visual-team { border-color: color-mix(in srgb, var(--graph-team) 58%, var(--border)); background: color-mix(in srgb, var(--graph-team) 7%, var(--surface)); }
+.graph-node-visual-mission { border-color: color-mix(in srgb, var(--graph-mission) 58%, var(--border)); background: color-mix(in srgb, var(--graph-mission) 7%, var(--surface)); }
 .graph-node-content { min-width: 0; display: grid; gap: 4px; text-align: left; }
 .graph-node-content strong { overflow: hidden; color: var(--text); font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .graph-node-content small { overflow: hidden; color: var(--text-faint); font-size: 10px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 .graph-node-heading { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; }
-.graph-node-heading strong { min-width: 0; }
+.graph-node-identity { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.graph-node-identity strong { min-width: 0; }
+.graph-node-icon { display: grid; width: 20px; height: 20px; flex: none; place-items: center; border-radius: 5px; color: var(--text-muted); background: var(--surface-2); }
+.graph-node-visual-agent .graph-node-icon { color: var(--graph-agent); background: color-mix(in srgb, var(--graph-agent) 16%, var(--surface)); }
+.graph-node-visual-tool .graph-node-icon { color: var(--graph-tool); background: color-mix(in srgb, var(--graph-tool) 16%, var(--surface)); }
+.graph-node-visual-skill .graph-node-icon { color: var(--graph-skill); background: color-mix(in srgb, var(--graph-skill) 16%, var(--surface)); }
+.graph-node-visual-team .graph-node-icon { color: var(--graph-team); background: color-mix(in srgb, var(--graph-team) 16%, var(--surface)); }
+.graph-node-visual-mission .graph-node-icon { color: var(--graph-mission); background: color-mix(in srgb, var(--graph-mission) 16%, var(--surface)); }
 .graph-node-status { flex: none; color: var(--text-faint); font-size: 9px; line-height: 1; }
 .graph-node-task, .graph-node-output { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.graph-node-visual-mission .graph-node-task { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .graph-node-output { color: var(--text-muted) !important; }
 .graph-node-metrics { display: flex; min-width: 0; flex-wrap: wrap; gap: 3px; }
 .graph-node-metrics span { border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; color: var(--text-faint); font-size: 9px; line-height: 1.25; white-space: nowrap; }
@@ -610,6 +638,14 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .graph-node.status-complete, .graph-node.status-succeeded { border-color: color-mix(in srgb, var(--success) 54%, var(--border)); }
 .graph-node.status-failed, .graph-node.status-error, .graph-node.status-blocked { border-color: color-mix(in srgb, var(--danger) 58%, var(--border)); }
 .graph-edge path { stroke: var(--border-2); }
+.graph-flow .graph-edge-visual-transfer .vue-flow__edge-path { stroke-dasharray: 5 4; }
+.graph-flow .graph-edge-labeled .vue-flow__edge-text,
+.graph-flow .graph-edge-labeled .vue-flow__edge-textbg { opacity: 1; }
+.graph-flow .graph-edge-labeled .vue-flow__edge-text { fill: var(--text-muted); font-size: 9px; }
+.graph-flow .graph-edge-labeled .vue-flow__edge-textbg { fill: var(--surface); fill-opacity: .92; }
+.graph-flow .graph-handle { width: 1px; height: 1px; border: 0; opacity: 0; pointer-events: none; }
+.graph-flow .hierarchy-handle { background: var(--graph-edge-hierarchy); }
+.graph-flow .transfer-handle { background: var(--graph-edge-transfer); }
 .graph-flow .vue-flow__edge-text,
 .graph-flow .vue-flow__edge-textbg {
   opacity: 0;

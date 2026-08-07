@@ -57,6 +57,15 @@ export function adaptMissionControlGraph(
   ));
   const candidateIds = new Set(candidateNodes.map((node) => node.node_id));
   const agentMetrics = agentToolMetrics(executions);
+  const objective = missionObjective(
+    String(mission?.objective || ''),
+    graph.nodes,
+  );
+  const taskLabels = new Map(graph.nodes.flatMap((node) => (
+    node.kind === 'task' && node.task_id
+      ? [[String(node.task_id), String(node.label || '')] as const]
+      : []
+  )));
   const strategicEdges = graph.edges
     .flatMap((edge) => {
       const from = presentationId.get(edge.from_node_id);
@@ -88,7 +97,7 @@ export function adaptMissionControlGraph(
   }
   return {
     graph_id: `mission:${graph.mission_id}`,
-    objective: missionLabel(mission?.objective || graph.mission_id),
+    objective: objectivePreview(objective),
     status: mission?.status || 'unknown',
     revision: Number(mission?.revision || 0),
     nodes: nodes.map((node) => {
@@ -100,9 +109,14 @@ export function adaptMissionControlGraph(
         kind: node.kind === 'agent' ? 'agent_task' : node.kind,
         executor_kind: node.kind,
         status: node.status,
-        summary: missionNodeLabel(node),
-        description: missionNodeDescription(node),
+        summary: node.kind === 'mission'
+          ? t('execution.goal')
+          : missionNodeLabel(node),
+        description: node.kind === 'mission'
+          ? objective
+          : missionNodeDescription(node, taskLabels),
         input: {
+          objective: node.kind === 'mission' ? objective : undefined,
           mission_id: node.mission_id,
           session_id: node.session_id,
           task_id: node.task_id,
@@ -151,14 +165,7 @@ function resolveStrategicHost(
   return '';
 }
 
-function missionLabel(value: string) {
-  return /^workspace mission for /i.test(value)
-    ? t('chat.execution.globalMissionGraph')
-    : value;
-}
-
 function missionNodeLabel(node: Record<string, any>) {
-  if (node.kind === 'mission') return missionLabel(String(node.label || ''));
   if (node.kind === 'team') return t('execution.kind.team');
   if (node.kind === 'agent') {
     const identity = String(node.agent_id || node.label || '').toLowerCase();
@@ -173,9 +180,64 @@ function missionNodeLabel(node: Record<string, any>) {
   return String(node.label || node.node_id);
 }
 
-function missionNodeDescription(node: Record<string, any>) {
-  if (['mission', 'team', 'agent'].includes(node.kind)) return '';
+function missionNodeDescription(
+  node: Record<string, any>,
+  taskLabels: Map<string, string>,
+) {
+  if (node.kind === 'agent') {
+    const task = taskLabels.get(String(node.task_id || '')) || '';
+    const focus = task.match(/^Focus:\s*(.+)$/im)?.[1]?.trim();
+    if (focus) return t('execution.agentFocus', { focus });
+    const responsibility = task.match(/^Responsibility:\s*(.+)$/im)?.[1]?.trim();
+    if (responsibility) return responsibility;
+    return '';
+  }
+  if (['mission', 'team'].includes(node.kind)) return '';
   return String(node.label || '');
+}
+
+function missionObjective(
+  configuredObjective: string,
+  nodes: Array<Record<string, any>>,
+) {
+  const configured = cleanObjective(configuredObjective);
+  if (configured && !isGeneratedWorkspaceObjective(configured)) return configured;
+
+  const executionObjective = nodes
+    .filter((node) => node.kind === 'execution')
+    .map((node) => cleanObjective(String(node.label || '')))
+    .find((value) => value && !isOpaqueMissionText(value));
+  if (executionObjective) return executionObjective;
+
+  const taskObjective = nodes
+    .filter((node) => node.kind === 'task')
+    .map((node) => cleanObjective(String(node.label || '')))
+    .find((value) => value && !isOpaqueMissionText(value));
+  return taskObjective || t('chat.execution.globalMissionGraph');
+}
+
+function cleanObjective(value: string) {
+  const parentObjective = value
+    .replace(/^#+\s*Parent objective \(context only\)\s*/i, '')
+    .split(/\n\s*(?:Parent-level orchestration directives|##\s*Team role)\b/i)[0]
+    ?.trim() || '';
+  return parentObjective.replace(/\s+/g, ' ').trim();
+}
+
+function objectivePreview(value: string) {
+  const characters = Array.from(value);
+  return characters.length > 120
+    ? `${characters.slice(0, 119).join('')}…`
+    : value;
+}
+
+function isGeneratedWorkspaceObjective(value: string) {
+  return /^workspace mission for [a-z0-9_-]+$/i.test(value);
+}
+
+function isOpaqueMissionText(value: string) {
+  return isGeneratedWorkspaceObjective(value)
+    || /^(?:technical execution|runtime-team:|mission-default-)/i.test(value);
 }
 
 function isInternalTeamRoleTask(taskId: string, teamId: string) {
@@ -244,6 +306,7 @@ function agentExecutionRelations(
   missionNodes: Array<{ node_id: string; agent_id?: string | null }>,
 ) {
   const activityById = new Map<string, ExecutionActivityProjection>();
+  const parentByActivity = new Map<string, string>();
   const missionAgentByIdentity = new Map<string, string>();
   for (const node of missionNodes) {
     const identity = String(node.agent_id || '').trim();
@@ -252,16 +315,34 @@ function agentExecutionRelations(
   for (const projection of executions) {
     for (const activity of projection?.activities || []) {
       activityById.set(activity.activity_id, activity);
+      if (activity.parent_activity_id) {
+        parentByActivity.set(activity.activity_id, activity.parent_activity_id);
+      }
+    }
+    for (const relation of projection?.activity_relations || []) {
+      if (
+        ['contains', 'delegated_to', 'invoked', 'produced'].includes(relation.kind)
+        && !parentByActivity.has(relation.to_activity_id)
+      ) {
+        parentByActivity.set(relation.to_activity_id, relation.from_activity_id);
+      }
     }
   }
   return executions.flatMap((projection) => (
     (projection?.activity_relations || []).flatMap((relation) => {
       if (!['depends_on', 'contributes_to', 'consumed'].includes(relation.kind)) return [];
-      const source = activityById.get(relation.from_activity_id);
-      const target = activityById.get(relation.to_activity_id);
-      if (source?.kind !== 'agent' || target?.kind !== 'agent') return [];
-      const from = missionAgentNode(source, missionAgentByIdentity);
-      const to = missionAgentNode(target, missionAgentByIdentity);
+      const from = missionAgentForActivity(
+        relation.from_activity_id,
+        activityById,
+        parentByActivity,
+        missionAgentByIdentity,
+      );
+      const to = missionAgentForActivity(
+        relation.to_activity_id,
+        activityById,
+        parentByActivity,
+        missionAgentByIdentity,
+      );
       if (!from || !to || from === to) return [];
       return [{
         from,
@@ -272,6 +353,26 @@ function agentExecutionRelations(
       }];
     })
   ));
+}
+
+function missionAgentForActivity(
+  activityId: string,
+  activities: Map<string, ExecutionActivityProjection>,
+  parents: Map<string, string>,
+  nodes: Map<string, string>,
+) {
+  let current = activityId;
+  const visited = new Set<string>();
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    const activity = activities.get(current);
+    if (activity) {
+      const nodeId = missionAgentNode(activity, nodes);
+      if (nodeId) return nodeId;
+    }
+    current = parents.get(current) || '';
+  }
+  return '';
 }
 
 function missionAgentNode(

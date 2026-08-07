@@ -119,8 +119,11 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
 
 function edgeLabel(kind: string) {
   if (kind === 'depends_on') return t('execution.edge.dependsOn');
-  if (kind === 'delegates') return t('execution.edge.delegates');
+  if (kind === 'delegates' || kind === 'delegated_to') return t('execution.edge.delegates');
   if (kind === 'invokes') return t('execution.edge.invokes');
+  if (kind === 'consumed') return t('execution.edge.consumed');
+  if (kind === 'contributes_to') return t('execution.edge.contributesTo');
+  if (kind === 'produced') return t('execution.edge.produced');
   return kind.replaceAll('_', ' ');
 }
 

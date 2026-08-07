@@ -15,7 +15,6 @@ import type {
   SessionExecutionIndexProjection,
   SessionHistoryIndexProjection,
   SessionSummary,
-  SessionTurnProjection,
   WorkspaceFile,
 } from '../types';
 import { apiReadPolicy, type ApiReadClass } from './readPolicy';
@@ -297,12 +296,14 @@ interface CachedRead {
   cacheUntil: number;
   sessionId: string;
   referencedSessionIds: string[];
+  dataScopes: string[];
 }
 
 interface SharedRead {
   promise: Promise<unknown>;
   controller: AbortController;
   authorization: RequestAuthorizationStamp;
+  dataScopes: string[];
   subscribers: number;
   settled: boolean;
 }
@@ -313,11 +314,17 @@ let authenticationEpoch = 0;
 let readRevision = 0;
 const sessionAuthorizationEpochs = new Map<string, number>();
 const sessionReadRevisions = new Map<string, number>();
+const dataScopeRevisions = new Map<string, number>();
 
 interface RequestAuthorizationStamp {
   globalEpoch: number;
   sessionId: string;
   sessionEpoch: number;
+}
+
+interface ApiWriteRequestContext {
+  authorizationSessionId?: string;
+  invalidationScopes?: string[];
 }
 
 function sessionIdFromRequest(path: string, init: RequestInit = {}) {
@@ -383,6 +390,7 @@ export function invalidateApiReadCache() {
   authenticationEpoch += 1;
   readRevision += 1;
   sessionReadRevisions.clear();
+  dataScopeRevisions.clear();
   lastSuccessfulReads.clear();
   for (const pending of inFlightReads.values()) pending.controller.abort();
   inFlightReads.clear();
@@ -447,29 +455,121 @@ function isProjectionNeutralControlWrite(path: string) {
     || pathname === '/api/runtime/session-leases/release';
 }
 
-function invalidateReadsAfterWrite(path: string, sessionId: string) {
-  if (isProjectionNeutralControlWrite(path)) return;
+function apiPathname(path: string) {
+  try {
+    return new URL(path, 'http://cowd.local').pathname;
+  } catch {
+    return path.split('?', 1)[0];
+  }
+}
+
+function sessionDataScope(path: string, sessionId: string) {
+  const pathname = apiPathname(path);
+  if (pathname.startsWith('/api/runtime/executions/')) {
+    return `session:${sessionId}:execution`;
+  }
+  const encoded = encodeURIComponent(sessionId);
+  const suffix = pathname.replace(new RegExp(`^/api/sessions/${encoded}`), '');
+  if (
+    /^\/messages(?:\/|$)/.test(suffix)
+    || suffix === '/history-index'
+  ) return `session:${sessionId}:transcript`;
+  if (
+    /^\/(?:execution|evidence|inputs|turns)(?:\/|$)/.test(suffix)
+    || suffix === '/cancel'
+    || suffix === '/compact'
+  ) return `session:${sessionId}:execution`;
+  if (/^\/attachments(?:\/|$)/.test(suffix)) return `session:${sessionId}:resources`;
+  return `session:${sessionId}:metadata`;
+}
+
+function readDataScopes(path: string, sessionId: string) {
+  const pathname = apiPathname(path);
+  if (sessionId) return [
+    `session:${sessionId}`,
+    sessionDataScope(path, sessionId),
+  ];
+  if (pathname === '/api/sessions' || pathname.startsWith('/api/sessions/search')) {
+    return ['sessions:catalog'];
+  }
+  const domain = pathname.split('/').filter(Boolean)[1] || 'gateway';
+  return [`domain:${domain}`];
+}
+
+function writeInvalidationScopes(path: string, sessionId: string) {
+  if (isProjectionNeutralControlWrite(path)) return [];
+  const pathname = apiPathname(path);
   if (!sessionId) {
-    readRevision += 1;
-    lastSuccessfulReads.clear();
-    for (const pending of inFlightReads.values()) pending.controller.abort();
-    inFlightReads.clear();
-    return;
+    if (pathname === '/api/sessions') return ['sessions:catalog'];
+    const domain = pathname.split('/').filter(Boolean)[1] || 'gateway';
+    return [`domain:${domain}`];
   }
 
-  sessionReadRevisions.set(sessionId, (sessionReadRevisions.get(sessionId) || 0) + 1);
+  const encoded = encodeURIComponent(sessionId);
+  const suffix = pathname.replace(new RegExp(`^/api/sessions/${encoded}`), '');
+  if (!suffix || suffix === '/') {
+    return [`session:${sessionId}`, 'sessions:catalog'];
+  }
+  if (/^\/messages(?:\/|$)/.test(suffix)) {
+    return [
+      `session:${sessionId}:transcript`,
+      `session:${sessionId}:execution`,
+      'sessions:catalog',
+    ];
+  }
+  if (suffix === '/branch') return ['sessions:catalog'];
+  if (suffix === '/compact') {
+    return [
+      `session:${sessionId}:transcript`,
+      `session:${sessionId}:metadata`,
+    ];
+  }
+  if (/^\/attachments(?:\/|$)/.test(suffix)) {
+    return [`session:${sessionId}:resources`];
+  }
+  if (
+    /^\/(?:inputs|turns)(?:\/|$)/.test(suffix)
+    || suffix === '/cancel'
+    || suffix.startsWith('/context/')
+  ) return [`session:${sessionId}:execution`];
+  return [sessionDataScope(path, sessionId)];
+}
+
+function dataScopeMatches(invalidated: string, candidate: string) {
+  return invalidated === candidate
+    || candidate.startsWith(`${invalidated}:`);
+}
+
+function captureDataScopeRevisions(scopes: string[]) {
+  return scopes.map((scope) => [scope, dataScopeRevisions.get(scope) || 0] as const);
+}
+
+function dataScopeRevisionsAreCurrent(stamp: ReadonlyArray<readonly [string, number]>) {
+  return stamp.every(([scope, revision]) => (
+    revision === (dataScopeRevisions.get(scope) || 0)
+  ));
+}
+
+function invalidateDataScopes(scopes: string[]) {
+  if (!scopes.length) return;
+  for (const scope of scopes) {
+    dataScopeRevisions.set(scope, (dataScopeRevisions.get(scope) || 0) + 1);
+  }
+  const invalidates = (candidateScopes: string[]) => scopes.some((scope) => (
+    candidateScopes.some((candidate) => dataScopeMatches(scope, candidate))
+  ));
   for (const [key, cached] of lastSuccessfulReads.entries()) {
-    if (
-      cached.sessionId === sessionId
-      || cached.referencedSessionIds.includes(sessionId)
-    ) lastSuccessfulReads.delete(key);
+    if (invalidates(cached.dataScopes)) lastSuccessfulReads.delete(key);
   }
   for (const [key, pending] of inFlightReads.entries()) {
-    if (pending.authorization.sessionId === sessionId) {
-      pending.controller.abort();
-      inFlightReads.delete(key);
-    }
+    if (!invalidates(pending.dataScopes)) continue;
+    pending.controller.abort();
+    inFlightReads.delete(key);
   }
+}
+
+function invalidateReadsAfterWrite(path: string, sessionId: string) {
+  invalidateDataScopes(writeInvalidationScopes(path, sessionId));
 }
 
 function requestedCapabilityProbeSubset(capabilities: readonly string[]) {
@@ -605,6 +705,8 @@ async function readAtRevision<T>(
   retryAfterInvalidation = true,
 ): Promise<T & ApiReadState> {
   const requestAuthorization = authorizationStamp(path, init, authorizationSessionId);
+  const requestDataScopes = readDataScopes(path, requestAuthorization.sessionId);
+  const requestDataScopeRevisions = captureDataScopeRevisions(requestDataScopes);
   const requestReadRevision = readRevision;
   const requestSessionReadRevision = requestAuthorization.sessionId
     ? (sessionReadRevisions.get(requestAuthorization.sessionId) || 0)
@@ -616,6 +718,7 @@ async function readAtRevision<T>(
     requestAuthorization.sessionId,
     requestAuthorization.sessionEpoch,
     requestSessionReadRevision,
+    requestDataScopeRevisions.map(([scope, revision]) => `${scope}@${revision}`).join(','),
     readPolicy.class,
     path,
     [...requestHeaders.entries()]
@@ -699,6 +802,7 @@ async function readAtRevision<T>(
         promise,
         controller,
         authorization: requestAuthorization,
+        dataScopes: requestDataScopes,
         subscribers: 0,
         settled: false,
       };
@@ -738,6 +842,22 @@ async function readAtRevision<T>(
           'stale',
         );
       }
+      if (!dataScopeRevisionsAreCurrent(requestDataScopeRevisions)) {
+        if (retryAfterInvalidation) {
+          return readAtRevision(
+            path,
+            fallback,
+            init,
+            authorizationSessionId,
+            requestedReadClass,
+            false,
+          );
+        }
+        throw new ApiReadError(
+          'read data scope changed while this response was in flight',
+          'stale',
+        );
+      }
       const refreshedAt = new Date().toISOString();
       lastSuccessfulReads.set(cacheKey, {
         data: parsed,
@@ -745,6 +865,7 @@ async function readAtRevision<T>(
         cacheUntil: positiveTtlMs > 0 ? Date.now() + positiveTtlMs : 0,
         sessionId: requestAuthorization.sessionId,
         referencedSessionIds: referencedSessionIds(parsed),
+        dataScopes: requestDataScopes,
       });
       return withReadState(parsed, {
         __state: 'ready',
@@ -774,6 +895,19 @@ async function readAtRevision<T>(
           requestAuthorization.sessionId,
           requestSessionReadRevision,
         )
+        && retryAfterInvalidation
+      ) {
+        return readAtRevision(
+          path,
+          fallback,
+          init,
+          authorizationSessionId,
+          requestedReadClass,
+          false,
+        );
+      }
+      if (
+        !dataScopeRevisionsAreCurrent(requestDataScopeRevisions)
         && retryAfterInvalidation
       ) {
         return readAtRevision(
@@ -855,8 +989,13 @@ export async function writeWithMetadata<T>(
   path: string,
   init: RequestInit = {},
   validation: ApiWriteMetadataValidation<T> = {},
+  context: ApiWriteRequestContext = {},
 ): Promise<ApiWriteWithMetadataResult<T>> {
-  const requestAuthorization = authorizationStamp(path, init);
+  const requestAuthorization = authorizationStamp(
+    path,
+    init,
+    context.authorizationSessionId || '',
+  );
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers: headers(init) });
   if (!response.ok) {
     const body = await response.text();
@@ -962,12 +1101,20 @@ export async function writeWithMetadata<T>(
       });
     }
   }
-  invalidateReadsAfterWrite(path, requestAuthorization.sessionId);
+  if (context.invalidationScopes) {
+    invalidateDataScopes(context.invalidationScopes);
+  } else {
+    invalidateReadsAfterWrite(path, requestAuthorization.sessionId);
+  }
   return { data: parsed, metadata };
 }
 
-export async function write<T>(path: string, init: RequestInit = {}): Promise<T> {
-  return (await writeWithMetadata<T>(path, init)).data;
+export async function write<T>(
+  path: string,
+  init: RequestInit = {},
+  context: ApiWriteRequestContext = {},
+): Promise<T> {
+  return (await writeWithMetadata<T>(path, init, {}, context)).data;
 }
 
 async function writeWithReceipt<T>(path: string, init: RequestInit = {}): Promise<ApiReceipt<T>> {
@@ -1077,8 +1224,17 @@ export const api = {
     authorizationSessionId,
     'interactive',
   ),
-  executeProjectionCommand: (executionId: string, request: Record<string, unknown>) => write(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
+  executeProjectionCommand: (
+    executionId: string,
+    request: Record<string, unknown>,
+    authorizationSessionId = '',
+  ) => write(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
     method: 'POST', body: JSON.stringify(request),
+  }, {
+    authorizationSessionId,
+    invalidationScopes: authorizationSessionId
+      ? [`session:${authorizationSessionId}:execution`]
+      : ['domain:runtime'],
   }),
   writeReceipt: writeWithReceipt,
   health: (signal?: AbortSignal) => read('/api/webui/manifest', {
@@ -1229,21 +1385,6 @@ export const api = {
     turns: [],
     freshness: 'unavailable',
   }),
-  sessionTurnProjection: (sessionId: string, fromSeq?: number, limit = 2000) => read<SessionTurnProjection>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/turns?limit=${limit}${
-      fromSeq === undefined ? '' : `&from_seq=${Math.max(0, fromSeq)}`
-    }`,
-    {
-      kind: 'session.turn_projection',
-      session_id: sessionId,
-      turn_count: 0,
-      turns: [],
-    },
-  ),
-  sessionTurn: (sessionId: string, turnId: string) => read(
-    `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}`,
-    {},
-  ),
   updateSession: (sessionId: string, patch: Record<string, unknown>) => write(`/api/sessions/${encodeURIComponent(sessionId)}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),

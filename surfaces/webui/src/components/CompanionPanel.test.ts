@@ -181,19 +181,25 @@ describe('Companion projection contract visibility', () => {
     }];
     chat.states['activity-session'] = {
       sessionId: 'activity-session',
-      turns: [],
+      turns: [{
+        id: 'message-1',
+        role: 'user',
+        content: '检查最新执行链',
+        turn_id: 'turn-1',
+        created_at_ms: 1,
+      }],
       activity: [],
-      turnProjection: {
-        kind: 'session.turn_projection',
+      executionIndex: {
         session_id: 'activity-session',
-        turn_count: 1,
-        turns: [{
+        executions: [{
+          execution_id: 'execution-1',
+          graph_id: 'execution-1',
           turn_id: 'turn-1',
-          status: 'completed',
-          user_preview: '检查最新执行链',
-          evidence_refs: ['tool://call-1/evidence/result'],
-          activity_events: [],
+          status: 'complete',
+          updated_at_ms: 2,
         }],
+        active_execution_ids: [],
+        latest_execution_id: 'execution-1',
       },
       executionId: '',
       executionGraphId: '',

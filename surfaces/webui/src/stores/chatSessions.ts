@@ -10,7 +10,6 @@ import type {
   ExecutionLiveState,
   SessionExecutionIndexProjection,
   SessionHistoryIndexProjection,
-  SessionTurnProjection,
 } from '../types';
 import { mergeActivityEvent, normalizeTurnActivity } from '../utils/turnSettlement';
 import {
@@ -45,7 +44,6 @@ export type SessionChatState = {
   live: LiveExecutionState | null;
   executionIndex: SessionExecutionIndexProjection | null;
   historyIndex: SessionHistoryIndexProjection | null;
-  turnProjection: SessionTurnProjection | null;
   streamState: 'connected' | 'connecting' | 'reconnecting' | 'degraded' | 'offline';
   loadEpoch: number;
   submissionEpoch: number;
@@ -63,6 +61,7 @@ export type SessionChatState = {
   draft: string;
   scrollTop: number;
   historyTotal: number;
+  historyNextSequence: number;
   historyOldestOffset: number;
   historyWindowEndOffset: number;
   historyHasOlder: boolean;
@@ -73,8 +72,6 @@ export type SessionChatState = {
   scrollInitialized: boolean;
   executionIndexLoading: boolean;
   executionIndexLoaded: boolean;
-  turnProjectionLoading: boolean;
-  turnProjectionLoaded: boolean;
   detailsLoading: boolean;
   detailsLoaded: boolean;
 };
@@ -426,45 +423,15 @@ function normalizeTurns(messages: any[]): ChatTurn[] {
   return sortTurnsCausally(normalized);
 }
 
-function projectedActivity(value: unknown): ActivityEvent | null {
-  if (!value || typeof value !== 'object') return null;
-  const event = value as ActivityEvent;
-  const kind = String(event.kind || '');
-  if (![
-    'execution',
-    'goal',
-    'team',
-    'agent',
-    'model',
-    'tool_batch',
-    'tool',
-    'think',
-    'runtime',
-    'context',
-    'approval',
-    'verify',
-    'artifact',
-    'outcome',
-    'replan',
-    'recovery',
-    'error',
-  ].includes(kind)) return null;
-  const detail = typeof event.detail === 'string'
-    ? event.detail
-    : event.detail == null
-      ? ''
-      : JSON.stringify(event.detail);
-  return normalizeTurnActivity({
-    ...event,
-    id: String(event.id || `${kind}:${event.commit_cursor || event.sequence || Date.now()}`),
-    kind: kind as ActivityEvent['kind'],
-    title: String(event.title || kind),
-    detail,
-    turn_id: String(event.turn_id || ''),
-  });
+function blockMetadata(blocks: any[], key: string) {
+  for (const block of blocks || []) {
+    const value = block?.[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  return '';
 }
 
-function mergeProjectedActivity(existing: ActivityEvent[], incoming: ActivityEvent[]) {
+function mergeActivityTimeline(existing: ActivityEvent[], incoming: ActivityEvent[]) {
   const rows = [...existing];
   for (const event of incoming) {
     const identity = activityIdentityKey(event);
@@ -479,45 +446,6 @@ function mergeProjectedActivity(existing: ActivityEvent[], incoming: ActivityEve
     else rows.push(event);
   }
   return causalActivityTimeline(rows, TURN_ACTIVITY_CAP);
-}
-
-function applyTurnProjectionHistory(state: SessionChatState, projection: SessionTurnProjection) {
-  const sessionActivity = [...state.activity];
-  for (const projectedTurn of projection.turns || []) {
-    const activities = (projectedTurn.activity_events || [])
-      .map(projectedActivity)
-      .filter((event): event is ActivityEvent => !!event);
-    if (!activities.length) continue;
-    const candidates = state.turns.filter((turn) => turn.turn_id === projectedTurn.turn_id);
-    const target = [...candidates].reverse().find((turn) => turn.role === 'assistant')
-      || [...candidates].reverse().find((turn) => turn.role === 'tool')
-      || candidates.at(-1);
-    if (target) target.activity = mergeProjectedActivity(target.activity || [], activities);
-    for (const event of activities) {
-      const identity = activityIdentityKey(event);
-      const index = sessionActivity.findIndex((candidate) => (
-        activityIdentityKey(candidate) === identity
-        || (
-          !!event.tool_call_id
-          && candidate.tool_call_id === event.tool_call_id
-        )
-      ));
-      if (index >= 0) {
-        sessionActivity.splice(index, 1, mergeActivityEvent(sessionActivity[index], event));
-      } else {
-        sessionActivity.push(event);
-      }
-    }
-  }
-  state.activity = causalActivityTimeline(sessionActivity, SESSION_ACTIVITY_CAP);
-}
-
-function blockMetadata(blocks: any[], key: string) {
-  for (const block of blocks || []) {
-    const value = block?.[key];
-    if (typeof value === 'string' && value) return value;
-  }
-  return '';
 }
 
 function streamIdentityKey(sessionId: string, state: SessionChatState, payload: any) {
@@ -637,9 +565,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   const attachmentFlights = new Map<string, Promise<unknown>>();
   const canonicalResyncFlights = new Map<string, Promise<void>>();
   const executionIndexFlights = new Map<string, Promise<void>>();
-  const turnProjectionFlights = new Map<string, Promise<void>>();
+  const transcriptSyncFlights = new Map<string, Promise<void>>();
   const progressRecoveryTimers = new Map<string, ReturnType<typeof setInterval>>();
   const progressRecoveryFlights = new Map<string, Promise<void>>();
+  const presenceHeartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   const projections = useProjectionRegistryStore();
   const activeSessionId = ref('');
@@ -651,21 +580,56 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       states[sessionId] = {
         sessionId, turns: [], activity: [], executionId: '', executionGraphId: '', executionTurnId: '', executionGeneration: 0,
         streamGeneration: 0, runtimeCommitCursor: 0, reconnectBlocked: false,
-        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, historyIndex: null, turnProjection: null, streamState: 'offline',
+        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, historyIndex: null, streamState: 'offline',
         loadEpoch: 0, submissionEpoch: 0, attachmentEpoch: 0,
         pending: false, submitting: false, lastError: '', unread: 0,
         lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
         attachmentRole: 'detached', writable: false,
-        draft: readSessionDraft(sessionId), scrollTop: 0, historyTotal: 0, historyOldestOffset: 0,
+        draft: readSessionDraft(sessionId), scrollTop: 0, historyTotal: 0, historyNextSequence: 0, historyOldestOffset: 0,
         historyWindowEndOffset: 0, historyHasOlder: false, historyHasNewer: false,
         scrollInitialized: false,
         executionIndexLoading: false, executionIndexLoaded: false,
-        turnProjectionLoading: false, turnProjectionLoaded: false,
         historyLoading: false, historyIndexLoading: false, historyIndexLoaded: false,
         detailsLoading: false, detailsLoaded: false,
       };
     }
     return states[sessionId];
+  }
+
+  function clearPresenceHeartbeat(sessionId: string) {
+    const timer = presenceHeartbeatTimers.get(sessionId);
+    if (timer) clearTimeout(timer);
+    presenceHeartbeatTimers.delete(sessionId);
+  }
+
+  function schedulePresenceHeartbeat(sessionId: string, attachment: any) {
+    const ttlMs = Number(attachment?.presence_ttl_ms);
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) return;
+    clearPresenceHeartbeat(sessionId);
+    const delayMs = Math.max(100, Math.floor(ttlMs / 3));
+    const timer = setTimeout(() => {
+      presenceHeartbeatTimers.delete(sessionId);
+      const reaffirm = serializeAttachment(sessionId, async () => {
+        const state = states[sessionId];
+        if (!state || state.reconnectBlocked || state.attachmentRole === 'detached') return null;
+        const response: any = await api.attachSession(sessionId, state.attachmentRole);
+        if (response?.ok === false) {
+          throw new Error(String(response.error || 'session presence heartbeat rejected'));
+        }
+        return response;
+      });
+      void reaffirm
+        .then((response) => {
+          if (response) schedulePresenceHeartbeat(sessionId, response);
+        })
+        .catch(() => {
+          const state = states[sessionId];
+          if (state && !state.reconnectBlocked && state.attachmentRole !== 'detached') {
+            schedulePresenceHeartbeat(sessionId, { presence_ttl_ms: ttlMs });
+          }
+        });
+    }, delayMs);
+    presenceHeartbeatTimers.set(sessionId, timer);
   }
 
   function scheduleFlush(sessionId: string) {
@@ -1211,6 +1175,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.submitting = false;
     state.writable = false;
     state.attachmentRole = 'detached';
+    clearPresenceHeartbeat(sessionId);
     state.turns = [];
     state.activity = [];
     state.live = null;
@@ -1222,6 +1187,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.latestIngressSequence = -1;
     state.runtimeCommitCursor = 0;
     state.historyTotal = 0;
+    state.historyNextSequence = 0;
     state.historyOldestOffset = 0;
     state.historyWindowEndOffset = 0;
     state.historyHasOlder = false;
@@ -1305,7 +1271,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       ensureStreamTurn(state);
       const canonicalStreamTurn = state.turns.find((turn) => turn.id === state.streamTurnId);
       if (canonicalStreamTurn && previousStreamTurn?.activity?.length) {
-        canonicalStreamTurn.activity = mergeProjectedActivity(
+        canonicalStreamTurn.activity = mergeActivityTimeline(
           canonicalStreamTurn.activity || [],
           previousStreamTurn.activity,
         );
@@ -1342,30 +1308,30 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     return state.executionGraphId || state.executionId;
   }
 
-  async function hydrateExecutionProjection(sessionId: string) {
+  async function hydrateExecutionProjection(
+    sessionId: string,
+    scope: 'summary' | 'full' = 'summary',
+  ) {
     const state = stateFor(sessionId);
     const projectionId = executionProjectionId(state);
     if (!projectionId) return false;
     projections.acquire(
       projectionId,
       `chat:${sessionId}`,
-      'summary',
+      scope,
       'bounded',
       sessionId,
     );
-    return refreshProjection(sessionId);
+    return refreshProjection(sessionId, scope);
   }
 
   async function load(sessionId: string) {
     const state = stateFor(sessionId);
     const epoch = ++state.loadEpoch;
     executionIndexFlights.delete(sessionId);
-    turnProjectionFlights.delete(sessionId);
     state.historyLoading = true;
     state.executionIndexLoading = false;
     state.executionIndexLoaded = false;
-    state.turnProjectionLoading = false;
-    state.turnProjectionLoaded = false;
     state.detailsLoaded = false;
     state.historyIndexLoading = true;
     state.historyIndexLoaded = false;
@@ -1464,6 +1430,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       Number(data.total || 0),
       Number(state.historyIndex?.total_messages || 0),
     );
+    state.historyNextSequence = Math.max(
+      Number(data.next_seq || 0),
+      ...((data.messages || [])
+        .map((message: any) => Number(message.sequence) + 1)
+        .filter(Number.isFinite)),
+    );
     state.historyOldestOffset = Number(data.offset ?? offset);
     state.historyWindowEndOffset = state.historyOldestOffset + (data.messages || []).length;
     state.historyHasOlder = state.historyOldestOffset > 0;
@@ -1497,55 +1469,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   }
 
   function refreshDetailState(state: SessionChatState) {
-    state.detailsLoading = state.executionIndexLoading
-      || state.turnProjectionLoading;
-    state.detailsLoaded = state.executionIndexLoaded
-      && state.turnProjectionLoaded;
-  }
-
-  async function hydrateTurnProjection(sessionId: string) {
-    const state = stateFor(sessionId);
-    const epoch = state.loadEpoch;
-    const existing = turnProjectionFlights.get(sessionId);
-    if (existing) return existing;
-    if (state.turnProjectionLoaded) {
-      if (state.turnProjection) applyTurnProjectionHistory(state, state.turnProjection);
-      return;
-    }
-
-    state.turnProjectionLoading = true;
-    refreshDetailState(state);
-    let flight!: Promise<void>;
-    flight = api.sessionTurnProjection(sessionId)
-      .then((projection) => {
-        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
-        const identityIssue = sessionEnvelopeIdentityIssue(projection, sessionId, 'turn projection');
-        if (identityIssue) {
-          state.lastError = identityIssue;
-          state.degradedReason = identityIssue;
-          return;
-        }
-        const issue = readIssue(projection, 'turn projection');
-        if (issue) {
-          state.lastError = issue;
-          state.degradedReason = issue;
-          return;
-        }
-        state.turnProjection = projection;
-        state.turnProjectionLoaded = true;
-        applyTurnProjectionHistory(state, projection);
-      })
-      .finally(() => {
-        if (state.loadEpoch === epoch) {
-          state.turnProjectionLoading = false;
-          refreshDetailState(state);
-        }
-        if (turnProjectionFlights.get(sessionId) === flight) {
-          turnProjectionFlights.delete(sessionId);
-        }
-      });
-    turnProjectionFlights.set(sessionId, flight);
-    await flight;
+    state.detailsLoading = state.executionIndexLoading;
+    state.detailsLoaded = state.executionIndexLoaded;
   }
 
   async function hydrateExecutionIndex(sessionId: string, includeProjection = false) {
@@ -1555,12 +1480,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (existing) {
       await existing;
       if (includeProjection && state.loadEpoch === epoch) {
-        await hydrateExecutionProjection(sessionId);
+        await hydrateExecutionProjection(sessionId, 'full');
       }
       return;
     }
     if (state.executionIndexLoaded) {
-      if (includeProjection) await hydrateExecutionProjection(sessionId);
+      if (includeProjection) await hydrateExecutionProjection(sessionId, 'full');
       return;
     }
 
@@ -1602,7 +1527,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           );
         }
         if (recoveredGraphId) adoptExecutionGraph(sessionId, recoveredGraphId, includeProjection);
-        if (includeProjection) await hydrateExecutionProjection(sessionId);
+        if (includeProjection) await hydrateExecutionProjection(sessionId, 'full');
         if (state.executionId) refreshLiveExecution(sessionId).catch(() => undefined);
         state.executionIndexLoaded = true;
       })
@@ -1618,10 +1543,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   }
 
   async function hydrateRuntimeDetails(sessionId: string, includeProjection = false) {
-    await Promise.all([
-      hydrateExecutionIndex(sessionId, includeProjection),
-      hydrateTurnProjection(sessionId),
-    ]);
+    await hydrateExecutionIndex(sessionId, includeProjection);
   }
 
   async function loadOlder(sessionId: string) {
@@ -1647,7 +1569,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       state.turns = merged.length > HISTORY_WINDOW_CAP
         ? merged.slice(0, HISTORY_WINDOW_CAP)
         : merged;
-      if (state.turnProjection) applyTurnProjectionHistory(state, state.turnProjection);
       state.historyTotal = Math.max(state.historyTotal, Number(page.total || 0));
       state.historyOldestOffset = nextOffset;
       state.historyWindowEndOffset = Math.min(state.historyTotal, nextOffset + state.turns.length);
@@ -1665,6 +1586,99 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   async function loadLatest(sessionId: string) {
     await load(sessionId);
+  }
+
+  async function syncTranscriptTail(sessionId: string) {
+    const state = stateFor(sessionId);
+    const existing = transcriptSyncFlights.get(sessionId);
+    if (existing) return existing;
+    const epoch = state.loadEpoch;
+    let flight!: Promise<void>;
+    flight = (async () => {
+      let nextSequence = Math.max(
+        0,
+        state.historyNextSequence,
+        ...state.turns
+          .map((turn) => Number(turn.sequence) + 1)
+          .filter(Number.isFinite),
+      );
+      for (;;) {
+        const page = await api.messages(sessionId, {
+          fromSeq: nextSequence,
+          limit: 500,
+        });
+        if (state.loadEpoch !== epoch || state.reconnectBlocked) return;
+        const issue = readIssue(page, 'transcript tail')
+          || messagesIdentityIssue(page, sessionId, 'transcript tail');
+        if (issue) {
+          state.lastError = issue;
+          state.degradedReason = issue;
+          return;
+        }
+
+        const durableTurns = normalizeTurns(page.messages);
+        const durableActivity = durableTurns.flatMap((turn) => turn.activity || []);
+        state.activity = mergeActivityTimeline(state.activity, durableActivity);
+        state.turns = mergeTurns(state.turns, durableTurns);
+
+        const streamTurn = state.turns.find((turn) => turn.id === state.streamTurnId);
+        if (streamTurn && durableTurns.some((turn) => (
+          turn.role === 'assistant'
+          && (
+            (!!streamTurn.execution_id && turn.execution_id === streamTurn.execution_id)
+            || (!!streamTurn.turn_id && turn.turn_id === streamTurn.turn_id)
+            || (
+              !state.pending
+              && !!streamTurn.content.trim()
+              && turn.content.trim() === streamTurn.content.trim()
+            )
+          )
+        ))) {
+          state.turns = state.turns.filter((turn) => turn.id !== state.streamTurnId);
+        }
+        if (state.turns.length > HISTORY_WINDOW_CAP) {
+          state.turns = state.turns.slice(-HISTORY_WINDOW_CAP);
+        }
+
+        const responseNext = Number(page.next_seq);
+        const observedNext = Math.max(
+          nextSequence,
+          ...page.messages
+            .map((message: any) => Number(message.sequence) + 1)
+            .filter(Number.isFinite),
+        );
+        const advancedNext = Number.isFinite(responseNext)
+          ? Math.max(observedNext, responseNext)
+          : observedNext;
+        state.historyNextSequence = Math.max(state.historyNextSequence, advancedNext);
+        state.historyTotal = Math.max(state.historyTotal, Number(page.total || 0));
+        state.historyWindowEndOffset = state.historyTotal;
+        state.historyOldestOffset = Math.max(0, state.historyTotal - state.turns.length);
+        state.historyHasOlder = state.historyOldestOffset > 0;
+        state.historyHasNewer = false;
+        state.latestIngressSequence = Math.max(
+          state.latestIngressSequence,
+          ...page.messages
+            .filter((message: any) => message?.role === 'user')
+            .map((message: any) => Number(message.sequence))
+            .filter(Number.isFinite),
+        );
+
+        if (!page.has_more) return;
+        if (advancedNext <= nextSequence) {
+          state.lastError = 'transcript tail cursor did not advance';
+          state.degradedReason = state.lastError;
+          return;
+        }
+        nextSequence = advancedNext;
+      }
+    })().finally(() => {
+      if (transcriptSyncFlights.get(sessionId) === flight) {
+        transcriptSyncFlights.delete(sessionId);
+      }
+    });
+    transcriptSyncFlights.set(sessionId, flight);
+    return flight;
   }
 
   async function applyRecoveredLive(
@@ -1758,7 +1772,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       const wasPending = state.pending;
       state.pending = false;
       stopProgressRecovery(sessionId);
-      if (wasPending) await load(sessionId);
+      if (wasPending) await syncTranscriptTail(sessionId);
       await releaseWriter(sessionId);
     }
     return streamRecovered;
@@ -1781,11 +1795,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     return false;
   }
 
-  async function refreshProjection(sessionId: string): Promise<boolean> {
+  async function refreshProjection(
+    sessionId: string,
+    scope: 'summary' | 'full' = 'summary',
+  ): Promise<boolean> {
     const state = stateFor(sessionId);
     const projectionId = executionProjectionId(state);
     if (!projectionId) return false;
-    const projection = await projections.load(projectionId, 'full', sessionId);
+    const projection = await projections.load(projectionId, scope, sessionId);
     if (projection?.execution_id === projectionId) {
       if (projection.live && projection.execution_id === state.executionId) {
         return applyRecoveredLive(
@@ -2120,7 +2137,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         // materialization. Reloading for every replayed terminal multiplies
         // the history/evidence requests and can keep the transcript blank
         // until the whole replay finishes.
-        if (!payload.replayed) load(sessionId).catch(() => undefined);
+        if (!payload.replayed) syncTranscriptTail(sessionId).catch(() => undefined);
         if (settlesCurrentTurn) refreshLiveExecution(sessionId).catch(() => undefined);
         if (settlesCurrentTurn) refreshProjection(sessionId).catch(() => undefined);
         if (settlesCurrentTurn) void releaseWriter(sessionId);
@@ -2165,6 +2182,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         }
         state.attachmentRole = 'reader';
         state.writable = false;
+        schedulePresenceHeartbeat(sessionId, result);
         return true;
       } catch (error: any) {
         if (state.attachmentEpoch !== epoch || state.reconnectBlocked) return false;
@@ -2217,6 +2235,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       state.attachmentRole = 'writer';
       state.writable = true;
       state.degradedReason = '';
+      schedulePresenceHeartbeat(sessionId, attached);
       return true;
     } catch (error: any) {
       if (writerAttached) {
@@ -2237,6 +2256,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           return false;
         }
         state.attachmentRole = 'reader';
+        schedulePresenceHeartbeat(sessionId, reader);
       } catch {
         try {
           await api.detachSession(sessionId);
@@ -2333,6 +2353,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           state.attachmentRole = 'reader';
           state.writable = false;
           state.degradedReason = '';
+          schedulePresenceHeartbeat(sessionId, reader);
           return true;
         } catch (error) {
           if (invalidated()) return false;
@@ -2573,6 +2594,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         const detached: any = await api.detachSession(sessionId);
         if (detached?.ok === false) throw new Error(String(detached.error || 'session detach rejected'));
         state.attachmentRole = 'detached';
+        clearPresenceHeartbeat(sessionId);
         return true;
       } catch (error: any) {
         state.degradedReason = String(error?.message || error || 'session detach failed');
@@ -2639,6 +2661,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     for (const stream of sourceLeases.values()) stream.close();
     for (const frame of flushFrames.values()) cancelAnimationFrame(frame);
     for (const timer of progressRecoveryTimers.values()) clearInterval(timer);
+    for (const timer of presenceHeartbeatTimers.values()) clearTimeout(timer);
     sourceLeases.clear();
     deltaBuffers.clear();
     flushFrames.clear();
@@ -2647,9 +2670,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     attachmentFlights.clear();
     canonicalResyncFlights.clear();
     executionIndexFlights.clear();
-    turnProjectionFlights.clear();
+    transcriptSyncFlights.clear();
     progressRecoveryTimers.clear();
     progressRecoveryFlights.clear();
+    presenceHeartbeatTimers.clear();
     for (const sessionId of Object.keys(states)) delete states[sessionId];
     activeSourceCount.value = 0;
   });
@@ -2671,10 +2695,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     open,
     load,
     hydrateExecutionIndex,
-    hydrateTurnProjection,
     hydrateRuntimeDetails,
     loadOlder,
     loadLatest,
+    syncTranscriptTail,
     send,
     stop,
     close,

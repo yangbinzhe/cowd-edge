@@ -631,7 +631,7 @@ export const useProjectionRegistryStore = defineStore('projectionRegistry', () =
       expected_revision: projection.revision,
       command,
       payload,
-    });
+    }, entry.authorizationSessionId);
     if (result?.status === 'accepted') await load(executionId, entry.detailScope);
     return result;
   }

@@ -444,7 +444,7 @@ describe('Cowd Vue WebUI shell', () => {
     wrapper.unmount();
   });
 
-  it('hydrates durable turn narratives after the transcript becomes available', async () => {
+  it('loads the typed execution index after the transcript without requesting a second turn projection', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
     const store = useAppStore();
@@ -452,14 +452,12 @@ describe('Cowd Vue WebUI shell', () => {
     store.sessions = [{ id: 'history-session', title: 'History' }] as any;
     const open = vi.spyOn(chat, 'open').mockResolvedValue(undefined);
     const execution = vi.spyOn(chat, 'hydrateExecutionIndex').mockResolvedValue(undefined);
-    const turns = vi.spyOn(chat, 'hydrateTurnProjection').mockResolvedValue(undefined);
 
     await store.loadMessages('history-session');
     await settle();
 
     expect(open).toHaveBeenCalledWith('history-session');
     expect(execution).toHaveBeenCalledWith('history-session', false);
-    expect(turns).toHaveBeenCalledWith('history-session');
     wrapper.unmount();
   });
 

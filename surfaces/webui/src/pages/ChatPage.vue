@@ -60,7 +60,6 @@ const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
 const globalMissionGraphOpen = ref(false);
-const historicalExecutionConsumers = new Set<string>();
 const release = computed(() => releaseProjection(store.health));
 const releaseTitle = computed(() => t('release.versions', {
   edge: release.value.edge,
@@ -300,8 +299,14 @@ const chatRuntimeMetrics = computed(() => {
   };
 });
 const chatEvidenceCount = computed(() => new Set(
-  (chat.active?.turnProjection?.turns || [])
-    .flatMap((turn: any) => Array.isArray(turn?.evidence_refs) ? turn.evidence_refs : [])
+  [
+    ...canonicalNarrativeActivities.value,
+    ...(chat.active?.activity || []),
+  ]
+    .flatMap((activity: any) => [
+      ...(Array.isArray(activity?.evidence_refs) ? activity.evidence_refs : []),
+      ...(Array.isArray(activity?.refs) ? activity.refs : []),
+    ])
     .map((reference: unknown) => String(reference || '').trim())
     .filter(Boolean),
 ).size);
@@ -409,44 +414,6 @@ watch(
   { immediate: true },
 );
 watch(
-  [
-    () => store.activeSessionId,
-    () => (chat.active?.turns || [])
-      .map((turn) => String(turn.turn_id || '').trim())
-      .filter(Boolean),
-    () => (chat.active?.executionIndex?.executions || []).map((entry) => ({
-      executionId: String(entry.graph_id || entry.execution_id || '').trim(),
-      turnId: String(entry.turn_id || '').trim(),
-    })),
-  ],
-  ([sessionId, turnIds, executions]) => {
-    const visibleTurnIds = new Set(turnIds);
-    const desiredConsumers = new Set<string>();
-    if (sessionId) {
-      for (const execution of executions) {
-        if (!execution.executionId || !visibleTurnIds.has(execution.turnId)) continue;
-        const consumer = `chat:history:${sessionId}:${execution.executionId}`;
-        desiredConsumers.add(consumer);
-        if (historicalExecutionConsumers.has(consumer)) continue;
-        projections.acquire(
-          execution.executionId,
-          consumer,
-          'summary',
-          'passive',
-          sessionId,
-        );
-      }
-    }
-    for (const consumer of historicalExecutionConsumers) {
-      if (desiredConsumers.has(consumer)) continue;
-      projections.release(consumer);
-      historicalExecutionConsumers.delete(consumer);
-    }
-    for (const consumer of desiredConsumers) historicalExecutionConsumers.add(consumer);
-  },
-  { immediate: true },
-);
-watch(
   [() => store.chatExecutionGraphExpanded, requestedExecutionGraphId],
   ([expanded, rootGraphId]) => {
     projections.release(executionGraphConsumer);
@@ -465,8 +432,6 @@ watch(
 onBeforeUnmount(() => {
   projections.release(activeExecutionSummaryConsumer);
   projections.release(executionGraphConsumer);
-  for (const consumer of historicalExecutionConsumers) projections.release(consumer);
-  historicalExecutionConsumers.clear();
   if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
 });
 

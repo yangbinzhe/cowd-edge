@@ -69,12 +69,6 @@ describe('chatSessions', () => {
       recent_metadata: [],
       cards: [],
     }) as any);
-    vi.spyOn(api, 'sessionTurnProjection').mockImplementation(async (sessionId) => ({
-      kind: 'session.turn_projection',
-      session_id: sessionId,
-      turn_count: 0,
-      turns: [],
-    }) as any);
   });
 
   afterEach(() => {
@@ -225,7 +219,7 @@ describe('chatSessions', () => {
     expect(JSON.stringify(state.turns[0])).not.toContain('provider-transcript');
   });
 
-  it('hydrates durable execution history into exactly the canonical user turns', async () => {
+  it('hydrates durable execution history from the transcript without a second projection', async () => {
     setActivePinia(createPinia());
     const chat = useChatSessionsStore();
     const messages = [1, 2, 3].flatMap((number) => ([
@@ -246,12 +240,29 @@ describe('chatSessions', () => {
         session_id: 'turn-history',
         sequence: (number - 1) * 2 + 1,
         role: 'assistant',
-        blocks: [{
-          type: 'text',
-          text: `answer ${number}`,
-          cowd_turn_id: `turn-${number}`,
-          cowd_turn_ingress_message_id: `user-${number}`,
-        }],
+        blocks: [
+          {
+            type: 'tool_use',
+            id: `tool-${number}`,
+            name: 'read_file',
+            input: { path: `file-${number}` },
+            cowd_turn_id: `turn-${number}`,
+          },
+          {
+            type: 'tool_result',
+            tool_use_id: `tool-${number}`,
+            tool_name: 'read_file',
+            output: `result ${number}`,
+            is_error: false,
+            cowd_turn_id: `turn-${number}`,
+          },
+          {
+            type: 'text',
+            text: `answer ${number}`,
+            cowd_turn_id: `turn-${number}`,
+            cowd_turn_ingress_message_id: `user-${number}`,
+          },
+        ],
       },
     ]));
     vi.spyOn(api, 'messages').mockResolvedValue({
@@ -259,42 +270,17 @@ describe('chatSessions', () => {
       messages,
       total: messages.length,
     } as any);
-    vi.mocked(api.sessionTurnProjection).mockResolvedValue({
-      kind: 'session.turn_projection',
-      session_id: 'turn-history',
-      turn_count: 3,
-      turns: [1, 2, 3].map((number) => ({
-        turn_id: `turn-${number}`,
-        status: 'completed',
-        tool_calls: [],
-        approvals: [],
-        context_events: [],
-        usage: [],
-        evidence_refs: [],
-        event_sequences: [],
-        activity_events: [{
-          id: `tool-${number}`,
-          kind: 'tool',
-          title: 'read_file',
-          status: 'complete',
-          turn_id: `turn-${number}`,
-          execution_id: number === 1 ? 'runtime-team:researcher:1' : `root-${number}`,
-          parent_execution_id: number === 1 ? 'root-1' : '',
-          tool_call_id: `tool-${number}`,
-          output: `result ${number}`,
-        }],
-      })),
-    } as any);
-
     await chat.load('turn-history');
-    await chat.hydrateTurnProjection('turn-history');
 
     const state = chat.states['turn-history'];
     expect(state.turns.filter((turn) => turn.role === 'user')).toHaveLength(3);
-    expect(state.turnProjection?.turn_count).toBe(3);
     expect(state.turns.filter((turn) => turn.role === 'assistant').map((turn) => (
       turn.activity?.map((event) => event.tool_call_id)
-    ))).toEqual([['tool-1'], ['tool-2'], ['tool-3']]);
+    ))).toEqual([
+      ['tool-1', 'tool-1'],
+      ['tool-2', 'tool-2'],
+      ['tool-3', 'tool-3'],
+    ]);
     expect(state.turns.some((turn) => turn.turn_id === 'runtime-team:researcher:1')).toBe(false);
   });
 
@@ -1839,6 +1825,29 @@ describe('chatSessions', () => {
     expect(detach).toHaveBeenCalledWith('atomic-message');
   });
 
+  it('renews presence from the server TTL without writing Session history', async () => {
+    vi.useFakeTimers();
+    setActivePinia(createPinia());
+    mockEmptySessionReads();
+    const attach = vi.spyOn(api, 'attachSession').mockResolvedValue({
+      ok: true,
+      presence_ttl_ms: 900,
+    } as any);
+    vi.spyOn(api, 'detachSession').mockResolvedValue({ ok: true } as any);
+    const chat = useChatSessionsStore();
+
+    await chat.open('presence-heartbeat');
+    attach.mockClear();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(attach).toHaveBeenCalledTimes(1);
+    expect(attach).toHaveBeenCalledWith('presence-heartbeat', 'reader');
+
+    await chat.close('presence-heartbeat');
+    attach.mockClear();
+    await vi.advanceTimersByTimeAsync(900);
+    expect(attach).not.toHaveBeenCalled();
+  });
+
   it('hydrates the newest durable page and can page backward without losing metadata', async () => {
     setActivePinia(createPinia());
     mockWriterAttachment();
@@ -1882,6 +1891,103 @@ describe('chatSessions', () => {
     expect(chat.states['history-window'].turns[0].sequence).toBe(105);
     expect(chat.states['history-window'].historyOldestOffset).toBe(105);
     expect(chat.states['history-window'].historyTotal).toBe(205);
+  });
+
+  it('advances terminal transcript from the durable sequence without reloading history', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    const chat = useChatSessionsStore();
+    const messages = vi.spyOn(api, 'messages')
+      .mockResolvedValueOnce({
+        __state: 'ready',
+        session_id: 'terminal-tail',
+        messages: [{
+          id: 'message-40',
+          session_id: 'terminal-tail',
+          sequence: 40,
+          role: 'user',
+          blocks: [{ type: 'text', text: 'question' }],
+        }],
+        total: 41,
+        offset: 40,
+        next_seq: 41,
+        limit: 50,
+        has_more: false,
+      } as any)
+      .mockResolvedValueOnce({
+        __state: 'ready',
+        session_id: 'terminal-tail',
+        messages: [{
+          id: 'message-41',
+          session_id: 'terminal-tail',
+          sequence: 41,
+          role: 'assistant',
+          blocks: [{ type: 'text', text: 'durable answer' }],
+        }],
+        total: 42,
+        from_seq: 41,
+        next_seq: 42,
+        limit: 500,
+        has_more: false,
+      } as any);
+
+    await chat.load('terminal-tail');
+    await chat.syncTranscriptTail('terminal-tail');
+
+    expect(messages).toHaveBeenNthCalledWith(1, 'terminal-tail', {
+      limit: 50,
+      tail: true,
+    });
+    expect(messages).toHaveBeenNthCalledWith(2, 'terminal-tail', {
+      fromSeq: 41,
+      limit: 500,
+    });
+    expect(chat.states['terminal-tail'].turns.map((turn) => turn.content)).toEqual([
+      'question',
+      'durable answer',
+    ]);
+    expect(chat.states['terminal-tail'].historyNextSequence).toBe(42);
+    expect(chat.states['terminal-tail'].historyHasNewer).toBe(false);
+  });
+
+  it('coalesces concurrent terminal transcript synchronization', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    const chat = useChatSessionsStore();
+    let finishTail!: (value: unknown) => void;
+    const messages = vi.spyOn(api, 'messages').mockImplementation(async (_sessionId, options = {}) => {
+      if (options.tail) {
+        return {
+          __state: 'ready',
+          session_id: 'terminal-coalesced',
+          messages: [],
+          total: 0,
+          next_seq: 0,
+          limit: 50,
+          has_more: false,
+        } as any;
+      }
+      return new Promise((resolve) => {
+        finishTail = resolve;
+      }) as any;
+    });
+
+    await chat.load('terminal-coalesced');
+    const first = chat.syncTranscriptTail('terminal-coalesced');
+    const second = chat.syncTranscriptTail('terminal-coalesced');
+    expect(messages).toHaveBeenCalledTimes(2);
+    finishTail({
+      __state: 'ready',
+      session_id: 'terminal-coalesced',
+      messages: [],
+      total: 0,
+      from_seq: 0,
+      next_seq: 0,
+      limit: 500,
+      has_more: false,
+    });
+    await Promise.all([first, second]);
+    expect(messages).toHaveBeenCalledTimes(2);
   });
 
   it('accepts canonical tool messages in durable history', async () => {

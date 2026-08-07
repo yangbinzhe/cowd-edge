@@ -221,6 +221,7 @@ function visibleSessionRows(rows: unknown): SessionSummary[] {
 
 export const useAppStore = defineStore('app', () => {
   const chatSessions = useChatSessionsStore();
+  const projectionRegistry = useProjectionRegistryStore();
   let configReloadTimer: ReturnType<typeof setInterval> | null = null;
   let bootPromise: Promise<void> | null = null;
   let sessionCreateFlight: Promise<SessionSummary> | null = null;
@@ -406,10 +407,16 @@ export const useAppStore = defineStore('app', () => {
         ref: attachment.ref_id,
       });
     });
+    const projectionId = String(
+      chatSessions.active?.executionGraphId
+      || chatSessions.active?.executionId
+      || '',
+    );
+    const projectionActivities = projectionId
+      ? projectionRegistry.projectionFor(projectionId)?.activities || []
+      : [];
     const typedRefs = [
-      ...(Array.isArray(chatSessions.active?.turnProjection?.turns)
-        ? chatSessions.active.turnProjection.turns.flatMap((turn: any) => turn?.activity_events || [])
-        : []),
+      ...projectionActivities,
       ...activity.value,
     ].flatMap((event: any) => [
       ...(Array.isArray(event?.raw?.refs) ? event.raw.refs : []),
@@ -589,10 +596,6 @@ export const useAppStore = defineStore('app', () => {
     queueMicrotask(() => {
       if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
       chat.hydrateExecutionIndex(sessionId, false).catch(() => undefined);
-      // The transcript owns its per-turn narrative. Hydrate the bounded,
-      // durable turn projection after messages are visible instead of waiting
-      // for the optional companion panel to open.
-      chat.hydrateTurnProjection(sessionId).catch(() => undefined);
       Promise.allSettled([
         loadAttachments(sessionId, generation),
         refreshSessionInputs(sessionId, generation),
@@ -636,7 +639,6 @@ export const useAppStore = defineStore('app', () => {
       if (tab === 'activity') {
         await Promise.all([
           chat.hydrateRuntimeDetails(sessionId, true),
-          loadActivity(sessionId, generation, controller.signal),
           refreshSessionInputs(sessionId, generation, controller.signal),
           refreshChatProjection(sessionId, '', generation, controller.signal),
         ]);
@@ -978,6 +980,7 @@ export const useAppStore = defineStore('app', () => {
     ]);
     if (activeSessionId.value !== sessionId || generation !== activeSessionLoadGeneration) return;
     currentTimeline.value = timeline;
+    activity.value = runtimeTimelineRows.value.slice(0, 50).map(timelineActivity);
     currentRealityFlow.value = reality;
     if (!currentContextEnvelope.value || context?.identity || context?.envelope) currentContextEnvelope.value = context.envelope || context;
   }

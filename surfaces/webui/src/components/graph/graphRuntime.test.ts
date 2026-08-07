@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/graph';
 import {
+  aggregateGraphEdges,
+  graphEdgeVisualKind,
   graphDiagnostics,
   graphExportPayload,
   semanticHierarchyLayoutEdges,
@@ -129,5 +131,39 @@ describe('graph runtime contracts', () => {
       semanticEdges,
     )).toEqual([semanticEdges[0]]);
     expect(semanticHierarchyLayoutEdges('generic', semanticEdges)).toEqual(semanticEdges);
+  });
+
+  it('aggregates duplicate visual relations without dropping their evidence', () => {
+    const aggregated = aggregateGraphEdges([{
+      id: 'data-1',
+      source: 'tool',
+      target: 'agent',
+      type: 'consumed',
+      label: '产出传递',
+      evidenceRefs: ['evidence-1'],
+    }, {
+      id: 'data-2',
+      source: 'tool',
+      target: 'agent',
+      type: 'depends_on',
+      label: '依赖',
+      evidenceRefs: ['evidence-2'],
+    }, {
+      id: 'hierarchy',
+      source: 'tool',
+      target: 'agent',
+      type: 'delegates',
+      label: '委派',
+    }]);
+
+    expect(aggregated).toHaveLength(2);
+    expect(aggregated.find((edge) => graphEdgeVisualKind(edge.type) === 'transfer'))
+      .toMatchObject({
+        source: 'tool',
+        target: 'agent',
+        type: 'transfer',
+        label: '产出传递 · 依赖',
+        evidenceRefs: ['evidence-1', 'evidence-2'],
+      });
   });
 });

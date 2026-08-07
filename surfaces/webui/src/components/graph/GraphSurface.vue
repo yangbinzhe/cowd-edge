@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { MarkerType, Panel, VueFlow } from '@vue-flow/core';
 import {
+  Handle,
+  MarkerType,
+  Panel,
+  Position,
+  VueFlow,
+} from '@vue-flow/core';
+import {
+  Bot,
+  Boxes,
+  CircleDot,
   ArrowDown,
   ArrowRight,
   Download,
@@ -12,6 +21,11 @@ import {
   Minimize2,
   Scan,
   Search,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  Users,
+  Wrench,
   ZoomIn,
   ZoomOut,
 } from 'lucide-vue-next';
@@ -25,6 +39,8 @@ import StatusPill from '../workbench/StatusPill.vue';
 import EvidenceInspector from '../evidence/EvidenceInspector.vue';
 import { runGraphLayout } from './graphLayout';
 import {
+  aggregateGraphEdges,
+  graphEdgeVisualKind,
   graphDiagnostics,
   graphExportPayload,
   semanticHierarchyLayoutEdges,
@@ -139,7 +155,12 @@ const visibleNodes = computed(() => {
   });
 });
 const visibleNodeIds = computed(() => new Set(visibleNodes.value.map((node) => node.id)));
-const visibleEdges = computed(() => props.model.edges.filter((edge) => visibleNodeIds.value.has(edge.source) && visibleNodeIds.value.has(edge.target)));
+const visibleEdges = computed(() => aggregateGraphEdges(
+  props.model.edges.filter((edge) => (
+    visibleNodeIds.value.has(edge.source)
+    && visibleNodeIds.value.has(edge.target)
+  )),
+));
 const graphIsAggregated = computed(() => visibleNodes.value.length > graphNodeLimit);
 const minimumZoom = computed(() => (
   props.compact || visibleNodes.value.length > 28 ? 0.12 : 0.32
@@ -185,24 +206,51 @@ const flowNodes = computed(() => {
         metrics: node.metrics || [],
         node,
         status: node.status,
+        visualKind: graphNodeVisualKind(node),
+        icon: graphNodeIcon(node),
       },
-      class: `graph-node graph-node-${node.type} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}${props.activeNodeId === node.id ? ' active-runtime-node' : ''}`,
+      class: `graph-node graph-node-${node.type} graph-node-visual-${graphNodeVisualKind(node)} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}${props.activeNodeId === node.id ? ' active-runtime-node' : ''}`,
     }];
   });
 });
 const laidOutNodeIds = computed(() => new Set(flowNodes.value.map((node) => node.id)));
 const flowEdges = computed(() => canvasEdges.value
   .filter((edge) => laidOutNodeIds.value.has(edge.source) && laidOutNodeIds.value.has(edge.target))
-  .map((edge) => ({
-  id: edge.id,
-  source: edge.source,
-  target: edge.target,
-  label: edge.label,
-  type: 'smoothstep',
-  markerEnd: { type: MarkerType.ArrowClosed },
-  class: `graph-edge graph-edge-${edge.type}`,
-  data: { edge },
-})));
+  .map((edge) => {
+    const visualKind = graphEdgeVisualKind(edge.type);
+    const lateral = visualKind === 'transfer';
+    const verticalHierarchy = direction.value === 'DOWN' && !lateral;
+    const sourceHandle = verticalHierarchy
+      ? 'hierarchy-output-bottom'
+      : direction.value === 'DOWN'
+        ? 'transfer-output-right'
+        : lateral
+          ? 'transfer-output-bottom'
+          : 'hierarchy-output-right';
+    const targetHandle = verticalHierarchy
+      ? 'hierarchy-input-top'
+      : direction.value === 'DOWN'
+        ? 'transfer-input-left'
+        : lateral
+          ? 'transfer-input-top'
+          : 'hierarchy-input-left';
+    const color = edgeColor(visualKind, edge.type);
+    const showLabel = ['delegates', 'delegated_to', 'consumed', 'contributes_to', 'depends_on', 'transfer'].includes(edge.type);
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle,
+      targetHandle,
+      label: showLabel ? edge.label : '',
+      type: 'smoothstep',
+      pathOptions: { borderRadius: 10, offset: lateral ? 26 : 18 },
+      style: { stroke: color, strokeWidth: lateral ? 1.7 : 1.4 },
+      markerEnd: { type: MarkerType.ArrowClosed, color },
+      class: `graph-edge graph-edge-${edge.type} graph-edge-visual-${visualKind}${showLabel ? ' graph-edge-labeled' : ''}`,
+      data: { edge },
+    };
+  }));
 const minimapBounds = computed(() => {
   if (!laidOutNodes.value.length) return null;
   const xs = laidOutNodes.value.map((node) => Number(node.position.x || 0));
@@ -300,8 +348,10 @@ async function layout() {
         metrics: node.metrics || [],
         node,
         status: node.status,
+        visualKind: graphNodeVisualKind(node),
+        icon: graphNodeIcon(node),
       },
-      class: `graph-node graph-node-${node.type} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}${props.activeNodeId === node.id ? ' active-runtime-node' : ''}`,
+      class: `graph-node graph-node-${node.type} graph-node-visual-${graphNodeVisualKind(node)} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}${props.activeNodeId === node.id ? ' active-runtime-node' : ''}`,
       draggable: false,
       connectable: false,
     };
@@ -383,12 +433,53 @@ function scheduleFit(instance = flow.value) {
 function graphNodeSize(node: GraphNodeView) {
   const labelLength = Array.from(String(node.label || '')).length;
   const semantic = Boolean(node.raw?.semantic_view);
+  const visualKind = graphNodeVisualKind(node);
   return {
-    width: Math.max(164, Math.min(236, 138 + labelLength * 5)),
-    height: semantic
-      ? (node.outputSummary || node.metrics?.length ? 94 : 76)
+    width: visualKind === 'mission'
+      ? Math.max(236, Math.min(320, 180 + labelLength * 5))
+      : Math.max(164, Math.min(236, 138 + labelLength * 5)),
+    height: visualKind === 'mission' && node.description
+      ? 104
+      : semantic
+        ? (node.outputSummary || node.metrics?.length ? 94 : 76)
       : 70,
   };
+}
+
+function graphNodeVisualKind(node: GraphNodeView) {
+  const value = `${node.type} ${String(node.raw?.executor_kind || '')}`.toLowerCase();
+  if (value.includes('agent')) return 'agent';
+  if (value.includes('tool')) return 'tool';
+  if (value.includes('skill')) return 'skill';
+  if (value.includes('team')) return 'team';
+  if (value.includes('mission')) return 'mission';
+  if (value.includes('approval')) return 'approval';
+  if (value.includes('task')) return 'task';
+  if (value.includes('execution')) return 'execution';
+  return 'generic';
+}
+
+function graphNodeIcon(node: GraphNodeView) {
+  const icons = {
+    agent: Bot,
+    tool: Wrench,
+    skill: Sparkles,
+    team: Users,
+    mission: Target,
+    approval: ShieldCheck,
+    task: CircleDot,
+    execution: Boxes,
+    generic: CircleDot,
+  };
+  return icons[graphNodeVisualKind(node) as keyof typeof icons] || CircleDot;
+}
+
+function edgeColor(visualKind: ReturnType<typeof graphEdgeVisualKind>, type: string) {
+  if (visualKind === 'transfer') return 'var(--graph-edge-transfer)';
+  if (visualKind === 'approval') return 'var(--graph-edge-approval)';
+  if (['delegates', 'delegated_to'].includes(type)) return 'var(--graph-edge-delegates)';
+  if (type === 'invokes') return 'var(--graph-edge-invokes)';
+  return 'var(--graph-edge-hierarchy)';
 }
 
 function selectListRow(row: Record<string, unknown>) {
@@ -564,7 +655,12 @@ onBeforeUnmount(() => {
       <template #node-default="{ data }">
         <div class="graph-node-content" :class="{ 'semantic-node-content': data.node.raw?.semantic_view }">
           <div class="graph-node-heading">
-            <strong>{{ data.label }}</strong>
+            <span class="graph-node-identity">
+              <span class="graph-node-icon" aria-hidden="true">
+                <component :is="data.icon" :size="13" :stroke-width="1.9" />
+              </span>
+              <strong>{{ data.label }}</strong>
+            </span>
             <span class="graph-node-status">{{ displayStatus(data.status) }}</span>
           </div>
           <small v-if="data.node.raw?.semantic_view && data.task" class="graph-node-task">{{ data.task }}</small>
@@ -576,6 +672,14 @@ onBeforeUnmount(() => {
             <span v-for="metric in data.metrics" :key="metric">{{ metric }}</span>
           </div>
         </div>
+        <Handle id="hierarchy-input-top" class="graph-handle hierarchy-handle" type="target" :position="Position.Top" />
+        <Handle id="hierarchy-output-bottom" class="graph-handle hierarchy-handle" type="source" :position="Position.Bottom" />
+        <Handle id="hierarchy-input-left" class="graph-handle hierarchy-handle" type="target" :position="Position.Left" />
+        <Handle id="hierarchy-output-right" class="graph-handle hierarchy-handle" type="source" :position="Position.Right" />
+        <Handle id="transfer-input-left" class="graph-handle transfer-handle" type="target" :position="Position.Left" />
+        <Handle id="transfer-output-right" class="graph-handle transfer-handle" type="source" :position="Position.Right" />
+        <Handle id="transfer-input-top" class="graph-handle transfer-handle" type="target" :position="Position.Top" />
+        <Handle id="transfer-output-bottom" class="graph-handle transfer-handle" type="source" :position="Position.Bottom" />
       </template>
       <Panel position="top-right" class="execution-graph-controls">
         <button type="button" :title="t('runtime.execution.canvas.zoomIn')" :aria-label="t('runtime.execution.canvas.zoomIn')" @click="flow?.zoomIn()"><ZoomIn :size="15" /></button>

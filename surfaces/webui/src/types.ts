@@ -310,42 +310,6 @@ export interface SessionAttachment {
   status?: string;
 }
 
-export interface SessionTurnProjectionItem {
-  turn_id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | string;
-  submitted_at_ms?: number | null;
-  started_at_ms?: number | null;
-  completed_at_ms?: number | null;
-  user_preview?: string | null;
-  assistant_preview?: string | null;
-  tool_calls: Array<Record<string, unknown>>;
-  approvals: Array<Record<string, unknown>>;
-  context_events: Array<Record<string, unknown>>;
-  usage: Array<Record<string, unknown>>;
-  evidence_refs: string[];
-  event_sequences: number[];
-  activity_events?: ActivityEvent[];
-}
-
-export interface SessionTurnProjection {
-  kind: 'session.turn_projection';
-  source?: string;
-  session_id: string;
-  turn_count: number;
-  turns: SessionTurnProjectionItem[];
-  unbound_event_count?: number;
-  unbound_events?: Array<Record<string, unknown>>;
-  paging?: {
-    total: number;
-    from_seq: number;
-    next_seq?: number | null;
-    limit: number;
-    has_more: boolean;
-  };
-  __state?: ApiReadStatus;
-  __error?: string;
-}
-
 export interface GatewayCapabilityHttp {
   method: string;
   path: string;

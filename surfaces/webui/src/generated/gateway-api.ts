@@ -9256,28 +9256,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{id}/projection": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * session GET /api/sessions/:id/projection
-         * @description Query Gateway session capability through `/api/sessions/:id/projection` handled by `get_session_projection`.
-         *
-         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
-         */
-        get: operations["gateway_session_get_api_sessions_by_id_projection"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{id}/replay": {
         parameters: {
             query?: never;
@@ -9292,28 +9270,6 @@ export interface paths {
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
         get: operations["gateway_session_get_api_sessions_by_id_replay"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * session GET /api/sessions/:id/runs
-         * @description Query Gateway session capability through `/api/sessions/:id/runs` handled by `get_session_runs`.
-         *
-         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
-         */
-        get: operations["gateway_session_get_api_sessions_by_id_runs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9358,50 +9314,6 @@ export interface paths {
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
         get: operations["gateway_session_message_get_api_sessions_by_id_turn_inbox"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/turns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * session GET /api/sessions/:id/turns
-         * @description Query Gateway session capability through `/api/sessions/:id/turns` handled by `get_session_turns`.
-         *
-         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
-         */
-        get: operations["gateway_session_get_api_sessions_by_id_turns"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/turns/{turn_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * session GET /api/sessions/:id/turns/:turn_id
-         * @description Query Gateway session capability through `/api/sessions/:id/turns/:turn_id` handled by `get_session_turn`.
-         *
-         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
-         */
-        get: operations["gateway_session_get_api_sessions_by_id_turns_by_turn_id"];
         put?: never;
         post?: never;
         delete?: never;
@@ -42642,97 +42554,7 @@ export interface operations {
             };
         };
     };
-    gateway_session_get_api_sessions_by_id_projection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     gateway_session_get_api_sessions_by_id_replay: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_session_get_api_sessions_by_id_runs: {
         parameters: {
             query?: never;
             header?: never;
@@ -42828,97 +42650,6 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_session_get_api_sessions_by_id_turns: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    gateway_session_get_api_sessions_by_id_turns_by_turn_id: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                turn_id: string;
             };
             cookie?: never;
         };

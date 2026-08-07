@@ -133,9 +133,9 @@ const activityEvents = computed(() => {
       raw: { ...(previous.raw || {}), ...(event.raw || {}) },
     } : event);
   }
-  // The current execution projection is fresher than the durable Turn
-  // projection, but it only covers one execution lineage. Merge it into the
-  // Session-wide history instead of replacing earlier Turn activity.
+  // The current typed execution projection is fresher than the durable
+  // transcript, but it only covers one execution lineage. Merge it into the
+  // Session-wide transcript activity instead of replacing earlier turns.
   for (const event of canonical) {
     const identity = activityIdentityKey(event);
     const previous = rows.get(identity);
@@ -184,26 +184,25 @@ const executionConnectionState = computed(() => {
 const canonicalExecutionTurns = computed(() => {
   const rows = new Map<string, {
     turnId: string;
-    projected: any;
     userTurns: any[];
     order: number;
     timestamp: number;
   }>();
   let order = 0;
-  for (const projected of chat.active?.turnProjection?.turns || []) {
-    const turnId = String(projected.turn_id || '').trim();
+  const indexedExecutions = [...(chat.active?.executionIndex?.executions || [])]
+    .sort((left, right) => (
+      Number(left.started_at_ms || left.updated_at_ms || 0)
+      - Number(right.started_at_ms || right.updated_at_ms || 0)
+    ));
+  for (const execution of indexedExecutions) {
+    const turnId = String(execution.turn_id || '').trim();
     if (!turnId) continue;
+    if (rows.has(turnId)) continue;
     rows.set(turnId, {
       turnId,
-      projected,
       userTurns: [],
       order: order += 1,
-      timestamp: Number(
-        projected.submitted_at_ms
-        || projected.started_at_ms
-        || projected.completed_at_ms
-        || 0,
-      ),
+      timestamp: Number(execution.started_at_ms || execution.updated_at_ms || 0),
     });
   }
   const transcript = chat.active?.turns || [];
@@ -223,7 +222,6 @@ const canonicalExecutionTurns = computed(() => {
     } else {
       rows.set(turnId, {
         turnId,
-        projected: null,
         userTurns: [userTurn],
         order: order += 1,
         timestamp: Number(userTurn.created_at_ms || 0),
@@ -238,7 +236,7 @@ const executionTurnGroups = computed(() => {
   const entries = chat.active?.executionIndex?.executions || [];
   const canonicalTurns = canonicalExecutionTurns.value;
   const visibleTurns = canonicalTurns.slice(-executionHistoryLimit.value).reverse();
-  return visibleTurns.map(({ turnId, projected, userTurns, order }) => {
+  return visibleTurns.map(({ turnId, userTurns, order, timestamp }) => {
     const indexedEntry = selectTurnExecutionEntry(entries, turnId);
     const isActiveTurn = turnId === chat.active?.executionTurnId;
     const entry = indexedEntry || (isActiveTurn ? {
@@ -254,22 +252,14 @@ const executionTurnGroups = computed(() => {
       || (!!entry?.execution_id && event.parent_execution_id === entry.execution_id)
     ));
     const evidenceRefs = Array.from(new Set([
-      ...(Array.isArray(projected?.evidence_refs) ? projected.evidence_refs : []),
       ...events.flatMap(activityEvidenceRefs),
     ]));
-    const fallbackTimestamp = Number(
-      projected?.completed_at_ms
-      || projected?.started_at_ms
-      || projected?.submitted_at_ms
-      || 0,
-    );
     const runtimeInput = runtimeInputItems.value.find((item: any) => (
       String(item?.turn_id || item?.active_turn_id || item?.input_id || item?.id || '') === turnId
     ));
     const transcriptInput = userTurns[0];
     const userPreview = String(
-      projected?.user_preview
-      || runtimeInput?.content_preview
+      runtimeInput?.content_preview
       || transcriptInput?.content
       || '',
     ).trim();
@@ -278,8 +268,8 @@ const executionTurnGroups = computed(() => {
         execution_id: '',
         graph_id: null,
         turn_id: turnId,
-        status: projected?.status || 'unknown',
-        updated_at_ms: fallbackTimestamp,
+        status: transcriptInput?.status || 'unknown',
+        updated_at_ms: timestamp,
       },
       turnId,
       runtimeInput,
@@ -290,7 +280,6 @@ const executionTurnGroups = computed(() => {
       status: String(
         (isActiveTurn && chat.active?.pending ? chat.active?.live?.status : '')
         || entry?.status
-        || projected?.status
         || transcriptInput?.status
         || 'unknown',
       ),
@@ -345,7 +334,6 @@ const activityApprovalCount = computed(() => Math.max(
   activityEvents.value.filter((event) => event.kind === 'approval').length,
 ));
 const activityEvidenceCount = computed(() => Array.from(new Set([
-  ...(chat.active?.turnProjection?.turns || []).flatMap((turn: any) => turn?.evidence_refs || []),
   ...activityEvents.value.flatMap(activityEvidenceRefs),
 ])).length);
 const activityMemoryEvidenceCount = computed(() =>

@@ -6,6 +6,70 @@ export interface GraphDiagnostics {
   danglingEdgeIds: string[];
 }
 
+const HIERARCHY_EDGE_TYPES = new Set([
+  'contains',
+  'delegates',
+  'delegated_to',
+  'invokes',
+  'owns',
+]);
+
+const TRANSFER_EDGE_TYPES = new Set([
+  'consumed',
+  'contributes_to',
+  'depends_on',
+  'produced',
+  'recovered_from',
+  'replanned_to',
+  'transfer',
+]);
+
+export type GraphEdgeVisualKind = 'hierarchy' | 'transfer' | 'approval' | 'generic';
+
+export function graphEdgeVisualKind(type: string): GraphEdgeVisualKind {
+  if (HIERARCHY_EDGE_TYPES.has(type)) return 'hierarchy';
+  if (TRANSFER_EDGE_TYPES.has(type)) return 'transfer';
+  if (type === 'approved_by') return 'approval';
+  return 'generic';
+}
+
+export function aggregateGraphEdges(edges: GraphEdgeView[]): GraphEdgeView[] {
+  const groups = new Map<string, GraphEdgeView[]>();
+  for (const edge of edges) {
+    const key = [
+      edge.source,
+      edge.target,
+      graphEdgeVisualKind(edge.type),
+    ].join(':');
+    groups.set(key, [...(groups.get(key) || []), edge]);
+  }
+
+  return [...groups.values()].map((rows) => {
+    const first = rows[0]!;
+    if (rows.length === 1) return first;
+    const labels = unique(rows.map((edge) => edge.label || '').filter(Boolean));
+    const types = unique(rows.map((edge) => edge.type));
+    return {
+      ...first,
+      id: `visual:${first.source}:${first.target}:${graphEdgeVisualKind(first.type)}`,
+      type: types.length === 1 ? first.type : graphEdgeVisualKind(first.type),
+      label: labels.join(' · '),
+      evidenceRefs: unique(rows.flatMap((edge) => edge.evidenceRefs || [])),
+      correlationRefs: unique(rows.flatMap((edge) => edge.correlationRefs || [])),
+      raw: {
+        aggregated: true,
+        relation_count: rows.length,
+        relations: rows.map((edge) => edge.raw || {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: edge.type,
+        }),
+      },
+    };
+  });
+}
+
 function duplicates(values: string[]) {
   const seen = new Set<string>();
   const duplicate = new Set<string>();
@@ -109,14 +173,7 @@ export function semanticHierarchyLayoutEdges(
     !modelId.startsWith('activity-lineage:')
     && !modelId.startsWith('mission:')
   ) return edges;
-  const hierarchy = new Set([
-    'contains',
-    'delegates',
-    'delegated_to',
-    'invokes',
-    'owns',
-  ]);
-  return edges.filter((edge) => hierarchy.has(edge.type));
+  return edges.filter((edge) => HIERARCHY_EDGE_TYPES.has(edge.type));
 }
 
 export function graphExportPayload(
@@ -145,4 +202,8 @@ export function graphExportPayload(
     edges: publicEdges,
     generated_at: generatedAt.toISOString(),
   };
+}
+
+function unique(values: string[]) {
+  return [...new Set(values)];
 }

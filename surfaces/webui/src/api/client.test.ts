@@ -59,26 +59,6 @@ describe('API authorization epoch', () => {
     expect(secondResult.__state).toBe('ready');
   });
 
-  it('loads the latest turn projection unless an explicit event offset is requested', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      kind: 'session.turn_projection',
-      session_id: 'history-session',
-      turn_count: 0,
-      turns: [],
-    }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await api.sessionTurnProjection('history-session');
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/sessions/history-session/turns?limit=2000',
-      expect.any(Object),
-    );
-  });
-
   it('coalesces signalled reads while allowing one caller to cancel independently', async () => {
     let finish!: (response: Response) => void;
     const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
@@ -262,6 +242,74 @@ describe('API authorization epoch', () => {
     expect(catalogReads).toBe(2);
   });
 
+  it('invalidates only the owning Session execution after an execution command', async () => {
+    let finishSessionOne!: (response: Response) => void;
+    let finishSessionTwo!: (response: Response) => void;
+    let sessionOneReads = 0;
+    let sessionTwoReads = 0;
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/runtime/executions/execution-1?detail_scope=full') {
+        sessionOneReads += 1;
+        if (sessionOneReads === 1) {
+          return new Promise<Response>((resolve) => {
+            finishSessionOne = resolve;
+          });
+        }
+        return Promise.resolve(new Response(JSON.stringify({ revision: 2 }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }));
+      }
+      if (url === '/api/runtime/executions/execution-2?detail_scope=full') {
+        sessionTwoReads += 1;
+        return new Promise<Response>((resolve) => {
+          finishSessionTwo = resolve;
+        });
+      }
+      if (url === '/api/runtime/executions/execution-1/commands') {
+        return Promise.resolve(new Response(JSON.stringify({ status: 'accepted' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }));
+      }
+      throw new Error(`unexpected request ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const sessionOne = read(
+      '/api/runtime/executions/execution-1?detail_scope=full',
+      { revision: 0 },
+      {},
+      'session-1',
+    );
+    const sessionTwo = read(
+      '/api/runtime/executions/execution-2?detail_scope=full',
+      { revision: 0 },
+      {},
+      'session-2',
+    );
+    await api.executeProjectionCommand('execution-1', {
+      command_id: 'command-1',
+      expected_revision: 1,
+      command: 'cancel',
+      payload: {},
+    }, 'session-1');
+    finishSessionOne(new Response(JSON.stringify({ revision: 1 }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    finishSessionTwo(new Response(JSON.stringify({ revision: 7 }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await expect(sessionOne).resolves.toMatchObject({ revision: 2, __state: 'ready' });
+    await expect(sessionTwo).resolves.toMatchObject({ revision: 7, __state: 'ready' });
+    expect(sessionOneReads).toBe(2);
+    expect(sessionTwoReads).toBe(1);
+  });
+
   it('does not abort an execution projection when the same session attaches a reader', async () => {
     let finishExecution!: (response: Response) => void;
     const fetchMock = vi.fn((path: RequestInfo | URL) => {
@@ -297,6 +345,73 @@ describe('API authorization epoch', () => {
       __state: 'ready',
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps transcript and execution reads alive when only session resources change', async () => {
+    let finishTranscript!: (response: Response) => void;
+    let finishExecution!: (response: Response) => void;
+    const aborted = vi.fn();
+    const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
+      const requestPath = String(path);
+      if (requestPath === '/api/sessions/session-A/messages?limit=50&tail=true') {
+        return new Promise<Response>((resolve, reject) => {
+          finishTranscript = resolve;
+          init?.signal?.addEventListener('abort', () => {
+            aborted('transcript');
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          }, { once: true });
+        });
+      }
+      if (requestPath === '/api/sessions/session-A/execution') {
+        return new Promise<Response>((resolve, reject) => {
+          finishExecution = resolve;
+          init?.signal?.addEventListener('abort', () => {
+            aborted('execution');
+            reject(new DOMException('The operation was aborted', 'AbortError'));
+          }, { once: true });
+        });
+      }
+      return Promise.resolve(new Response(JSON.stringify({
+        ok: true,
+        ref_id: 'attachment-A',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const transcript = read(
+      '/api/sessions/session-A/messages?limit=50&tail=true',
+      { messages: [] },
+    );
+    const execution = api.sessionExecution('session-A');
+    await api.addSessionAttachment('session-A', 'reports/result.md');
+    finishTranscript(new Response(JSON.stringify({
+      messages: [{ id: 'message-A' }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    finishExecution(new Response(JSON.stringify({
+      session_id: 'session-A',
+      latest_execution_id: 'execution-A',
+      active_execution_ids: [],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await expect(transcript).resolves.toMatchObject({
+      messages: [{ id: 'message-A' }],
+      __state: 'ready',
+    });
+    await expect(execution).resolves.toMatchObject({
+      latest_execution_id: 'execution-A',
+      __state: 'ready',
+    });
+    expect(aborted).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('briefly reuses static catalog projections but never live runtime state', async () => {
