@@ -89,7 +89,7 @@ function installCanonicalExecutionProjection(
   const rootActivityId = `activity:execution:${executionId}`;
   const activities = [
     {
-      schema_version: 3,
+      schema_version: 4,
       activity_id: rootActivityId,
       scope: {
         workspace_id: 'workspace',
@@ -115,7 +115,7 @@ function installCanonicalExecutionProjection(
       definition_refs: [],
     },
     ...rows.map((row, index) => ({
-      schema_version: 3,
+      schema_version: 4,
       activity_id: row.activity_id || `activity:execution:${executionId}:${row.kind}:${row.id}`,
       scope: {
         workspace_id: 'workspace',
@@ -123,9 +123,11 @@ function installCanonicalExecutionProjection(
         turn_id: turnId,
         execution_id: executionId,
       },
-      kind: row.kind === 'think' ? 'model' : row.kind,
+      kind: row.kind === 'think' ? 'reasoning' : row.kind,
       display_label: row.title,
-      visibility: ['narrative', 'operational', 'audit'],
+      visibility: row.kind === 'think'
+        ? ['narrative', 'audit']
+        : ['narrative', 'operational', 'audit'],
       parent_activity_id: row.parent_activity_id || rootActivityId,
       initiator_activity_id: rootActivityId,
       causal_parent_ids: [],
@@ -980,7 +982,8 @@ describe('Cowd Vue WebUI shell', () => {
     const activityTree = wrapper.get('.execution-activity-tree');
     expect(activityTree.text()).toContain('工具调用');
     expect(activityTree.text()).toContain('已执行 1/1');
-    expect(activityTree.text()).toContain('正在比对现有说明');
+    expect(wrapper.get('.reasoning-group.is-global').text()).toContain('正在比对现有说明');
+    expect(activityTree.text()).not.toContain('正在比对现有说明');
     expect(activityTree.text()).not.toContain('STRUCTURED AGENT RESULT SHOULD NOT BE A THOUGHT');
     expect(activityTree.findAll('.execution-activity-node[data-kind="tool_batch"]')).toHaveLength(1);
     await activityTree
@@ -1092,6 +1095,13 @@ describe('Cowd Vue WebUI shell', () => {
       },
     ] as any;
     installCanonicalExecutionProjection('execution-live-now', 'turn-live-now', [
+      {
+        id: 'think-1',
+        kind: 'think',
+        title: '思考',
+        detail: '先读取项目说明，再核对目标。',
+        status: 'running',
+      },
       {
         id: 'tool-live',
         kind: 'tool',

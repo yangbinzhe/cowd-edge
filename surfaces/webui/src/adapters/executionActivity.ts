@@ -108,12 +108,24 @@ export function compactStructuredSummary(value: unknown): string {
     try {
       return structuredValueSummary(JSON.parse(text));
     } catch {
-      return t('component.workbench.timeline.structuredDetail');
+      return partialStructuredSummary(text);
     }
   }
   const starts = [text.indexOf(' {'), text.indexOf(' [')].filter((index) => index >= 0);
   const jsonStart = starts.length ? Math.min(...starts) : -1;
   return jsonStart >= 0 ? text.slice(0, jsonStart) : text;
+}
+
+function partialStructuredSummary(value: string) {
+  const match = value.match(
+    /"(?:summary|message|description|conclusion|recommendation|finding)"\s*:\s*"((?:\\.|[^"\\])*)/i,
+  );
+  if (!match?.[1]) return '';
+  try {
+    return JSON.parse(`"${match[1]}"`);
+  } catch {
+    return match[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim();
+  }
 }
 
 function activityContentValue(content: any) {
@@ -144,7 +156,47 @@ function structuredValueSummary(value: any): string {
   ]) {
     if (typeof value[key] === 'string' && value[key].trim()) return value[key].trim();
   }
+  const nested = firstReadableStructuredText(value);
+  if (nested) return nested;
   return t('component.workbench.timeline.fields', { count: Object.keys(value).length });
+}
+
+function firstReadableStructuredText(value: any, depth = 0): string {
+  if (depth > 3 || value === null || value === undefined) return '';
+  if (typeof value === 'string') {
+    const text = value.replace(/\s+/g, ' ').trim();
+    return text && !internalReference(text) ? text : '';
+  }
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 4)) {
+      const text = firstReadableStructuredText(item, depth + 1);
+      if (text) return text;
+    }
+    return '';
+  }
+  if (typeof value !== 'object') return '';
+  const ignored = /(?:^|_)(?:id|ids|ref|refs|path|uri|url|status|count)$/i;
+  const preferred = [
+    'description',
+    'title',
+    'name',
+    'finding',
+    'findings',
+    'conclusion',
+    'recommendation',
+    'recommendations',
+    'boundary_risks',
+    'results',
+    'items',
+  ];
+  const entries = Object.entries(value);
+  const ordered = preferred.flatMap((key) => entries.filter(([candidate]) => candidate === key));
+  for (const [key, candidate] of ordered) {
+    if (ignored.test(key)) continue;
+    const text = firstReadableStructuredText(candidate, depth + 1);
+    if (text) return text;
+  }
+  return '';
 }
 
 export function canonicalActivityEvents(
@@ -302,11 +354,46 @@ export function conversationActivityTree(
   relations: ExecutionActivityRelation[],
 ): ActivityTreeNode[] {
   const roots = activityTree(
-    compactBusinessActivities(activities.map(localizedActivity)),
+    compactBusinessActivities(foldConversationOutputs(activities, relations).map(localizedActivity)),
     relations,
   ).flatMap(compactConversationNode);
   sortActivityNodes(roots);
   return roots;
+}
+
+function foldConversationOutputs(
+  activities: ActivityView[],
+  relations: ExecutionActivityRelation[],
+) {
+  const rows = new Map(activities.map((activity) => [activity.id, activity]));
+  for (const output of activities.filter((activity) => (
+    activity.kind === 'artifact' || activity.kind === 'outcome'
+  ))) {
+    const explicit = relations
+      .filter((relation) => relation.kind === 'produced' && relation.to_activity_id === output.id)
+      .map((relation) => relation.from_activity_id);
+    const producerId = explicit.length === 1 ? explicit[0] : output.parent_activity_id || '';
+    const producer = rows.get(producerId);
+    if (producer && ['tool', 'agent', 'team'].includes(producer.kind)) {
+      const canonical = {
+        ...producer.canonical,
+        result_summary: producer.canonical.result_summary
+          || output.canonical.result_summary
+          || output.detail,
+        artifact_refs: Array.from(new Set([
+          ...(producer.canonical.artifact_refs || []),
+          ...(output.canonical.artifact_refs || []),
+        ])),
+        evidence_refs: Array.from(new Set([
+          ...(producer.canonical.evidence_refs || []),
+          ...(output.canonical.evidence_refs || []),
+        ])),
+      };
+      rows.set(producerId, activityView(canonical));
+    }
+    rows.delete(output.id);
+  }
+  return [...rows.values()];
 }
 
 export function businessGraphActivities(activities: ActivityView[]) {
@@ -332,12 +419,11 @@ export function activityNeedsAttention(activity: ActivityView) {
 }
 
 export function isBusinessGraphActivity(activity: ActivityView) {
-  if (activity.kind === 'runtime' || activity.kind === 'context') return false;
+  if (activity.kind === 'runtime' || activity.kind === 'context' || activity.kind === 'reasoning') {
+    return false;
+  }
   if (activity.kind === 'approval' && !activity.approval_id) return false;
-  if (
-    activity.kind === 'model'
-    && (technicalModelActivity(activity) || publicReasoningModelActivity(activity))
-  ) return false;
+  if (activity.kind === 'model' && technicalModelActivity(activity)) return false;
   if (['execution', 'goal', 'team', 'agent'].includes(activity.kind)) return true;
   if (internalOperationalActivity(activity)) return false;
   if (activity.kind === 'artifact' && internalArtifact(activity)) return false;
@@ -445,7 +531,8 @@ function localizedActivity(activity: ActivityView): ActivityView {
   const rawTitle = String(activity.title || activity.detail || '').trim();
   const title = businessTitle(activity, rawTitle);
   const rawDetail = String(activity.detail || '').trim();
-  const detail = humanizeActivityDetail(activity, rawDetail);
+  const detail = compactStructuredSummary(humanizeActivityDetail(activity, rawDetail));
+  const resultSummary = compactStructuredSummary(activity.result_summary);
   return {
     ...activity,
     title,
@@ -454,6 +541,9 @@ function localizedActivity(activity: ActivityView): ActivityView {
       && !internalReference(detail)
       && !(title !== rawTitle && detail === rawTitle)
     ) ? detail : '',
+    result_summary: resultSummary && !internalReference(resultSummary)
+      ? resultSummary
+      : undefined,
   };
 }
 
@@ -496,7 +586,7 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
   }
   if (activity.kind === 'tool_batch') return t('execution.kind.toolBatch');
   if (activity.kind === 'tool') return rawTitle || t('execution.kind.toolCall');
-  if (activity.kind === 'think') return t('chat.activity.thinking');
+  if (activity.kind === 'think' || activity.kind === 'reasoning') return t('chat.activity.thinking');
   if (activity.kind === 'approval') return t('execution.kind.approval');
   if (activity.kind === 'verify') return t('execution.kind.verify');
   if (activity.kind === 'artifact') return t('execution.kind.artifact');
@@ -513,23 +603,31 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
 function compactConversationNode(node: ActivityTreeNode): ActivityTreeNode[] {
   const activity = node.activity;
   if (isToolActivity(activity)) return [];
+  if (
+    ['model', 'verify'].includes(activity.kind)
+    || (activity.kind === 'execution' && Boolean(activity.parent_activity_id))
+  ) {
+    return node.children.flatMap(compactConversationNode);
+  }
   if (activity.kind === 'tool_batch') {
-    const tools = deduplicatedTools(node.children.map((child) => child.activity));
-    const children = node.children
+    return node.children
       .filter((child) => !isToolActivity(child.activity))
       .flatMap(compactConversationNode);
-    children.push(...tools.map((tool) => ({ activity: tool, children: [] })));
-    sortActivityNodes(children);
-    return isBusinessGraphActivity(activity) ? [{ activity, children }] : children;
   }
-  const tools = deduplicatedTools(node.children.map((child) => child.activity));
+  const tools = deduplicatedTools(node.children.flatMap(conversationOwnedTools));
   const children = node.children
-    .filter((child) => !isToolActivity(child.activity))
+    .filter((child) => !isToolActivity(child.activity) && child.activity.kind !== 'tool_batch')
     .flatMap(compactConversationNode);
   if (tools.length) children.push(toolGroupNode(tools, activity.id));
   if (!isBusinessGraphActivity(activity)) return children;
   sortActivityNodes(children);
   return [{ activity, children }];
+}
+
+function conversationOwnedTools(node: ActivityTreeNode): ActivityView[] {
+  if (isToolActivity(node.activity)) return [node.activity];
+  if (node.activity.kind !== 'tool_batch') return [];
+  return node.children.flatMap(conversationOwnedTools);
 }
 
 function compactBusinessActivities(activities: ActivityView[]) {
@@ -691,18 +789,6 @@ function technicalModelActivity(activity: ActivityView) {
     || value.includes('model_step')
     || value.includes('provider.call')
     || value.includes('provider_call');
-}
-
-function publicReasoningModelActivity(activity: ActivityView) {
-  const marker = [
-    activity.id,
-    activity.phase,
-    activity.canonical.phase,
-    activity.canonical.display_label,
-  ].join(' ').toLowerCase();
-  return marker.includes('public_reasoning')
-    || marker.includes('reasoning_summary')
-    || marker.includes('reasoning summary');
 }
 
 function internalOperationalActivity(activity: ActivityView) {

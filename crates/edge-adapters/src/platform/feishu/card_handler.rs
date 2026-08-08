@@ -168,6 +168,14 @@ impl CardActionHandler {
 mod tests {
     use super::*;
 
+    static TOKEN_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn token_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        TOKEN_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     // ------------------------------------------------------------------
     // handle_card_action tests
     // ------------------------------------------------------------------
@@ -270,6 +278,7 @@ mod tests {
 
     #[test]
     fn test_duplicate_token_returns_true() {
+        let _guard = token_test_guard();
         CardActionHandler::clear_tokens();
 
         let token = "test_token_dup_001";
@@ -281,6 +290,7 @@ mod tests {
 
     #[test]
     fn test_non_duplicate_token_returns_false() {
+        let _guard = token_test_guard();
         CardActionHandler::clear_tokens();
 
         assert!(!CardActionHandler::is_duplicate("unique_token_a"));
@@ -289,6 +299,7 @@ mod tests {
 
     #[test]
     fn test_different_tokens_are_not_duplicates() {
+        let _guard = token_test_guard();
         CardActionHandler::clear_tokens();
 
         assert!(!CardActionHandler::is_duplicate("token_x"));
@@ -298,6 +309,7 @@ mod tests {
 
     #[test]
     fn test_expired_tokens_are_pruned() {
+        let _guard = token_test_guard();
         CardActionHandler::clear_tokens();
 
         // Insert a token with an artificially old timestamp
@@ -316,6 +328,7 @@ mod tests {
 
     #[test]
     fn test_prune_removes_multiple_expired_entries() {
+        let _guard = token_test_guard();
         CardActionHandler::clear_tokens();
 
         // Insert several expired tokens and one fresh one

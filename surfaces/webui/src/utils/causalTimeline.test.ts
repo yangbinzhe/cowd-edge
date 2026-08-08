@@ -147,6 +147,25 @@ describe('causal activity timeline', () => {
     })));
   });
 
+  it('uses the Runtime activity binding before lifecycle phase heuristics', () => {
+    const binding = {
+      activity_id: 'activity:execution:root:agent:researcher',
+    };
+    expect(activityIdentityKey(event({
+      id: 'agent:run:started',
+      kind: 'agent',
+      phase: 'started',
+      activity_id: binding.activity_id,
+      activity_binding: binding,
+    }))).toBe(activityIdentityKey(event({
+      id: 'agent:run:completed',
+      kind: 'agent',
+      phase: 'completed',
+      activity_id: binding.activity_id,
+      activity_binding: binding,
+    })));
+  });
+
   it('retains public reasoning line structure while bounding memory', () => {
     expect(appendReasoningSummary('inspect\n', 'decide')).toBe('inspect\ndecide');
     const bounded = appendReasoningSummary('a'.repeat(20), '\nanswer', 12);

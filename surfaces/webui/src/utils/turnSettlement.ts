@@ -26,7 +26,7 @@ export function normalizeTurnActivity(event: ActivityEvent): ActivityEvent {
   return {
     ...event,
     title: clean(event.title) || clean(event.kind) || 'event',
-    detail: event.kind === 'think'
+    detail: event.kind === 'think' || event.kind === 'reasoning'
       ? String(event.detail || '').replace(/\r\n/g, '\n').trim()
       : clean(event.detail),
     status: clean(event.status || 'observed'),
@@ -77,7 +77,7 @@ export function activitySummary(turn: Pick<ChatTurn, 'activity' | 'tool_name'>):
     const text = `${kind} ${event.title || ''} ${event.detail || ''}`.toLowerCase();
     acc.total += 1;
     if (kind === 'tool' || text.includes('tool')) acc.tools += 1;
-    else if (kind === 'think' || text.includes('thinking')) acc.thinking += 1;
+    else if (kind === 'think' || kind === 'reasoning' || text.includes('thinking')) acc.thinking += 1;
     else if (kind === 'context' || text.includes('context') || text.includes('memory')) acc.context += 1;
     else if (kind === 'approval' || text.includes('approval') || text.includes('policy')) acc.approvals += 1;
     if (kind === 'error' || String(event.status || '').toLowerCase().includes('error') || text.includes('failed')) acc.errors += 1;

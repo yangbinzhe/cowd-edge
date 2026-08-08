@@ -11878,8 +11878,7 @@ export interface components {
             /** Format: uint32 */
             schema_version: number;
         };
-        /** @enum {string} */
-        ExecutionActivityKind: "execution" | "goal" | "team" | "agent" | "skill" | "model" | "tool_batch" | "tool" | "approval" | "verify" | "artifact" | "outcome" | "replan" | "recovery" | "runtime";
+        ExecutionActivityKind: ("execution" | "goal" | "team" | "agent" | "skill" | "model" | "tool_batch" | "tool" | "approval" | "verify" | "artifact" | "outcome" | "replan" | "recovery" | "runtime") | "reasoning";
         ExecutionActivityProjection: {
             activity_id: string;
             agent_instance_id?: string | null;

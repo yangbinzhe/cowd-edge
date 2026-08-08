@@ -37,60 +37,76 @@ export interface ReasoningPresentation {
   byOwner: Record<string, ReasoningGroupView>;
 }
 
-interface ReasoningSource {
-  id: string;
-  text: string;
-  status: string;
-  at?: string | number;
-  sequence: number;
-  executionId: string;
-  agentId: string;
-  parentActivityId: string;
-  assistantProgress: boolean;
-}
-
 export function reasoningPresentation(
   events: ActivityEvent[],
   activities: ActivityView[],
   rootExecutionId = '',
 ): ReasoningPresentation {
-  const agents = activities.filter((activity) => activity.kind === 'agent');
+  const agents = new Set(
+    activities.filter((activity) => activity.kind === 'agent').map((activity) => activity.id),
+  );
   const rootActivityIds = new Set(
     activities
       .filter((activity) => ['execution', 'goal'].includes(activity.kind))
       .map((activity) => activity.id),
   );
-  const sources = [
-    ...events.filter((event) => event.kind === 'think').map(eventReasoningSource),
-    ...activities.filter(publicReasoningActivity).map(activityReasoningSource),
-  ]
-    .filter((source): source is ReasoningSource => Boolean(source?.text))
-    .sort(compareSources);
-
+  const rootIdentity = String(rootExecutionId || '').trim();
+  if (rootIdentity) {
+    rootActivityIds.add(
+      rootIdentity.startsWith('activity:execution:')
+        ? rootIdentity
+        : `activity:execution:${rootIdentity}`,
+    );
+  }
   const grouped = new Map<string, Map<string, ReasoningSegmentView>>();
-  for (const source of sources) {
-    const ownerActivityId = exactAgentOwner(source, agents);
-    const scope = ownerActivityId
+  for (const event of events.filter((event) => event.kind === 'reasoning')) {
+    const text = readableReasoningText(event.detail);
+    const ownerActivityId = String(event.parent_activity_id || '').trim();
+    const scope = agents.has(ownerActivityId)
       ? `agent:${ownerActivityId}`
-      : isGlobalReasoning(source, rootExecutionId, rootActivityIds)
+      : rootActivityIds.has(ownerActivityId)
+        ? 'global'
+        : '';
+    if (!scope || !text || !event.activity_id) continue;
+    const entries = grouped.get(scope) || new Map<string, ReasoningSegmentView>();
+    entries.set(event.activity_id, {
+      id: event.activity_id,
+      text,
+      status: normalizedStatus(event.status),
+      at: event.at,
+      sequence: numericSequence(event.sequence),
+      executionId: event.execution_id,
+      agentId: event.agent_instance_id || event.agent_run_id,
+    });
+    grouped.set(scope, entries);
+  }
+  for (const activity of activities.filter((activity) => activity.kind === 'reasoning')) {
+    const text = readableReasoningText(
+      activity.detail
+      || activity.canonical.public_summary
+      || activity.canonical.result_summary,
+    );
+    if (!text) continue;
+    const ownerActivityId = String(activity.parent_activity_id || '').trim();
+    const scope = agents.has(ownerActivityId)
+      ? `agent:${ownerActivityId}`
+      : rootActivityIds.has(ownerActivityId)
         ? 'global'
         : '';
     if (!scope) continue;
-
     const segment: ReasoningSegmentView = {
-      id: source.id,
-      text: source.text,
-      status: source.status,
-      at: source.at,
-      sequence: source.sequence,
-      executionId: source.executionId || undefined,
-      agentId: source.agentId || undefined,
+      id: activity.id,
+      text,
+      status: normalizedStatus(activity.status),
+      at: activity.at,
+      sequence: numericSequence(activity.sequence),
+      executionId: activity.execution_id || undefined,
+      agentId: activity.agent_instance_id || activity.agent_run_id || undefined,
     };
-    const normalized = normalizedText(source.text);
     const entries = grouped.get(scope) || new Map<string, ReasoningSegmentView>();
-    const previous = entries.get(normalized);
+    const previous = entries.get(segment.id);
     if (!previous || compareSegments(previous, segment) <= 0) {
-      entries.set(normalized, segment);
+      entries.set(segment.id, segment);
     }
     grouped.set(scope, entries);
   }
@@ -104,100 +120,6 @@ export function reasoningPresentation(
     if (group) byOwner[ownerActivityId] = group;
   }
   return { global, byOwner };
-}
-
-function eventReasoningSource(event: ActivityEvent): ReasoningSource | null {
-  const text = readableReasoningText(event.detail);
-  if (!text) return null;
-  return {
-    id: String(event.activity_id || event.id),
-    text,
-    status: normalizedStatus(event.status),
-    at: event.at,
-    sequence: numericSequence(event.sequence),
-    executionId: String(event.execution_id || '').trim(),
-    agentId: String(
-      event.agent_instance_id
-      || event.agent_run_id
-      || event.agent_id
-      || '',
-    ).trim(),
-    parentActivityId: String(event.parent_activity_id || '').trim(),
-    assistantProgress: String(event.id || '').startsWith('assistant-progress:'),
-  };
-}
-
-function activityReasoningSource(activity: ActivityView): ReasoningSource | null {
-  const text = readableReasoningText(activity.detail || activity.canonical.public_summary);
-  if (!text) return null;
-  return {
-    id: activity.id,
-    text,
-    status: normalizedStatus(activity.status),
-    at: activity.at,
-    sequence: numericSequence(activity.sequence),
-    executionId: String(
-      activity.execution_id
-      || activity.canonical.scope.execution_id
-      || '',
-    ).trim(),
-    agentId: String(
-      activity.agent_instance_id
-      || activity.agent_run_id
-      || activity.agent_id
-      || '',
-    ).trim(),
-    parentActivityId: String(activity.parent_activity_id || '').trim(),
-    assistantProgress: false,
-  };
-}
-
-function publicReasoningActivity(activity: ActivityView) {
-  if (activity.kind !== 'model') return false;
-  const marker = [
-    activity.id,
-    activity.phase,
-    activity.canonical.phase,
-    activity.canonical.display_label,
-  ].join(' ').toLowerCase();
-  return marker.includes('public_reasoning')
-    || marker.includes('reasoning_summary')
-    || marker.includes('reasoning summary');
-}
-
-function exactAgentOwner(source: ReasoningSource, agents: ActivityView[]) {
-  if (source.parentActivityId) {
-    const parent = agents.find((agent) => agent.id === source.parentActivityId);
-    if (parent) return parent.id;
-  }
-  if (!source.executionId && !source.agentId) return '';
-  const owner = agents.find((agent) => {
-    const identities = new Set([
-      agent.execution_id,
-      agent.agent_id,
-      agent.agent_run_id,
-      agent.agent_instance_id,
-      agent.canonical.scope.execution_id,
-      agent.canonical.agent_run_id,
-      agent.canonical.agent_instance_id,
-    ].map((value) => String(value || '').trim()).filter(Boolean));
-    return (source.executionId && identities.has(source.executionId))
-      || (source.agentId && identities.has(source.agentId));
-  });
-  return owner?.id || '';
-}
-
-function isGlobalReasoning(
-  source: ReasoningSource,
-  rootExecutionId: string,
-  rootActivityIds: Set<string>,
-) {
-  if (source.assistantProgress) return true;
-  if (source.agentId) return false;
-  if (source.parentActivityId && rootActivityIds.has(source.parentActivityId)) return true;
-  const root = String(rootExecutionId || '').trim();
-  if (root) return !source.executionId || source.executionId === root;
-  return !source.executionId && !source.parentActivityId;
 }
 
 function buildGroup(
@@ -243,10 +165,6 @@ function normalizedStatus(value: unknown) {
   return status || 'planned';
 }
 
-function normalizedText(value: string) {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
 function numericSequence(value: unknown) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -261,12 +179,6 @@ function timestamp(value: unknown) {
     if (Number.isFinite(parsed)) return parsed;
   }
   return 0;
-}
-
-function compareSources(left: ReasoningSource, right: ReasoningSource) {
-  return timestamp(left.at) - timestamp(right.at)
-    || left.sequence - right.sequence
-    || left.id.localeCompare(right.id);
 }
 
 function compareSegments(left: ReasoningSegmentView, right: ReasoningSegmentView) {

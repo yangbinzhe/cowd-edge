@@ -11,6 +11,7 @@ import {
   activityTree,
   businessGraphActivities,
   canonicalActivityEvents,
+  compactStructuredSummary,
   conversationActivityTree,
   presentActivityDetail,
 } from './executionActivity';
@@ -47,6 +48,15 @@ function activity(
 }
 
 describe('canonical execution activity adapter', () => {
+  it('extracts a readable summary from bounded structured output without exposing raw JSON', () => {
+    expect(compactStructuredSummary(
+      '{"findings":{"boundary_risks":[{"description":"GPU dependency requires review","id":"R1"}],"truncated":"…',
+    )).toBe('GPU dependency requires review');
+    expect(compactStructuredSummary(
+      '{"evidence_refs":["tool://call/evidence/…',
+    )).toBe('');
+  });
+
   it('keeps stable IDs and builds the Runtime-owned hierarchy', () => {
     const agent = activity('agent', 'agent');
     const tool = activity('tool', 'tool', 'agent');
@@ -81,7 +91,7 @@ describe('canonical execution activity adapter', () => {
     expect(events[0].status).toBe('failed');
   });
 
-  it('renders Runtime-owned tool batches without creating a frontend aggregate', () => {
+  it('folds Runtime tool waves into one Agent-owned conversation summary', () => {
     const root = activity('execution', 'execution');
     const agent = activity('agent:research', 'agent', root.activity_id);
     const batch = activity('tool-batch:research', 'tool_batch', agent.activity_id);
@@ -100,9 +110,79 @@ describe('canonical execution activity adapter', () => {
     const agentNode = executionNode?.children.find((node) => node.activity.id === agent.activity_id);
     const toolGroup = agentNode?.children.find((node) => node.activity.kind === 'tool_batch');
 
-    expect(toolGroup?.activity.id).toBe(batch.activity_id);
-    expect(toolGroup?.activity.tool_summary).toBeUndefined();
+    expect(agentNode?.children.filter((node) => node.activity.kind === 'tool_batch')).toHaveLength(1);
+    expect(toolGroup?.activity.id).toBe(`activity:view:tool-group:${agent.activity_id}`);
+    expect(toolGroup?.activity.tool_summary).toEqual({
+      total: 12,
+      executed: 12,
+      succeeded: 10,
+      failed: 1,
+      running: 1,
+      pending: 0,
+    });
     expect(toolGroup?.children).toHaveLength(12);
+  });
+
+  it('keeps cross-execution Team, Agent and Tool ownership in one canonical tree', () => {
+    const root = activity('session-root', 'execution');
+    const team = {
+      ...activity('team', 'team', root.activity_id),
+      scope: { ...root.scope, execution_id: 'mission-execution' },
+    };
+    const agent = {
+      ...activity('agent', 'agent', team.activity_id),
+      scope: { ...root.scope, execution_id: 'team-execution' },
+    };
+    const firstBatch = activity('batch:1', 'tool_batch', agent.activity_id);
+    const secondBatch = activity('batch:2', 'tool_batch', agent.activity_id);
+    const firstTool = {
+      ...activity('tool:1', 'tool', firstBatch.activity_id),
+      tool_call_id: 'call:1',
+    };
+    const secondTool = {
+      ...activity('tool:2', 'tool', secondBatch.activity_id),
+      tool_call_id: 'call:2',
+    };
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'session-root',
+      activities: [root, team, agent, firstBatch, secondBatch, firstTool, secondTool],
+    } as unknown as ExecutionProjection]), []);
+    const teamNode = tree[0].children.find((node) => node.activity.id === team.activity_id);
+    const agentNode = teamNode?.children.find((node) => node.activity.id === agent.activity_id);
+
+    expect(teamNode?.children).toHaveLength(1);
+    expect(agentNode?.children).toHaveLength(1);
+    expect(agentNode?.children[0].activity.tool_summary?.total).toBe(2);
+    expect(agentNode?.children[0].children.map((node) => node.activity.id))
+      .toEqual(['tool:1', 'tool:2']);
+  });
+
+  it('removes duplicate nested execution wrappers and summarizes structured Agent output', () => {
+    const root = activity('root', 'execution');
+    const team = activity('team', 'team', root.activity_id);
+    const agent = {
+      ...activity('agent', 'agent', team.activity_id),
+      public_summary: JSON.stringify({
+        findings: [{ description: '发现两个高风险边界问题', evidence_refs: ['evidence://1'] }],
+      }),
+      result_summary: JSON.stringify({
+        findings: [{ description: '发现两个高风险边界问题', evidence_refs: ['evidence://1'] }],
+      }),
+    };
+    const childExecution = activity('child-execution', 'execution', agent.activity_id);
+    const model = activity('model', 'model', childExecution.activity_id);
+    const verify = activity('verify', 'verify', childExecution.activity_id);
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'root',
+      activities: [root, team, agent, childExecution, model, verify],
+    } as unknown as ExecutionProjection]), []);
+    const agentNode = tree[0].children[0].children[0];
+
+    expect(agentNode.activity.kind).toBe('agent');
+    expect(agentNode.activity.detail).toBe('发现两个高风险边界问题');
+    expect(agentNode.activity.result_summary).toBe('发现两个高风险边界问题');
+    expect(agentNode.children).toEqual([]);
+    expect(JSON.stringify(tree)).not.toContain('child-execution');
   });
 
   it('keeps tools under the exact canonical parent without owner inference', () => {

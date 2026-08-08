@@ -10,6 +10,8 @@ function clean(value: unknown) {
 }
 
 export function activityIdentityKey(event: ActivityEvent) {
+  const canonicalActivity = clean(event.activity_id || event.activity_binding?.activity_id);
+  if (canonicalActivity) return `activity|${canonicalActivity}`;
   const execution = clean(event.execution_id || event.raw?.execution_id);
   if (event.kind === 'agent') {
     const run = clean(event.raw?.run_id || event.execution_id || event.agent_id);

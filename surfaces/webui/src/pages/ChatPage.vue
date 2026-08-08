@@ -841,7 +841,9 @@ function exchangeActivityEvents(turns: ChatTurn[], index: number) {
       exchangeTurn.role === 'assistant'
       && cursor !== index
       && exchangeTurn.content.trim()
-      && !(exchangeTurn.activity || []).some((event) => event.kind === 'think')
+      && !(exchangeTurn.activity || []).some((event) => (
+        event.kind === 'think' || event.kind === 'reasoning'
+      ))
     ) {
       const detail = assistantProgressThought(exchangeTurn.content);
       if (!detail) continue;
@@ -903,7 +905,10 @@ function buildTurnExecutionActivities(turns: ChatTurn[], index: number) {
   const lineage = exchangeProjectionLineage(turns, index);
   const lineageExecutionIds = new Set(
     lineage
-      .map((projection) => String(projection?.execution_id || '').trim())
+      .flatMap((projection) => [
+        String(projection?.execution_id || '').trim(),
+        ...executionProjectionLinks(projection),
+      ])
       .filter(Boolean),
   );
   const canonical = canonicalActivityEvents(lineage, 'narrative').filter((activity) => (
@@ -1075,7 +1080,7 @@ function liveNow(turn: ChatTurn) {
     };
   }
   const activeThought = [...events].reverse().find((event) => (
-    event.kind === 'think'
+    (event.kind === 'think' || event.kind === 'reasoning')
     && ['queued', 'pending', 'started', 'running'].includes(String(event.status || '').toLowerCase())
   ));
   if (activeThought) {

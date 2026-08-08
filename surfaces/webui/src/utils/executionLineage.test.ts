@@ -192,6 +192,31 @@ describe('execution lineage', () => {
     );
   });
 
+  it('discovers nested execution scopes declared only by canonical activities', () => {
+    const team = {
+      ...activity('team', 'team'),
+      scope: {
+        ...activity('team', 'team').scope,
+        execution_id: 'mission-execution',
+        parent_execution_id: 'session-root',
+      },
+    };
+    const agent = {
+      ...activity('agent', 'agent', 'team'),
+      scope: {
+        ...activity('agent', 'agent', 'team').scope,
+        execution_id: 'team-execution',
+        parent_execution_id: 'mission-execution',
+      },
+    };
+    const root = projection('session-root', [team, agent]);
+
+    expect(executionProjectionLinks(root)).toEqual([
+      'mission-execution',
+      'team-execution',
+    ]);
+  });
+
   it('projects canonical parent identities into a connected business hierarchy', () => {
     const execution = activity('execution', 'execution', 'root');
     const team = activity('team', 'team', 'root', 'execution');

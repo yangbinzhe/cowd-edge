@@ -711,7 +711,9 @@ describe('chatSessions', () => {
     }
 
     const state = chat.states[causalTimelineFixture.session_id];
-    const causalRows = state.activity.filter((event) => event.kind === 'think' || event.kind === 'tool');
+    const causalRows = state.activity.filter((event) => (
+      event.kind === 'reasoning' || event.kind === 'tool'
+    ));
     expect(causalRows.map((event) => event.item_id || event.tool_call_id)).toEqual(
       causalTimelineFixture.expected_activity,
     );
@@ -737,6 +739,109 @@ describe('chatSessions', () => {
     expect(state.turns.find((turn) => turn.id === state.streamTurnId)?.content).toBe('完成');
 
     await chat.close(causalTimelineFixture.session_id);
+  });
+
+  it('keeps Runtime activity IDs and Agent ownership stable across live lifecycle updates', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor() { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    mockEmptySessionReads();
+
+    await chat.open('bound-live');
+    const stream = streams[0];
+    const root = 'activity:execution:root-1';
+    const agent = 'activity:execution:root-1:agent:researcher-1';
+    const tool = 'activity:execution:root-1:tool:call-1';
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'UserMessageCommitted',
+      session_id: 'bound-live',
+      execution_id: 'root-1',
+      turn_id: 'turn-1',
+      message_id: 'message-1',
+      sequence: 1,
+      content: 'research',
+    }) } as MessageEvent);
+    const agentBinding = {
+      root_execution_id: 'root-1',
+      session_id: 'bound-live',
+      turn_id: 'turn-1',
+      root_task_id: 'task-root',
+      task_id: 'task-agent',
+      activity_id: agent,
+      parent_activity_id: root,
+      agent_instance_id: 'researcher-1',
+      agent_run_id: 'agent-run-1',
+      revision: 1,
+      fence: 1,
+      generation: 1,
+    };
+    for (const [phase, status] of [['started', 'running'], ['completed', 'completed']]) {
+      stream.onmessage?.({ data: JSON.stringify({
+        type: 'AgentLifecycle',
+        session_id: 'bound-live',
+        execution_id: 'agent-run-1',
+        parent_execution_id: 'root-1',
+        turn_id: 'turn-1',
+        run_id: 'agent-run-1',
+        agent_id: 'researcher-1',
+        role: 'researcher',
+        phase,
+        status,
+        activity_binding: agentBinding,
+      }) } as MessageEvent);
+    }
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'ToolStart',
+      ...causalFields('call-1', 'tool-execution', 1),
+      session_id: 'bound-live',
+      execution_id: 'agent-run-1',
+      parent_execution_id: 'root-1',
+      turn_id: 'turn-1',
+      id: 'call-1',
+      tool_call_id: 'call-1',
+      name: 'glob_search',
+      activity_binding: {
+        ...agentBinding,
+        activity_id: tool,
+        parent_activity_id: agent,
+        tool_contract_id: 'glob_search',
+        tool_call_id: 'call-1',
+      },
+    }) } as MessageEvent);
+
+    const state = chat.states['bound-live'];
+    expect(state.activity.filter((item) => item.kind === 'agent')).toEqual([
+      expect.objectContaining({
+        id: agent,
+        parent_activity_id: root,
+        status: 'completed',
+      }),
+    ]);
+    expect(
+      state.activity.find((item) => item.kind === 'tool'),
+      JSON.stringify(state.activity, null, 2),
+    ).toMatchObject({
+      id: tool,
+      parent_activity_id: agent,
+      agent_instance_id: 'researcher-1',
+      status: 'running',
+    });
+    expect(JSON.stringify(state.activity)).not.toContain('agent-run-1:activity:execution');
+    await chat.close('bound-live');
   });
 
   it('keeps eight logical Session sources live without the former per-topic cap', async () => {

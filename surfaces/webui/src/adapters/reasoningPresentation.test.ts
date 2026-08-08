@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type {
-  ActivityEvent,
   ExecutionActivityProjection,
   ExecutionProjection,
 } from '../types';
@@ -42,25 +41,21 @@ function activity(
 describe('reasoning presentation', () => {
   it('keeps root reasoning outside the canonical business graph', () => {
     const root = activity('execution', 'execution');
+    const reasoning = {
+      ...activity('reasoning:root', 'reasoning', root.activity_id),
+      public_summary: '先核对目标，再读取证据。',
+    } satisfies ExecutionActivityProjection;
     const activities = canonicalActivityEvents([{
       execution_id: 'execution',
-      activities: [root],
+      activities: [root, reasoning],
     } as unknown as ExecutionProjection]);
-    const events: ActivityEvent[] = [{
-      id: 'reasoning:root',
-      kind: 'think',
-      title: '思考',
-      detail: '先核对目标，再读取证据。',
-      status: 'running',
-      execution_id: 'execution',
-      turn_id: 'turn',
-    }];
-
-    const result = reasoningPresentation(events, activities, 'execution');
+    const result = reasoningPresentation([], activities, 'execution');
 
     expect(result.global?.latest.text).toBe('先核对目标，再读取证据。');
     expect(result.byOwner).toEqual({});
-    expect(activities).toHaveLength(1);
+    expect(activities).toHaveLength(2);
+    expect(JSON.stringify(conversationActivityTree(activities, [])))
+      .not.toContain('reasoning:root');
   });
 
   it('attaches reasoning only to an exact Agent identity', () => {
@@ -70,21 +65,15 @@ describe('reasoning presentation', () => {
       agent_run_id: 'agent-run-1',
       agent_instance_id: 'researcher-1',
     } satisfies ExecutionActivityProjection;
+    const reasoning = {
+      ...activity('reasoning:agent', 'reasoning', agent.activity_id, 'agent-run-1'),
+      public_summary: '交叉验证三个来源。',
+    } satisfies ExecutionActivityProjection;
     const activities = canonicalActivityEvents([{
       execution_id: 'execution',
-      activities: [root, agent],
+      activities: [root, agent, reasoning],
     } as unknown as ExecutionProjection]);
-    const events: ActivityEvent[] = [{
-      id: 'reasoning:agent',
-      kind: 'think',
-      title: '思考',
-      detail: '交叉验证三个来源。',
-      status: 'complete',
-      execution_id: 'agent-run-1',
-      agent_id: 'researcher-1',
-    }];
-
-    const result = reasoningPresentation(events, activities, 'execution');
+    const result = reasoningPresentation([], activities, 'execution');
 
     expect(result.global).toBeNull();
     expect(result.byOwner[agent.activity_id]?.latest.text).toBe('交叉验证三个来源。');
@@ -111,22 +100,15 @@ describe('reasoning presentation', () => {
   it('filters structured outputs and deduplicates durable reasoning replay', () => {
     const root = activity('execution', 'execution');
     const durable = {
-      ...activity('reasoning:durable', 'model', root.activity_id),
-      phase: 'public_reasoning',
+      ...activity('reasoning:durable', 'reasoning', root.activity_id),
       public_summary: '检查已有证据。',
     } satisfies ExecutionActivityProjection;
     const activities = canonicalActivityEvents([{
       execution_id: 'execution',
       activities: [root, durable],
     } as unknown as ExecutionProjection]);
-    const result = reasoningPresentation([
-      {
-        id: 'reasoning:replay',
-        kind: 'think',
-        title: '思考',
-        detail: '检查已有证据。',
-        execution_id: 'execution',
-      },
+    const result = reasoningPresentation(
+      [
       {
         id: 'reasoning:structured',
         kind: 'think',
@@ -134,7 +116,10 @@ describe('reasoning presentation', () => {
         detail: '{"findings":[{"id":"F1"}]}',
         execution_id: 'execution',
       },
-    ], activities, 'execution');
+      ],
+      activities,
+      'execution',
+    );
 
     expect(result.global?.items).toHaveLength(1);
     expect(result.global?.latest.text).toBe('检查已有证据。');

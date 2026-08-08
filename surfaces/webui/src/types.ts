@@ -86,7 +86,7 @@ export interface ChatTurn {
 
 export interface ActivityEvent {
   id: string;
-  kind: 'execution' | 'goal' | 'team' | 'agent' | 'skill' | 'model' | 'tool_batch' | 'tool'
+  kind: 'execution' | 'goal' | 'team' | 'agent' | 'skill' | 'model' | 'reasoning' | 'tool_batch' | 'tool'
     | 'think' | 'runtime' | 'context' | 'approval' | 'verify' | 'artifact' | 'outcome'
     | 'replan' | 'recovery' | 'error';
   title: string;
@@ -139,6 +139,7 @@ export interface ActivityEvent {
   agent_lane_count?: number;
   agent_lane_label?: string;
   activity_id?: string;
+  activity_binding?: Record<string, unknown>;
   parent_activity_id?: string;
   initiator_activity_id?: string;
   dependency_ids?: string[];

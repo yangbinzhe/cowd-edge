@@ -287,7 +287,7 @@ function durableActivity(message: any): ActivityEvent[] {
     if (block?.type === 'thinking' || block?.type === 'reasoning_summary') {
       return [normalizeTurnActivity({
         id: String(block.id || `${message.id}:thinking:${index}`),
-        kind: 'think',
+        kind: 'reasoning',
         title: t('chat.activity.thinking'),
         detail: block.text || block.thinking || block.content || '',
         status: 'complete',
@@ -805,8 +805,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const segmentId = String(payload.segment_id || '');
     const toolId = String(payload.tool_call_id || payload.tool_instance_id || payload.id || '');
     const causalItemKey = segmentId || itemId || modelStepId;
+    const activityBinding = (payload.activity_binding || {}) as Record<string, any>;
+    const canonicalActivityId = String(activityBinding.activity_id || '');
     const scopedActivityId = (activityId: string) => (
-      nestedExecution ? `${executionId}:${activityId}` : activityId
+      canonicalActivityId && activityId === canonicalActivityId
+        ? activityId
+        : nestedExecution ? `${executionId}:${activityId}` : activityId
     );
     const base = {
       at: Date.now(),
@@ -830,6 +834,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         : [],
       commit_cursor: Number(payload.runtime_commit_cursor),
       event_kind: type,
+      activity_id: String(activityBinding.activity_id || ''),
+      parent_activity_id: String(activityBinding.parent_activity_id || ''),
+      initiator_activity_id: String(activityBinding.initiator_activity_id || ''),
+      team_run_id: String(activityBinding.team_run_id || ''),
+      agent_instance_id: String(activityBinding.agent_instance_id || ''),
+      agent_run_id: String(activityBinding.agent_run_id || ''),
+      parallel_group_id: String(activityBinding.parallel_group_id || ''),
+      activity_binding: activityBinding,
       raw: payload,
     };
     if (type === 'SessionInputReceived') {
@@ -914,7 +926,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       const agentId = String(payload.agent_id || base.agent_id || runId);
       upsertSessionActivity(sessionId, {
         ...base,
-        id: `agent:${runId}:${phase}`,
+        id: canonicalActivityId || `agent:${runId}:${phase}`,
         kind: 'agent',
         title: role || agentId || t('chat.activity.agent'),
         detail: compactToolOutput(payload.summary),
@@ -930,7 +942,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
     if (type === 'ToolStart' || type === 'ToolProgress' || type === 'ToolComplete') {
       const failed = type === 'ToolComplete' && Number(payload.exit_code || 0) !== 0;
-      const activityId = toolId || causalItemKey || `tool:${executionId}:${payload.name || 'unknown'}`;
+      const activityId = String(activityBinding.activity_id || '')
+        || toolId
+        || causalItemKey
+        || `tool:${executionId}:${payload.name || 'unknown'}`;
       upsertSessionActivity(sessionId, {
         ...base,
         id: scopedActivityId(activityId),
@@ -957,11 +972,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (type === 'ItemStarted' || type === 'ItemCompleted') {
       const kind = String(payload.kind || '');
       if (kind === 'public_reasoning') {
-        if (!causalItemKey) return;
+        const reasoningId = canonicalActivityId || causalItemKey;
+        if (!reasoningId) return;
         upsertSessionActivity(sessionId, {
           ...base,
-          id: causalItemKey,
-          kind: 'think',
+          id: reasoningId,
+          kind: 'reasoning',
           title: t('chat.activity.thinking'),
           detail: '',
           status: type === 'ItemCompleted' ? 'complete' : 'running',
@@ -1011,8 +1027,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       return;
     }
     if (type === 'ReasoningSummaryDelta') {
-      if (!causalItemKey) return;
-      const id = causalItemKey;
+      const id = canonicalActivityId || causalItemKey;
+      if (!id) return;
       const previous = stateFor(sessionId).activity.find((event) => event.id === id);
       const delta = String(payload.summary || '');
       const incomingDeltaSequence = Number(payload.delta_sequence);
@@ -1024,7 +1040,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       upsertSessionActivity(sessionId, {
         ...base,
         id,
-        kind: 'think',
+        kind: 'reasoning',
         title: t('chat.activity.thinking'),
         detail: appendReasoningSummary(previous?.detail || '', delta),
         status: 'running',

@@ -54,7 +54,7 @@ function activityIcon(kind: string) {
   if (kind === 'team') return Users;
   if (kind === 'agent') return Bot;
   if (kind === 'skill') return Sparkles;
-  if (kind === 'think' || kind === 'model') return Brain;
+  if (kind === 'think' || kind === 'reasoning' || kind === 'model') return Brain;
   if (kind === 'tool' || kind === 'tool_batch') return Wrench;
   if (kind === 'approval') return ShieldCheck;
   if (kind === 'artifact' || kind === 'outcome') return PackageCheck;
