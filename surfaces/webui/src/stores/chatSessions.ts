@@ -423,6 +423,33 @@ function normalizeTurns(messages: any[]): ChatTurn[] {
   return sortTurnsCausally(normalized);
 }
 
+function latestCompletedExecutionReference(turns: ChatTurn[]) {
+  const indexed = turns.map((turn, index) => ({ turn, index }));
+  const latestUser = indexed
+    .filter(({ turn }) => turn.role === 'user')
+    .at(-1);
+  const latestAssistant = indexed
+    .filter(({ turn }) => (
+      turn.role === 'assistant'
+      && turn.status === 'complete'
+      && !!turn.execution_id
+      && !!turn.turn_id
+    ))
+    .at(-1);
+  if (!latestAssistant) return null;
+  const assistantSequence = Number.isFinite(Number(latestAssistant.turn.sequence))
+    ? Number(latestAssistant.turn.sequence)
+    : latestAssistant.index;
+  const userSequence = latestUser && Number.isFinite(Number(latestUser.turn.sequence))
+    ? Number(latestUser.turn.sequence)
+    : latestUser?.index ?? -1;
+  if (assistantSequence < userSequence) return null;
+  return {
+    executionId: String(latestAssistant.turn.execution_id),
+    turnId: String(latestAssistant.turn.turn_id),
+  };
+}
+
 function blockMetadata(blocks: any[], key: string) {
   for (const block of blocks || []) {
     const value = block?.[key];
@@ -1254,7 +1281,19 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (!next) return false;
     if (state.executionId === next) {
       if (turnId) state.executionTurnId = turnId;
+      if (initialStatus) {
+        state.live = {
+          ...(state.live || {}),
+          status: initialStatus,
+          status_detail: 'execution refreshed from canonical session index',
+          last_progress_at_ms: state.live?.last_progress_at_ms || Date.now(),
+        };
+      }
       if (markPending) state.pending = true;
+      else if (['complete', 'error', 'cancelled', 'terminal'].includes(String(initialStatus || ''))) {
+        state.pending = false;
+        stopProgressRecovery(sessionId);
+      }
       if (state.pending) ensureStreamTurn(state);
       if (state.pending) ensureProgressRecovery(sessionId);
       return false;
@@ -1478,9 +1517,26 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         state.turns.push({ ...streaming, id: state.streamTurnId });
       }
     }
+    const durableExecution = latestCompletedExecutionReference(state.turns);
+    if (
+      durableExecution
+      && (
+        !state.pending
+        || !state.executionId
+        || state.executionTurnId === durableExecution.turnId
+      )
+    ) {
+      adoptExecution(
+        sessionId,
+        durableExecution.executionId,
+        durableExecution.turnId,
+        false,
+        'complete',
+      );
+    }
     if (state.executionId) {
       if (state.pending && !durableOwnsStreamingIdentity) ensureStreamTurn(state);
-      refreshLiveExecution(sessionId).catch(() => undefined);
+      if (state.pending) refreshLiveExecution(sessionId).catch(() => undefined);
     }
   }
 
@@ -1526,10 +1582,35 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         }
 
         state.executionIndex = execution;
-        const recoveredExecutionId = String(execution.latest_execution_id || '');
-        const recoveredGraphId = String(execution.latest_graph_id || '');
-        const recoveredActive = (execution.active_execution_ids || []).includes(recoveredExecutionId);
+        const indexedExecutionId = String(execution.latest_execution_id || '');
+        const indexedEntry = (execution.executions || []).find(
+          (entry: any) => String(entry?.execution_id || '') === indexedExecutionId,
+        );
+        const indexedTurnId = String(indexedEntry?.turn_id || '');
+        const indexedActive = (execution.active_execution_ids || []).includes(indexedExecutionId);
         const recoveredStatus = String(execution.latest_status || '');
+        const durableExecution = latestCompletedExecutionReference(state.turns);
+        const useDurableTerminal = !!durableExecution
+          && (!indexedTurnId || indexedTurnId === durableExecution.turnId);
+        const recoveredExecutionId = useDurableTerminal
+          ? durableExecution.executionId
+          : indexedExecutionId;
+        const recoveredTurnId = useDurableTerminal
+          ? durableExecution.turnId
+          : indexedTurnId;
+        const recoveredActive = !useDurableTerminal && indexedActive;
+        const canonicalStatus = useDurableTerminal ? 'complete' : recoveredStatus;
+        const recoveredGraphId = recoveredExecutionId === indexedExecutionId
+          ? String(execution.latest_graph_id || '')
+          : '';
+        if (
+          useDurableTerminal
+          && indexedExecutionId
+          && indexedTurnId === durableExecution.turnId
+          && indexedExecutionId !== durableExecution.executionId
+        ) {
+          state.degradedReason = 'Session execution index disagreed with the terminal transcript root; recovered the durable root identity';
+        }
         const currentStillMaterializing = state.pending
           && !!state.executionId
           && state.executionId !== recoveredExecutionId;
@@ -1537,14 +1618,16 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           adoptExecution(
             sessionId,
             recoveredExecutionId,
-            String((execution as any).turn_id || state.executionTurnId || ''),
-            recoveredActive || !['complete', 'error', 'cancelled'].includes(recoveredStatus),
-            recoveredStatus as SurfaceExecutionStatus || undefined,
+            recoveredTurnId || state.executionTurnId || '',
+            recoveredActive || !['complete', 'error', 'cancelled'].includes(canonicalStatus),
+            canonicalStatus as SurfaceExecutionStatus || undefined,
           );
         }
-        if (recoveredGraphId) adoptExecutionGraph(sessionId, recoveredGraphId, includeProjection);
-        if (includeProjection) await hydrateExecutionProjection(sessionId, 'full');
-        if (state.executionId) refreshLiveExecution(sessionId).catch(() => undefined);
+        if (recoveredGraphId) adoptExecutionGraph(sessionId, recoveredGraphId, false);
+        if (state.executionId) {
+          await hydrateExecutionProjection(sessionId, includeProjection ? 'full' : 'summary');
+        }
+        if (state.executionId && state.pending) refreshLiveExecution(sessionId).catch(() => undefined);
         state.executionIndexLoaded = true;
       })
       .finally(() => {

@@ -123,6 +123,142 @@ describe('chatSessions', () => {
     expect(evidence).not.toHaveBeenCalled();
   });
 
+  it('recovers a completed historical turn from the durable root instead of a newer child index', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'historical-root',
+      messages: [
+        {
+          id: 'user-root',
+          session_id: 'historical-root',
+          sequence: 0,
+          role: 'user',
+          blocks: [{ type: 'text', text: 'run a team', cowd_turn_id: 'turn-root' }],
+        },
+        {
+          id: 'assistant-root',
+          session_id: 'historical-root',
+          sequence: 1,
+          role: 'assistant',
+          blocks: [{
+            type: 'text',
+            text: 'team complete',
+            cowd_execution_id: 'session-ingress-graph:root',
+            cowd_turn_id: 'turn-root',
+          }],
+        },
+      ],
+      total: 2,
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'historical-root',
+      executions: [{
+        execution_id: 'team:run:child',
+        graph_id: 'execution-graph:child',
+        turn_id: 'turn-root',
+        status: 'finalizing',
+        updated_at_ms: 20,
+      }],
+      active_execution_ids: ['team:run:child'],
+      latest_execution_id: 'team:run:child',
+      latest_graph_id: 'execution-graph:child',
+      latest_status: 'finalizing',
+    } as any);
+    const live = vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({ __state: 'not_found' } as any);
+    const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'session-ingress-graph:root',
+      revision: 13,
+      cursor: 97,
+      activities: [],
+    } as any);
+
+    await chat.load('historical-root');
+    await chat.hydrateExecutionIndex('historical-root', false);
+
+    expect(chat.states['historical-root'].executionId).toBe('session-ingress-graph:root');
+    expect(chat.states['historical-root'].executionGraphId).toBe('');
+    expect(chat.states['historical-root'].pending).toBe(false);
+    expect(projection).toHaveBeenCalledWith(
+      'session-ingress-graph:root',
+      'summary',
+      'historical-root',
+    );
+    expect(chat.states['historical-root'].degradedReason).toContain('terminal transcript root');
+    expect(live).not.toHaveBeenCalled();
+  });
+
+  it('keeps a newer active root ahead of the previous terminal transcript', async () => {
+    setActivePinia(createPinia());
+    const chat = useChatSessionsStore();
+    vi.spyOn(api, 'messages').mockResolvedValue({
+      session_id: 'active-root',
+      messages: [
+        {
+          id: 'user-old',
+          session_id: 'active-root',
+          sequence: 0,
+          role: 'user',
+          blocks: [{ type: 'text', text: 'old turn', cowd_turn_id: 'turn-old' }],
+        },
+        {
+          id: 'assistant-old',
+          session_id: 'active-root',
+          sequence: 1,
+          role: 'assistant',
+          blocks: [{
+            type: 'text',
+            text: 'old answer',
+            cowd_execution_id: 'session-ingress-graph:old',
+            cowd_turn_id: 'turn-old',
+          }],
+        },
+        {
+          id: 'user-new',
+          session_id: 'active-root',
+          sequence: 2,
+          role: 'user',
+          blocks: [{ type: 'text', text: 'new turn', cowd_turn_id: 'turn-new' }],
+        },
+      ],
+      total: 3,
+    } as any);
+    vi.spyOn(api, 'sessionExecution').mockResolvedValue({
+      session_id: 'active-root',
+      executions: [{
+        execution_id: 'session-ingress-graph:new',
+        graph_id: 'execution-graph:new',
+        turn_id: 'turn-new',
+        status: 'calling_model',
+        updated_at_ms: 30,
+      }],
+      active_execution_ids: ['session-ingress-graph:new'],
+      latest_execution_id: 'session-ingress-graph:new',
+      latest_graph_id: 'execution-graph:new',
+      latest_status: 'calling_model',
+    } as any);
+    vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'session-ingress-graph:new',
+      live: { revision: 2, status: 'calling_model', last_progress_at_ms: 30, metrics: {} },
+    } as any);
+    const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'execution-graph:new',
+      revision: 2,
+      cursor: 2,
+    } as any);
+
+    await chat.load('active-root');
+    await chat.hydrateExecutionIndex('active-root', false);
+
+    expect(chat.states['active-root'].executionId).toBe('session-ingress-graph:new');
+    expect(chat.states['active-root'].executionGraphId).toBe('execution-graph:new');
+    expect(chat.states['active-root'].pending).toBe(true);
+    expect(projection).toHaveBeenCalledWith('execution-graph:new', 'summary', 'active-root');
+  });
+
   it('loads the body-free history index before transcript bodies and preserves canonical coverage', async () => {
     setActivePinia(createPinia());
     const chat = useChatSessionsStore();

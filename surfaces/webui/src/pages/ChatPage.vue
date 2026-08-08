@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   Bot,
   ArrowDown,
@@ -65,6 +65,11 @@ const GlobalMissionGraphDialog = defineAsyncComponent(
 const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
+onMounted(() => {
+  // Model metadata backs the always-visible model/context controls. Heavy
+  // execution evidence remains owned by the closed-by-default companion.
+  store.loadChatCapabilities().catch(() => undefined);
+});
 const globalMissionGraphOpen = ref(false);
 const routingDialogOpen = ref(false);
 const routingBusy = ref(false);
@@ -287,7 +292,13 @@ const loadedSessionUsage = computed(() => {
 const chatRuntimeMetrics = computed(() => {
   const metrics = live.value?.metrics;
   const session = store.sessions.find((item) => item.id === store.activeSessionId);
-  const activities = [...(chat.active?.activity || []), ...store.activity];
+  const turns = chat.active?.turns || [];
+  const activities = [
+    ...canonicalNarrativeActivities.value,
+    ...turns.flatMap((_, index) => buildTurnExecutionActivities(turns, index)),
+    ...(chat.active?.activity || []),
+    ...store.activity,
+  ];
   const toolEvents = new Set(
     activities
       .filter((event) => event.kind === 'tool')

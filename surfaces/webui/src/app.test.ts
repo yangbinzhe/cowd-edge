@@ -933,16 +933,6 @@ describe('Cowd Vue WebUI shell', () => {
     };
     chat.active!.activity = [
       {
-        id: 'tool-1',
-        kind: 'tool',
-        title: 'workspace.read',
-        status: 'complete',
-        turn_id: 'turn-1',
-        duration_ms: 125,
-        input: { path: 'README.md' },
-        output: { lines: 42 },
-      },
-      {
         id: 'memory-1',
         kind: 'context',
         title: 'memory recall',

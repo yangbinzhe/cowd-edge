@@ -157,6 +157,113 @@ describe('canonical execution activity adapter', () => {
       .toEqual(['tool:1', 'tool:2']);
   });
 
+  it('restores a missing Tool parent from its canonical Agent runtime identity', () => {
+    const root = activity('execution', 'execution');
+    const agent = {
+      ...activity('agent:researcher', 'agent', root.activity_id),
+      agent_instance_id: 'instance:researcher:1',
+      agent_run_id: 'run:researcher:1',
+    } satisfies ExecutionActivityProjection;
+    const tool = {
+      ...activity('tool:read', 'tool'),
+      parent_activity_id: 'missing-child-wrapper',
+      agent_instance_id: agent.agent_instance_id,
+      agent_run_id: agent.agent_run_id,
+      tool_call_id: 'call:read',
+      status: 'completed',
+    } satisfies ExecutionActivityProjection;
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [root, agent, tool],
+    } as unknown as ExecutionProjection]), []);
+    const agentNode = tree[0].children.find((node) => node.activity.id === agent.activity_id);
+
+    expect(agentNode?.children).toHaveLength(1);
+    expect(agentNode?.children[0].activity.tool_summary?.total).toBe(1);
+    expect(agentNode?.children[0].children[0].activity.id).toBe(tool.activity_id);
+  });
+
+  it('repairs a valid but stale Tool parent from its exact Agent runtime identity', () => {
+    const root = activity('execution', 'execution');
+    const first = {
+      ...activity('agent:first', 'agent', root.activity_id),
+      agent_instance_id: 'instance:first',
+      agent_run_id: 'run:first',
+    } satisfies ExecutionActivityProjection;
+    const second = {
+      ...activity('agent:second', 'agent', root.activity_id),
+      agent_instance_id: 'instance:second',
+      agent_run_id: 'run:second',
+    } satisfies ExecutionActivityProjection;
+    const tool = {
+      ...activity('tool:read', 'tool', first.activity_id),
+      agent_instance_id: second.agent_instance_id,
+      agent_run_id: second.agent_run_id,
+      tool_call_id: 'call:read',
+      status: 'completed',
+    } satisfies ExecutionActivityProjection;
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [root, first, second, tool],
+    } as unknown as ExecutionProjection]), []);
+    const firstNode = tree[0].children.find((node) => node.activity.id === first.activity_id);
+    const secondNode = tree[0].children.find((node) => node.activity.id === second.activity_id);
+
+    expect(firstNode?.children).toHaveLength(0);
+    expect(secondNode?.children[0].activity.tool_summary?.total).toBe(1);
+    expect(secondNode?.children[0].children[0].activity.id).toBe(tool.activity_id);
+  });
+
+  it('does not guess Tool ownership from a shared Agent definition id', () => {
+    const root = activity('execution', 'execution');
+    const first = {
+      ...activity('agent:first', 'agent', root.activity_id),
+      agent_id: 'researcher',
+      agent_instance_id: 'instance:first',
+      agent_run_id: 'run:first',
+    } satisfies ExecutionActivityProjection;
+    const second = {
+      ...activity('agent:second', 'agent', root.activity_id),
+      agent_id: 'researcher',
+      agent_instance_id: 'instance:second',
+      agent_run_id: 'run:second',
+    } satisfies ExecutionActivityProjection;
+    const tool = {
+      ...activity('tool:ambiguous', 'tool', root.activity_id),
+      agent_id: 'researcher',
+      tool_call_id: 'call:ambiguous',
+      status: 'completed',
+    } satisfies ExecutionActivityProjection;
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [root, first, second, tool],
+    } as unknown as ExecutionProjection]), []);
+    const firstNode = tree[0].children.find((node) => node.activity.id === first.activity_id);
+    const secondNode = tree[0].children.find((node) => node.activity.id === second.activity_id);
+
+    expect(JSON.stringify([firstNode, secondNode])).not.toContain('tool:ambiguous');
+  });
+
+  it('collects Tool activities through an internal child execution wrapper', () => {
+    const root = activity('execution', 'execution');
+    const agent = activity('agent:researcher', 'agent', root.activity_id);
+    const childExecution = activity('execution:child', 'execution', agent.activity_id);
+    const tool = {
+      ...activity('tool:read', 'tool', childExecution.activity_id),
+      tool_call_id: 'call:read',
+      status: 'completed',
+    } satisfies ExecutionActivityProjection;
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [root, agent, childExecution, tool],
+    } as unknown as ExecutionProjection]), []);
+    const agentNode = tree[0].children.find((node) => node.activity.id === agent.activity_id);
+
+    expect(agentNode?.children).toHaveLength(1);
+    expect(agentNode?.children[0].activity.tool_summary?.total).toBe(1);
+    expect(agentNode?.children[0].children[0].activity.id).toBe(tool.activity_id);
+  });
+
   it('removes duplicate nested execution wrappers and summarizes structured Agent output', () => {
     const root = activity('root', 'execution');
     const team = activity('team', 'team', root.activity_id);

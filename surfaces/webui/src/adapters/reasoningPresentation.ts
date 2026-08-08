@@ -58,15 +58,40 @@ export function reasoningPresentation(
         : `activity:execution:${rootIdentity}`,
     );
   }
+  const agentsByRuntimeIdentity = new Map<string, string>();
+  for (const activity of activities.filter((candidate) => candidate.kind === 'agent')) {
+    for (const identity of [
+      activity.agent_instance_id,
+      activity.agent_run_id,
+    ].map((value) => String(value || '').trim()).filter(Boolean)) {
+      agentsByRuntimeIdentity.set(identity, activity.id);
+    }
+  }
+  const reasoningScope = (item: {
+    parent_activity_id?: string;
+    agent_instance_id?: string;
+    agent_run_id?: string;
+    agent_id?: string;
+    execution_id?: string;
+  }) => {
+    const explicitOwner = String(item.parent_activity_id || '').trim();
+    const runtimeOwner = [item.agent_run_id, item.agent_instance_id]
+      .map((value) => agentsByRuntimeIdentity.get(String(value || '').trim()))
+      .find(Boolean);
+    // Exact Runtime identity is authoritative even when a replayed legacy
+    // event still carries a valid but stale parent from another Agent.
+    const ownerActivityId = runtimeOwner || (agents.has(explicitOwner) ? explicitOwner : undefined);
+    if (ownerActivityId) return `agent:${ownerActivityId}`;
+    if (rootActivityIds.has(explicitOwner)) return 'global';
+    const executionId = String(item.execution_id || '').trim();
+    return !explicitOwner && rootIdentity && executionId === rootIdentity ? 'global' : '';
+  };
   const grouped = new Map<string, Map<string, ReasoningSegmentView>>();
-  for (const event of events.filter((event) => event.kind === 'reasoning')) {
+  for (const event of events.filter((event) => (
+    event.kind === 'reasoning' || event.kind === 'think'
+  ))) {
     const text = readableReasoningText(event.detail);
-    const ownerActivityId = String(event.parent_activity_id || '').trim();
-    const scope = agents.has(ownerActivityId)
-      ? `agent:${ownerActivityId}`
-      : rootActivityIds.has(ownerActivityId)
-        ? 'global'
-        : '';
+    const scope = reasoningScope(event);
     if (!scope || !text || !event.activity_id) continue;
     const entries = grouped.get(scope) || new Map<string, ReasoningSegmentView>();
     entries.set(event.activity_id, {
@@ -87,12 +112,7 @@ export function reasoningPresentation(
       || activity.canonical.result_summary,
     );
     if (!text) continue;
-    const ownerActivityId = String(activity.parent_activity_id || '').trim();
-    const scope = agents.has(ownerActivityId)
-      ? `agent:${ownerActivityId}`
-      : rootActivityIds.has(ownerActivityId)
-        ? 'global'
-        : '';
+    const scope = reasoningScope(activity);
     if (!scope) continue;
     const segment: ReasoningSegmentView = {
       id: activity.id,

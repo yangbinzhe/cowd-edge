@@ -354,11 +354,44 @@ export function conversationActivityTree(
   relations: ExecutionActivityRelation[],
 ): ActivityTreeNode[] {
   const roots = activityTree(
-    compactBusinessActivities(foldConversationOutputs(activities, relations).map(localizedActivity)),
+    compactBusinessActivities(bindCanonicalActivityOwners(
+      foldConversationOutputs(activities, relations),
+    ).map(localizedActivity)),
     relations,
   ).flatMap(compactConversationNode);
   sortActivityNodes(roots);
   return roots;
+}
+
+function bindCanonicalActivityOwners(activities: ActivityView[]) {
+  const agentsByRuntimeIdentity = new Map<string, string>();
+  for (const activity of activities.filter((candidate) => candidate.kind === 'agent')) {
+    for (const identity of [
+      activity.agent_instance_id,
+      activity.agent_run_id,
+    ].map((value) => String(value || '').trim()).filter(Boolean)) {
+      agentsByRuntimeIdentity.set(identity, activity.id);
+    }
+  }
+  return activities.map((activity) => {
+    if (!['tool', 'tool_batch', 'skill'].includes(activity.kind)) return activity;
+    const ownerId = [
+      activity.agent_run_id,
+      activity.agent_instance_id,
+    ]
+      .map((value) => agentsByRuntimeIdentity.get(String(value || '').trim()))
+      .find(Boolean);
+    if (!ownerId || ownerId === activity.id) return activity;
+    if (activity.parent_activity_id === ownerId) return activity;
+    return {
+      ...activity,
+      parent_activity_id: ownerId,
+      canonical: {
+        ...activity.canonical,
+        parent_activity_id: ownerId,
+      },
+    };
+  });
 }
 
 function foldConversationOutputs(
@@ -626,8 +659,11 @@ function compactConversationNode(node: ActivityTreeNode): ActivityTreeNode[] {
 
 function conversationOwnedTools(node: ActivityTreeNode): ActivityView[] {
   if (isToolActivity(node.activity)) return [node.activity];
-  if (node.activity.kind !== 'tool_batch') return [];
-  return node.children.flatMap(conversationOwnedTools);
+  if (
+    node.activity.kind === 'tool_batch'
+    || ['model', 'execution', 'runtime', 'verify'].includes(node.activity.kind)
+  ) return node.children.flatMap(conversationOwnedTools);
+  return [];
 }
 
 function compactBusinessActivities(activities: ActivityView[]) {
