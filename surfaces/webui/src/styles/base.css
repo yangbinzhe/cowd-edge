@@ -138,6 +138,13 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .chat-fact.context { font-variant-numeric: tabular-nums; }
 .chat-fact.observer[data-role="writer"] { color: var(--success); }
 .chat-fact.observer[data-role="detached"] { color: var(--warn); }
+.chat-routing-control { min-width: 0; display: inline-flex; align-items: center; gap: 2px; }
+.chat-fact.routing-chip { max-width: min(240px, 28vw); }
+.chat-fact.routing-chip strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-fact.routing-chip[data-locked="true"] { border-color: color-mix(in srgb, var(--success) 46%, var(--border)); color: var(--success); }
+.routing-clear { width: 24px; height: 24px; min-width: 24px; padding: 0; }
+.routing-dialog { width: min(520px, calc(100vw - 24px)); }
+.routing-dialog header p { margin: 4px 0 0; color: var(--text-muted); font-size: 12px; }
 .chat-top-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: nowrap; }
 .status-strip { display: inline-flex; gap: 10px; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 5px 9px; color: var(--text-muted); background: var(--bg); }
 .status-strip button { border: 0; background: transparent; color: var(--text); font-weight: 650; padding: 0; }
@@ -1260,6 +1267,8 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .chat-session-facts { flex: 1 1 auto; justify-content: flex-end; flex-wrap: nowrap; gap: 4px; }
   .chat-fact, .chat-execution-status, .session-evidence-head { width: 32px; min-width: 32px; min-height: 32px; justify-content: center; gap: 3px; padding: 0; }
   .chat-fact strong, .chat-execution-status strong, .session-evidence-head > span { display: none; }
+  .chat-routing-control { flex: 0 0 auto; }
+  .routing-clear { display: none; }
   .session-evidence-head strong { font-size: 10px; }
   .chat-execution-modal-scrim { padding: 8px; }
   .chat-execution-overlay { width: 100%; height: calc(100dvh - 16px); min-height: 320px; }

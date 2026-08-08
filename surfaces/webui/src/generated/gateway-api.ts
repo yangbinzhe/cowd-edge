@@ -3936,6 +3936,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/evolution/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * evolution GET /api/evolution/cases
+         * @description Query Gateway evolution capability through `/api/evolution/cases` handled by `evolution_cases_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_evolution_get_api_evolution_cases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/cases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * evolution GET /api/evolution/cases/:id
+         * @description Query Gateway evolution capability through `/api/evolution/cases/:id` handled by `evolution_case_detail_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_evolution_get_api_evolution_cases_by_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/cases/{id}/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * evolution POST /api/evolution/cases/:id/analyze
+         * @description Invoke or create Gateway evolution capability through `/api/evolution/cases/:id/analyze` handled by `evolution_case_analyze_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_evolution_post_api_evolution_cases_by_id_analyze"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/evolution/chain/{id}": {
         parameters: {
             query?: never;
@@ -4094,6 +4160,28 @@ export interface paths {
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
         get: operations["gateway_evolution_get_api_evolution_missions_by_id_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/evolution/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * evolution GET /api/evolution/overview
+         * @description Query Gateway evolution capability through `/api/evolution/overview` handled by `evolution_overview_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_evolution_get_api_evolution_overview"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9256,6 +9344,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/mission-focus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * session GET /api/sessions/:id/mission-focus
+         * @description Query Gateway session capability through `/api/sessions/:id/mission-focus` handled by `get_mission_focus_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["session_mission_focus_get"];
+        /**
+         * session PUT /api/sessions/:id/mission-focus
+         * @description Replace Gateway session capability through `/api/sessions/:id/mission-focus` handled by `set_mission_focus_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        put: operations["session_mission_focus_set"];
+        post?: never;
+        /**
+         * session DELETE /api/sessions/:id/mission-focus
+         * @description Delete Gateway session capability through `/api/sessions/:id/mission-focus` handled by `clear_mission_focus_handler`.
+         *
+         *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        delete: operations["session_mission_focus_clear"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/replay": {
         parameters: {
             query?: never;
@@ -9295,6 +9417,40 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/task-focus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * session GET /api/sessions/:id/task-focus
+         * @description Query Gateway session capability through `/api/sessions/:id/task-focus` handled by `get_task_focus_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["session_task_focus_get"];
+        /**
+         * session PUT /api/sessions/:id/task-focus
+         * @description Replace Gateway session capability through `/api/sessions/:id/task-focus` handled by `set_task_focus_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        put: operations["session_task_focus_set"];
+        post?: never;
+        /**
+         * session DELETE /api/sessions/:id/task-focus
+         * @description Delete Gateway session capability through `/api/sessions/:id/task-focus` handled by `clear_task_focus_handler`.
+         *
+         *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        delete: operations["session_task_focus_clear"];
         options?: never;
         head?: never;
         patch?: never;
@@ -9432,7 +9588,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/skills/maintenance/evaluate": {
+    "/api/skills/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * skill GET /api/skills/maintenance
+         * @description Query Gateway skill capability through `/api/skills/maintenance` handled by `skill_maintenance_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_skill_get_api_skills_maintenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/maintenance/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * skill GET /api/skills/maintenance/:id
+         * @description Query Gateway skill capability through `/api/skills/maintenance/:id` handled by `skill_maintenance_detail_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_skill_get_api_skills_maintenance_by_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/maintenance/{id}/activation-reviews": {
         parameters: {
             query?: never;
             header?: never;
@@ -9442,12 +9642,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * skill POST /api/skills/maintenance/evaluate
-         * @description Invoke or create Gateway skill capability through `/api/skills/maintenance/evaluate` handled by `skill_maintenance_evaluate_handler`.
+         * skill POST /api/skills/maintenance/:id/activation-reviews
+         * @description Invoke or create Gateway skill capability through `/api/skills/maintenance/:id/activation-reviews` handled by `skill_revision_activation_review_handler`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_skill_post_api_skills_maintenance_evaluate"];
+        post: operations["gateway_skill_post_api_skills_maintenance_by_id_activation_reviews"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9470,6 +9670,50 @@ export interface paths {
         get: operations["gateway_skill_get_api_skills_projection"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/revision-reviews/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * skill GET /api/skills/revision-reviews/:id
+         * @description Query Gateway skill capability through `/api/skills/revision-reviews/:id` handled by `skill_revision_review_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_skill_get_api_skills_revision_reviews_by_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/revision-reviews/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * skill POST /api/skills/revision-reviews/:id/decision
+         * @description Invoke or create Gateway skill capability through `/api/skills/revision-reviews/:id/decision` handled by `skill_revision_review_decision_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_skill_post_api_skills_revision_reviews_by_id_decision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9614,6 +9858,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills/{id}/active-pointer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * skill GET /api/skills/:id/active-pointer
+         * @description Query Gateway skill capability through `/api/skills/:id/active-pointer` handled by `skill_active_pointer_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_skill_get_api_skills_by_id_active_pointer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/skills/{id}/files": {
         parameters: {
             query?: never;
@@ -9652,6 +9918,28 @@ export interface paths {
         get: operations["gateway_skill_get_api_skills_by_id_files_raw"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{id}/rollback-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * skill POST /api/skills/:id/rollback-reviews
+         * @description Invoke or create Gateway skill capability through `/api/skills/:id/rollback-reviews` handled by `skill_revision_rollback_review_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_skill_post_api_skills_by_id_rollback_reviews"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10397,9 +10685,75 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_task_get_api_tasks"];
+        get: operations["task_list"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/mission/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * task POST /api/tasks/mission/commit
+         * @description Invoke or create Gateway task capability through `/api/tasks/mission/commit` handled by `commit_tasks_mission_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["task_mission_batch_commit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/mission/organization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * task GET /api/tasks/mission/organization
+         * @description Query Gateway task capability through `/api/tasks/mission/organization` handled by `mission_organization_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["mission_organization_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/mission/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * task POST /api/tasks/mission/preview
+         * @description Invoke or create Gateway task capability through `/api/tasks/mission/preview` handled by `preview_tasks_mission_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["task_mission_batch_preview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10421,7 +10775,29 @@ export interface paths {
          *
          *     Risk: admin. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_task_post_api_tasks_start"];
+        post: operations["task_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * task GET /api/tasks/:id
+         * @description Query Gateway task capability through `/api/tasks/:id` handled by `task_detail_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["task_detail"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10443,7 +10819,7 @@ export interface paths {
          *
          *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_task_post_api_tasks_by_id_cancel"];
+        post: operations["task_cancel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10465,7 +10841,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_task_post_api_tasks_by_id_complete"];
+        post: operations["task_complete"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10487,13 +10863,7 @@ export interface paths {
          */
         get: operations["gateway_agent_get_api_tasks_by_id_execution_graph"];
         put?: never;
-        /**
-         * agent POST /api/tasks/:id/execution-graph
-         * @description Invoke or create Gateway agent capability through `/api/tasks/:id/execution-graph` handled by `register_task_execution_graph_handler`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_agent_post_api_tasks_by_id_execution_graph"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10515,7 +10885,73 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_task_post_api_tasks_by_id_failure"];
+        post: operations["task_failure"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/focus": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * task POST /api/tasks/:id/focus
+         * @description Invoke or create Gateway task capability through `/api/tasks/:id/focus` handled by `focus_task_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["task_focus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/mission/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * task POST /api/tasks/:id/mission/commit
+         * @description Invoke or create Gateway task capability through `/api/tasks/:id/mission/commit` handled by `commit_task_mission_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["task_mission_commit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/mission/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * task POST /api/tasks/:id/mission/preview
+         * @description Invoke or create Gateway task capability through `/api/tasks/:id/mission/preview` handled by `preview_task_mission_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["task_mission_preview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10537,7 +10973,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_task_post_api_tasks_by_id_phases"];
+        post: operations["task_phase_start"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10559,7 +10995,7 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_task_post_api_tasks_by_id_phases_by_phase_id_artifacts"];
+        post: operations["task_phase_artifact_record"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10581,7 +11017,29 @@ export interface paths {
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_task_post_api_tasks_by_id_phases_by_phase_id_review"];
+        post: operations["task_phase_review"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * task GET /api/tasks/:id/turns
+         * @description Query Gateway task capability through `/api/tasks/:id/turns` handled by `task_turns_handler`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["task_turns"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -11610,11 +12068,25 @@ export interface components {
             message: string;
             retryable: boolean;
         };
+        /**
+         * @description Canonical business lineage attached before an execution graph is admitted.
+         *     Graph planning may happen before this identity is known, but a graph must
+         *     carry this scope before Runtime commits any activity or side effect.
+         */
+        ExecutionGraphLineage: {
+            /** Format: uint64 */
+            generation: number;
+            root_task_id: string;
+            session_id: string;
+            task_id: string;
+            turn_id: string;
+        };
         ExecutionGraphProjection: {
             /** Format: uint64 */
             commit_cursor: number;
             edges: components["schemas"]["ExecutionEdgeProjection"][];
             graph_id: string;
+            lineage?: components["schemas"]["ExecutionGraphLineage"] | null;
             nodes: components["schemas"]["ExecutionNodeProjection"][];
             objective: string;
             orchestration?: components["schemas"]["ExecutionOrchestrationMetadata"] | null;
@@ -11915,6 +12387,7 @@ export interface components {
             mission_id?: string | null;
             parent_execution_id?: string | null;
             parent_node_id?: string | null;
+            root_task_id?: string | null;
             session_id?: string | null;
             task_id?: string | null;
             turn_id?: string | null;
@@ -15240,6 +15713,7 @@ export interface components {
             mission: unknown;
             mission_graph: components["schemas"]["MissionControlGraphProjection"];
             missions: components["schemas"]["MissionControlMissionSummary"][];
+            organization_decisions: components["schemas"]["MissionOrganizationDecision"][];
             relations: unknown;
             schema_version: number;
             selected_mission_id: string;
@@ -15271,6 +15745,8 @@ export interface components {
             active: boolean;
             agent_count: number;
             attachment_count: number;
+            contributing_task_count: number;
+            contributing_task_ids: string[];
             created_at_ms: number;
             hydration: string;
             last_error?: string | null;
@@ -15288,24 +15764,31 @@ export interface components {
             closed_session_count: number;
             paused_session_count: number;
             pending_approval_count: number;
+            pending_organization_count: number;
             recovery_required_count: number;
             session_count: number;
             task_count: number;
             team_count: number;
         };
         MissionControlTaskNode: {
+            assignment_source: string;
             blocker_reason?: string | null;
             created_at_ms: number;
             current_phase_id?: string | null;
             failure_count: number;
             graph_count: number;
+            /** @enum {string} */
+            kind: "root" | "delegated";
             mission_id: string;
             objective: string;
+            origin_session_id: string;
+            parent_task_id?: string | null;
             phase_count: number;
             revision: number;
-            source_session_id: string;
+            root_task_id: string;
             status: string;
             task_id: string;
+            turn_count: number;
             updated_at_ms: number;
         };
         MissionControlTeamNode: {
@@ -15320,6 +15803,11 @@ export interface components {
             task_id?: string | null;
             team_id: string;
         };
+        MissionFocusProjection: {
+            mission_focus: components["schemas"]["SessionMissionFocus"] | null;
+            revision: number;
+            session_id: string;
+        };
         MissionMaterializedSnapshot: {
             cursor: number;
             /** @constant */
@@ -15329,6 +15817,57 @@ export interface components {
             revision: number;
             schema_version: number;
         };
+        /** @enum {string} */
+        MissionOrganizationAction: "keep_default" | "join_existing" | "create_cluster" | "propose_conflict";
+        /** MissionOrganizationDecision */
+        MissionOrganizationDecision: {
+            action: components["schemas"]["MissionOrganizationAction"];
+            /** Format: uint32 */
+            attempt: number;
+            /** Format: uint */
+            candidate_count: number;
+            claim_token?: string | null;
+            /** Format: uint64 */
+            created_at_ms: number;
+            decision_id: string;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            elapsed_ms: number;
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            /** Format: uint64 */
+            next_attempt_at_ms: number;
+            proposed_objective?: string | null;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            provider_input_tokens: number;
+            provider_invoked: boolean;
+            provider_model?: string | null;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            provider_output_tokens: number;
+            reason: string;
+            rejected_reason?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            status: components["schemas"]["MissionOrganizationStatus"];
+            target_mission_id: string;
+            task_ids: string[];
+            /** Format: uint64 */
+            updated_at_ms: number;
+            workspace_id: string;
+        };
+        MissionOrganizationResponse: {
+            decisions: components["schemas"]["MissionOrganizationDecision"][];
+        };
+        /** @enum {string} */
+        MissionOrganizationStatus: "pending" | "claimed" | "applied" | "rejected" | "failed";
         MissionProjectionDelta: {
             changed_domains: string[];
             events: components["schemas"]["MissionControlEventLine"][];
@@ -15706,6 +16245,24 @@ export interface components {
             /** @default [] */
             items: components["schemas"]["SessionExecutionIndexProjection"][];
         };
+        SessionFocusClearRequest: {
+            expected_revision: number;
+        };
+        /** @enum {string} */
+        SessionFocusMutation: "task_set" | "task_cleared" | "mission_set" | "mission_cleared" | "task_invalidated" | "mission_invalidated" | "focus_invalidated";
+        /** SessionFocusReceipt */
+        SessionFocusReceipt: {
+            /** Format: uint64 */
+            accepted_revision: number;
+            actor: string;
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            focus: components["schemas"]["SessionRoutingFocus"];
+            mutation: components["schemas"]["SessionFocusMutation"];
+            session_id: string;
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
         /**
          * @description Rebuildable navigation card. The card is never authoritative transcript
          *     content; `source_start_sequence..=source_end_sequence` and `source_digest`
@@ -15809,6 +16366,43 @@ export interface components {
             decision: "start_new_turn" | "supplement_current_turn" | "interrupt_and_replan" | "enqueue_next_step" | "spawn_subtask" | "route_cross_session" | "create_new_session" | "control_or_approval" | "reject_duplicate" | "reject_policy";
             reason?: string | null;
         };
+        /** @description Durable Mission routing preference for future Root Tasks in one Session. */
+        SessionMissionFocus: {
+            actor: string;
+            inherited_from_session_id?: string | null;
+            mission_id: string;
+            /** Format: uint64 */
+            revision: number;
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
+        SessionMissionFocusRequest: {
+            expected_revision: number;
+            mission_id: string;
+        };
+        SessionRoutingFocus: {
+            mission?: components["schemas"]["SessionMissionFocus"] | null;
+            /** Format: uint64 */
+            revision: number;
+            task?: components["schemas"]["SessionTaskFocus"] | null;
+        };
+        /**
+         * @description Durable routing preference owned by one Session. A focus is advisory: the
+         *     Runtime Task Router validates it against current Task state for every Turn.
+         */
+        SessionTaskFocus: {
+            actor: string;
+            inherited_from_session_id?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            task_id: string;
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
+        SessionTaskFocusRequest: {
+            expected_revision: number;
+            task_id: string;
+        };
         SlashDispatchReceipt: {
             action: string | Record<string, never>;
             data: unknown;
@@ -15823,6 +16417,25 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             command: string;
+        };
+        StartTaskPhaseRequest: {
+            acceptance?: string[];
+            evidence_refs?: components["schemas"]["EvidenceRef"][];
+            expected_revision: number;
+            name: string;
+            objective: string;
+            plan?: string[];
+            test_commands?: string[];
+        };
+        StartTaskRequest: {
+            evidence_refs?: components["schemas"]["EvidenceRef"][];
+            mission_id: string;
+            objective: string;
+            origin_session_id: string;
+            origin_turn_id: string;
+            task_id: string;
+            /** @default false */
+            yolo_mode: boolean;
         };
         StrategyActualProjection: {
             /** Format: uint16 */
@@ -15992,6 +16605,217 @@ export interface components {
             revision: number;
             status: string;
             summary: string;
+        };
+        /** TaskAggregate */
+        TaskAggregate: {
+            blocker_reason?: string | null;
+            /** Format: uint64 */
+            created_at_ms: number;
+            current_phase_id?: string | null;
+            execution_policy: components["schemas"]["TaskExecutionPolicy"];
+            /** Format: uint32 */
+            failure_count: number;
+            graph_refs: components["schemas"]["TaskGraphRef"][];
+            kind: components["schemas"]["TaskKind"];
+            mission_assigned_by: string;
+            mission_assignment: components["schemas"]["TaskMissionAssignment"];
+            /** @default [] */
+            mission_assignment_evidence_refs: components["schemas"]["EvidenceRef"][];
+            /** Format: uint64 */
+            mission_assignment_revision: number;
+            mission_id: string;
+            objective: string;
+            origin: components["schemas"]["TaskOrigin"];
+            origin_session_id: string;
+            origin_turn_id: string;
+            parent_task_id?: string | null;
+            phases: components["schemas"]["TaskPhase"][];
+            predecessor_task_id?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            root_task_id: string;
+            status: components["schemas"]["TaskStatus"];
+            strategy_ref?: string | null;
+            task_id: string;
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
+        TaskDetailResponse: {
+            task: components["schemas"]["TaskAggregate"];
+            turns: components["schemas"]["TaskTurnBinding"][];
+        };
+        TaskExecutionPolicy: {
+            /** Format: uint32 */
+            max_failures_before_block: number;
+            yolo_mode: boolean;
+        };
+        TaskFailureRequest: {
+            evidence_refs?: components["schemas"]["EvidenceRef"][];
+            expected_revision: number;
+            reason: string;
+        };
+        TaskFocusProjection: {
+            revision: number;
+            session_id: string;
+            task_focus: components["schemas"]["SessionTaskFocus"] | null;
+        };
+        TaskFocusRequest: {
+            expected_revision: number;
+            session_id: string;
+        };
+        TaskGraphRef: {
+            graph_id: string;
+            /** Format: uint64 */
+            linked_at_ms: number;
+            /** Format: uint64 */
+            revision: number;
+        };
+        /** @enum {string} */
+        TaskKind: "root" | "delegated";
+        TaskListResponse: {
+            tasks: components["schemas"]["TaskAggregate"][];
+        };
+        /** @enum {string} */
+        TaskMissionAssignment: "default" | "automatic" | "explicit_locked";
+        /** TaskMissionAssignmentCommand */
+        TaskMissionAssignmentCommand: {
+            actor: string;
+            assignment: components["schemas"]["TaskMissionAssignment"];
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            expected_task_revisions: {
+                [key: string]: number;
+            };
+            operation_id: string;
+            target_mission_id: string;
+            task_ids: string[];
+            workspace_id: string;
+        };
+        /** TaskMissionAssignmentPreview */
+        TaskMissionAssignmentPreview: {
+            confirm_required: boolean;
+            items: components["schemas"]["TaskMissionAssignmentPreviewItem"][];
+            operation_id: string;
+            target_mission_id: string;
+        };
+        TaskMissionAssignmentPreviewItem: {
+            allowed: boolean;
+            current_mission_id: string;
+            /** Format: uint64 */
+            current_revision: number;
+            reason?: string | null;
+            target_mission_id: string;
+            task_id: string;
+        };
+        /** TaskMissionAssignmentReceipt */
+        TaskMissionAssignmentReceipt: {
+            /** Format: uint64 */
+            applied_at_ms: number;
+            assignment: components["schemas"]["TaskMissionAssignment"];
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            operation_id: string;
+            target_mission_id: string;
+            task_revisions: {
+                [key: string]: number;
+            };
+        };
+        TaskMissionCommitResponse: {
+            preview: components["schemas"]["TaskMissionAssignmentPreview"];
+            receipt: components["schemas"]["TaskMissionAssignmentReceipt"];
+        };
+        TaskMissionPreviewResponse: {
+            command: components["schemas"]["TaskMissionAssignmentCommand"];
+            preview: components["schemas"]["TaskMissionAssignmentPreview"];
+        };
+        TaskMissionRequest: {
+            assignment: components["schemas"]["TaskMissionAssignment"];
+            /** @default false */
+            confirmed: boolean;
+            evidence_refs?: components["schemas"]["EvidenceRef"][];
+            expected_task_revisions: {
+                [key: string]: number;
+            };
+            operation_id: string;
+            target_mission_id: string;
+            task_ids?: string[];
+        };
+        /** @enum {string} */
+        TaskOrigin: "user" | "schedule" | "mission" | "delegated" | "system";
+        TaskPhase: {
+            acceptance: string[];
+            artifacts: components["schemas"]["TaskPhaseArtifact"][];
+            /** Format: uint64 */
+            created_at_ms: number;
+            dependency_refs: string[];
+            name: string;
+            objective: string;
+            phase_id: string;
+            plan: string[];
+            review_result?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            status: components["schemas"]["TaskPhaseStatus"];
+            terminal_receipt?: components["schemas"]["TaskPhaseTerminalReceipt"] | null;
+            test_commands: string[];
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
+        TaskPhaseArtifact: {
+            /** Format: uint64 */
+            created_at_ms: number;
+            kind: string;
+            label: string;
+            value: string;
+        };
+        TaskPhaseArtifactRequest: {
+            evidence_refs?: components["schemas"]["EvidenceRef"][];
+            expected_revision: number;
+            /** @default note */
+            kind: string;
+            label: string;
+            value: string;
+        };
+        TaskPhaseReviewRequest: {
+            /** @default false */
+            completed: boolean;
+            evidence_refs?: components["schemas"]["EvidenceRef"][];
+            expected_revision: number;
+            result: string;
+        };
+        /** @enum {string} */
+        TaskPhaseStatus: "pending" | "running" | "reviewing" | "completed" | "blocked" | "cancelled" | "failed";
+        TaskPhaseTerminalReceipt: {
+            /** Format: uint64 */
+            completed_at_ms: number;
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            outcome: string;
+        };
+        /** @enum {string} */
+        TaskStatus: "pending" | "running" | "reviewing" | "completed" | "blocked" | "cancelled" | "failed";
+        TaskTransitionRequest: {
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            expected_revision: number;
+            note: string;
+        };
+        /** TaskTurnBinding */
+        TaskTurnBinding: {
+            binding_id: string;
+            /** Format: uint64 */
+            bound_at_ms: number;
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceRef"][];
+            input_id?: string | null;
+            role: components["schemas"]["TaskTurnRole"];
+            session_id: string;
+            task_id: string;
+            turn_id: string;
+        };
+        /** @enum {string} */
+        TaskTurnRole: "primary" | "additional" | "review" | "handoff";
+        TaskTurnsResponse: {
+            task_id: string;
+            turns: components["schemas"]["TaskTurnBinding"][];
         };
         /**
          * @description A stable, deterministic relation between one durable Session turn and its
@@ -18042,7 +18866,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.cockpit.profile.delete.request.v1"];
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -28098,7 +28926,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -28244,7 +29095,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -29249,6 +30123,162 @@ export interface operations {
             };
         };
     };
+    gateway_evolution_get_api_evolution_cases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_get_api_evolution_cases_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_post_api_evolution_cases_by_id_analyze: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_evolution_get_api_evolution_chain_by_id: {
         parameters: {
             query?: never;
@@ -29657,6 +30687,49 @@ export interface operations {
             path: {
                 id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_evolution_get_api_evolution_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -34938,7 +36011,34 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                        /** @description Path parameter `layer` */
+                        layer: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                        /** @description Path parameter `layer` */
+                        layer: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -36504,7 +37604,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -37486,7 +38609,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -39144,7 +40290,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -39432,7 +40601,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -41069,7 +42261,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -41432,7 +42647,34 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                        /** @description Path parameter `ref_id` */
+                        ref_id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                        /** @description Path parameter `ref_id` */
+                        ref_id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -42554,6 +43796,179 @@ export interface operations {
             };
         };
     };
+    session_mission_focus_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MissionFocusProjection"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_mission_focus_set: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionMissionFocusRequest"];
+                "multipart/form-data": components["schemas"]["SessionMissionFocusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionFocusReceipt"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_mission_focus_clear: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionFocusClearRequest"];
+                "multipart/form-data": components["schemas"]["SessionFocusClearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionFocusReceipt"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_session_get_api_sessions_by_id_replay: {
         parameters: {
             query?: never;
@@ -42630,6 +44045,179 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_task_focus_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskFocusProjection"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_task_focus_set: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionTaskFocusRequest"];
+                "multipart/form-data": components["schemas"]["SessionTaskFocusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionFocusReceipt"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_task_focus_clear: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionFocusClearRequest"];
+                "multipart/form-data": components["schemas"]["SessionFocusClearRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionFocusReceipt"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -42938,11 +44526,101 @@ export interface operations {
             };
         };
     };
-    gateway_skill_post_api_skills_maintenance_evaluate: {
+    gateway_skill_get_api_skills_maintenance: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_get_api_skills_maintenance_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_post_api_skills_maintenance_by_id_activation_reviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: {
@@ -42952,11 +44630,19 @@ export interface operations {
                     body?: {
                         [key: string]: unknown;
                     };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
                 };
                 "multipart/form-data": {
                     /** @description Request JSON or multipart body. See handler request type in source file. */
                     body?: {
                         [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
                     };
                 };
             };
@@ -43004,6 +44690,119 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_get_api_skills_revision_reviews_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_post_api_skills_revision_reviews_by_id_decision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -43181,7 +44980,30 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -43421,6 +45243,51 @@ export interface operations {
             };
         };
     };
+    gateway_skill_get_api_skills_by_id_active_pointer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_skill_get_api_skills_by_id_files: {
         parameters: {
             query?: never;
@@ -43484,6 +45351,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_post_api_skills_by_id_rollback_reviews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Bad request */
@@ -45355,7 +47290,7 @@ export interface operations {
             };
         };
     };
-    gateway_task_get_api_tasks: {
+    task_list: {
         parameters: {
             query?: never;
             header?: never;
@@ -45370,9 +47305,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskListResponse"];
                 };
             };
             /** @description Bad request */
@@ -45398,27 +47331,17 @@ export interface operations {
             };
         };
     };
-    gateway_task_post_api_tasks_start: {
+    task_mission_batch_commit: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                };
+                "application/json": components["schemas"]["TaskMissionRequest"];
+                "multipart/form-data": components["schemas"]["TaskMissionRequest"];
             };
         };
         responses: {
@@ -45428,9 +47351,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskMissionCommitResponse"];
                 };
             };
             /** @description Bad request */
@@ -45456,39 +47377,14 @@ export interface operations {
             };
         };
     };
-    gateway_task_post_api_tasks_by_id_cancel: {
+    mission_organization_list: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -45496,9 +47392,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["MissionOrganizationResponse"];
                 };
             };
             /** @description Bad request */
@@ -45524,37 +47418,17 @@ export interface operations {
             };
         };
     };
-    gateway_task_post_api_tasks_by_id_complete: {
+    task_mission_batch_preview: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["TaskMissionRequest"];
+                "multipart/form-data": components["schemas"]["TaskMissionRequest"];
             };
         };
         responses: {
@@ -45564,9 +47438,192 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskMissionPreviewResponse"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    task_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartTaskRequest"];
+                "multipart/form-data": components["schemas"]["StartTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAggregate"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    task_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetailResponse"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    task_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskTransitionRequest"];
+                "multipart/form-data": components["schemas"]["TaskTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAggregate"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    task_complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskTransitionRequest"];
+                "multipart/form-data": components["schemas"]["TaskTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAggregate"];
                 };
             };
             /** @description Bad request */
@@ -45637,7 +47694,7 @@ export interface operations {
             };
         };
     };
-    gateway_agent_post_api_tasks_by_id_execution_graph: {
+    task_failure: {
         parameters: {
             query?: never;
             header?: never;
@@ -45646,28 +47703,10 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["TaskFailureRequest"];
+                "multipart/form-data": components["schemas"]["TaskFailureRequest"];
             };
         };
         responses: {
@@ -45677,9 +47716,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskAggregate"];
                 };
             };
             /** @description Bad request */
@@ -45705,37 +47742,22 @@ export interface operations {
             };
         };
     };
-    gateway_task_post_api_tasks_by_id_failure: {
+    task_focus: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["TaskFocusRequest"];
+                "multipart/form-data": components["schemas"]["TaskFocusRequest"];
             };
         };
         responses: {
@@ -45745,9 +47767,69 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SessionFocusReceipt"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    task_mission_commit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskMissionRequest"];
+                "multipart/form-data": components["schemas"]["TaskMissionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskMissionCommitResponse"];
                 };
             };
             /** @description Bad request */
@@ -45773,7 +47855,7 @@ export interface operations {
             };
         };
     };
-    gateway_task_post_api_tasks_by_id_phases: {
+    task_mission_preview: {
         parameters: {
             query?: never;
             header?: never;
@@ -45782,28 +47864,10 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                    };
-                };
+                "application/json": components["schemas"]["TaskMissionRequest"];
+                "multipart/form-data": components["schemas"]["TaskMissionRequest"];
             };
         };
         responses: {
@@ -45813,9 +47877,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskMissionPreviewResponse"];
                 };
             };
             /** @description Bad request */
@@ -45841,7 +47903,55 @@ export interface operations {
             };
         };
     };
-    gateway_task_post_api_tasks_by_id_phases_by_phase_id_artifacts: {
+    task_phase_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartTaskPhaseRequest"];
+                "multipart/form-data": components["schemas"]["StartTaskPhaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAggregate"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    task_phase_artifact_record: {
         parameters: {
             query?: never;
             header?: never;
@@ -45851,32 +47961,10 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `phase_id` */
-                        phase_id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `phase_id` */
-                        phase_id: string;
-                    };
-                };
+                "application/json": components["schemas"]["TaskPhaseArtifactRequest"];
+                "multipart/form-data": components["schemas"]["TaskPhaseArtifactRequest"];
             };
         };
         responses: {
@@ -45886,9 +47974,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskAggregate"];
                 };
             };
             /** @description Bad request */
@@ -45914,7 +48000,7 @@ export interface operations {
             };
         };
     };
-    gateway_task_post_api_tasks_by_id_phases_by_phase_id_review: {
+    task_phase_review: {
         parameters: {
             query?: never;
             header?: never;
@@ -45924,32 +48010,10 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
+        requestBody: {
             content: {
-                "application/json": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `phase_id` */
-                        phase_id: string;
-                    };
-                };
-                "multipart/form-data": {
-                    /** @description Request JSON or multipart body. See handler request type in source file. */
-                    body?: {
-                        [key: string]: unknown;
-                    };
-                    path?: {
-                        /** @description Path parameter `id` */
-                        id: string;
-                        /** @description Path parameter `phase_id` */
-                        phase_id: string;
-                    };
-                };
+                "application/json": components["schemas"]["TaskPhaseReviewRequest"];
+                "multipart/form-data": components["schemas"]["TaskPhaseReviewRequest"];
             };
         };
         responses: {
@@ -45959,9 +48023,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TaskAggregate"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    task_turns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskTurnsResponse"];
                 };
             };
             /** @description Bad request */
@@ -47130,7 +49235,22 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {

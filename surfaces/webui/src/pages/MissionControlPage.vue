@@ -73,6 +73,10 @@ const editingScheduleId = ref('');
 const editingScheduleRevision = ref(0);
 const selectedExecutionNode = ref<any>(null);
 const selectedTraceEvidence = ref<Record<string, unknown> | null>(null);
+const selectedTaskDetail = ref<any>(null);
+const taskAssignmentTarget = ref('');
+const taskAssignmentPreview = ref<any>(null);
+const taskAssignmentBusy = ref(false);
 let missionLiveSource: LiveSourceLease | null = null;
 const loadedAuxiliarySections = new Set<string>();
 const controlProjection = computed<MissionControlProjection | Record<string, never>>(
@@ -88,6 +92,9 @@ const sessions = computed(() => Array.isArray(controlProjection.value?.sessions)
   : []);
 const tasks = computed(() => Array.isArray(controlProjection.value?.tasks)
   ? controlProjection.value.tasks
+  : []);
+const organizationDecisions = computed(() => Array.isArray((controlProjection.value as any)?.organization_decisions)
+  ? (controlProjection.value as any).organization_decisions
   : []);
 const missionSessionIds = computed(() => new Set(sessions.value
   .map((session: any) => String(session.session_id || session.id || '').trim())
@@ -284,11 +291,24 @@ const sessionRows = computed(() => sessions.value.map((session: any) => ({
 const taskRows = computed(() => tasks.value.map((task: any) => ({
   id: task.task_id || '-',
   status: task.status || '-',
-  session: task.source_session_id || '-',
+  kind: task.kind || '-',
+  session: task.origin_session_id || '-',
   objective: task.objective || '-',
-  phase: task.current_phase_id || '-',
+  turns: Number(task.turn_count || 0),
+  assignment: task.assignment_source || '-',
   graphs: Number(task.graph_count || 0),
   failures: Number(task.failure_count || 0),
+  raw: task,
+})));
+const organizationRows = computed(() => organizationDecisions.value.map((decision: any) => ({
+  id: decision.decision_id || '-',
+  status: decision.status || '-',
+  action: decision.action || '-',
+  tasks: Array.isArray(decision.task_ids) ? decision.task_ids.length : 0,
+  candidates: Number(decision.candidate_count || 0),
+  provider: decision.provider_invoked ? (decision.provider_model || 'provider') : 'deterministic',
+  elapsed: `${Number(decision.elapsed_ms || 0)} ms`,
+  reason: decision.reason || decision.rejected_reason || '-',
 })));
 const teamRunRows = computed(() => collaborationRuns.value.slice(0, 8).map((run: any) => {
   const team = run.team || run;
@@ -444,6 +464,50 @@ async function refreshSelectedSession() {
 async function selectSession(sessionId: string) {
   selectedSessionId.value = sessionId;
   await refreshSelectedSession();
+}
+
+async function selectTask(row: any) {
+  const taskId = String(row?.id || row?.task_id || '').trim();
+  if (!taskId || taskId === '-') return;
+  selectedTaskDetail.value = await api.taskDetail(taskId);
+  taskAssignmentTarget.value = selectedTaskDetail.value?.task?.mission_id || '';
+  taskAssignmentPreview.value = null;
+}
+
+async function previewSelectedTaskMission() {
+  const task = selectedTaskDetail.value?.task;
+  if (!task?.task_id || !taskAssignmentTarget.value) return;
+  taskAssignmentBusy.value = true;
+  error.value = '';
+  try {
+    taskAssignmentPreview.value = await api.previewTaskMission(
+      [task.task_id],
+      taskAssignmentTarget.value,
+      { [task.task_id]: Number(task.revision || 0) },
+    );
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    taskAssignmentBusy.value = false;
+  }
+}
+
+async function commitSelectedTaskMission() {
+  const command = taskAssignmentPreview.value?.command;
+  if (!command) return;
+  if (!globalThis.confirm(t('page.mission.taskAssignment.confirm'))) return;
+  taskAssignmentBusy.value = true;
+  error.value = '';
+  try {
+    actionResult.value = await api.commitTaskMission(command);
+    taskAssignmentPreview.value = null;
+    selectedTaskDetail.value = null;
+    await refresh();
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    taskAssignmentBusy.value = false;
+  }
 }
 
 async function startTeam() {
@@ -1097,7 +1161,7 @@ onUnmounted(() => {
             <select v-model="schedulePermission">
               <option value="read-only">read-only</option>
               <option value="workspace-write">workspace-write</option>
-              <option value="prompt">prompt</option>
+              <option value="danger-full-access">danger-full-access</option>
             </select>
           </label>
           <div class="button-row">
@@ -1162,7 +1226,50 @@ onUnmounted(() => {
           copyable
           row-key="id"
           :rows="taskRows"
-          :columns="['id', 'status', 'session', 'objective', 'phase', 'graphs', 'failures']"
+          :columns="['id', 'status', 'kind', 'session', 'objective', 'turns', 'assignment', 'graphs', 'failures']"
+          @row-click="selectTask"
+        />
+        <section v-if="selectedTaskDetail?.task" class="task-governance-detail">
+          <header>
+            <div>
+              <strong>{{ selectedTaskDetail.task.objective }}</strong>
+              <span>{{ selectedTaskDetail.task.task_id }} · {{ displayStatus(selectedTaskDetail.task.status) }}</span>
+            </div>
+            <button class="icon-action" type="button" :aria-label="t('common.close')" @click="selectedTaskDetail = null"><X :size="15" /></button>
+          </header>
+          <div class="task-governance-facts">
+            <span>{{ t('page.mission.taskDetail.origin') }} <strong>{{ selectedTaskDetail.task.origin_session_id }}</strong></span>
+            <span>{{ t('page.mission.taskDetail.lineage') }} <strong>{{ selectedTaskDetail.task.root_task_id }}</strong></span>
+            <span>{{ t('page.mission.taskDetail.assignment') }} <strong>{{ selectedTaskDetail.task.mission_assignment }}</strong></span>
+            <span>{{ t('page.mission.taskDetail.turns') }} <strong>{{ selectedTaskDetail.turns?.length || 0 }}</strong></span>
+          </div>
+          <DataTable
+            v-if="selectedTaskDetail.turns?.length"
+            row-key="binding_id"
+            :rows="selectedTaskDetail.turns"
+            :columns="['session_id', 'turn_id', 'role', 'bound_at_ms']"
+          />
+          <div class="task-assignment-controls">
+            <select v-model="taskAssignmentTarget">
+              <option v-for="missionOption in missions" :key="missionOption.mission_id" :value="missionOption.mission_id">
+                {{ missionOption.objective || missionOption.mission_id }}
+              </option>
+            </select>
+            <button class="ghost-action" type="button" :disabled="taskAssignmentBusy || !taskAssignmentTarget" @click="previewSelectedTaskMission">
+              {{ t('page.mission.taskAssignment.preview') }}
+            </button>
+            <button v-if="taskAssignmentPreview?.command" class="primary-action" type="button" :disabled="taskAssignmentBusy" @click="commitSelectedTaskMission">
+              {{ t('page.mission.taskAssignment.commit') }}
+            </button>
+          </div>
+        </section>
+        <DataTable
+          v-if="organizationRows.length"
+          searchable
+          copyable
+          row-key="id"
+          :rows="organizationRows"
+          :columns="['id', 'status', 'action', 'tasks', 'candidates', 'provider', 'elapsed', 'reason']"
         />
         <DataTable
           v-if="executionGraphRows.length"
@@ -1267,4 +1374,12 @@ onUnmounted(() => {
   gap: 16px;
   margin-bottom: 16px;
 }
+.task-governance-detail { display: grid; gap: 12px; padding: 12px 0; border-block: 1px solid var(--border); }
+.task-governance-detail > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.task-governance-detail > header div { min-width: 0; display: grid; gap: 3px; }
+.task-governance-detail > header span { color: var(--text-muted); font-size: 12px; }
+.task-governance-facts { display: flex; gap: 8px; flex-wrap: wrap; }
+.task-governance-facts span { padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); font-size: 11px; }
+.task-assignment-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-assignment-controls select { min-width: min(320px, 100%); }
 </style>

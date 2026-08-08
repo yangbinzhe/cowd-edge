@@ -3014,7 +3014,7 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/mission/approvals') return Promise.resolve(new Response(JSON.stringify({ approvals: { pending_count: 0, requests: [] } })));
       if (url === '/api/mission/relations') return Promise.resolve(new Response(JSON.stringify({ relations: { relation_count: 0, relations: [] } })));
       if (url.startsWith('/api/runtime/timeline')) return Promise.resolve(new Response(JSON.stringify({ events: [{ sequence: 1, kind: 'turn', status: 'complete', detail: 'done' }] })));
-      if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ tasks: [{ id: 'task-1', status: 'done', objective: 'align webui', current_phase: 'review' }] })));
+      if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ tasks: [{ task_id: 'task-1', status: 'completed', objective: 'align webui', current_phase_id: 'review', revision: 1 }] })));
       if (url === '/api/growth/status') return Promise.resolve(new Response(JSON.stringify({ status: 'ready', event_count: 1, promotion_count: 1, sources: { risk_gate: 1 } })));
       if (url === '/api/growth/events') return Promise.resolve(new Response(JSON.stringify({
         events: [{ id: 'growth-1', source_event_kind: 'risk_gate', selected_mode: 'promote', risk: 'low', created_at: '2026-06-21T00:00:00Z' }],
@@ -3750,7 +3750,7 @@ describe('Cowd Vue WebUI shell', () => {
       if (url === '/api/agents/self-models') return Promise.resolve(new Response(JSON.stringify({ items: [{ definition_id: 'workspace/cowd/planner', definition_revision: 1, environment_fingerprint: 'env', run_count: 3, success_count: 2, failure_count: 1, total_tool_calls: 4 }] })));
       if (url === '/api/agents/execution-graphs') return Promise.resolve(new Response(JSON.stringify({ graphs: [{ graph_id: 'agent-graph-task-1' }] })));
       if (url === '/api/team-templates') return Promise.resolve(new Response(JSON.stringify({ templates: [] })));
-      if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ current: { id: 'task-1', objective: 'Ship UI', status: 'open', phases: [] }, tasks: [{ id: 'task-1', objective: 'Ship UI', status: 'open', phases: [] }] })));
+      if (url === '/api/tasks') return Promise.resolve(new Response(JSON.stringify({ tasks: [{ task_id: 'task-1', objective: 'Ship UI', status: 'running', revision: 1, phases: [] }] })));
       if (url === '/api/tasks/task-1/execution-graph') return Promise.resolve(new Response(JSON.stringify({ status: 'running', nodes: [{ id: 'planner', title: 'Plan', role: 'planner', status: 'ready', objective: 'Ship UI', depends_on: [] }] })));
       if (url === '/api/runtime/managed-agents') return Promise.resolve(new Response(JSON.stringify({
         definitions: [{

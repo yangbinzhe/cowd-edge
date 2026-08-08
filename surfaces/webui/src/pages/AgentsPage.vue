@@ -84,9 +84,9 @@ const discoveredRows = computed(() => (Array.isArray(discovery.value?.agents) ? 
   status: agent.scope || '-',
 })));
 const taskItems = computed(() => Array.isArray(tasks.value?.tasks) ? tasks.value.tasks : []);
-const selectedTask = computed(() => taskItems.value.find((task: any) => task.id === selectedTaskId.value) || tasks.value?.current || taskItems.value[0] || null);
+const selectedTask = computed(() => taskItems.value.find((task: any) => task.task_id === selectedTaskId.value) || taskItems.value[0] || null);
 const phaseItems = computed(() => Array.isArray(selectedTask.value?.phases) ? selectedTask.value.phases : []);
-const currentPhase = computed(() => phaseItems.value.find((phase: any) => phase.id === selectedTask.value?.current_phase) || phaseItems.value[0] || null);
+const currentPhase = computed(() => phaseItems.value.find((phase: any) => phase.phase_id === selectedTask.value?.current_phase_id) || phaseItems.value[0] || null);
 const graphNodes = computed(() => Array.isArray(graph.value?.nodes) ? graph.value.nodes : []);
 const runItems = computed(() => Array.isArray(runs.value?.runs) ? runs.value.runs : []);
 const teamTemplateItems = computed(() => Array.isArray(teamTemplates.value?.templates) ? teamTemplates.value.templates : []);
@@ -243,7 +243,7 @@ async function refresh() {
       );
     }
     if (!selectedTaskId.value) {
-      selectedTaskId.value = nextTasks?.current?.id || nextTasks?.tasks?.[0]?.id || '';
+      selectedTaskId.value = nextTasks?.tasks?.[0]?.task_id || '';
     }
     if (!selectedTemplateId.value) selectedTemplateId.value = nextTemplates?.templates?.[0]?.revision_ref?.template_id || '';
     await loadGraph();
@@ -278,19 +278,20 @@ async function startTask() {
     error.value = t('page.agents.error.objectiveRequired');
     return;
   }
-  actionResult.value = await api.startTask(objective.value, false);
-  selectedTaskId.value = actionResult.value?.id || selectedTaskId.value;
+  actionResult.value = await api.startTask(objective.value, false, store.activeSessionId);
+  selectedTaskId.value = actionResult.value?.task_id || selectedTaskId.value;
   await refresh();
 }
 
 async function addPhase() {
-  const taskId = selectedTaskId.value || selectedTask.value?.id;
+  const taskId = selectedTaskId.value || selectedTask.value?.task_id;
   if (!taskId) return;
   if (!phaseName.value.trim() || !phaseObjective.value.trim()) {
     error.value = t('page.agents.error.phaseRequired');
     return;
   }
   actionResult.value = await api.startTaskPhase(taskId, {
+    expected_revision: Number(selectedTask.value?.revision || 0),
     name: phaseName.value,
     objective: phaseObjective.value,
     plan: [],
@@ -301,14 +302,15 @@ async function addPhase() {
 }
 
 async function recordArtifact() {
-  const taskId = selectedTaskId.value || selectedTask.value?.id;
-  const phaseId = currentPhase.value?.id;
+  const taskId = selectedTaskId.value || selectedTask.value?.task_id;
+  const phaseId = currentPhase.value?.phase_id;
   if (!taskId || !phaseId) return;
   if (!artifactLabel.value.trim() || !artifactValue.value.trim()) {
     error.value = t('page.agents.error.artifactRequired');
     return;
   }
   actionResult.value = await api.recordTaskArtifact(taskId, phaseId, {
+    expected_revision: Number(selectedTask.value?.revision || 0),
     kind: 'validation',
     label: artifactLabel.value,
     value: artifactValue.value,
@@ -317,28 +319,35 @@ async function recordArtifact() {
 }
 
 async function reviewPhase(completed = true) {
-  const taskId = selectedTaskId.value || selectedTask.value?.id;
-  const phaseId = currentPhase.value?.id;
+  const taskId = selectedTaskId.value || selectedTask.value?.task_id;
+  const phaseId = currentPhase.value?.phase_id;
   if (!taskId || !phaseId) return;
   if (!reviewResult.value.trim()) {
     error.value = t('page.agents.error.reviewRequired');
     return;
   }
-  actionResult.value = await api.reviewTaskPhase(taskId, phaseId, reviewResult.value, completed);
+  actionResult.value = await api.reviewTaskPhase(
+    taskId,
+    phaseId,
+    Number(selectedTask.value?.revision || 0),
+    reviewResult.value,
+    completed,
+  );
   await refresh();
 }
 
 async function transitionTask(action: 'complete' | 'cancel' | 'failure') {
-  const taskId = selectedTaskId.value || selectedTask.value?.id;
+  const taskId = selectedTaskId.value || selectedTask.value?.task_id;
   if (!taskId) return;
-  if (action === 'complete') actionResult.value = await api.completeTask(taskId);
-  if (action === 'cancel') actionResult.value = await api.cancelTask(taskId);
+  const revision = Number(selectedTask.value?.revision || 0);
+  if (action === 'complete') actionResult.value = await api.completeTask(taskId, revision);
+  if (action === 'cancel') actionResult.value = await api.cancelTask(taskId, revision);
   if (action === 'failure') {
     if (!failureReason.value.trim()) {
       error.value = t('page.agents.error.failureReasonRequired');
       return;
     }
-    actionResult.value = await api.recordTaskFailure(taskId, failureReason.value);
+    actionResult.value = await api.recordTaskFailure(taskId, revision, failureReason.value);
   }
   await refresh();
 }
@@ -756,14 +765,14 @@ onUnmounted(() => projections.release('agents'));
           <aside class="task-list">
             <button
               v-for="task in taskItems"
-              :key="task.id"
+              :key="task.task_id"
               class="memory-entry-row"
-              :class="{ active: selectedTaskId === task.id }"
+              :class="{ active: selectedTaskId === task.task_id }"
               type="button"
-              @click="selectTask(task.id); selectedDetail = task"
+              @click="selectTask(task.task_id); selectedDetail = task"
             >
-              <strong>{{ task.objective || task.id }}</strong>
-              <span>{{ task.id }}</span>
+              <strong>{{ task.objective || task.task_id }}</strong>
+              <span>{{ task.task_id }}</span>
               <small>{{ displayStatus(task.status) }} · failures {{ task.failure_count || 0 }}</small>
             </button>
             <EmptyState v-if="!taskItems.length" :title="t('page.agents.page.title.6c2217048b')" :detail="t('page.agents.page.detail.f95c3d582c')" />

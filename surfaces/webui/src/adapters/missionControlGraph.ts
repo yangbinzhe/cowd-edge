@@ -7,6 +7,7 @@ import { t } from '../i18n';
 
 const STRATEGIC_KINDS = new Set([
   'mission',
+  'session',
   'task',
   'execution',
   'team',
@@ -250,16 +251,21 @@ function isInternalTeamRoleTask(taskId: string, teamId: string) {
 
 function reachableStrategicNodes(
   rootId: string,
-  edges: Array<{ from: string; to: string }>,
+  edges: Array<{ from: string; to: string; kind?: string }>,
 ) {
   const reachable = new Set<string>([rootId]);
   let changed = true;
   while (changed) {
     changed = false;
     for (const edge of edges) {
-      if (!reachable.has(edge.from) || reachable.has(edge.to)) continue;
-      reachable.add(edge.to);
-      changed = true;
+      if (reachable.has(edge.from) && !reachable.has(edge.to)) {
+        reachable.add(edge.to);
+        changed = true;
+      }
+      if (edge.kind === 'contributes' && reachable.has(edge.to) && !reachable.has(edge.from)) {
+        reachable.add(edge.from);
+        changed = true;
+      }
     }
   }
   return reachable;

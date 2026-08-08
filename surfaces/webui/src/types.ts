@@ -55,6 +55,14 @@ export type MissionMaterializedSnapshot = GatewayComponents['schemas']['MissionM
 export type MissionProjectionDelta = GatewayComponents['schemas']['MissionProjectionDelta'];
 export type SessionHistoryIndexProjection = GatewayComponents['schemas']['SessionHistoryIndexProjection'];
 
+export type SessionRoutingFocusProjection = GatewayComponents['schemas']['SessionRoutingFocus'];
+export type TaskFocusProjection = GatewayComponents['schemas']['TaskFocusProjection'];
+export type MissionFocusProjection = GatewayComponents['schemas']['MissionFocusProjection'];
+export type TaskTurnBindingProjection = GatewayComponents['schemas']['TaskTurnBinding'];
+export type TaskAggregateProjection = GatewayComponents['schemas']['TaskAggregate'];
+export type TaskDetailProjection = GatewayComponents['schemas']['TaskDetailResponse'];
+export type MissionOrganizationDecisionProjection = GatewayComponents['schemas']['MissionOrganizationDecision'];
+
 export interface ChatTurn {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';

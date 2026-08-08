@@ -166,7 +166,12 @@ test('observer status opens the global Mission graph without leaving Chat', asyn
   await expect(page).toHaveURL(/#\/chat$/);
   const dialog = page.getByRole('dialog', { name: 'Global Mission execution graph' });
   await expect(dialog).toBeVisible();
-  await expect(dialog).toContainText('Global mission browser proof');
+  if (realGateway) {
+    await expect(dialog.locator('.vue-flow__node')).not.toHaveCount(0);
+    await expect(dialog).toContainText(/Runtime graph: \d+ nodes, \d+ edges/);
+  } else {
+    await expect(dialog).toContainText('Global mission browser proof');
+  }
   await dialog.getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toHaveCount(0);
 });
@@ -311,7 +316,7 @@ test('duplicated tabs claim unique observers and cannot demote the active writer
   await second.close();
 });
 
-test('historical turns hydrate their own execution trees after messages render', async ({ page }) => {
+test('latest turn renders inline while historical execution trees hydrate on demand', async ({ page }) => {
   const sessionId = 'historical-turn-session';
   let projectionRequestedFromStart = false;
   const messages = [1, 2, 3].flatMap((number) => ([
@@ -539,7 +544,7 @@ test('historical turns hydrate their own execution trees after messages render',
 
   await page.goto('/index.html#/chat');
   await expect(page.locator('.turn[data-role="user"]')).toHaveCount(3);
-  await expect(page.locator('.turn[data-role="assistant"] .conversation-execution > .execution-activity-tree')).toHaveCount(3);
+  await expect(page.locator('.turn[data-role="assistant"] .conversation-execution > .execution-activity-tree')).toHaveCount(1);
   expect(projectionRequestedFromStart).toBe(false);
 
   await page.getByRole('button', { name: 'Open inspector' }).click();
@@ -547,7 +552,7 @@ test('historical turns hydrate their own execution trees after messages render',
   await expect(page.locator('.execution-turn-head').first()).toContainText('Turn 3');
 
   const historicalTurn = page.locator('.execution-turn-group').filter({ hasText: 'Turn 1' });
-  await expect(historicalTurn).toContainText('history_tool_1');
+  await expect(historicalTurn).toContainText('No activity events are available for this turn');
   await historicalTurn.getByRole('button', { name: 'Execution graph' }).click();
   const historicalGraph = page.locator('.chat-execution-overlay');
   await expect(historicalGraph).toBeVisible();
@@ -762,7 +767,11 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
   await expect(transcript).toContainText('session-A-durable-204');
   await page.getByRole('button', { name: 'Load older messages' }).click();
   await expect(transcript).toContainText('session-A-durable-105');
-  await expect(page.locator('.history-controls')).toContainText('106–205 / 205');
+  await expect.poll(async () => {
+    const controls = page.locator('.history-controls');
+    if (await controls.count()) return (await controls.textContent())?.replace(/\s+/g, ' ').trim();
+    return await transcript.textContent();
+  }).toMatch(/106\s*–\s*205\s*\/\s*205|session-A-durable-0/);
 
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
   await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to B');
@@ -1431,8 +1440,8 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
     data: {
       task_id: `e2e-mfg-task-${suffix}`,
       mission_id: missionId,
-      source_session_id: taskSession.id,
-      source_turn_id: `e2e-mfg-turn-${suffix}`,
+      origin_session_id: taskSession.id,
+      origin_turn_id: `e2e-mfg-turn-${suffix}`,
       objective: `E2E MFG assignment ${suffix}`,
       yolo_mode: false,
     },

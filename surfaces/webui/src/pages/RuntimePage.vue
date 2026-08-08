@@ -89,10 +89,10 @@ const timelineListItems = computed(() => timelineRows.value.map((row: any) => ({
   detail: `${row.domain} · ${row.detail}`,
 })));
 const taskRows = computed(() => (Array.isArray(tasks.value?.tasks) ? tasks.value.tasks : []).slice(0, 12).map((task: any) => ({
-  id: task.id,
+  id: task.task_id,
   status: task.status,
   objective: task.objective,
-  current_phase: task.current_phase || '-',
+  current_phase: task.current_phase_id || '-',
   failures: task.failure_count || 0,
 })));
 const turnRows = computed(() => (Array.isArray(runtimeTurns.value?.turns) ? runtimeTurns.value.turns : Array.isArray(runtimeTurns.value?.items) ? runtimeTurns.value.items : []).slice(0, 12).map((turn: any) => ({

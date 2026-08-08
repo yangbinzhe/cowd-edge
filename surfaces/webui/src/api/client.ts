@@ -15,6 +15,10 @@ import type {
   SessionExecutionIndexProjection,
   SessionHistoryIndexProjection,
   SessionSummary,
+  TaskFocusProjection,
+  MissionFocusProjection,
+  TaskDetailProjection,
+  MissionOrganizationDecisionProjection,
   WorkspaceFile,
 } from '../types';
 import { apiReadPolicy, type ApiReadClass } from './readPolicy';
@@ -1214,7 +1218,7 @@ export const api = {
   ) => read<ExecutionActivityDetailProjection>(
     `/api/runtime/executions/${encodeURIComponent(executionId)}/activity?activity_id=${encodeURIComponent(activityId)}`,
     {
-      schema_version: 1,
+      schema_version: 5,
       execution_id: executionId,
       activity: null as never,
       relations: [],
@@ -1526,16 +1530,26 @@ export const api = {
       revision: 1,
       needs_resync: false,
       projection: {
-        schema_version: 1,
+        schema_version: 5,
         kind: 'mission_control.projection',
         workspace: {},
         summary: {},
         control_readiness: {},
+        selected_mission_id: '',
+        missions: [],
         mission: {},
         sessions: [],
+        tasks: [],
         teams: [],
         agents: [],
         approvals: [],
+        organization_decisions: [],
+        mission_graph: {
+          schema_version: 5,
+          mission_id: '',
+          nodes: [],
+          edges: [],
+        },
         relations: {},
         execution_graphs: {},
         conflicts: {},
@@ -1558,7 +1572,7 @@ export const api = {
     if (Number.isFinite(revision)) params.set('revision', String(revision));
     if (missionId.trim()) params.set('mission_id', missionId.trim());
     return read<MissionProjectionDelta>(`/api/mission/control/delta?${params.toString()}`, {
-      schema_version: 1,
+      schema_version: 5,
       kind: 'mission_control.projection_delta',
       from_cursor: cursor,
       from_revision: revision,
@@ -1801,15 +1815,111 @@ export const api = {
     body: JSON.stringify(body),
   }),
   tasks: (signal?: AbortSignal) => read('/api/tasks', {}, { signal }),
-  startTask: (objective: string, yoloMode = false) => write('/api/tasks/start', {
+  taskDetail: (id: string, signal?: AbortSignal) => read<TaskDetailProjection>(
+    `/api/tasks/${encodeURIComponent(id)}`,
+    { task: null, turns: [] } as unknown as TaskDetailProjection,
+    { signal },
+  ),
+  taskTurns: (id: string, signal?: AbortSignal) => read(
+    `/api/tasks/${encodeURIComponent(id)}/turns`,
+    { task_id: id, turns: [] },
+    { signal },
+  ),
+  taskFocus: (sessionId: string, signal?: AbortSignal) => read<TaskFocusProjection>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/task-focus`,
+    { revision: 0, task_focus: null },
+    { signal },
+  ),
+  setTaskFocus: (sessionId: string, taskId: string, expectedRevision: number) => write(
+    `/api/sessions/${encodeURIComponent(sessionId)}/task-focus`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ task_id: taskId, expected_revision: expectedRevision }),
+    },
+  ),
+  clearTaskFocus: (sessionId: string, expectedRevision: number) => write(
+    `/api/sessions/${encodeURIComponent(sessionId)}/task-focus`,
+    {
+      method: 'DELETE',
+      body: JSON.stringify({ expected_revision: expectedRevision }),
+    },
+  ),
+  missionFocus: (sessionId: string, signal?: AbortSignal) => read<MissionFocusProjection>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/mission-focus`,
+    { revision: 0, mission_focus: null },
+    { signal },
+  ),
+  setMissionFocus: (sessionId: string, missionId: string, expectedRevision: number) => write(
+    `/api/sessions/${encodeURIComponent(sessionId)}/mission-focus`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ mission_id: missionId, expected_revision: expectedRevision }),
+    },
+  ),
+  clearMissionFocus: (sessionId: string, expectedRevision: number) => write(
+    `/api/sessions/${encodeURIComponent(sessionId)}/mission-focus`,
+    {
+      method: 'DELETE',
+      body: JSON.stringify({ expected_revision: expectedRevision }),
+    },
+  ),
+  previewTaskMission: (taskIds: string[], targetMissionId: string, expectedTaskRevisions: Record<string, number>) => write(
+    '/api/tasks/mission/preview',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        operation_id: `webui-preview-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`,
+        task_ids: taskIds,
+        target_mission_id: targetMissionId,
+        assignment: 'explicit_locked',
+        expected_task_revisions: expectedTaskRevisions,
+        evidence_refs: [],
+      }),
+    },
+  ),
+  commitTaskMission: (body: Record<string, unknown>) => write('/api/tasks/mission/commit', {
     method: 'POST',
-    body: JSON.stringify({ objective, yolo_mode: yoloMode }),
+    body: JSON.stringify({ ...body, confirmed: true }),
   }),
-  cancelTask: (id: string) => write(`/api/tasks/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
-  completeTask: (id: string) => write(`/api/tasks/${encodeURIComponent(id)}/complete`, { method: 'POST' }),
-  recordTaskFailure: (id: string, reason: string) => write(`/api/tasks/${encodeURIComponent(id)}/failure`, {
+  missionOrganizationDecisions: (status = '', limit = 100, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (status) params.set('status', status);
+    return read<{ decisions: MissionOrganizationDecisionProjection[] }>(
+      `/api/tasks/mission/organization?${params.toString()}`,
+      { decisions: [] },
+      { signal },
+    );
+  },
+  startTask: async (objective: string, yoloMode = false, sessionId = '') => {
+    if (!sessionId.trim()) throw new Error('Task creation requires an active Session');
+    const control = await read<MissionControlResponse>('/api/mission/control', {} as MissionControlResponse);
+    const missionId = String(control.snapshot?.projection?.selected_mission_id || '').trim();
+    if (!missionId) throw new Error('Task creation requires a selected Mission');
+    const suffix = globalThis.crypto?.randomUUID?.() || Date.now().toString(36);
+    return write('/api/tasks/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        task_id: `task-${suffix}`,
+        mission_id: missionId,
+        origin_session_id: sessionId,
+        origin_turn_id: `manual-${suffix}`,
+        objective,
+        yolo_mode: yoloMode,
+        evidence_refs: [],
+      }),
+    });
+  },
+  cancelTask: (id: string, expectedRevision: number) => write(`/api/tasks/${encodeURIComponent(id)}/cancel`, {
     method: 'POST',
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ expected_revision: expectedRevision, note: 'cancelled by WebUI', evidence_refs: [] }),
+  }),
+  completeTask: (id: string, expectedRevision: number) => write(`/api/tasks/${encodeURIComponent(id)}/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ expected_revision: expectedRevision, note: 'completed by WebUI', evidence_refs: [] }),
+  }),
+  recordTaskFailure: (id: string, expectedRevision: number, reason: string) => write(`/api/tasks/${encodeURIComponent(id)}/failure`, {
+    method: 'POST',
+    body: JSON.stringify({ expected_revision: expectedRevision, reason, evidence_refs: [] }),
   }),
   startTaskPhase: (id: string, body: Record<string, unknown>) => write(`/api/tasks/${encodeURIComponent(id)}/phases`, {
     method: 'POST',
@@ -1819,9 +1929,9 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  reviewTaskPhase: (id: string, phaseId: string, result: string, completed = true) => write(`/api/tasks/${encodeURIComponent(id)}/phases/${encodeURIComponent(phaseId)}/review`, {
+  reviewTaskPhase: (id: string, phaseId: string, expectedRevision: number, result: string, completed = true) => write(`/api/tasks/${encodeURIComponent(id)}/phases/${encodeURIComponent(phaseId)}/review`, {
     method: 'POST',
-    body: JSON.stringify({ result, completed }),
+    body: JSON.stringify({ expected_revision: expectedRevision, result, completed, evidence_refs: [] }),
   }),
   agentCatalog: () => read('/api/agents/catalog', { agents: [], summary: {} }),
   agentDirectory: () => read('/api/agents/directory', { agents: [], summary: {} }),

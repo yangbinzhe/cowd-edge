@@ -54,6 +54,64 @@ describe('adaptMissionControlGraph', () => {
     ]);
   });
 
+  it('shows Session participation through canonical contribution edges without claiming ownership', () => {
+    const graph = adaptMissionControlGraph({
+      missions: [{
+        mission_id: 'mission-1',
+        objective: 'Ship the result',
+        status: 'active',
+        revision: 3,
+      }],
+      mission_graph: {
+        schema_version: 5,
+        mission_id: 'mission-1',
+        nodes: [{
+          node_id: 'mission:mission-1',
+          kind: 'mission',
+          label: 'Ship the result',
+          status: 'active',
+          mission_id: 'mission-1',
+        }, {
+          node_id: 'session:session-1',
+          kind: 'session',
+          label: 'Current conversation',
+          status: 'active',
+          mission_id: 'mission-1',
+          session_id: 'session-1',
+        }, {
+          node_id: 'task:task-1',
+          kind: 'task',
+          label: 'Implement terminal route',
+          status: 'running',
+          mission_id: 'mission-1',
+          task_id: 'task-1',
+        }],
+        edges: [{
+          edge_id: 'mission-task',
+          kind: 'contains',
+          from_node_id: 'mission:mission-1',
+          to_node_id: 'task:task-1',
+        }, {
+          edge_id: 'session-task',
+          kind: 'contributes',
+          from_node_id: 'session:session-1',
+          to_node_id: 'task:task-1',
+        }],
+      },
+    } as any);
+
+    expect(graph?.nodes.map((node) => node.node_id)).toEqual([
+      'mission:mission-1',
+      'session:session-1',
+      'task:task-1',
+    ]);
+    expect(graph?.edges).toContainEqual(expect.objectContaining({
+      from: 'session:session-1',
+      to: 'task:task-1',
+      kind: 'contributes',
+    }));
+  });
+
   it('keeps the Mission graph strategic and rolls Tool execution into Agent metrics', () => {
     const graph = adaptMissionControlGraph({
       missions: [{

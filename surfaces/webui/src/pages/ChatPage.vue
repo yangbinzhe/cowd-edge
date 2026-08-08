@@ -28,13 +28,19 @@ import {
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
+import { api } from '../api/client';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import ExecutionActivityTree from '../components/chat/ExecutionActivityTree.vue';
 import ReasoningGroup from '../components/chat/ReasoningGroup.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
-import type { ActivityEvent, ChatTurn } from '../types';
+import type {
+  ActivityEvent,
+  ChatTurn,
+  SessionRoutingFocusProjection,
+  TaskAggregateProjection,
+} from '../types';
 import { causalActivityTimeline } from '../utils/causalTimeline';
 import { mergeActivityEvent } from '../utils/turnSettlement';
 import { releaseProjection } from '../release';
@@ -60,6 +66,13 @@ const store = useAppStore();
 const chat = useChatSessionsStore();
 const projections = useProjectionRegistryStore();
 const globalMissionGraphOpen = ref(false);
+const routingDialogOpen = ref(false);
+const routingBusy = ref(false);
+const routingError = ref('');
+const routingFocus = ref<SessionRoutingFocusProjection>({ revision: 0 });
+const currentTask = ref<TaskAggregateProjection | null>(null);
+const missionOptions = ref<Array<{ mission_id: string; objective: string }>>([]);
+const selectedMissionFocus = ref('');
 const release = computed(() => releaseProjection(store.health));
 const releaseTitle = computed(() => t('release.versions', {
   edge: release.value.edge,
@@ -100,6 +113,17 @@ const canonicalNarrativeActivities = computed(() => (
   canonicalActivityEvents(lineageProjections.value, 'narrative')
 ));
 const activeProjection = computed(() => requestedProjection.value);
+const projectionTaskId = computed(() => String(activeProjection.value?.task_id || '').trim());
+const currentTaskId = computed(() => String(
+  projectionTaskId.value
+  || routingFocus.value.task?.task_id
+  || '',
+).trim());
+const currentMissionId = computed(() => String(
+  currentTask.value?.mission_id
+  || routingFocus.value.mission?.mission_id
+  || '',
+).trim());
 const executionGraph = computed(() => combineExecutionLineage(
   requestedExecutionGraphId.value,
   lineageProjections.value,
@@ -357,6 +381,32 @@ watch(() => store.activeSessionId, async (sessionId, previousSessionId) => {
 }, { immediate: true });
 
 watch(
+  [() => store.activeSessionId, projectionTaskId],
+  async ([sessionId, taskId]) => {
+    routingFocus.value = { revision: 0 };
+    currentTask.value = null;
+    routingError.value = '';
+    if (!sessionId) return;
+    try {
+      const [taskFocus, missionFocus] = await Promise.all([
+        api.taskFocus(sessionId),
+        api.missionFocus(sessionId),
+      ]);
+      routingFocus.value = {
+        revision: Math.max(Number(taskFocus.revision || 0), Number(missionFocus.revision || 0)),
+        task: taskFocus.task_focus || null,
+        mission: missionFocus.mission_focus || null,
+      };
+      const resolvedTaskId = taskId || routingFocus.value.task?.task_id || '';
+      if (resolvedTaskId) currentTask.value = (await api.taskDetail(resolvedTaskId)).task;
+    } catch (error) {
+      routingError.value = error instanceof Error ? error.message : String(error);
+    }
+  },
+  { immediate: true },
+);
+
+watch(
   () => [
     store.activeSessionId,
     chat.active?.historyLoading,
@@ -496,6 +546,101 @@ function toggleCurrentExecutionGraph() {
 
 function openGlobalMissionGraph() {
   globalMissionGraphOpen.value = true;
+}
+
+async function openRoutingDialog() {
+  routingDialogOpen.value = true;
+  routingError.value = '';
+  try {
+    const control = await api.missionControl();
+    missionOptions.value = (control.snapshot?.projection?.missions || []).map((mission) => ({
+      mission_id: mission.mission_id,
+      objective: mission.objective,
+    }));
+    selectedMissionFocus.value = routingFocus.value.mission?.mission_id
+      || currentTask.value?.mission_id
+      || missionOptions.value[0]?.mission_id
+      || '';
+  } catch (error) {
+    routingError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function refreshRoutingFocus() {
+  const sessionId = store.activeSessionId;
+  if (!sessionId) return;
+  const [taskFocus, missionFocus] = await Promise.all([
+    api.taskFocus(sessionId),
+    api.missionFocus(sessionId),
+  ]);
+  routingFocus.value = {
+    revision: Math.max(Number(taskFocus.revision || 0), Number(missionFocus.revision || 0)),
+    task: taskFocus.task_focus || null,
+    mission: missionFocus.mission_focus || null,
+  };
+}
+
+async function focusCurrentTask() {
+  const sessionId = store.activeSessionId;
+  const taskId = currentTaskId.value;
+  if (!sessionId || !taskId) return;
+  routingBusy.value = true;
+  routingError.value = '';
+  try {
+    await api.setTaskFocus(sessionId, taskId, routingFocus.value.revision);
+    await refreshRoutingFocus();
+  } catch (error) {
+    routingError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    routingBusy.value = false;
+  }
+}
+
+async function clearTaskFocus() {
+  const sessionId = store.activeSessionId;
+  if (!sessionId || !routingFocus.value.task) return;
+  routingBusy.value = true;
+  routingError.value = '';
+  try {
+    await api.clearTaskFocus(sessionId, routingFocus.value.revision);
+    await refreshRoutingFocus();
+  } catch (error) {
+    routingError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    routingBusy.value = false;
+  }
+}
+
+async function applyMissionFocus() {
+  const sessionId = store.activeSessionId;
+  if (!sessionId || !selectedMissionFocus.value) return;
+  routingBusy.value = true;
+  routingError.value = '';
+  try {
+    await api.setMissionFocus(sessionId, selectedMissionFocus.value, routingFocus.value.revision);
+    await refreshRoutingFocus();
+    routingDialogOpen.value = false;
+  } catch (error) {
+    routingError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    routingBusy.value = false;
+  }
+}
+
+async function clearMissionFocus() {
+  const sessionId = store.activeSessionId;
+  if (!sessionId || !routingFocus.value.mission) return;
+  routingBusy.value = true;
+  routingError.value = '';
+  try {
+    await api.clearMissionFocus(sessionId, routingFocus.value.revision);
+    await refreshRoutingFocus();
+    routingDialogOpen.value = false;
+  } catch (error) {
+    routingError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    routingBusy.value = false;
+  }
 }
 
 function commandName(command: any) {
@@ -1110,6 +1255,39 @@ function chooseFirstCommand() {
             <strong>{{ chatEvidenceCount }}</strong>
             <span>{{ t('page.chat.page.text.848af509ba') }}</span>
           </button>
+          <span v-if="currentTaskId" class="chat-routing-control" :title="currentTask?.objective || currentTaskId">
+            <button
+              type="button"
+              class="chat-fact routing-chip"
+              :data-locked="Boolean(routingFocus.task)"
+              :disabled="routingBusy"
+              @click="focusCurrentTask"
+            >
+              <Check v-if="routingFocus.task?.task_id === currentTaskId" :size="13" />
+              <Boxes v-else :size="13" />
+              <strong>{{ currentTask?.objective || currentTaskId }}</strong>
+            </button>
+            <button
+              v-if="routingFocus.task"
+              type="button"
+              class="icon-action routing-clear"
+              :disabled="routingBusy"
+              :title="t('chat.routing.clear')"
+              :aria-label="t('chat.routing.clear')"
+              @click="clearTaskFocus"
+            ><X :size="12" /></button>
+          </span>
+          <button
+            v-if="store.activeSessionId"
+            type="button"
+            class="chat-fact routing-chip"
+            :data-locked="Boolean(routingFocus.mission)"
+            :title="currentMissionId || t('chat.routing.missionFocus')"
+            @click="openRoutingDialog"
+          >
+            <Workflow :size="13" />
+            <strong>{{ currentMissionId || t('chat.routing.mission') }}</strong>
+          </button>
         </div>
       </div>
     </header>
@@ -1466,6 +1644,34 @@ function chooseFirstCommand() {
           <Boxes :size="15" />
           <span><strong>{{ commandName(command) }}</strong><small>{{ commandDescription(command) }}</small></span>
         </button>
+      </section>
+    </div>
+    <div v-if="routingDialogOpen" class="modal-scrim" @click.self="routingDialogOpen = false">
+      <section class="command-modal routing-dialog">
+        <header>
+          <div>
+            <h2>{{ t('chat.routing.missionFocus') }}</h2>
+            <p>{{ t('chat.routing.missionHelp') }}</p>
+          </div>
+          <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="routingDialogOpen = false"><X :size="16" /></button>
+        </header>
+        <label class="field-line">
+          <span>{{ t('chat.routing.mission') }}</span>
+          <select v-model="selectedMissionFocus">
+            <option v-for="mission in missionOptions" :key="mission.mission_id" :value="mission.mission_id">
+              {{ mission.objective || mission.mission_id }}
+            </option>
+          </select>
+        </label>
+        <p v-if="routingError" class="file-error">{{ routingError }}</p>
+        <div class="button-row">
+          <button class="primary-action" type="button" :disabled="routingBusy || !selectedMissionFocus" @click="applyMissionFocus">
+            <Check :size="15" /> {{ t('chat.routing.apply') }}
+          </button>
+          <button v-if="routingFocus.mission" class="ghost-action" type="button" :disabled="routingBusy" @click="clearMissionFocus">
+            <X :size="15" /> {{ t('chat.routing.clear') }}
+          </button>
+        </div>
       </section>
     </div>
     <GlobalMissionGraphDialog

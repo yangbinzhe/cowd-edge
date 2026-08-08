@@ -648,6 +648,54 @@ describe('Provider control-plane projection', () => {
   });
 });
 
+describe('Session Task and Mission routing contract', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    invalidateApiReadCache();
+  });
+
+  it('reads typed Task and Mission focus projections without merging their transport shapes', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        revision: 7,
+        task_focus: { task_id: 'task-1', pinned_at_ms: 10 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        revision: 7,
+        mission_focus: { mission_id: 'mission-1', pinned_at_ms: 11 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.taskFocus('session-1')).resolves.toMatchObject({
+      revision: 7,
+      task_focus: { task_id: 'task-1' },
+    });
+    await expect(api.missionFocus('session-1')).resolves.toMatchObject({
+      revision: 7,
+      mission_focus: { mission_id: 'mission-1' },
+    });
+  });
+
+  it('sends CAS revision and canonical focus fields when pinning future routing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      revision: 9,
+      task: { task_id: 'task-1', pinned_at_ms: 12 },
+      mission: null,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.setTaskFocus('session-1', 'task-1', 8);
+
+    const [path, request] = fetchMock.mock.calls[0];
+    expect(String(path)).toBe('/api/sessions/session-1/task-focus');
+    expect(request.method).toBe('PUT');
+    expect(JSON.parse(String(request.body))).toEqual({
+      task_id: 'task-1',
+      expected_revision: 8,
+    });
+  });
+});
+
 describe('WebUI authorization catalogue', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

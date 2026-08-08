@@ -238,7 +238,7 @@ providers:
     models:
       - "cowd-tui-acceptance-model"
 permissions:
-  default_mode: "acceptEdits"
+  default_mode: "danger-full-access"
 sandbox:
   enabled: false
 gateway:
