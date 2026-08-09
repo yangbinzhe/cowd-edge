@@ -132,6 +132,7 @@ const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'RuntimePolicyDecision',
   'SessionInputReceived',
   'SessionInputProjection',
+  'SessionInputDispositionChanged',
   'TurnInboxUpdated',
   'TurnInputCheckpointConsumed',
   'ApprovalRequested',
@@ -813,6 +814,76 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
   }
 
+  function projectInputDisposition(sessionId: string, base: ActivityEvent, receipt: any) {
+    const dispositionId = String(receipt?.disposition_id || '').trim();
+    if (!dispositionId) return;
+    const state = String(receipt?.state || 'prepared');
+    const status = state === 'applied'
+      ? 'complete'
+      : state === 'failed'
+        ? 'error'
+        : state === 'materializing'
+          ? 'running'
+          : 'pending';
+    const executionIds = Array.isArray(receipt?.execution_ids)
+      ? receipt.execution_ids.map(String)
+      : [];
+    const teamIds = Array.isArray(receipt?.team_ids) ? receipt.team_ids.map(String) : [];
+    const agentIds = Array.isArray(receipt?.agent_ids) ? receipt.agent_ids.map(String) : [];
+    const taskIds = Array.isArray(receipt?.task_ids) ? receipt.task_ids.map(String) : [];
+    const targetSessionId = String(receipt?.target_session_id || '').trim();
+    const action = String(receipt?.action || 'progress_or_control');
+    const actionTitles: Record<string, string> = {
+      amend_current_turn: t('chat.input.disposition.amend_current_turn'),
+      replan_current_graph: t('chat.input.disposition.replan_current_graph'),
+      replace_current_task: t('chat.input.disposition.replace_current_task'),
+      add_required_task: t('chat.input.disposition.add_required_task'),
+      add_background_task: t('chat.input.disposition.add_background_task'),
+      add_team_lane: t('chat.input.disposition.add_team_lane'),
+      add_task_with_team: t('chat.input.disposition.add_task_with_team'),
+      dispatch_session: t('chat.input.disposition.dispatch_session'),
+      progress_or_control: t('chat.input.disposition.progress_or_control'),
+      clarify: t('chat.input.disposition.clarify'),
+    };
+    upsertSessionActivity(sessionId, {
+      ...base,
+      id: `input-disposition:${dispositionId}`,
+      kind: 'runtime',
+      title: actionTitles[action] || actionTitles.progress_or_control,
+      detail: compactToolOutput(receipt?.error || receipt?.summary || receipt?.objective),
+      status,
+      execution_id: executionIds[0] || base.execution_id,
+      team_id: teamIds[0] || base.team_id,
+      agent_id: agentIds[0] || base.agent_id,
+      input: {
+        input_ids: receipt?.input_ids,
+        action: receipt?.action,
+        relation: receipt?.relation,
+        objective: receipt?.objective,
+        required: receipt?.required,
+      },
+      output: {
+        state,
+        summary: receipt?.summary,
+        error: receipt?.error,
+        task_ids: taskIds,
+        team_ids: teamIds,
+        agent_ids: agentIds,
+        execution_ids: executionIds,
+        target_session_id: targetSessionId || undefined,
+        target_session_created: Boolean(receipt?.target_session_created),
+      },
+      refs: [
+        ...taskIds.map((id: string) => `task:${id}`),
+        ...teamIds.map((id: string) => `team:${id}`),
+        ...agentIds.map((id: string) => `agent:${id}`),
+        ...executionIds.map((id: string) => `execution:${id}`),
+        ...(targetSessionId ? [`session:${targetSessionId}`] : []),
+      ],
+      raw: receipt,
+    });
+  }
+
   function projectLiveActivity(sessionId: string, payload: any) {
     const state = stateFor(sessionId);
     const type = String(payload.type || '');
@@ -907,6 +978,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         },
       });
       for (const item of Array.isArray(projection.inputs) ? projection.inputs : []) {
+        if (item?.application_receipt) {
+          projectInputDisposition(sessionId, base, item.application_receipt);
+        }
         if (String(item?.status || '') !== 'failed') continue;
         const inputId = String(item?.input_id || executionId);
         upsertSessionActivity(sessionId, {
@@ -928,6 +1002,10 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           },
         });
       }
+      return;
+    }
+    if (type === 'SessionInputDispositionChanged') {
+      projectInputDisposition(sessionId, base, payload.receipt || {});
       return;
     }
     if (type === 'TurnInboxUpdated') {

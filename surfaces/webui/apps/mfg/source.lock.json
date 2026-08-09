@@ -2,7 +2,7 @@
   "app_id": "mfg",
   "repository": "https://gitee.com/eyeout/cowd-app-mfg",
   "revision": "f82e50b34cf510da91fe717917809101058308ad",
-  "cowd_revision": "2cb993225682916da78482edc6bc9fff0ba9ad06",
+  "cowd_revision": "eb53cc0ceba794d56a03e77f929bf9a94f10eaf9",
   "presentation_schema": "cowd.presentation.result-shape.v1",
   "presentation_schema_sha256": "bb0ff5ebc437f61eeea368ecb74eb88aa75cd7de587ccfe83448c69cb1d5bd64",
   "package": "webui",
