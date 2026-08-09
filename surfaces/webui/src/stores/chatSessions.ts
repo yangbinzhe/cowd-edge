@@ -906,6 +906,28 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           last_decision: projection.last_decision,
         },
       });
+      for (const item of Array.isArray(projection.inputs) ? projection.inputs : []) {
+        if (String(item?.status || '') !== 'failed') continue;
+        const inputId = String(item?.input_id || executionId);
+        upsertSessionActivity(sessionId, {
+          ...base,
+          id: `session-input:${inputId}`,
+          kind: 'runtime',
+          title: t('chat.input.projection'),
+          detail: compactToolOutput(item?.last_error || item?.failure_class || 'failed'),
+          status: 'error',
+          turn_id: String(item?.active_turn_id || payload.turn_id || state.executionTurnId || ''),
+          input: {
+            input_id: inputId,
+            content_preview: item?.content_preview,
+            failure_class: item?.failure_class,
+          },
+          output: {
+            status: item?.status,
+            last_error: item?.last_error,
+          },
+        });
+      }
       return;
     }
     if (type === 'TurnInboxUpdated') {

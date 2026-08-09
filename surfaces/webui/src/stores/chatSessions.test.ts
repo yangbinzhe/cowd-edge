@@ -1220,6 +1220,35 @@ describe('chatSessions', () => {
         output: { checkpoint: 'after_tool', consumed: true },
       }),
     ]));
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'SessionInputProjection',
+      session_id: 'cross-surface',
+      execution_id: 'execution-new',
+      turn_id: 'turn-new',
+      projection: {
+        total: 1,
+        pending_count: 0,
+        queued_next_count: 0,
+        consumed_count: 0,
+        inputs: [{
+          input_id: 'input-live-1',
+          active_turn_id: 'turn-new',
+          content_preview: 'additional constraint',
+          status: 'failed',
+          failure_class: 'mission_revision_conflict',
+          last_error: 'Mission organization revision conflict',
+        }],
+      },
+    }) } as MessageEvent);
+    expect(chat.states['cross-surface'].activity).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'session-input:input-live-1',
+        status: 'error',
+        detail: 'Mission organization revision conflict',
+        input: expect.objectContaining({ failure_class: 'mission_revision_conflict' }),
+        output: expect.objectContaining({ last_error: 'Mission organization revision conflict' }),
+      }),
+    ]));
 
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TerminalCommitted',

@@ -40,9 +40,10 @@ describe('ExecutionActivityTree', () => {
   it('renders an Agent reasoning projection without adding a business activity node', () => {
     const root = activity('execution', 'execution');
     const agent = activity('agent:researcher', 'agent', root.activity_id);
+    const tool = activity('tool:search', 'tool', agent.activity_id);
     const activities = canonicalActivityEvents([{
       execution_id: 'execution',
-      activities: [root, agent],
+      activities: [root, agent, tool],
     } as unknown as ExecutionProjection]);
     const wrapper = mount(ExecutionActivityTree, {
       props: {
@@ -73,6 +74,9 @@ describe('ExecutionActivityTree', () => {
 
     const agentNode = wrapper.get('.execution-activity-node[data-kind="agent"]');
     expect(agentNode.get('.reasoning-group.is-agent').text()).toContain('核对代码调用链');
-    expect(wrapper.findAll('.execution-activity-node')).toHaveLength(2);
+    expect(agentNode.element.querySelector('.execution-activity-children')?.nextElementSibling)
+      .toBe(agentNode.element.querySelector('.reasoning-group.is-agent'));
+    expect(wrapper.findAll('.execution-activity-node[data-kind="reasoning"]')).toHaveLength(0);
+    expect(wrapper.findAll('.reasoning-group.is-agent')).toHaveLength(1);
   });
 });

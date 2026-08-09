@@ -146,11 +146,6 @@ function formatTime(value: unknown) {
         </span>
       </button>
     </div>
-    <ReasoningGroup
-      v-if="activity.kind === 'agent' && activityReasoning"
-      :group="activityReasoning"
-      variant="agent"
-    />
     <ol v-if="node.children.length && !collapsed" class="execution-activity-children">
       <ExecutionActivityNode
         v-for="child in node.children"
@@ -161,6 +156,11 @@ function formatTime(value: unknown) {
         @select="emit('select', $event)"
       />
     </ol>
+    <ReasoningGroup
+      v-if="activity.kind === 'agent' && activityReasoning"
+      :group="activityReasoning"
+      variant="agent"
+    />
   </li>
 </template>
 

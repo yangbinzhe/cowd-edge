@@ -841,6 +841,14 @@ watch(
             </div>
           </header>
           <div v-show="!turnCollapsed(group.turnId)" class="execution-turn-content">
+            <p
+              v-if="group.runtimeInput?.status === 'failed'"
+              class="companion-contract-alert"
+              role="alert"
+            >
+              {{ group.runtimeInput.failure_class || displayStatus(group.runtimeInput.status) }}
+              <template v-if="group.runtimeInput.last_error"> · {{ group.runtimeInput.last_error }}</template>
+            </p>
             <TimelineList
               v-if="group.events.length"
               :items="group.events"

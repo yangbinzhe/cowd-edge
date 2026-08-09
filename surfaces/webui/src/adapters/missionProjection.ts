@@ -6,6 +6,14 @@ import type {
 
 export const MISSION_CONTROL_SCHEMA_VERSION = 3;
 
+export function organizationDecisionTaskCount(decision: {
+  root_task_id?: unknown;
+  affected_task_ids?: unknown;
+}): number {
+  if (Array.isArray(decision.affected_task_ids)) return decision.affected_task_ids.length;
+  return typeof decision.root_task_id === 'string' && decision.root_task_id.trim() ? 1 : 0;
+}
+
 export function applyMissionProjectionDelta(
   current: MissionMaterializedSnapshot | null,
   delta: MissionProjectionDelta,

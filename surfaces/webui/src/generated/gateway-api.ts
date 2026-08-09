@@ -9219,7 +9219,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
-        get: operations["gateway_session_message_get_api_sessions_by_id_input_projection"];
+        get: operations["session_input_projection_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9469,7 +9469,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
-        get: operations["gateway_session_message_get_api_sessions_by_id_turn_inbox"];
+        get: operations["session_turn_inbox_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9513,7 +9513,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: may_change_ai_harness_execution_state.
          */
-        get: operations["gateway_session_message_get_api_sessions_by_id_turns_by_turn_id_inbox"];
+        get: operations["session_turn_inbox_by_turn_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -12280,7 +12280,9 @@ export interface components {
              *       "duplicate_tool_calls": 0,
              *       "duration_ms": 0,
              *       "input_tokens": 0,
+             *       "max_tool_concurrency_observed": 0,
              *       "output_tokens": 0,
+             *       "parallel_tool_batches": 0,
              *       "tool_calls": 0
              *     }
              */
@@ -12413,6 +12415,11 @@ export interface components {
             /** Format: uint64 */
             input_tokens: number;
             /**
+             * Format: uint64
+             * @default 0
+             */
+            max_tool_concurrency_observed: number;
+            /**
              * @description The provider model that actually produced this node result. This is
              *     distinct from a requested model because Runtime may use a configured
              *     fallback before any provider output is emitted.
@@ -12420,6 +12427,11 @@ export interface components {
             model?: string | null;
             /** Format: uint64 */
             output_tokens: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            parallel_tool_batches: number;
             runtime_observed_resource_scopes?: string[];
             runtime_write_attempt_paths?: string[];
             /** Format: uint64 */
@@ -15821,6 +15833,13 @@ export interface components {
         /** MissionOrganizationDecision */
         MissionOrganizationDecision: {
             action: components["schemas"]["MissionOrganizationAction"];
+            /**
+             * @description Tasks affected by the latest organization result. Older snapshots used
+             *     `task_ids`; the alias is a one-way schema migration and new snapshots
+             *     only serialize the unambiguous field name.
+             * @default []
+             */
+            affected_task_ids: string[];
             /** Format: uint32 */
             attempt: number;
             /** Format: uint */
@@ -15855,9 +15874,14 @@ export interface components {
             rejected_reason?: string | null;
             /** Format: uint64 */
             revision: number;
+            /**
+             * @description Immutable Root Task that owns this organization decision. Idempotency
+             *     and recovery are anchored here; clustering must never rewrite it.
+             * @default
+             */
+            root_task_id: string;
             status: components["schemas"]["MissionOrganizationStatus"];
             target_mission_id: string;
-            task_ids: string[];
             /** Format: uint64 */
             updated_at_ms: number;
             workspace_id: string;
@@ -16154,9 +16178,7 @@ export interface components {
             input: {
                 [key: string]: unknown;
             };
-            input_projection?: {
-                [key: string]: unknown;
-            } | null;
+            input_projection?: components["schemas"]["SessionInputProjection"] | null;
             materialized: {
                 [key: string]: unknown;
             } | null;
@@ -16166,9 +16188,7 @@ export interface components {
             session_id: string;
             /** @constant */
             status: "accepted";
-            turn_inbox?: {
-                [key: string]: unknown;
-            } | null;
+            turn_inbox?: components["schemas"]["TurnInboxSnapshot"] | null;
         };
         SendMessageRequest: {
             client_message_id?: string | null;
@@ -16346,19 +16366,35 @@ export interface components {
         SessionInputCancelRequest: {
             reason?: string | null;
         };
+        SessionInputCursor: {
+            /** Format: uint64 */
+            generation: number;
+            /** Format: uint64 */
+            sequence: number;
+        };
         SessionInputMutationReceipt: {
             input: {
                 [key: string]: unknown;
             };
-            input_projection?: {
-                [key: string]: unknown;
-            } | null;
+            input_projection?: components["schemas"]["SessionInputProjection"] | null;
             /** @enum {string} */
             kind: "session_input.cancel" | "session_input.reclassify";
             session_id: string;
-            turn_inbox?: {
-                [key: string]: unknown;
-            } | null;
+            turn_inbox?: components["schemas"]["TurnInboxSnapshot"] | null;
+        };
+        SessionInputProjection: {
+            active_turn_id?: string | null;
+            admitted_cursor?: components["schemas"]["SessionInputCursor"] | null;
+            consumed_count: number;
+            consumed_cursor?: components["schemas"]["SessionInputCursor"] | null;
+            inputs: components["schemas"]["TurnInboxItem"][];
+            last_decision?: string | null;
+            pending_count: number;
+            queued_next_count: number;
+            session_id: string;
+            total: number;
+            /** Format: date-time */
+            updated_at: string;
         };
         SessionInputReclassifyRequest: {
             /** @enum {string} */
@@ -16832,6 +16868,38 @@ export interface components {
             session_id: string;
             terminal_ref?: string | null;
             turn_id: string;
+        };
+        TurnInboxItem: {
+            /** @enum {string|null} */
+            checkpoint?: "turn_start" | "ingress_dispatched" | "before_provider_request" | "after_provider_response" | "after_tool_result" | "before_final_answer" | "before_compaction" | null;
+            /** Format: date-time */
+            consumed_at?: string | null;
+            content_preview: string;
+            /** Format: date-time */
+            created_at: string;
+            cursor?: components["schemas"]["SessionInputCursor"] | null;
+            /** @enum {string} */
+            decision: "start_new_turn" | "supplement_current_turn" | "interrupt_and_replan" | "enqueue_next_step" | "spawn_subtask" | "route_cross_session" | "create_new_session" | "control_or_approval" | "reject_duplicate" | "reject_policy";
+            failure_class?: string | null;
+            input_id: string;
+            last_error?: string | null;
+            relation_proposal?: {
+                [key: string]: unknown;
+            } | null;
+            session_id: string;
+            /** @enum {string} */
+            status: "received" | "persisted" | "classified" | "attached_to_turn" | "queued_next" | "interrupt_requested" | "dispatched_subtask" | "dispatched_session" | "new_session_created" | "control_resolved" | "consumed" | "cancelled" | "failed" | "rejected_duplicate" | "rejected_policy" | "superseded";
+        };
+        TurnInboxSnapshot: {
+            admitted_cursor?: components["schemas"]["SessionInputCursor"] | null;
+            consumed_count: number;
+            consumed_cursor?: components["schemas"]["SessionInputCursor"] | null;
+            items: components["schemas"]["TurnInboxItem"][];
+            pending_count: number;
+            session_id: string;
+            turn_id?: string | null;
+            /** Format: date-time */
+            updated_at: string;
         };
         "mfg.alert.command.request.v1": components["schemas"]["MfgAlertCommandRequest"];
         "mfg.alert.command.response.v1": components["schemas"]["MfgMutationResponseV1"];
@@ -43418,7 +43486,7 @@ export interface operations {
             };
         };
     };
-    gateway_session_message_get_api_sessions_by_id_input_projection: {
+    session_input_projection_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -43435,9 +43503,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SessionInputProjection"];
                 };
             };
             /** @description Bad request */
@@ -44231,7 +44297,7 @@ export interface operations {
             };
         };
     };
-    gateway_session_message_get_api_sessions_by_id_turn_inbox: {
+    session_turn_inbox_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -44248,9 +44314,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TurnInboxSnapshot"];
                 };
             };
             /** @description Bad request */
@@ -44320,7 +44384,7 @@ export interface operations {
             };
         };
     };
-    gateway_session_message_get_api_sessions_by_id_turns_by_turn_id_inbox: {
+    session_turn_inbox_by_turn_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -44338,9 +44402,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["TurnInboxSnapshot"];
                 };
             };
             /** @description Bad request */

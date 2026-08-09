@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyMissionProjectionDelta } from './missionProjection';
+import { applyMissionProjectionDelta, organizationDecisionTaskCount } from './missionProjection';
 import type { MissionMaterializedSnapshot, MissionProjectionDelta } from '../types';
 
 function snapshot(): MissionMaterializedSnapshot {
@@ -110,5 +110,21 @@ describe('applyMissionProjectionDelta', () => {
   it('rejects gaps and explicit resync requests', () => {
     expect(applyMissionProjectionDelta(snapshot(), { ...delta(), from_cursor: 9 })).toBeNull();
     expect(applyMissionProjectionDelta(snapshot(), { ...delta(), needs_resync: true })).toBeNull();
+  });
+});
+
+describe('organizationDecisionTaskCount', () => {
+  it('uses the canonical affected Task set from the Mission organization contract', () => {
+    expect(organizationDecisionTaskCount({
+      root_task_id: 'task-root',
+      affected_task_ids: ['task-root', 'task-related'],
+    })).toBe(2);
+  });
+
+  it('does not consume the removed ambiguous task_ids field', () => {
+    expect(organizationDecisionTaskCount({
+      root_task_id: 'task-root',
+      affected_task_ids: undefined,
+    })).toBe(1);
   });
 });

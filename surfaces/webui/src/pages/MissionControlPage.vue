@@ -26,6 +26,7 @@ import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 import { applyMissionProjectionDelta } from '../adapters/missionProjection';
 import { adaptMissionControlGraph } from '../adapters/missionControlGraph';
+import { organizationDecisionTaskCount } from '../adapters/missionProjection';
 import type {
   MissionCommand,
   MissionControlProjection,
@@ -304,7 +305,7 @@ const organizationRows = computed(() => organizationDecisions.value.map((decisio
   id: decision.decision_id || '-',
   status: decision.status || '-',
   action: decision.action || '-',
-  tasks: Array.isArray(decision.task_ids) ? decision.task_ids.length : 0,
+  tasks: organizationDecisionTaskCount(decision),
   candidates: Number(decision.candidate_count || 0),
   provider: decision.provider_invoked ? (decision.provider_model || 'provider') : 'deterministic',
   elapsed: `${Number(decision.elapsed_ms || 0)} ms`,
