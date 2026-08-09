@@ -26,6 +26,9 @@ export {
   releaseLongLivedConnection,
 } from '../utils/longLivedConnectionBudget';
 export type { GraphViewModel } from '../types/graph';
+export type { CowdPresentationRendererId, CowdPresentationResultShape, CowdPresentationTableColumn, CowdPresentationValue } from './presentation/types';
+export { COWD_PRESENTATION_SCHEMA_ID, COWD_PRESENTATION_SCHEMA_SHA256, COWD_PRESENTATION_SCHEMA_VERSION } from './presentation/types';
+export { presentationRendererContracts, resolvePresentationRenderer } from './presentation/registry';
 
 export { default as ApiStateBanner } from '../components/workbench/ApiStateBanner.vue';
 export { default as DataTable } from '../components/workbench/DataTable.vue';
@@ -33,6 +36,7 @@ export { default as EmptyState } from '../components/workbench/EmptyState.vue';
 export { default as EvidenceTrace } from '../components/workbench/EvidenceTrace.vue';
 export { default as ObjectInspectorDrawer } from '../components/workbench/ObjectInspectorDrawer.vue';
 export { default as RequestReceipt } from '../components/workbench/RequestReceipt.vue';
+export { default as PresentationResultRenderer } from '../components/workbench/PresentationResultRenderer.vue';
 export { default as GraphSurface } from '../components/graph/GraphSurface.vue';
 export { graphDiagnostics } from '../components/graph/graphRuntime';
 export { default as StrategyDecisionSummary } from '../components/runtime/StrategyDecisionSummary.vue';

@@ -1,0 +1,28 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+import ChartPanel from '../ChartPanel.vue';
+import { resolvePresentationRenderer } from '../../apps/presentation/registry';
+import type { CowdPresentationResultShape, CowdPresentationValue } from '../../apps/presentation/types';
+const props = defineProps<{ rendererId: string; rendererVersion: number; title: string; result: CowdPresentationResultShape }>();
+const contract = computed(() => resolvePresentationRenderer(props.rendererId, props.rendererVersion, props.result));
+const seriesPoints = computed(() => props.result.kind === 'series' ? props.result.content.points.map((point) => ({ name: point.x, value: point.y, series: point.series || undefined })) : []);
+const tableColumns = computed(() => props.result.kind === 'table' ? props.result.content.columns.slice(0, 8) : []);
+const matrixCells = computed(() => props.result.kind === 'matrix' ? new Map(props.result.content.cells.map((cell) => [`${cell.x}\u0000${cell.y}`, cell.value])) : new Map<string, number>());
+function displayValue(value: CowdPresentationValue | undefined) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? '✓' : '—';
+  return String(value);
+}
+</script>
+<template>
+  <p v-if="!contract" class="presentation-result__unsupported" role="alert">Unsupported renderer contract: {{ rendererId }}@{{ rendererVersion }} / {{ result.kind }}</p>
+  <div v-else-if="result.kind === 'scalar'" class="presentation-result__scalar"><span>{{ result.content.label || title }}</span><strong>{{ displayValue(result.content.value) }}{{ result.content.unit || '' }}</strong><small v-if="result.content.change != null">{{ result.content.change > 0 ? '+' : '' }}{{ result.content.change }}</small></div>
+  <ChartPanel v-else-if="result.kind === 'series'" :title="title" kind="line" :data="seriesPoints" :unit="result.content.unit || undefined" compact />
+  <div v-else-if="result.kind === 'table'" class="presentation-result__table-wrap"><table><thead><tr><th v-for="column in tableColumns" :key="column.key">{{ column.label }}</th></tr></thead><tbody><tr v-for="row in result.content.rows.slice(0, 12)" :key="row.id"><td v-for="column in tableColumns" :key="column.key">{{ displayValue(row.cells[column.key]) }}</td></tr></tbody></table><p v-if="!result.content.rows.length" class="presentation-result__empty">No rows</p></div>
+  <div v-else-if="result.kind === 'matrix'" class="presentation-result__matrix" :style="{ '--matrix-columns': result.content.x_labels.length }"><span /><strong v-for="x in result.content.x_labels" :key="`x-${x}`">{{ x }}</strong><template v-for="y in result.content.y_labels" :key="`y-${y}`"><strong>{{ y }}</strong><span v-for="x in result.content.x_labels" :key="`${x}-${y}`" :data-value="matrixCells.get(`${x}\u0000${y}`) || 0">{{ matrixCells.get(`${x}\u0000${y}`) || 0 }}</span></template></div>
+  <div v-else-if="result.kind === 'graph'" class="presentation-result__graph"><div class="presentation-result__nodes"><span v-for="node in result.content.nodes.slice(0, 16)" :key="node.id">{{ node.label }}</span></div><ol><li v-for="edge in result.content.edges.slice(0, 20)" :key="`${edge.source}-${edge.target}-${edge.label}`"><code>{{ edge.source }}</code><b>→</b><code>{{ edge.target }}</code><small>{{ edge.label }}</small></li></ol></div>
+  <ol v-else-if="result.kind === 'timeline'" class="presentation-result__timeline"><li v-for="item in result.content.items" :key="item.id"><time>{{ item.at }}</time><strong>{{ item.title }}</strong><span>{{ item.detail }}</span><small>{{ item.status }}</small></li></ol>
+</template>
+<style scoped>
+.presentation-result__unsupported{margin:0;padding:10px;border:1px solid var(--danger);color:var(--danger);border-radius:8px;font-size:12px}.presentation-result__scalar{display:grid;gap:4px;padding:8px 0}.presentation-result__scalar span,.presentation-result__scalar small{color:var(--text-muted);font-size:12px}.presentation-result__scalar strong{font-size:clamp(24px,4vw,42px)}.presentation-result__table-wrap{max-width:100%;overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{max-width:220px;padding:7px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}th{color:var(--text-muted);background:var(--surface)}.presentation-result__empty{color:var(--text-muted)}.presentation-result__matrix{display:grid;grid-template-columns:minmax(80px,auto) repeat(var(--matrix-columns),minmax(56px,1fr));gap:4px;overflow:auto;font-size:11px}.presentation-result__matrix>*{padding:7px;border-radius:5px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));text-align:center}.presentation-result__matrix span[data-value]:not([data-value="0"]){background:color-mix(in srgb,var(--warn) 24%,var(--surface))}.presentation-result__nodes{display:flex;gap:7px;flex-wrap:wrap}.presentation-result__nodes span{padding:6px 9px;border:1px solid var(--border);border-radius:999px}.presentation-result__graph ol,.presentation-result__timeline{display:grid;gap:6px;margin:10px 0 0;padding:0;list-style:none}.presentation-result__graph li{display:flex;align-items:center;gap:7px;color:var(--text-muted)}.presentation-result__graph li small{margin-left:auto}.presentation-result__timeline li{display:grid;grid-template-columns:minmax(130px,auto) 1fr auto;gap:4px 10px;padding-left:12px;border-left:2px solid var(--accent)}.presentation-result__timeline time,.presentation-result__timeline small{color:var(--text-muted);font-size:11px}.presentation-result__timeline span{grid-column:2/-1;color:var(--text-muted)}
+</style>

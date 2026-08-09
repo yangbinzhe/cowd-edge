@@ -17,6 +17,7 @@ const props = defineProps<{
   data: ChartPoint[];
   unit?: string;
   freshness?: string;
+  compact?: boolean;
 }>();
 
 const option = computed(() => {
@@ -60,7 +61,7 @@ const option = computed(() => {
 
 <template>
   <section class="chart-panel">
-    <header>
+    <header v-if="!compact">
       <h2>{{ title }}</h2>
       <span v-if="freshness">{{ freshness }}</span>
     </header>
