@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { t } from '../../i18n';
 import ChartPanel from '../ChartPanel.vue';
 import { resolvePresentationRenderer } from '../../apps/presentation/registry';
 import type { CowdPresentationResultShape, CowdPresentationValue } from '../../apps/presentation/types';
@@ -15,10 +16,10 @@ function displayValue(value: CowdPresentationValue | undefined) {
 }
 </script>
 <template>
-  <p v-if="!contract" class="presentation-result__unsupported" role="alert">Unsupported renderer contract: {{ rendererId }}@{{ rendererVersion }} / {{ result.kind }}</p>
+  <p v-if="!contract" class="presentation-result__unsupported" role="alert">{{ t('presentation.renderer.unsupported', { renderer: `${rendererId}@${rendererVersion}`, kind: result.kind }) }}</p>
   <div v-else-if="result.kind === 'scalar'" class="presentation-result__scalar"><span>{{ result.content.label || title }}</span><strong>{{ displayValue(result.content.value) }}{{ result.content.unit || '' }}</strong><small v-if="result.content.change != null">{{ result.content.change > 0 ? '+' : '' }}{{ result.content.change }}</small></div>
   <ChartPanel v-else-if="result.kind === 'series'" :title="title" kind="line" :data="seriesPoints" :unit="result.content.unit || undefined" compact />
-  <div v-else-if="result.kind === 'table'" class="presentation-result__table-wrap"><table><thead><tr><th v-for="column in tableColumns" :key="column.key">{{ column.label }}</th></tr></thead><tbody><tr v-for="row in result.content.rows.slice(0, 12)" :key="row.id"><td v-for="column in tableColumns" :key="column.key">{{ displayValue(row.cells[column.key]) }}</td></tr></tbody></table><p v-if="!result.content.rows.length" class="presentation-result__empty">No rows</p></div>
+  <div v-else-if="result.kind === 'table'" class="presentation-result__table-wrap"><table><thead><tr><th v-for="column in tableColumns" :key="column.key">{{ column.label }}</th></tr></thead><tbody><tr v-for="row in result.content.rows.slice(0, 12)" :key="row.id"><td v-for="column in tableColumns" :key="column.key">{{ displayValue(row.cells[column.key]) }}</td></tr></tbody></table><p v-if="!result.content.rows.length" class="presentation-result__empty">{{ t('presentation.table.empty') }}</p></div>
   <div v-else-if="result.kind === 'matrix'" class="presentation-result__matrix" :style="{ '--matrix-columns': result.content.x_labels.length }"><span /><strong v-for="x in result.content.x_labels" :key="`x-${x}`">{{ x }}</strong><template v-for="y in result.content.y_labels" :key="`y-${y}`"><strong>{{ y }}</strong><span v-for="x in result.content.x_labels" :key="`${x}-${y}`" :data-value="matrixCells.get(`${x}\u0000${y}`) || 0">{{ matrixCells.get(`${x}\u0000${y}`) || 0 }}</span></template></div>
   <div v-else-if="result.kind === 'graph'" class="presentation-result__graph"><div class="presentation-result__nodes"><span v-for="node in result.content.nodes.slice(0, 16)" :key="node.id">{{ node.label }}</span></div><ol><li v-for="edge in result.content.edges.slice(0, 20)" :key="`${edge.source}-${edge.target}-${edge.label}`"><code>{{ edge.source }}</code><b>→</b><code>{{ edge.target }}</code><small>{{ edge.label }}</small></li></ol></div>
   <ol v-else-if="result.kind === 'timeline'" class="presentation-result__timeline"><li v-for="item in result.content.items" :key="item.id"><time>{{ item.at }}</time><strong>{{ item.title }}</strong><span>{{ item.detail }}</span><small>{{ item.status }}</small></li></ol>

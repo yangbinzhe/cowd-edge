@@ -2814,11 +2814,19 @@ describe('Cowd Vue WebUI shell', () => {
       canonicalMfgMutationResponse(init),
     ));
     vi.stubGlobal('fetch', fetchMock);
-    const profileIntent = mfgIntent('mfg.cockpit.profile.update', 'mfg:cockpit-profile:profile-1');
+    const draftIntent = mfgIntent('mfg.cockpit.draft.save', 'mfg:cockpit-profile:profile-1');
+    const publishIntent = mfgIntent('mfg.cockpit.draft.publish', 'mfg:cockpit-profile:profile-1');
     const deleteIntent = mfgIntent('mfg.cockpit.profile.delete', 'mfg:cockpit-profile:profile-1');
     const cloneIntent = mfgIntent('mfg.cockpit.profile.clone', 'mfg:cockpit-profile:profile-1');
     const shareIntent = mfgIntent('mfg.cockpit.profile.share', 'mfg:cockpit-profile:profile-1');
-    await mfgApi.mfgUpsertProfile({ profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 }, profileIntent);
+    await mfgApi.mfgSaveCockpitDraft(
+      'profile-1',
+      { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 },
+      [],
+      undefined,
+      draftIntent,
+    );
+    await mfgApi.mfgPublishCockpitDraft('profile-1', 1, publishIntent);
     await mfgApi.mfgDeleteCockpitProfile('profile-1', 1, deleteIntent);
     await mfgApi.mfgCloneCockpitProfile('profile-1', {}, cloneIntent);
     await mfgApi.mfgShareCockpitProfile('profile-1', {
@@ -2833,9 +2841,18 @@ describe('Cowd Vue WebUI shell', () => {
     await mfgApi.mfgAssignmentCommand('assignment-1', { command: 'claim', expected_revision: 1 }, mfgIntent('mfg.assignment.claim', 'mfg:assignment:assignment-1'));
     expectMfgMutation(
       fetchMock,
-      '/api/apps/mfg/cockpit/profiles/upsert',
-      { profile: { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 } },
-      profileIntent.idempotency_key,
+      '/api/apps/mfg/cockpit/profiles/profile-1/draft',
+      {
+        profile: { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 },
+        locks: [],
+      },
+      draftIntent.idempotency_key,
+    );
+    expectMfgMutation(
+      fetchMock,
+      '/api/apps/mfg/cockpit/profiles/profile-1/publish',
+      { expected_active_revision: 1 },
+      publishIntent.idempotency_key,
     );
     const deleteCall = fetchMock.mock.calls.find(([url]) => (
       String(url) === '/api/apps/mfg/cockpit/profiles/profile-1?expected_revision=1'

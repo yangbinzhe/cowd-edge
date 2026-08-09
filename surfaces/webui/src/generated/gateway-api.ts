@@ -544,28 +544,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/apps/mfg/cockpit/profiles/upsert": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * app POST /api/apps/mfg/cockpit/profiles/upsert
-         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/upsert` handled by `mfg.cockpit.profile.upsert`.
-         *
-         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
-         */
-        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_upsert"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/apps/mfg/cockpit/profiles/{id}": {
         parameters: {
             query?: never;
@@ -616,6 +594,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/apps/mfg/cockpit/profiles/{id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * app GET /api/apps/mfg/cockpit/profiles/:id/draft
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/draft` handled by `mfg.cockpit.draft.get`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_draft"];
+        put?: never;
+        /**
+         * app POST /api/apps/mfg/cockpit/profiles/:id/draft
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/draft` handled by `mfg.cockpit.draft.save`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_draft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/apps/mfg/cockpit/profiles/{id}/projection": {
         parameters: {
             query?: never;
@@ -632,6 +638,116 @@ export interface paths {
         get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_projection"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/profiles/{id}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * app POST /api/apps/mfg/cockpit/profiles/:id/proposals
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/proposals` handled by `mfg.cockpit.proposal.create`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_proposals"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/profiles/{id}/proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * app GET /api/apps/mfg/cockpit/profiles/:id/proposals/:proposal_id
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/proposals/:proposal_id` handled by `mfg.cockpit.proposal.get`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_proposals_by_proposal_id"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/profiles/{id}/proposals/{proposal_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * app POST /api/apps/mfg/cockpit/profiles/:id/proposals/:proposal_id/accept
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/proposals/:proposal_id/accept` handled by `mfg.cockpit.proposal.accept`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_proposals_by_proposal_id_accept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/profiles/{id}/proposals/{proposal_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * app POST /api/apps/mfg/cockpit/profiles/:id/proposals/:proposal_id/cancel
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/proposals/:proposal_id/cancel` handled by `mfg.cockpit.proposal.cancel`.
+         *
+         *     Risk: destructive. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_proposals_by_proposal_id_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/profiles/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * app POST /api/apps/mfg/cockpit/profiles/:id/publish
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/publish` handled by `mfg.cockpit.draft.publish`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_publish"];
         delete?: never;
         options?: never;
         head?: never;
@@ -660,6 +776,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/apps/mfg/cockpit/profiles/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * app POST /api/apps/mfg/cockpit/profiles/:id/rollback
+         * @description Invoke or create Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/rollback` handled by `mfg.cockpit.version.rollback`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_rollback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/apps/mfg/cockpit/profiles/{id}/share": {
         parameters: {
             query?: never;
@@ -676,6 +814,28 @@ export interface paths {
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
         post: operations["gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_share"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/mfg/cockpit/profiles/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * app GET /api/apps/mfg/cockpit/profiles/:id/versions
+         * @description Query Gateway app capability through `/api/apps/mfg/cockpit/profiles/:id/versions` handled by `mfg.cockpit.version.list`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_versions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12603,7 +12763,7 @@ export interface components {
                 /** @enum {string} */
                 MfgIdempotencySemantics: "not_applicable_pure_dry_run" | "required" | "natural_key";
                 /** @enum {string} */
-                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.draft.create" | "mfg.cockpit.draft.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
                 /** @enum {string} */
                 MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
                 MfgMutationSemantics: ("read_only" | "preview_receipt") | {
@@ -12615,7 +12775,7 @@ export interface components {
                 /** @enum {string} */
                 MfgRevisionSemantics: "not_applicable" | "create_only" | "required";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         };
         /** MfgActionExecution */
@@ -13062,6 +13222,107 @@ export interface components {
             /** @default null */
             q: string | null;
         };
+        /**
+         * MfgCockpitDraftSaveRequest
+         * @description Cockpit ownership is derived from the verified APP request context. The
+         *     body still carries the domain profile shape, but a caller cannot choose
+         *     its durable owner.
+         */
+        MfgCockpitDraftSaveRequest: {
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_draft_revision: number | null;
+            /** @default [] */
+            locks: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["ViewSpecLock"][];
+            profile: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["MfgCockpitProfileInput"];
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+            $defs: {
+                MfgCockpitProfileInput: {
+                    /** @default null */
+                    cadence: string | null;
+                    /** @default null */
+                    display_name: string | null;
+                    /**
+                     * Format: uint64
+                     * @default null
+                     */
+                    expected_revision: number | null;
+                    /** @default [] */
+                    focus_metric_ids: string[];
+                    /** @default [] */
+                    focus_refs: string[];
+                    /** @default null */
+                    global_filters: unknown;
+                    /** @default null */
+                    layout: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["MfgDashboardLayout"] | null;
+                    owner_ref: string;
+                    /** @default null */
+                    profile_id: string | null;
+                    /** @default null */
+                    scope: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["MfgDashboardScope"] | null;
+                    /** @default null */
+                    sharing_policy: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["MfgDashboardSharingPolicy"] | null;
+                    /** @default null */
+                    template_id: string | null;
+                    /** @default null */
+                    thresholds: unknown;
+                    /** @default [] */
+                    widget_instances: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["MfgWidgetInstance"][];
+                };
+                MfgDashboardLayout: {
+                    /** Format: uint16 */
+                    columns: number;
+                    /** Format: uint16 */
+                    gap: number;
+                    /** Format: uint16 */
+                    row_height: number;
+                };
+                MfgDashboardScope: {
+                    kind: string;
+                    /** @default null */
+                    scope_ref: string | null;
+                };
+                MfgDashboardSharingPolicy: {
+                    /** @default [] */
+                    editor_refs: string[];
+                    /** @default [] */
+                    viewer_refs: string[];
+                    visibility: string;
+                };
+                MfgWidgetInstance: {
+                    /** @default null */
+                    config: unknown;
+                    definition_id: string;
+                    instance_id: string;
+                    placement: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["MfgWidgetPlacement"];
+                    /** @default null */
+                    query: unknown;
+                    /** @default true */
+                    visible: boolean;
+                };
+                MfgWidgetPlacement: {
+                    /** Format: uint16 */
+                    height: number;
+                    /** Format: uint16 */
+                    width: number;
+                    /** Format: uint16 */
+                    x: number;
+                    /** Format: uint16 */
+                    y: number;
+                };
+                ViewSpecLock: {
+                    fields: components["schemas"]["MfgCockpitDraftSaveRequest"]["$defs"]["ViewSpecLockField"][];
+                    instance_id: string;
+                };
+                /** @enum {string} */
+                ViewSpecLockField: "presence" | "position" | "size" | "query" | "renderer" | "title";
+            };
+        };
         /** MfgCockpitProfile */
         MfgCockpitProfile: {
             cadence: string;
@@ -13192,94 +13453,6 @@ export interface components {
                 };
             };
         };
-        /**
-         * MfgCockpitProfileUpsertRequest
-         * @description Cockpit ownership is derived from the verified APP request context. The
-         *     body still carries the domain profile shape, but a caller cannot choose
-         *     its durable owner.
-         */
-        MfgCockpitProfileUpsertRequest: {
-            profile: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgCockpitProfileInput"];
-            /** @default null */
-            request_id: string | null;
-            /** @default null */
-            session_id: string | null;
-            $defs: {
-                MfgCockpitProfileInput: {
-                    /** @default null */
-                    cadence: string | null;
-                    /** @default null */
-                    display_name: string | null;
-                    /**
-                     * Format: uint64
-                     * @default null
-                     */
-                    expected_revision: number | null;
-                    /** @default [] */
-                    focus_metric_ids: string[];
-                    /** @default [] */
-                    focus_refs: string[];
-                    /** @default null */
-                    global_filters: unknown;
-                    /** @default null */
-                    layout: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgDashboardLayout"] | null;
-                    owner_ref: string;
-                    /** @default null */
-                    profile_id: string | null;
-                    /** @default null */
-                    scope: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgDashboardScope"] | null;
-                    /** @default null */
-                    sharing_policy: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgDashboardSharingPolicy"] | null;
-                    /** @default null */
-                    template_id: string | null;
-                    /** @default null */
-                    thresholds: unknown;
-                    /** @default [] */
-                    widget_instances: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgWidgetInstance"][];
-                };
-                MfgDashboardLayout: {
-                    /** Format: uint16 */
-                    columns: number;
-                    /** Format: uint16 */
-                    gap: number;
-                    /** Format: uint16 */
-                    row_height: number;
-                };
-                MfgDashboardScope: {
-                    kind: string;
-                    /** @default null */
-                    scope_ref: string | null;
-                };
-                MfgDashboardSharingPolicy: {
-                    /** @default [] */
-                    editor_refs: string[];
-                    /** @default [] */
-                    viewer_refs: string[];
-                    visibility: string;
-                };
-                MfgWidgetInstance: {
-                    /** @default null */
-                    config: unknown;
-                    definition_id: string;
-                    instance_id: string;
-                    placement: components["schemas"]["MfgCockpitProfileUpsertRequest"]["$defs"]["MfgWidgetPlacement"];
-                    /** @default null */
-                    query: unknown;
-                    /** @default true */
-                    visible: boolean;
-                };
-                MfgWidgetPlacement: {
-                    /** Format: uint16 */
-                    height: number;
-                    /** Format: uint16 */
-                    width: number;
-                    /** Format: uint16 */
-                    x: number;
-                    /** Format: uint16 */
-                    y: number;
-                };
-            };
-        };
         /** MfgCockpitProjection */
         MfgCockpitProjection: {
             /** Format: date-time */
@@ -13290,6 +13463,39 @@ export interface components {
             /** @default [] */
             widgets: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgCockpitWidget"][];
             $defs: {
+                GraphEdge: {
+                    /** @default null */
+                    label: string | null;
+                    source: string;
+                    target: string;
+                };
+                GraphNode: {
+                    /** @default null */
+                    category: string | null;
+                    id: string;
+                    label: string;
+                    /** @default null */
+                    source_ref: string | null;
+                };
+                GraphResult: {
+                    edges: components["schemas"]["MfgCockpitProjection"]["$defs"]["GraphEdge"][];
+                    nodes: components["schemas"]["MfgCockpitProjection"]["$defs"]["GraphNode"][];
+                };
+                MatrixCell: {
+                    /** @default null */
+                    label: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    /** Format: double */
+                    value: number;
+                    x: string;
+                    y: string;
+                };
+                MatrixResult: {
+                    cells: components["schemas"]["MfgCockpitProjection"]["$defs"]["MatrixCell"][];
+                    x_labels: string[];
+                    y_labels: string[];
+                };
                 MfgCockpitProfile: {
                     cadence: string;
                     /** Format: date-time */
@@ -13340,8 +13546,6 @@ export interface components {
                     widget_instances: components["schemas"]["MfgCockpitProjection"]["$defs"]["MfgWidgetInstance"][];
                 };
                 MfgCockpitWidget: {
-                    /** @default null */
-                    data: unknown;
                     /** @default  */
                     definition_id: string;
                     /** @default null */
@@ -13357,6 +13561,7 @@ export interface components {
                      * @default 1
                      */
                     renderer_version: number;
+                    result: components["schemas"]["MfgCockpitProjection"]["$defs"]["ResultShape"];
                     /** @default [] */
                     source_refs: string[];
                     status: string;
@@ -13405,6 +13610,95 @@ export interface components {
                     /** Format: uint16 */
                     y: number;
                 };
+                ResultShape: {
+                    content: components["schemas"]["MfgCockpitProjection"]["$defs"]["ScalarResult"];
+                    /** @constant */
+                    kind: "scalar";
+                } | {
+                    content: components["schemas"]["MfgCockpitProjection"]["$defs"]["SeriesResult"];
+                    /** @constant */
+                    kind: "series";
+                } | {
+                    content: components["schemas"]["MfgCockpitProjection"]["$defs"]["TableResult"];
+                    /** @constant */
+                    kind: "table";
+                } | {
+                    content: components["schemas"]["MfgCockpitProjection"]["$defs"]["MatrixResult"];
+                    /** @constant */
+                    kind: "matrix";
+                } | {
+                    content: components["schemas"]["MfgCockpitProjection"]["$defs"]["GraphResult"];
+                    /** @constant */
+                    kind: "graph";
+                } | {
+                    content: components["schemas"]["MfgCockpitProjection"]["$defs"]["TimelineResult"];
+                    /** @constant */
+                    kind: "timeline";
+                };
+                ResultValue: null | boolean | number | string;
+                ScalarResult: {
+                    /**
+                     * Format: double
+                     * @default null
+                     */
+                    change: number | null;
+                    /** @default null */
+                    label: string | null;
+                    /** @default null */
+                    unit: string | null;
+                    value: components["schemas"]["MfgCockpitProjection"]["$defs"]["ResultValue"];
+                };
+                SeriesPoint: {
+                    /** @default null */
+                    series: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    x: string;
+                    /** Format: double */
+                    y: number;
+                };
+                SeriesResult: {
+                    points: components["schemas"]["MfgCockpitProjection"]["$defs"]["SeriesPoint"][];
+                    /** @default null */
+                    unit: string | null;
+                    /** @default null */
+                    x_label: string | null;
+                    /** @default null */
+                    y_label: string | null;
+                };
+                TableColumn: {
+                    key: string;
+                    label: string;
+                    value_kind: components["schemas"]["MfgCockpitProjection"]["$defs"]["TableValueKind"];
+                };
+                TableResult: {
+                    columns: components["schemas"]["MfgCockpitProjection"]["$defs"]["TableColumn"][];
+                    rows: components["schemas"]["MfgCockpitProjection"]["$defs"]["TableRow"][];
+                };
+                TableRow: {
+                    cells: {
+                        [key: string]: components["schemas"]["MfgCockpitProjection"]["$defs"]["ResultValue"];
+                    };
+                    id: string;
+                    /** @default null */
+                    source_ref: string | null;
+                };
+                /** @enum {string} */
+                TableValueKind: "text" | "number" | "boolean" | "timestamp" | "status";
+                TimelineItem: {
+                    at: string;
+                    /** @default null */
+                    detail: string | null;
+                    id: string;
+                    /** @default null */
+                    source_ref: string | null;
+                    /** @default null */
+                    status: string | null;
+                    title: string;
+                };
+                TimelineResult: {
+                    items: components["schemas"]["MfgCockpitProjection"]["$defs"]["TimelineItem"][];
+                };
             };
         };
         /** MfgCockpitProjectionQuery */
@@ -13421,6 +13715,42 @@ export interface components {
             status: string | null;
             /** @default null */
             to: string | null;
+        };
+        /** MfgCockpitProposalAcceptRequest */
+        MfgCockpitProposalAcceptRequest: {
+            accepted_change_ids: string[];
+            /**
+             * Format: uint64
+             * @default null
+             */
+            expected_draft_revision: number | null;
+            /** Format: uint64 */
+            expected_proposal_revision: number;
+        };
+        /** MfgCockpitProposalCancelRequest */
+        MfgCockpitProposalCancelRequest: {
+            /** Format: uint64 */
+            expected_proposal_revision: number;
+        };
+        /** MfgCockpitProposalCreateRequest */
+        MfgCockpitProposalCreateRequest: {
+            /** Format: uint64 */
+            expected_base_revision: number;
+            prompt: string;
+            /** @default null */
+            request_id: string | null;
+            /** @default null */
+            session_id: string | null;
+        };
+        /** MfgCockpitProposalGetQuery */
+        MfgCockpitProposalGetQuery: {
+            /** @default true */
+            retry: boolean;
+        };
+        /** MfgCockpitPublishRequest */
+        MfgCockpitPublishRequest: {
+            /** Format: uint64 */
+            expected_active_revision: number;
         };
         /**
          * MfgCockpitReportDeliveryRequest
@@ -13622,6 +13952,39 @@ export interface components {
             summary: string;
             title: string;
             $defs: {
+                GraphEdge: {
+                    /** @default null */
+                    label: string | null;
+                    source: string;
+                    target: string;
+                };
+                GraphNode: {
+                    /** @default null */
+                    category: string | null;
+                    id: string;
+                    label: string;
+                    /** @default null */
+                    source_ref: string | null;
+                };
+                GraphResult: {
+                    edges: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["GraphEdge"][];
+                    nodes: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["GraphNode"][];
+                };
+                MatrixCell: {
+                    /** @default null */
+                    label: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    /** Format: double */
+                    value: number;
+                    x: string;
+                    y: string;
+                };
+                MatrixResult: {
+                    cells: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MatrixCell"][];
+                    x_labels: string[];
+                    y_labels: string[];
+                };
                 MfgCockpitProfile: {
                     cadence: string;
                     /** Format: date-time */
@@ -13692,8 +14055,6 @@ export interface components {
                     report_id: string;
                 };
                 MfgCockpitWidget: {
-                    /** @default null */
-                    data: unknown;
                     /** @default  */
                     definition_id: string;
                     /** @default null */
@@ -13709,6 +14070,7 @@ export interface components {
                      * @default 1
                      */
                     renderer_version: number;
+                    result: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["ResultShape"];
                     /** @default [] */
                     source_refs: string[];
                     status: string;
@@ -13757,7 +14119,111 @@ export interface components {
                     /** Format: uint16 */
                     y: number;
                 };
+                ResultShape: {
+                    content: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["ScalarResult"];
+                    /** @constant */
+                    kind: "scalar";
+                } | {
+                    content: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["SeriesResult"];
+                    /** @constant */
+                    kind: "series";
+                } | {
+                    content: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["TableResult"];
+                    /** @constant */
+                    kind: "table";
+                } | {
+                    content: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["MatrixResult"];
+                    /** @constant */
+                    kind: "matrix";
+                } | {
+                    content: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["GraphResult"];
+                    /** @constant */
+                    kind: "graph";
+                } | {
+                    content: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["TimelineResult"];
+                    /** @constant */
+                    kind: "timeline";
+                };
+                ResultValue: null | boolean | number | string;
+                ScalarResult: {
+                    /**
+                     * Format: double
+                     * @default null
+                     */
+                    change: number | null;
+                    /** @default null */
+                    label: string | null;
+                    /** @default null */
+                    unit: string | null;
+                    value: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["ResultValue"];
+                };
+                SeriesPoint: {
+                    /** @default null */
+                    series: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    x: string;
+                    /** Format: double */
+                    y: number;
+                };
+                SeriesResult: {
+                    points: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["SeriesPoint"][];
+                    /** @default null */
+                    unit: string | null;
+                    /** @default null */
+                    x_label: string | null;
+                    /** @default null */
+                    y_label: string | null;
+                };
+                TableColumn: {
+                    key: string;
+                    label: string;
+                    value_kind: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["TableValueKind"];
+                };
+                TableResult: {
+                    columns: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["TableColumn"][];
+                    rows: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["TableRow"][];
+                };
+                TableRow: {
+                    cells: {
+                        [key: string]: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["ResultValue"];
+                    };
+                    id: string;
+                    /** @default null */
+                    source_ref: string | null;
+                };
+                /** @enum {string} */
+                TableValueKind: "text" | "number" | "boolean" | "timestamp" | "status";
+                TimelineItem: {
+                    at: string;
+                    /** @default null */
+                    detail: string | null;
+                    id: string;
+                    /** @default null */
+                    source_ref: string | null;
+                    /** @default null */
+                    status: string | null;
+                    title: string;
+                };
+                TimelineResult: {
+                    items: components["schemas"]["MfgCockpitReportSnapshot"]["$defs"]["TimelineItem"][];
+                };
             };
+        };
+        /** MfgCockpitRollbackRequest */
+        MfgCockpitRollbackRequest: {
+            /** Format: uint64 */
+            expected_active_revision: number;
+            /** Format: uint64 */
+            target_revision: number;
+        };
+        /** MfgCockpitVersionListQuery */
+        MfgCockpitVersionListQuery: {
+            /**
+             * Format: uint
+             * @default null
+             */
+            limit: number | null;
         };
         /** MfgCockpitWidgetProjection */
         MfgCockpitWidgetProjection: {
@@ -13769,9 +14235,40 @@ export interface components {
             projection_id: string;
             widget: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["MfgCockpitWidget"];
             $defs: {
-                MfgCockpitWidget: {
+                GraphEdge: {
                     /** @default null */
-                    data: unknown;
+                    label: string | null;
+                    source: string;
+                    target: string;
+                };
+                GraphNode: {
+                    /** @default null */
+                    category: string | null;
+                    id: string;
+                    label: string;
+                    /** @default null */
+                    source_ref: string | null;
+                };
+                GraphResult: {
+                    edges: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["GraphEdge"][];
+                    nodes: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["GraphNode"][];
+                };
+                MatrixCell: {
+                    /** @default null */
+                    label: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    /** Format: double */
+                    value: number;
+                    x: string;
+                    y: string;
+                };
+                MatrixResult: {
+                    cells: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["MatrixCell"][];
+                    x_labels: string[];
+                    y_labels: string[];
+                };
+                MfgCockpitWidget: {
                     /** @default  */
                     definition_id: string;
                     /** @default null */
@@ -13787,12 +14284,102 @@ export interface components {
                      * @default 1
                      */
                     renderer_version: number;
+                    result: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["ResultShape"];
                     /** @default [] */
                     source_refs: string[];
                     status: string;
                     title: string;
                     widget_id: string;
                     widget_type: string;
+                };
+                ResultShape: {
+                    content: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["ScalarResult"];
+                    /** @constant */
+                    kind: "scalar";
+                } | {
+                    content: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["SeriesResult"];
+                    /** @constant */
+                    kind: "series";
+                } | {
+                    content: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["TableResult"];
+                    /** @constant */
+                    kind: "table";
+                } | {
+                    content: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["MatrixResult"];
+                    /** @constant */
+                    kind: "matrix";
+                } | {
+                    content: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["GraphResult"];
+                    /** @constant */
+                    kind: "graph";
+                } | {
+                    content: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["TimelineResult"];
+                    /** @constant */
+                    kind: "timeline";
+                };
+                ResultValue: null | boolean | number | string;
+                ScalarResult: {
+                    /**
+                     * Format: double
+                     * @default null
+                     */
+                    change: number | null;
+                    /** @default null */
+                    label: string | null;
+                    /** @default null */
+                    unit: string | null;
+                    value: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["ResultValue"];
+                };
+                SeriesPoint: {
+                    /** @default null */
+                    series: string | null;
+                    /** @default null */
+                    source_ref: string | null;
+                    x: string;
+                    /** Format: double */
+                    y: number;
+                };
+                SeriesResult: {
+                    points: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["SeriesPoint"][];
+                    /** @default null */
+                    unit: string | null;
+                    /** @default null */
+                    x_label: string | null;
+                    /** @default null */
+                    y_label: string | null;
+                };
+                TableColumn: {
+                    key: string;
+                    label: string;
+                    value_kind: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["TableValueKind"];
+                };
+                TableResult: {
+                    columns: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["TableColumn"][];
+                    rows: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["TableRow"][];
+                };
+                TableRow: {
+                    cells: {
+                        [key: string]: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["ResultValue"];
+                    };
+                    id: string;
+                    /** @default null */
+                    source_ref: string | null;
+                };
+                /** @enum {string} */
+                TableValueKind: "text" | "number" | "boolean" | "timestamp" | "status";
+                TimelineItem: {
+                    at: string;
+                    /** @default null */
+                    detail: string | null;
+                    id: string;
+                    /** @default null */
+                    source_ref: string | null;
+                    /** @default null */
+                    status: string | null;
+                    title: string;
+                };
+                TimelineResult: {
+                    items: components["schemas"]["MfgCockpitWidgetProjection"]["$defs"]["TimelineItem"][];
                 };
             };
         };
@@ -13810,7 +14397,7 @@ export interface components {
             $defs: {
                 MfgActionId: components["schemas"]["MfgContractDiagnosticV1"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgContractDiagnosticV1"]["$defs"]["MfgMultiActionId"];
                 /** @enum {string} */
-                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.draft.create" | "mfg.cockpit.draft.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
                 /** @enum {string} */
                 MfgReceiptStatus: "preview" | "accepted" | "replayed" | "completed" | "conflict" | "rejected" | "failed";
                 MfgReceiptV1: {
@@ -13842,7 +14429,7 @@ export interface components {
                     updated_at: string;
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         };
         /** MfgContractFreshnessV1 */
@@ -14001,7 +14588,7 @@ export interface components {
                 /** @enum {string} */
                 MfgIdempotencySemantics: "not_applicable_pure_dry_run" | "required" | "natural_key";
                 /** @enum {string} */
-                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.draft.create" | "mfg.cockpit.draft.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
                 /** @enum {string} */
                 MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
                 MfgMutationSemantics: ("read_only" | "preview_receipt") | {
@@ -14029,7 +14616,7 @@ export interface components {
                     schema_owner: components["schemas"]["MfgFrontendContractV1"]["$defs"]["MfgSchemaOwner"];
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
                 MfgSurfaceContract: {
@@ -14300,7 +14887,7 @@ export interface components {
             $defs: {
                 MfgActionId: components["schemas"]["MfgMutationResponseV1"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgMutationResponseV1"]["$defs"]["MfgMultiActionId"];
                 /** @enum {string} */
-                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.draft.create" | "mfg.cockpit.draft.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
                 /** @enum {string} */
                 MfgReceiptStatus: "preview" | "accepted" | "replayed" | "completed" | "conflict" | "rejected" | "failed";
                 MfgReceiptV1: {
@@ -14332,7 +14919,7 @@ export interface components {
                     updated_at: string;
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         } & {
             [key: string]: unknown;
@@ -15007,11 +15594,11 @@ export interface components {
             $defs: {
                 MfgActionId: components["schemas"]["MfgReceiptV1"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgReceiptV1"]["$defs"]["MfgMultiActionId"];
                 /** @enum {string} */
-                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.draft.create" | "mfg.cockpit.draft.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
                 /** @enum {string} */
                 MfgReceiptStatus: "preview" | "accepted" | "replayed" | "completed" | "conflict" | "rejected" | "failed";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
             };
         };
         /** MfgRecoveryAction */
@@ -15262,7 +15849,7 @@ export interface components {
                 /** @enum {string} */
                 MfgMutationClass: "read" | "preview" | "create" | "update" | "effect" | "create_or_update" | "preview_or_effect" | "update_or_effect" | "per_action";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
             };
@@ -15315,7 +15902,7 @@ export interface components {
                     schema_owner: components["schemas"]["MfgRouteContractCollectionV1"]["$defs"]["MfgSchemaOwner"];
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
             };
@@ -15366,7 +15953,7 @@ export interface components {
                     schema_owner: components["schemas"]["MfgRouteContractResourceV1"]["$defs"]["MfgSchemaOwner"];
                 };
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSchemaOwner: "contract" | "matrix_core";
             };
@@ -15546,9 +16133,9 @@ export interface components {
             $defs: {
                 MfgActionId: components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgRouteId"] | components["schemas"]["MfgSurfaceContract"]["$defs"]["MfgMultiActionId"];
                 /** @enum {string} */
-                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.profile.create" | "mfg.cockpit.profile.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
+                MfgMultiActionId: "mfg.reality.source_pack.create" | "mfg.reality.source_pack.update" | "mfg.reality.metric_dependency.create" | "mfg.reality.metric_dependency.update" | "mfg.reality.entity.create" | "mfg.reality.entity.update" | "mfg.reality.relation.create" | "mfg.reality.relation.update" | "mfg.playbook.create" | "mfg.playbook.update" | "mfg.cockpit.draft.create" | "mfg.cockpit.draft.update" | "mfg.alert_rule.create" | "mfg.alert_rule.update" | "mfg.alert_subscription.create" | "mfg.alert_subscription.update" | "mfg.assignment.create" | "mfg.assignment.update" | "mfg.alert.acknowledge" | "mfg.alert.snooze" | "mfg.alert.resolve" | "mfg.alert.escalate" | "mfg.assignment.assign" | "mfg.assignment.claim" | "mfg.assignment.transfer" | "mfg.assignment.unassign" | "mfg.assignment.watch" | "mfg.assignment.request_update" | "mfg.assignment.escalate" | "mfg.assignment.start" | "mfg.assignment.complete" | "mfg.analysis.action.dry_run" | "mfg.analysis.action.commit" | "mfg.execution.cross_plane.dry_run" | "mfg.execution.cross_plane.commit" | "mfg.report.deliver.dry_run" | "mfg.report.deliver.commit" | "mfg.report.schedule.generate_only" | "mfg.report.schedule.generate_and_deliver" | "mfg.report.delivery.retry_dry_run" | "mfg.report.delivery.retry_commit" | "mfg.report.review.force_retry" | "mfg.report.review.reroute" | "mfg.report.review.abandon" | "mfg.report.review.resolve" | "mfg.report.review.reject" | "mfg.skill.run";
                 /** @enum {string} */
-                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.upsert" | "mfg.cockpit.profile.get" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
+                MfgRouteId: "mfg.contract.get" | "mfg.app.get" | "mfg.production.governance.get" | "mfg.reality.health.get" | "mfg.reality.data_plane.health.get" | "mfg.reality.data_plane.ingest_plan" | "mfg.reality.source_pack.upsert" | "mfg.reality.source_pack.get" | "mfg.reality.source_pack.validate" | "mfg.reality.source_pack.ingest_file" | "mfg.reality.source_pack.delta_plan" | "mfg.reality.connector_run.plan" | "mfg.reality.connector_run.execute" | "mfg.reality.connector_run.get" | "mfg.reality.metric.list" | "mfg.reality.metric.attention_plan" | "mfg.reality.metric_snapshot.materialize" | "mfg.reality.metric.recompute" | "mfg.reality.metric.get" | "mfg.reality.metric.lineage" | "mfg.reality.metric_dependency.upsert" | "mfg.reality.metric_dependency.affected_plan" | "mfg.reality.compute_job.plan" | "mfg.reality.compute_job.get" | "mfg.reality.compute_job.execute" | "mfg.reality.entity.list" | "mfg.reality.entity.upsert" | "mfg.reality.entity.resolve_source_key" | "mfg.reality.entity.match_candidate" | "mfg.reality.entity.conflict_decision" | "mfg.reality.entity.get" | "mfg.reality.entity.relations" | "mfg.reality.entity.impact_path" | "mfg.reality.relation.upsert" | "mfg.reality.fact.ingest" | "mfg.reality.change.list" | "mfg.reality.attention.hot" | "mfg.reality.evidence.build" | "mfg.reality.evidence.get" | "mfg.reality.evidence.quality_gate" | "mfg.reality.evidence.context" | "mfg.reality.quality_gate.get" | "mfg.skill.list" | "mfg.skill.get" | "mfg.skill_run.get" | "mfg.command_center.get" | "mfg.command_center.live.get" | "mfg.decision_trace.get" | "mfg.domain.server_manufacturing.get" | "mfg.domain.server_manufacturing.seed" | "mfg.ontology.server_manufacturing.get" | "mfg.ontology.server_manufacturing.seed" | "mfg.incident.list" | "mfg.incident.create" | "mfg.incident.get" | "mfg.incident.room.get" | "mfg.incident.analyze" | "mfg.incident.case.promote" | "mfg.incident.playbook.recommend" | "mfg.incident.skill.plan" | "mfg.incident.skill.commit" | "mfg.incident.skill.run" | "mfg.incident.skill_run.list" | "mfg.case.get" | "mfg.case.search" | "mfg.playbook.upsert" | "mfg.playbook.get" | "mfg.analysis.get" | "mfg.analysis.action.execute" | "mfg.execution.get" | "mfg.execution.cross_plane.execute" | "mfg.execution.feedback.create" | "mfg.cockpit.profile.list" | "mfg.cockpit.profile.get" | "mfg.cockpit.draft.get" | "mfg.cockpit.draft.save" | "mfg.cockpit.version.list" | "mfg.cockpit.draft.publish" | "mfg.cockpit.version.rollback" | "mfg.cockpit.proposal.create" | "mfg.cockpit.proposal.get" | "mfg.cockpit.proposal.accept" | "mfg.cockpit.proposal.cancel" | "mfg.cockpit.profile.delete" | "mfg.cockpit.profile.clone" | "mfg.cockpit.profile.share" | "mfg.cockpit.widget_catalog.get" | "mfg.cockpit.projection.get" | "mfg.cockpit.widget_projection.get" | "mfg.report.generate" | "mfg.report.schedule.run" | "mfg.report.list" | "mfg.report.get" | "mfg.report.deliver" | "mfg.report.delivery_state.get" | "mfg.report.delivery.retry" | "mfg.report.review.request" | "mfg.report.review.list" | "mfg.report.review.get" | "mfg.report.review.decide" | "mfg.alert_rule.list" | "mfg.alert_rule.upsert" | "mfg.alert.list" | "mfg.alert_subscription.list" | "mfg.alert_subscription.upsert" | "mfg.alert.command" | "mfg.forecast.list" | "mfg.assignment.list" | "mfg.assignment.upsert" | "mfg.assignment.get" | "mfg.assignment.command" | "mfg.live.stream" | "mfg.live.snapshot";
                 /** @enum {string} */
                 MfgSurfaceKind: "webui" | "tui" | "cli" | "management";
                 /** @enum {string} */
@@ -16363,6 +16950,33 @@ export interface components {
         };
         /** @enum {string} */
         SessionHistoryRecoveryState: "ready" | "manifest_rebuilt" | "index_pending" | "checkpoint_missing" | "checkpoint_malformed";
+        SessionInputApplicationReceipt: {
+            /** @enum {string} */
+            action: "amend_current_turn" | "replan_current_graph" | "replace_current_task" | "add_required_task" | "add_background_task" | "add_team_lane" | "add_task_with_team" | "dispatch_session" | "progress_or_control" | "clarify";
+            agent_ids: string[];
+            /** Format: uint16 */
+            attempts: number;
+            disposition_id: string;
+            error?: string | null;
+            execution_ids: string[];
+            input_ids: string[];
+            leader_input_id: string;
+            objective: string;
+            /** @enum {string} */
+            relation: "supplement" | "replan" | "progress" | "background" | "new_task" | "new_session" | "subtask" | "cross_session";
+            required: boolean;
+            /** Format: uint64 */
+            revision: number;
+            /** @enum {string} */
+            state: "prepared" | "materializing" | "applied" | "failed";
+            summary: string;
+            target_session_created: boolean;
+            target_session_id?: string | null;
+            task_ids: string[];
+            team_ids: string[];
+            /** Format: uint64 */
+            updated_at_ms: number;
+        };
         SessionInputCancelRequest: {
             reason?: string | null;
         };
@@ -16643,6 +17257,7 @@ export interface components {
         };
         /** TaskAggregate */
         TaskAggregate: {
+            application_provenance?: components["schemas"]["TaskApplicationProvenance"] | null;
             blocker_reason?: string | null;
             /** Format: uint64 */
             created_at_ms: number;
@@ -16674,6 +17289,24 @@ export interface components {
             task_id: string;
             /** Format: uint64 */
             updated_at_ms: number;
+        };
+        /**
+         * @description Immutable Gateway-authored provenance for an application-owned structured
+         *     task.  The application can request a registered result contract, but it
+         *     cannot author or replace any field in this binding.
+         */
+        TaskApplicationProvenance: {
+            producer_id: string;
+            request_digest: string;
+            result_contract_id: string;
+            /** Format: uint64 */
+            result_max_bytes: number;
+            result_schema_digest: string;
+            result_schema_id: string;
+            /** Format: uint16 */
+            result_schema_version: number;
+            surface: string;
+            workspace_id: string;
         };
         TaskDetailResponse: {
             task: components["schemas"]["TaskAggregate"];
@@ -16870,6 +17503,7 @@ export interface components {
             turn_id: string;
         };
         TurnInboxItem: {
+            application_receipt?: components["schemas"]["SessionInputApplicationReceipt"] | null;
             /** @enum {string|null} */
             checkpoint?: "turn_start" | "ingress_dispatched" | "before_provider_request" | "after_provider_response" | "after_tool_result" | "before_final_answer" | "before_compaction" | null;
             /** Format: date-time */
@@ -16931,6 +17565,12 @@ export interface components {
         "mfg.case.get.response.v1": components["schemas"]["MfgReadResponseV1"];
         "mfg.case.search.request.v1": components["schemas"]["MfgCaseSearchQuery"];
         "mfg.case.search.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.draft.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
+        "mfg.cockpit.draft.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.draft.publish.request.v1": components["schemas"]["MfgCockpitPublishRequest"];
+        "mfg.cockpit.draft.publish.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.draft.save.request.v1": components["schemas"]["MfgCockpitDraftSaveRequest"];
+        "mfg.cockpit.draft.save.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.cockpit.profile.clone.request.v1": components["schemas"]["MfgCockpitProfileCloneRequest"];
         "mfg.cockpit.profile.clone.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.cockpit.profile.delete.request.v1": components["schemas"]["MfgCockpitProfileDeleteQuery"];
@@ -16941,10 +17581,20 @@ export interface components {
         "mfg.cockpit.profile.list.response.v1": components["schemas"]["MfgReadResponseV1"];
         "mfg.cockpit.profile.share.request.v1": components["schemas"]["MfgCockpitProfileShareRequest"];
         "mfg.cockpit.profile.share.response.v1": components["schemas"]["MfgMutationResponseV1"];
-        "mfg.cockpit.profile.upsert.request.v1": components["schemas"]["MfgCockpitProfileUpsertRequest"];
-        "mfg.cockpit.profile.upsert.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.cockpit.projection.get.request.v1": components["schemas"]["MfgCockpitProjectionQuery"];
         "mfg.cockpit.projection.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.proposal.accept.request.v1": components["schemas"]["MfgCockpitProposalAcceptRequest"];
+        "mfg.cockpit.proposal.accept.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.proposal.cancel.request.v1": components["schemas"]["MfgCockpitProposalCancelRequest"];
+        "mfg.cockpit.proposal.cancel.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.proposal.create.request.v1": components["schemas"]["MfgCockpitProposalCreateRequest"];
+        "mfg.cockpit.proposal.create.response.v1": components["schemas"]["MfgMutationResponseV1"];
+        "mfg.cockpit.proposal.get.request.v1": components["schemas"]["MfgCockpitProposalGetQuery"];
+        "mfg.cockpit.proposal.get.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.version.list.request.v1": components["schemas"]["MfgCockpitVersionListQuery"];
+        "mfg.cockpit.version.list.response.v1": components["schemas"]["MfgReadResponseV1"];
+        "mfg.cockpit.version.rollback.request.v1": components["schemas"]["MfgCockpitRollbackRequest"];
+        "mfg.cockpit.version.rollback.response.v1": components["schemas"]["MfgMutationResponseV1"];
         "mfg.cockpit.widget_catalog.get.request.v1": components["schemas"]["MfgNoBodyRequestV1"];
         "mfg.cockpit.widget_catalog.get.response.v1": components["schemas"]["MfgReadResponseV1"];
         "mfg.cockpit.widget_projection.get.request.v1": components["schemas"]["MfgCockpitProjectionQuery"];
@@ -18751,94 +19401,6 @@ export interface operations {
             };
         };
     };
-    gateway_app_post_api_apps_mfg_cockpit_profiles_upsert: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["mfg.cockpit.profile.upsert.request.v1"];
-            };
-        };
-        responses: {
-            /** @description Successful Gateway response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["mfg.cockpit.profile.upsert.response.v1"];
-                    "text/event-stream": string;
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Unauthorized */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Capability or scope denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Resource is outside the verified scope */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Revision or idempotency conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Rate limited */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-            /** @description Gateway internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MfgApiErrorV1"];
-                };
-            };
-        };
-    };
     gateway_app_get_api_apps_mfg_cockpit_profiles_by_id: {
         parameters: {
             query?: never;
@@ -19104,6 +19666,181 @@ export interface operations {
             };
         };
     };
+    gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.draft.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.cockpit.draft.save.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.draft.save.response.v1"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
     gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_projection: {
         parameters: {
             query?: never;
@@ -19122,6 +19859,454 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["mfg.cockpit.projection.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_proposals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.cockpit.proposal.create.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.proposal.create.response.v1"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_proposals_by_proposal_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.proposal.get.response.v1"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_proposals_by_proposal_id_accept: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.cockpit.proposal.accept.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.proposal.accept.response.v1"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_proposals_by_proposal_id_cancel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.cockpit.proposal.cancel.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.proposal.cancel.response.v1"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.cockpit.draft.publish.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.draft.publish.response.v1"];
+                    "text/event-stream": string;
                 };
             };
             /** @description Bad request */
@@ -19279,6 +20464,96 @@ export interface operations {
             };
         };
     };
+    gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_rollback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["mfg.cockpit.version.rollback.request.v1"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.version.rollback.response.v1"];
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
     gateway_app_post_api_apps_mfg_cockpit_profiles_by_id_share: {
         parameters: {
             query?: never;
@@ -19302,6 +20577,91 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["mfg.cockpit.profile.share.response.v1"];
                     "text/event-stream": string;
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Capability or scope denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Resource is outside the verified scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Revision or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Rate limited */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MfgApiErrorV1"];
+                };
+            };
+        };
+    };
+    gateway_app_get_api_apps_mfg_cockpit_profiles_by_id_versions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mfg.cockpit.version.list.response.v1"];
                 };
             };
             /** @description Bad request */

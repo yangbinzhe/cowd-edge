@@ -1196,6 +1196,71 @@ describe('chatSessions', () => {
         evidence_refs: ['session-input://input-live-1'],
       },
     }) } as MessageEvent);
+    const dispositionReceipt = {
+      disposition_id: 'disposition-live-1',
+      leader_input_id: 'input-live-1',
+      input_ids: ['input-live-1'],
+      action: 'add_task_with_team',
+      relation: 'new_task',
+      state: 'applied',
+      objective: 'delegate the additional investigation',
+      required: true,
+      attempts: 1,
+      summary: 'team task completed',
+      task_ids: ['task-2'],
+      team_ids: ['team-2'],
+      agent_ids: ['agent-2'],
+      execution_ids: ['execution-child'],
+      target_session_created: false,
+      revision: 2,
+      updated_at_ms: 12,
+    };
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'SessionInputDispositionChanged',
+      session_id: 'cross-surface',
+      execution_id: 'execution-new',
+      turn_id: 'turn-new',
+      receipt: dispositionReceipt,
+    }) } as MessageEvent);
+    expect(chat.states['cross-surface'].activity).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'input-disposition:disposition-live-1',
+        status: 'complete',
+        execution_id: 'execution-child',
+        team_id: 'team-2',
+        agent_id: 'agent-2',
+        output: expect.objectContaining({ task_ids: ['task-2'] }),
+      }),
+    ]));
+    stream.onmessage?.({ data: JSON.stringify({
+      type: 'SessionInputDispositionChanged',
+      session_id: 'cross-surface',
+      execution_id: 'execution-new',
+      turn_id: 'turn-new',
+      receipt: {
+        ...dispositionReceipt,
+        disposition_id: 'disposition-session-1',
+        action: 'dispatch_session',
+        relation: 'new_session',
+        objective: 'continue in an isolated Session',
+        summary: 'isolated Session handoff completed',
+        task_ids: [],
+        team_ids: [],
+        agent_ids: [],
+        target_session_id: 'session-isolated-1',
+        target_session_created: true,
+      },
+    }) } as MessageEvent);
+    expect(chat.states['cross-surface'].activity).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'input-disposition:disposition-session-1',
+        output: expect.objectContaining({
+          target_session_id: 'session-isolated-1',
+          target_session_created: true,
+        }),
+        refs: expect.arrayContaining(['session:session-isolated-1']),
+      }),
+    ]));
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TurnInputCheckpointConsumed',
       session_id: 'cross-surface',
@@ -1233,6 +1298,12 @@ describe('chatSessions', () => {
           status: 'failed',
           failure_class: 'mission_revision_conflict',
           last_error: 'Mission organization revision conflict',
+        }, {
+          input_id: 'input-live-2',
+          active_turn_id: 'turn-new',
+          content_preview: 'delegated work',
+          status: 'attached_to_turn',
+          application_receipt: dispositionReceipt,
         }],
       },
     }) } as MessageEvent);
@@ -1245,6 +1316,9 @@ describe('chatSessions', () => {
         output: expect.objectContaining({ last_error: 'Mission organization revision conflict' }),
       }),
     ]));
+    expect(chat.states['cross-surface'].activity.filter(
+      (item) => item.id === 'input-disposition:disposition-live-1',
+    )).toHaveLength(1);
 
     stream.onmessage?.({ data: JSON.stringify({
       type: 'TerminalCommitted',
