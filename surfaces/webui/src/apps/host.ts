@@ -26,7 +26,20 @@ export {
   releaseLongLivedConnection,
 } from '../utils/longLivedConnectionBudget';
 export type { GraphViewModel } from '../types/graph';
-export type { CowdPresentationRendererId, CowdPresentationResultShape, CowdPresentationTableColumn, CowdPresentationValue } from './presentation/types';
+export type {
+  CowdPresentationRendererId,
+  CowdPresentationResultShape,
+  CowdPresentationTableColumn,
+  CowdPresentationValue,
+  CowdViewSpec,
+  CowdViewSpecLayout,
+  CowdViewSpecLock,
+  CowdViewSpecLockField,
+  CowdViewSpecPlacement,
+  CowdViewSpecSharing,
+  CowdViewSpecValidationReceipt,
+  CowdViewSpecWidget,
+} from './presentation/types';
 export { COWD_PRESENTATION_SCHEMA_ID, COWD_PRESENTATION_SCHEMA_SHA256, COWD_PRESENTATION_SCHEMA_VERSION } from './presentation/types';
 export { presentationRendererContracts, resolvePresentationRenderer } from './presentation/registry';
 

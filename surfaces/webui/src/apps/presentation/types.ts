@@ -13,3 +13,39 @@ export type CowdPresentationResultShape =
   | { kind: 'graph'; content: { nodes: Array<{ id: string; label: string; category?: string | null; source_ref?: string | null }>; edges: Array<{ source: string; target: string; label?: string | null }> } }
   | { kind: 'timeline'; content: { items: Array<{ id: string; at: string; title: string; detail?: string | null; status?: string | null; source_ref?: string | null }> } };
 export type CowdPresentationRendererId = 'kpi' | 'line' | 'risk_matrix' | 'attention' | 'incident' | 'workflow' | 'graph' | 'quality' | 'actions' | 'delivery' | 'freshness' | 'focus';
+
+/** Canonical, APP-neutral authoring contract owned by Cowd's APP SDK. */
+export type CowdViewSpecLockField = 'presence' | 'position' | 'size' | 'query' | 'renderer' | 'title';
+export interface CowdViewSpecPlacement { x: number; y: number; width: number; height: number }
+export interface CowdViewSpecLayout { columns: number; placements: Record<string, CowdViewSpecPlacement> }
+export interface CowdViewSpecWidget {
+  instance_id: string;
+  definition_id: string;
+  renderer_id: string;
+  renderer_version: number;
+  title: string;
+  config: Record<string, unknown> | null;
+  query: Record<string, unknown> | null;
+  visible: boolean;
+}
+export interface CowdViewSpecLock { instance_id: string; fields: CowdViewSpecLockField[] }
+export interface CowdViewSpecSharing { visibility: string; viewer_refs: string[]; editor_refs: string[] }
+export interface CowdViewSpec {
+  schema_version: number;
+  surface_id: string;
+  view_id: string;
+  base_revision: number;
+  catalog_version: string;
+  title: string;
+  widgets: CowdViewSpecWidget[];
+  layouts: Record<string, CowdViewSpecLayout>;
+  locks: CowdViewSpecLock[];
+  sharing: CowdViewSpecSharing;
+  domain_context: Record<string, unknown> | null;
+}
+export interface CowdViewSpecValidationReceipt {
+  schema_version: number;
+  view_id: string;
+  catalog_version: string;
+  spec_digest: string;
+}
