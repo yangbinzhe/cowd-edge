@@ -791,6 +791,33 @@ function visibleTranscriptTurn(turns: ChatTurn[], index: number) {
     || isExecutionTranscriptTurn(turns, index);
 }
 
+function failedUserExecutionEntry(turns: ChatTurn[], index: number) {
+  const turn = turns[index];
+  if (turn?.role !== 'user') return null;
+  for (let cursor = index + 1; cursor < turns.length; cursor += 1) {
+    const candidate = turns[cursor];
+    if (candidate.role === 'user') break;
+    if (
+      candidate.role === 'assistant'
+      && (!turn.turn_id || !candidate.turn_id || candidate.turn_id === turn.turn_id)
+    ) return null;
+  }
+  const entry = selectTurnExecutionEntry(
+    chat.active?.executionIndex?.executions || [],
+    String(turn.turn_id || ''),
+    String(turn.execution_id || ''),
+  );
+  return entry && (entry.status === 'error' || entry.status === 'cancelled')
+    ? entry
+    : null;
+}
+
+function openFailedUserExecution(turns: ChatTurn[], index: number) {
+  const entry = failedUserExecutionEntry(turns, index);
+  const graphId = String(entry?.graph_id || '').trim();
+  if (graphId) store.openChatExecutionGraph(graphId);
+}
+
 function isActiveStreamingTurn(turn: ChatTurn) {
   return turn.role === 'assistant'
     && turn.id === chat.active?.streamTurnId
@@ -1416,6 +1443,23 @@ function chooseFirstCommand() {
               <CircleAlert :size="13" />
               <span>{{ turn.submission_error }}</span>
             </p>
+            <div
+              v-if="failedUserExecutionEntry(chat.active?.turns || [], index)"
+              class="turn-execution-failure"
+              role="status"
+            >
+              <CircleAlert :size="13" />
+              <span>{{ t('chat.execution.failedWithoutAnswer') }}</span>
+              <button
+                v-if="failedUserExecutionEntry(chat.active?.turns || [], index)?.graph_id"
+                type="button"
+                :title="t('chat.execution.openTurnGraph')"
+                :aria-label="t('chat.execution.openTurnGraph')"
+                @click="openFailedUserExecution(chat.active?.turns || [], index)"
+              >
+                <Workflow :size="13" />
+              </button>
+            </div>
             <section
               v-if="turn.role !== 'user' && turn.role !== 'system'"
               class="conversation-execution"

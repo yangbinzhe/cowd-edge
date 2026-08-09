@@ -47,6 +47,7 @@ export const zhCN: MessageCatalog = {
   "chat.execution.turn": "轮次 {turn}",
   "chat.execution.turnNumber": "第 {number} 轮",
   "chat.execution.openTurnGraph": "查看本次执行图",
+  "chat.execution.failedWithoutAnswer": "本轮执行未生成回答",
   "chat.execution.turnNoEvents": "本轮暂无可展示的活动事件",
   "chat.execution.loadMoreTurns": "加载更早轮次",
   "chat.execution.loadingDetail": "正在按需加载本轮执行拓扑与节点详情",

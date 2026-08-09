@@ -2591,15 +2591,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       const localTurn = state.turns.find((turn) => turn.id === localId);
       if (localTurn) localTurn.status = 'complete';
       if (supplementing) {
-        const inputReceipt = receipt?.input || {};
-        upsertSessionActivity(sessionId, {
-          id: String(inputReceipt.input_id || `session-input:${idempotencyKey}`),
-          kind: 'runtime',
-          title: t('chat.input.supplemented'),
-          detail: String(inputReceipt.decision || receipt?.mode || 'accepted'),
-          status: 'complete',
-          raw: receipt,
-        });
+        // The POST proves durable admission, not application to the target
+        // answer. SessionInputProjection is the sole status authority.
         recordProgress(sessionId);
         return true;
       }

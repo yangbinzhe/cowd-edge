@@ -47,6 +47,7 @@ export const enUS: MessageCatalog = {
   "chat.execution.turn": "Turn {turn}",
   "chat.execution.turnNumber": "Turn {number}",
   "chat.execution.openTurnGraph": "View this turn's execution graph",
+  "chat.execution.failedWithoutAnswer": "This turn ended without an answer",
   "chat.execution.turnNoEvents": "No activity events are available for this turn",
   "chat.execution.loadMoreTurns": "Load earlier turns",
   "chat.execution.loadingDetail": "Loading this turn's topology and node details on demand",
