@@ -237,6 +237,9 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .turn-submission-error { width: min(var(--user-content-max), 100%); margin: 0; display: flex; justify-content: flex-end; align-items: flex-start; gap: 5px; color: var(--danger); font-size: 11px; line-height: 1.45; text-align: right; }
 .turn-submission-error svg { flex: 0 0 auto; margin-top: 1px; }
 .turn-submission-error span { min-width: 0; overflow-wrap: anywhere; }
+.turn-execution-failure { width: min(var(--user-content-max), 100%); margin: 0; display: flex; justify-content: flex-end; align-items: center; gap: 6px; color: var(--danger); font-size: 11px; line-height: 1.45; }
+.turn-execution-failure button { width: 25px; height: 25px; display: inline-grid; place-items: center; border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border)); border-radius: 6px; background: transparent; color: var(--danger); cursor: pointer; }
+.turn-execution-failure button:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
 .turn[data-role="system"] .markdown-body { background: color-mix(in srgb, var(--info) 8%, var(--surface)); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; color: var(--text-muted); }
 .turn[data-role="tool"] .markdown-body { background: var(--surface); border-left: 2px solid var(--border-2); padding: 7px 10px; color: var(--text-muted); }
 .turn-evidence-drawer { margin: 0 auto 16px; width: min(1120px, calc(100% - 56px)); max-height: 62vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 14px; display: grid; gap: 12px; }

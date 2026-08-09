@@ -1085,12 +1085,8 @@ describe('chatSessions', () => {
     expect(await chat.send('single-session', 'second')).toBe(true);
     expect(chat.states['single-session'].executionId).toBe('execution-one');
     expect(chat.states['single-session'].pending).toBe(true);
-    expect(chat.states['single-session'].activity).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'supplement-one',
-        detail: 'supplement_current_turn',
-        status: 'complete',
-      }),
+    expect(chat.states['single-session'].activity).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'supplement-one', status: 'complete' }),
     ]));
     expect(api.sendMessage).toHaveBeenCalledTimes(2);
   });
