@@ -28,6 +28,41 @@ async function expectOk(response, label) {
   throw new Error(`${label} failed with HTTP ${response.status()}: ${await response.text()}`);
 }
 
+async function createMfgCockpitProfile(page, { profileId, displayName, idempotencyKey }) {
+  const profilePath = `/api/apps/mfg/cockpit/profiles/${encodeURIComponent(profileId)}`;
+  const draftResponse = await page.request.post(`${profilePath}/draft`, {
+    headers: { 'Idempotency-Key': `${idempotencyKey}-draft` },
+    data: {
+      profile: {
+        profile_id: profileId,
+        owner_ref: 'client-value-is-ignored',
+        display_name: displayName,
+        focus_refs: ['entity:e2e-line'],
+        focus_metric_ids: ['manufacturing_event_count'],
+        thresholds: {},
+        template_id: 'mfg.default_ops',
+        cadence: 'daily',
+        expected_revision: 0,
+        scope: { kind: 'personal' },
+        layout: { columns: 12, row_height: 72, gap: 12 },
+        global_filters: {},
+        widget_instances: [],
+        sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] },
+      },
+      locks: [],
+    },
+  });
+  await expectOk(draftResponse, 'MFG cockpit initial draft save');
+  const draft = await draftResponse.json();
+  expect(draft.profile?.revision).toBe(0);
+  const publishResponse = await page.request.post(`${profilePath}/publish`, {
+    headers: { 'Idempotency-Key': `${idempotencyKey}-publish` },
+    data: { expected_active_revision: 0 },
+  });
+  await expectOk(publishResponse, 'MFG cockpit initial draft publish');
+  return (await publishResponse.json()).profile;
+}
+
 async function installOfflineGatewayContract(page) {
   const responses = new Map([
     ['/api/auth/verify', { valid: true, auth_required: false }],
@@ -1363,29 +1398,12 @@ test('real gateway closes MFG profile, filter, alert, assignment and report cont
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const profileId = `e2e-cockpit-${suffix}`;
-  const profileResponse = await page.request.post('/api/apps/mfg/cockpit/profiles/upsert', {
-    headers: { 'Idempotency-Key': `e2e-profile-${suffix}` },
-    data: {
-      profile: {
-        profile_id: profileId,
-        owner_ref: 'client-value-is-ignored',
-        display_name: 'E2E terminal cockpit',
-        focus_refs: ['entity:e2e-line'],
-        focus_metric_ids: ['metric:e2e-output'],
-        thresholds: { 'metric:e2e-output': { critical: 0.8 } },
-        template_id: 'mfg.default_ops',
-        cadence: 'daily',
-        scope: { kind: 'personal' },
-        layout: { columns: 12, row_height: 72, gap: 12 },
-        global_filters: {},
-        widget_instances: [],
-        sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] },
-      },
-    },
+  const savedProfile = await createMfgCockpitProfile(page, {
+    profileId,
+    displayName: 'E2E terminal cockpit',
+    idempotencyKey: `e2e-profile-${suffix}`,
   });
-  await expectOk(profileResponse, 'MFG cockpit profile upsert');
-  const savedProfile = (await profileResponse.json()).profile;
-  expect(savedProfile.owner_ref).not.toBe('client-value-is-ignored');
+  expect(savedProfile.owner_ref).toBeTruthy();
   expect(savedProfile.widget_instances).toHaveLength(4);
 
   await page.goto(`/index.html#/apps/mfg?profile=${encodeURIComponent(profileId)}&entity=${encodeURIComponent('entity:e2e-line')}&metric=${encodeURIComponent('metric:e2e-output')}&from=${encodeURIComponent('2026-07-01T00:00:00Z')}`);
@@ -1567,27 +1585,11 @@ test('real gateway cockpit editing and concurrent observers close without silent
   test.skip(!realGateway, 'requires a real cowd gateway');
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const profileId = `e2e-cockpit-conflict-${suffix}`;
-  const createResponse = await page.request.post('/api/apps/mfg/cockpit/profiles/upsert', {
-    headers: { 'Idempotency-Key': `e2e-cockpit-create-${suffix}` },
-    data: {
-      profile: {
-        profile_id: profileId,
-        owner_ref: 'client-value-is-ignored',
-        display_name: 'E2E editable cockpit',
-        focus_refs: ['entity:e2e-line'],
-        focus_metric_ids: ['manufacturing_event_count'],
-        thresholds: {},
-        template_id: 'mfg.default_ops',
-        cadence: 'daily',
-        scope: { kind: 'personal' },
-        layout: { columns: 12, row_height: 72, gap: 12 },
-        global_filters: {},
-        widget_instances: [],
-        sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] },
-      },
-    },
+  await createMfgCockpitProfile(page, {
+    profileId,
+    displayName: 'E2E editable cockpit',
+    idempotencyKey: `e2e-cockpit-create-${suffix}`,
   });
-  await expectOk(createResponse, 'MFG concurrent cockpit profile creation');
 
   await page.goto(`/index.html#/apps/mfg?section=dashboard&profile=${encodeURIComponent(profileId)}`);
   await expect(page.locator('.mfg-widget')).toHaveCount(4);
@@ -1614,14 +1616,18 @@ test('real gateway cockpit editing and concurrent observers close without silent
 
   const nameInput = page.locator('.mfg-cockpit__editor > label input').first();
   await nameInput.fill('E2E saved cockpit');
-  const saveResponsePromise = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'Save cockpit' }).click();
+  const saveResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/draft`) && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Save server draft' }).click();
   expect((await saveResponsePromise).ok()).toBeTruthy();
   await page.getByRole('button', { name: 'Edit layout' }).click();
   await nameInput.fill('Unsaved local title');
   await page.getByRole('button', { name: 'Revert saved version' }).click();
   await expect(nameInput).toHaveValue('E2E saved cockpit');
   await page.getByRole('button', { name: 'Finish editing' }).click();
+  page.once('dialog', (dialog) => dialog.accept());
+  const publishResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/publish`) && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Publish draft' }).click();
+  expect((await publishResponsePromise).ok()).toBeTruthy();
   const profileOptions = page.locator('.mfg-cockpit__toolbar select option');
   const profileCountBeforeClone = await profileOptions.count();
   const cloneResponsePromise = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/clone`) && response.request().method() === 'POST');
@@ -1632,7 +1638,7 @@ test('real gateway cockpit editing and concurrent observers close without silent
   // editor views; otherwise an in-flight pre-clone refresh can win the route
   // restoration race and make this a timing test rather than a revision test.
   await expect(profileOptions).toHaveCount(profileCountBeforeClone + 1);
-  await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
+  await expect(page.locator('.mfg-revision')).toHaveText('Active r2');
 
   const observerId = `webui:e2e-cockpit-observer:${suffix}`;
   const observerContext = await browser.newContext({
@@ -1665,21 +1671,21 @@ test('real gateway cockpit editing and concurrent observers close without silent
       primaryEdit.click(),
       observerEdit.click(),
     ]);
-    await expect(page.locator('.mfg-revision')).toHaveText('Revision 2');
-    await expect(observer.locator('.mfg-revision')).toHaveText('Revision 2');
+    await expect(page.locator('.mfg-revision')).toHaveText('Active r2');
+    await expect(observer.locator('.mfg-revision')).toHaveText('Active r2');
     const firstName = page.locator('.mfg-cockpit__editor > label input').first();
     const secondName = observer.locator('.mfg-cockpit__editor > label input').first();
     await firstName.fill('Observer one committed');
     await secondName.fill('Observer two stale draft');
-    const firstSave = page.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Save cockpit' }).click();
+    const firstSave = page.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/draft`) && response.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Save server draft' }).click();
     expect((await firstSave).ok()).toBeTruthy();
-    const staleSave = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
-    await observer.getByRole('button', { name: 'Save cockpit' }).click();
+    const staleSave = observer.waitForResponse((response) => response.url().includes(`/api/apps/mfg/cockpit/profiles/${profileId}/draft`) && response.request().method() === 'POST');
+    await observer.getByRole('button', { name: 'Save server draft' }).click();
     expect((await staleSave).status()).toBe(409);
     await expect(observer.locator('.mfg-cockpit__conflict')).toBeVisible();
     await expect(observer.locator('.mfg-cockpit__conflict-compare')).toContainText('display_name');
-    const saveAsResponse = observer.waitForResponse((response) => response.url().includes('/api/apps/mfg/cockpit/profiles/upsert') && response.request().method() === 'POST');
+    const saveAsResponse = observer.waitForResponse((response) => /\/api\/apps\/mfg\/cockpit\/profiles\/[^/]+\/draft$/.test(new URL(response.url()).pathname) && response.request().method() === 'POST');
     await observer.getByRole('button', { name: 'Save as new cockpit' }).click();
     expect((await saveAsResponse).ok()).toBeTruthy();
   } finally {
