@@ -328,11 +328,15 @@ export interface GatewayCapabilityHttp {
   criticality?: string;
 }
 
-export interface GatewayCapabilityVisibility {
-  webui?: boolean;
-  tui?: boolean;
-  llm?: boolean;
-  edge?: boolean;
+export interface GatewayCapabilityAvailability {
+  available: boolean;
+  executable: boolean;
+}
+
+export interface GatewayCapabilityDiscoverability {
+  http: boolean;
+  openapi: boolean;
+  ai_tool: boolean;
 }
 
 export interface GatewayCapabilityAiAffordance {
@@ -353,7 +357,10 @@ export interface GatewayCapability {
   side_effects?: string[];
   idempotency?: string;
   streaming?: string;
-  surface_visibility?: GatewayCapabilityVisibility;
+  availability?: GatewayCapabilityAvailability;
+  discoverability?: GatewayCapabilityDiscoverability;
+  consumed_by: string[];
+  verified_by?: string[];
   ai_affordance?: GatewayCapabilityAiAffordance;
   input_schema?: Record<string, unknown>;
   output_schema?: Record<string, unknown>;
@@ -364,9 +371,10 @@ export interface GatewayCapabilityCoverage {
   route_count: number;
   capability_count: number;
   p1_count: number;
-  ai_visible_count: number;
+  webui_required_count: number;
+  tui_required_count: number;
+  ai_tool_count: number;
   openapi_path_count: number;
-  openai_tool_count: number;
   route_contract_parity: boolean;
 }
 

@@ -10,7 +10,7 @@ const siblingBackend = path.join(workspaceRoot, 'cowd');
 export const backendRoot = process.env.COWD_BACKEND_REPO
   || (fs.existsSync(path.join(siblingBackend, 'Cargo.toml'))
     ? siblingBackend
-    : path.join(workspaceRoot, 'cowd-develop'));
+    : (() => { throw new Error(`Cowd backend repository is missing at ${siblingBackend}; set COWD_BACKEND_REPO explicitly`); })());
 export const manifestPath = path.join(webuiRoot, 'evaluation/acceptance-manifest.json');
 
 function git(root, ...args) {

@@ -10,7 +10,6 @@ const surfaceRoot = path.resolve(webuiRoot, '../..');
 const workspaceRoot = path.resolve(surfaceRoot, '..');
 const backendRoot = process.env.COWD_BACKEND_REPO
   || [
-    path.join(workspaceRoot, 'cowd-develop'),
     path.join(workspaceRoot, 'cowd'),
   ].find((candidate) => (
     fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/mod.rs'))

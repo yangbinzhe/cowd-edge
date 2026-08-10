@@ -10,9 +10,7 @@ const surfaceRoot = path.resolve(webuiRoot, '../..');
 const workspaceRoot = path.resolve(surfaceRoot, '..');
 const backendRoot = process.env.COWD_BACKEND_REPO
   || [
-    path.join(workspaceRoot, 'cowd-develop'),
     path.join(workspaceRoot, 'cowd'),
-    path.join(workspaceRoot, 'dev-iacc'),
   ].find((candidate) => (
     fs.existsSync(path.join(candidate, 'crates/gateway/src/api_routes/mod.rs'))
   ))
@@ -62,6 +60,10 @@ const testDirs = [
 const routeDirs = [
   path.join(backendRoot, 'crates/gateway/src/api_routes'),
   appRepositoryPath('mfg', 'crates', 'app-mfg-contract', 'src'),
+];
+const tuiSourceDirs = [
+  path.join(backendRoot, 'crates/tui/src'),
+  path.join(backendRoot, 'crates/cli/src'),
 ];
 
 const criticalMethods = {
@@ -317,6 +319,38 @@ function extractRoutes() {
   return routes;
 }
 
+function extractRequiredSurfaceRoutes() {
+  const source = read(path.join(backendRoot, 'crates/gateway/src/api_routes/capability_contract.rs'));
+  const extract = (name, surface) => {
+    const block = source.match(
+      new RegExp(`const ${name}:\\s*&\\[\\(&str,\\s*&str\\)\\]\\s*=\\s*&\\[([\\s\\S]*?)\\n\\s*\\];`),
+    )?.[1] || '';
+    return Array.from(block.matchAll(/\("([A-Z]+)",\s*"([^"]+)"\)/g)).map((match) => ({
+      surface,
+      method: match[1],
+      path: match[2],
+      normalized_path: normalizeRoute(match[2]),
+    }));
+  };
+  return [...extract('WEBUI', 'webui'), ...extract('TUI', 'tui')];
+}
+
+function extractTuiRouteReferences() {
+  const references = [];
+  for (const file of tuiSourceDirs.flatMap(walk).filter((item) => item.endsWith('.rs'))) {
+    const source = read(file);
+    const routeRegex = /"(\/api\/[^"]+)"/g;
+    let match;
+    while ((match = routeRegex.exec(source))) {
+      references.push({
+        normalized_path: normalizeRoute(match[1].replace(/\{\}/g, ':param')),
+        file: path.relative(backendRoot, file),
+      });
+    }
+  }
+  return references;
+}
+
 function routeMatches(entry, route) {
   if (entry.method !== route.method) return false;
   if (entry.normalized_path === route.normalized_path) return true;
@@ -343,6 +377,8 @@ const clientEntries = extractClientMethods();
 const uiCalls = extractUiCalls();
 const testEvidence = extractTestEvidence();
 const routes = extractRoutes();
+const requiredSurfaceRoutes = extractRequiredSurfaceRoutes();
+const tuiRouteReferences = extractTuiRouteReferences();
 
 const entries = clientEntries.map((entry) => {
   const matchedRoutes = routes.filter((route) => routeMatches(entry, route));
@@ -410,6 +446,31 @@ for (const entry of entries.filter((item) => item.criticality === 'p0' || item.c
   if (entry.governed_receipt_required && !entry.governed_receipt_ok) blocking.push(`${entry.client_method}: missing MFG governed receipt evidence`);
 }
 
+const surfaceCoverage = requiredSurfaceRoutes.map((requirement) => {
+  if (requirement.surface === 'webui') {
+    const matchingEntries = entries.filter((entry) => routeMatches(entry, requirement));
+    const coveredEntries = matchingEntries.filter((entry) => entry.has_ui_call);
+    return {
+      ...requirement,
+      covered: coveredEntries.length > 0,
+      client_methods: matchingEntries.map((entry) => entry.client_method),
+      evidence_files: Array.from(new Set(coveredEntries.flatMap((entry) => entry.ui_files))).sort(),
+    };
+  }
+  const evidence = tuiRouteReferences.filter((reference) => (
+    reference.normalized_path === requirement.normalized_path
+  ));
+  return {
+    ...requirement,
+    covered: evidence.length > 0,
+    client_methods: [],
+    evidence_files: Array.from(new Set(evidence.map((item) => item.file))).sort(),
+  };
+});
+for (const item of surfaceCoverage.filter((entry) => !entry.covered)) {
+  blocking.push(`${item.surface}: required consumer is not wired for ${item.method} ${item.path}`);
+}
+
 const requiredFindings = [];
 for (const route of requiredRoutes) {
   const normalized = normalizeRoute(route);
@@ -437,6 +498,8 @@ fs.writeFileSync(matrixPath, JSON.stringify({
     client_methods: entries.length,
     backend_routes: routes.length,
     required_routes: requiredRoutes.length,
+    required_surface_routes: requiredSurfaceRoutes.length,
+    covered_surface_routes: surfaceCoverage.filter((item) => item.covered).length,
     blocking: blocking.length,
   },
   required_routes: requiredRoutes.map((route) => ({
@@ -445,6 +508,7 @@ fs.writeFileSync(matrixPath, JSON.stringify({
     present: !requiredFindings.includes(`required route missing: ${route}`),
   })),
   entries,
+  surface_coverage: surfaceCoverage,
   probes: probeResults,
 }, null, 2));
 fs.writeFileSync(gatePath, [
@@ -457,6 +521,8 @@ fs.writeFileSync(gatePath, [
   `Client methods: ${entries.length}`,
   `Backend routes: ${routes.length}`,
   `Required routes: ${requiredRoutes.length}`,
+  `Required Surface routes: ${requiredSurfaceRoutes.length}`,
+  `Covered Surface routes: ${surfaceCoverage.filter((item) => item.covered).length}`,
   `Blocking findings: ${blocking.length}`,
   '',
   ...(blocking.length ? ['## Blocking', '', ...blocking.map((item) => `- ${item}`)] : ['## Blocking', '', 'None']),

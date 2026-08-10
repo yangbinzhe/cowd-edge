@@ -1781,7 +1781,7 @@ describe('Cowd Vue WebUI shell', () => {
       if (path.includes('/api/gateway/capability-contract')) {
         return Promise.resolve(new Response(JSON.stringify({
           kind: 'gateway.capability_contract',
-          schema_version: 1,
+          schema_version: 2,
           owner: 'gateway',
           source: 'test',
           route_count: 1,
@@ -1790,13 +1790,14 @@ describe('Cowd Vue WebUI shell', () => {
             route_count: 1,
             capability_count: 1,
             p1_count: 1,
-            ai_visible_count: 1,
+            webui_required_count: 1,
+            tui_required_count: 0,
+            ai_tool_count: 1,
             openapi_path_count: 1,
-            openai_tool_count: 1,
             route_contract_parity: true,
           },
           capabilities: [
-            { id: 'gateway.test', domain: 'gateway', title: 'Gateway test', http: { method: 'GET', path: '/api/gateway/test' }, risk: 'read', surface_visibility: { webui: true } },
+            { id: 'gateway.test', domain: 'gateway', title: 'Gateway test', http: { method: 'GET', path: '/api/gateway/test' }, risk: 'read', consumed_by: ['webui'], discoverability: { http: true, openapi: true, ai_tool: true } },
           ],
         }), { status: 200, headers: { 'content-type': 'application/json' } }));
       }
@@ -1813,6 +1814,61 @@ describe('Cowd Vue WebUI shell', () => {
     expect(calls.some((path) => path.includes('/api/gateway/capability-contract'))).toBe(false);
     expect(calls.some((path) => path.includes('/api/gateway/openapi.json'))).toBe(false);
     expect(calls.some((path) => path.includes('/api/gateway/openai-tools'))).toBe(false);
+    wrapper.unmount();
+    vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
+  });
+
+  it('renders schema v2 Surface requirements without treating API-only capabilities as WebUI features', async () => {
+    vi.mocked(fetch).mockImplementation((url: any) => {
+      const path = String(url);
+      if (path.includes('/api/gateway/capability-contract')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          kind: 'gateway.capability_contract',
+          schema_version: 2,
+          owner: 'gateway',
+          source: 'test',
+          route_count: 2,
+          capability_count: 2,
+          coverage: {
+            route_count: 2,
+            capability_count: 2,
+            p1_count: 1,
+            webui_required_count: 1,
+            tui_required_count: 1,
+            ai_tool_count: 0,
+            openapi_path_count: 2,
+            route_contract_parity: true,
+          },
+          capabilities: [
+            {
+              id: 'gateway.session.get', domain: 'session', title: 'Session',
+              http: { method: 'GET', path: '/api/sessions', criticality: 'p1' }, risk: 'read',
+              consumed_by: ['webui', 'tui'], discoverability: { http: true, openapi: true, ai_tool: false },
+            },
+            {
+              id: 'gateway.internal.get', domain: 'gateway', title: 'Internal',
+              http: { method: 'GET', path: '/api/internal', criticality: 'p2' }, risk: 'read',
+              consumed_by: [], discoverability: { http: true, openapi: true, ai_tool: false },
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      if (path.includes('/api/gateway/openapi.json')) {
+        return Promise.resolve(new Response(JSON.stringify({ openapi: '3.1.0', paths: { '/api/sessions': {}, '/api/internal': {} } }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      if (path.includes('/api/gateway/openai-tools')) {
+        return Promise.resolve(new Response(JSON.stringify({ kind: 'gateway.openai_tools', tool_count: 0, tools: [] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ sessions: [], commands: [], profiles: [], workspace_files: [] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    });
+    const wrapper = await mountApp('/gateway?section=alignment');
+    await settleAsync();
+    expect(wrapper.text()).toContain('WebUI 必须消费');
+    expect(wrapper.text()).toContain('TUI 必须消费');
+    expect(wrapper.text()).toContain('必须接线');
+    expect(wrapper.text()).toContain('API / 自动化');
+    expect(wrapper.text()).toContain('内部能力');
+    expect(wrapper.text()).not.toContain('visible');
     wrapper.unmount();
     vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
   });

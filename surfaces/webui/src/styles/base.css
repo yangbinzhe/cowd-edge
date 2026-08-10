@@ -1292,7 +1292,7 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .chat-title-block { width: 100%; display: flex; align-items: center; gap: 10px; }
   .chat-title-block h1 { flex: 0 0 auto; font-size: 17px; }
   .chat-session-facts { flex: 1 1 auto; justify-content: flex-end; flex-wrap: nowrap; gap: 4px; }
-  .chat-fact, .chat-execution-status, .session-evidence-head { width: 32px; min-width: 32px; min-height: 32px; justify-content: center; gap: 3px; padding: 0; }
+  .chat-fact, .chat-execution-status, .session-evidence-head { width: 44px; min-width: 44px; min-height: 44px; justify-content: center; gap: 3px; padding: 0; }
   .chat-fact strong, .chat-execution-status strong, .session-evidence-head > span { display: none; }
   .chat-routing-control { flex: 0 0 auto; }
   .routing-clear { display: none; }
@@ -1313,7 +1313,7 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .jump-to-latest { right: 14px; }
   .composer { padding: 10px 12px; }
   .composer textarea { min-height: 76px; max-height: 124px; }
-  .composer-input-actions .composer-icon-action { width: 38px; min-width: 38px; height: 38px; min-height: 38px; }
+  .composer-input-actions .composer-icon-action { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
   .composer-runtime-summary { display: grid; grid-template-columns: minmax(60px, 1fr) repeat(7, auto); gap: 4px; margin-left: -2px; margin-right: -2px; overflow: visible; }
   .composer-runtime-chip { min-width: 0; width: auto; min-height: 32px; overflow: hidden; gap: 4px; padding: 0 6px; font-size: 11px; }
   .composer-runtime-chip.model { grid-column: auto; max-width: none; }
@@ -1323,9 +1323,10 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .composer-runtime-chip.execution-policy > span { display: none; }
   .execution-policy-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .execution-policy-options { grid-template-columns: 1fr; }
-  .composer-runtime-chip.workspace { width: 32px; max-width: 32px; margin-left: 0; padding: 0; justify-content: center; }
+  button.composer-runtime-chip { min-height: 44px; }
+  .composer-runtime-chip.workspace { width: 44px; max-width: 44px; margin-left: 0; padding: 0; justify-content: center; }
   .composer-runtime-chip.workspace strong { display: none; }
-  .composer-runtime-chip.attachments { width: 32px; padding: 0; justify-content: center; }
+  .composer-runtime-chip.attachments { width: 44px; padding: 0; justify-content: center; }
   .composer-runtime-chip.attachments strong { display: none; }
   .context-ring.compact { width: 20px; height: 20px; }
   .chat-approval-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }
@@ -1338,6 +1339,7 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .workspace-tree-actions .icon-action { width: 32px; min-width: 32px; height: 32px; min-height: 32px; }
   .workspace-inline-action { grid-template-columns: minmax(0, 1fr); }
   .workspace-context-menu button { min-height: 44px; }
+  .graph-icon-action, .graph-icon-select { flex-basis: 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 }
 
 @media (max-width: 420px) {

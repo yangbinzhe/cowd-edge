@@ -153,7 +153,10 @@ function evaluateLayout(metrics, route, viewport) {
   }
 
   if (viewport.width < 820 && metrics.smallTouchTargetCount > 0) {
-    addFinding(findings, 'review', `${metrics.smallTouchTargetCount} visible controls are below 44px touch target`);
+    const details = (metrics.smallTouchTargetDetails || []).slice(0, 4)
+      .map((item) => `${item.label} (${item.width}×${item.height})`)
+      .join(', ');
+    addFinding(findings, 'review', `${metrics.smallTouchTargetCount} visible controls are below 44px touch target${details ? `: ${details}` : ''}`);
   }
   if (viewport.width < 820 && !metrics.mobileMoreNavigationVisible) {
     addFinding(findings, 'fail', 'mobile navigation has no visible all-features entry');
@@ -339,10 +342,24 @@ try {
             }
             return element.getBoundingClientRect();
           };
-          const smallTouchTargetCount = visibleControls.filter((element) => {
+          const touchControls = visibleControls.filter((element) => {
+            if (!(element instanceof HTMLAnchorElement)) return true;
+            const style = getComputedStyle(element);
+            return style.display !== 'inline' || element.matches('.icon-action, .primary-action, .ghost-action, .danger-action, .rail-button');
+          });
+          const smallTouchTargets = touchControls.filter((element) => {
             const rect = touchTargetRect(element);
             return rect.width < 44 || rect.height < 44;
-          }).length;
+          });
+          const smallTouchTargetDetails = smallTouchTargets.slice(0, 12).map((element) => {
+            const rect = touchTargetRect(element);
+            return {
+              label: element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent?.trim().slice(0, 48) || element.tagName.toLowerCase(),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            };
+          });
+          const smallTouchTargetCount = smallTouchTargets.length;
           const croppedCriticalControlElements = visibleControls.filter((element) => {
             const rect = element.getBoundingClientRect();
             const critical = element.matches('.primary-action, [type="submit"], .section-nav button, .rail-button');
@@ -467,6 +484,7 @@ try {
             settingsContent: rectOf('.settings-content'),
             companion: rectOf('.companion-panel'),
             smallTouchTargetCount,
+            smallTouchTargetDetails,
             unlabeledIconButtons,
             visibleWorkflowCount: workflowHeights.length,
             minWorkflowHeight: workflowHeights.length ? Math.min(...workflowHeights) : 0,

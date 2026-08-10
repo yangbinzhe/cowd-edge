@@ -103,9 +103,10 @@ const contractOverviewRows = computed(() => [
   { label: t('page.gateway.contract.routes'), value: capabilityCoverage.value.route_count ?? capabilityContract.value.route_count ?? 0 },
   { label: t('page.gateway.contract.capabilities'), value: capabilityCoverage.value.capability_count ?? capabilityContract.value.capability_count ?? 0 },
   { label: t('page.gateway.contract.p1'), value: capabilityCoverage.value.p1_count ?? 0 },
-  { label: t('page.gateway.contract.aiVisible'), value: capabilityCoverage.value.ai_visible_count ?? 0 },
+  { label: t('page.gateway.contract.webuiRequired'), value: capabilityCoverage.value.webui_required_count ?? 0 },
+  { label: t('page.gateway.contract.tuiRequired'), value: capabilityCoverage.value.tui_required_count ?? 0 },
   { label: t('page.gateway.contract.openapi'), value: capabilityCoverage.value.openapi_path_count ?? openApiPathCount.value },
-  { label: t('page.gateway.contract.tools'), value: openAiTools.value.tool_count ?? capabilityCoverage.value.openai_tool_count ?? openAiTools.value.tools?.length ?? 0 },
+  { label: t('page.gateway.contract.tools'), value: openAiTools.value.tool_count ?? capabilityCoverage.value.ai_tool_count ?? openAiTools.value.tools?.length ?? 0 },
   { label: t('page.gateway.contract.parity'), value: capabilityCoverage.value.route_contract_parity ? 'yes' : 'no' },
 ]);
 const gatewayContractRows = computed(() => contractCapabilities.value
@@ -117,9 +118,9 @@ const gatewayContractRows = computed(() => contractCapabilities.value
     owner: capabilityContract.value.owner || 'gateway',
     criticality: item.http?.criticality || '-',
     risk: item.risk || '-',
-    webui: item.surface_visibility?.webui === false ? 'hidden' : 'visible',
-    ai: item.surface_visibility?.llm === false ? 'hidden' : 'visible',
-    tool: item.ai_affordance?.expose_as_tool ? 'exposed' : 'internal',
+    webui: item.consumed_by?.includes('webui') ? t('page.gateway.contract.required') : t('page.gateway.contract.apiOnly'),
+    tui: item.consumed_by?.includes('tui') ? t('page.gateway.contract.required') : t('page.gateway.contract.apiOnly'),
+    ai: item.discoverability?.ai_tool ? t('page.gateway.contract.exposed') : t('page.gateway.contract.internal'),
   })));
 const openAiToolRows = computed(() => (Array.isArray(openAiTools.value.tools) ? openAiTools.value.tools : [])
   .map((item: any) => ({
@@ -1028,7 +1029,7 @@ watch(activeSection, (section) => {
           copyable
           row-key="id"
           :rows="gatewayContractRows"
-          :columns="['domain', 'method', 'path', 'owner', 'criticality', 'risk', 'webui', 'ai', 'tool']"
+          :columns="['domain', 'method', 'path', 'owner', 'criticality', 'risk', 'webui', 'tui', 'ai']"
           :loading="contractLoading"
           :page-size="50"
           @row-click="selectedDetail = $event"
