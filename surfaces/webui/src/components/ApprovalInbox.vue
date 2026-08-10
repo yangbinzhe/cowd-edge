@@ -12,6 +12,7 @@ const store = useAppStore();
 const route = useRoute();
 const router = useRouter();
 const approvals = ref<Record<string, any>[]>([]);
+const blockingCurrentApprovals = ref<Record<string, any>[]>([]);
 const modalOpen = ref(false);
 const selectedIndex = ref(0);
 const busy = ref(false);
@@ -65,7 +66,21 @@ function approvalRows(payload: any) {
 
 async function refresh() {
   try {
-    approvals.value = approvalRows(await api.approvalPending());
+    const sessionId = activeSessionId.value;
+    const [all, blocking] = await Promise.all([
+      api.approvalPending(),
+      sessionId
+        ? api.approvalPending({ sessionId, domain: 'execution', blocksExecution: true })
+        : Promise.resolve([]),
+    ]);
+    const allRows = approvalRows(all);
+    const blockingRows = approvalRows(blocking);
+    const known = new Set(allRows.map((item) => String(item?.approval_id || item?.id || '')));
+    approvals.value = [
+      ...blockingRows.filter((item) => !known.has(String(item?.approval_id || item?.id || ''))),
+      ...allRows,
+    ];
+    blockingCurrentApprovals.value = blockingRows;
     if (selectedIndex.value >= approvals.value.length) {
       selectedIndex.value = Math.max(0, approvals.value.length - 1);
     }
@@ -134,16 +149,16 @@ function refreshWhenVisible() {
 }
 
 watch(
-  [() => route.path, activeSessionId, orderedApprovals],
+  [() => route.path, activeSessionId, blockingCurrentApprovals],
   () => {
     if (route.path !== '/chat' || !activeSessionId.value) return;
-    const approval = orderedApprovals.value.find(
-      (item) => approvalSessionId(item) === activeSessionId.value,
-    );
+    const approval = blockingCurrentApprovals.value[0];
     const approvalId = String(approval?.approval_id || approval?.id || '');
     if (!approvalId || presentedInChat.has(approvalId)) return;
     presentedInChat.add(approvalId);
-    selectedIndex.value = orderedApprovals.value.indexOf(approval);
+    selectedIndex.value = Math.max(0, orderedApprovals.value.findIndex(
+      (candidate) => String(candidate?.approval_id || candidate?.id || '') === approvalId,
+    ));
     error.value = '';
     modalOpen.value = true;
   },

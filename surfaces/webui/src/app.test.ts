@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { nextTick } from 'vue';
+import { computed, nextTick } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App.vue';
@@ -32,6 +32,7 @@ import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
 import { isWorkspaceTextPreview, workspacePreviewKind } from './utils/workspacePreview';
 import { canonicalMfgMutationResponse } from './testing/mfgReceiptMock';
+import { activeCapabilitySectionKey } from './composables/useCapabilitySection';
 
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
 vi.mock('vue-echarts', () => ({ default: { template: '<div class="chart"></div>' } }));
@@ -403,6 +404,104 @@ describe('Cowd Vue WebUI shell', () => {
     wrapper.unmount();
   });
 
+  it('updates the canonical Session execution policy with writer ownership and revision control', async () => {
+    const readPolicy = vi.spyOn(api, 'sessionExecutionPolicy').mockResolvedValue({
+      session_id: 'policy-ui-session',
+      policy: {
+        autonomy_profile: 'supervised',
+        permission_mode: 'workspace-write',
+        approval_profile: 'balanced',
+        interruption_policy: 'pause_on_risk',
+        revision: 7,
+        origin: 'session_explicit',
+      },
+      matched_preset: 'supervised',
+      active_turn: { state: 'applied', applied_revision: 7 },
+    });
+    const updatePolicy = vi.spyOn(api, 'updateSessionExecutionPolicy').mockResolvedValue({
+      session_id: 'policy-ui-session',
+      policy: {
+        autonomy_profile: 'yolo',
+        permission_mode: 'danger-full-access',
+        approval_profile: 'autonomous',
+        interruption_policy: 'continue_until_blocked',
+        revision: 8,
+        origin: 'session_explicit',
+      },
+      matched_preset: 'yolo',
+      active_turn: { state: 'applied', applied_revision: 8 },
+    });
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'policy-ui-session';
+    chat.activeSessionId = 'policy-ui-session';
+    chat.active!.attachmentRole = 'writer';
+    chat.active!.writable = true;
+    await settleAsync();
+
+    expect(readPolicy).toHaveBeenCalledWith('policy-ui-session');
+    await wrapper.get('.composer-runtime-chip.execution-policy').trigger('click');
+    await wrapper.get('.execution-policy-options [data-preset="yolo"]').trigger('click');
+    await settleAsync();
+
+    expect(updatePolicy).toHaveBeenCalledWith('policy-ui-session', 'yolo', 7);
+    expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('全自主');
+    wrapper.unmount();
+  });
+
+  it('does not disguise a custom or unavailable Session policy as a built-in preset', async () => {
+    const readPolicy = vi.spyOn(api, 'sessionExecutionPolicy');
+    readPolicy.mockResolvedValueOnce({
+      session_id: 'custom-policy-session',
+      policy: {
+        autonomy_profile: 'yolo',
+        permission_mode: 'danger-full-access',
+        approval_profile: 'supervised',
+        interruption_policy: 'continue_until_blocked',
+        revision: 4,
+        origin: 'session_explicit',
+      },
+      matched_preset: null,
+      active_turn: { state: 'applied', applied_revision: 4 },
+      __state: 'ready',
+    });
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'custom-policy-session';
+    chat.activeSessionId = 'custom-policy-session';
+    await settleAsync();
+
+    expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('自定义');
+
+    readPolicy.mockResolvedValueOnce({
+      session_id: 'unavailable-policy-session',
+      policy: {
+        autonomy_profile: 'supervised',
+        permission_mode: 'workspace-write',
+        approval_profile: 'balanced',
+        interruption_policy: 'pause_on_risk',
+        revision: 0,
+        origin: 'config_default',
+      },
+      matched_preset: null,
+      active_turn: { state: 'applies_on_activation', applied_revision: null },
+      __state: 'forbidden',
+      __error: 'policy access denied',
+    });
+    store.activeSessionId = 'unavailable-policy-session';
+    chat.activeSessionId = 'unavailable-policy-session';
+    await settleAsync();
+
+    expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('不可用');
+    await wrapper.get('.composer-runtime-chip.execution-policy').trigger('click');
+    expect(wrapper.get('.execution-policy-modal').text()).toContain('policy access denied');
+    wrapper.unmount();
+  });
+
   it('opens and closes the complete session list from the active Chat navigation control', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
@@ -553,17 +652,20 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
     let resolved = false;
     const pending = vi.spyOn(api, 'approvalPending')
-      .mockImplementation(async () => ({
+      .mockImplementation(async (filters = {}) => ({
         kind: 'gateway.unified_approval_pending',
         pending: resolved ? [] : [{
           approval_id: 'approval-chat-1',
           status: 'pending',
-          action: 'knowledge.promote_l4',
-          summary: 'Promote verified knowledge',
+          action: 'tool.workspace_write',
+          summary: 'Allow the current execution write',
           risk: 'medium',
           timeout_policy: 'pending',
+          domain: 'execution',
+          blocks_execution: true,
           source: { session_id: 'approval-session' },
         }],
+        filter: filters,
       } as any));
     const respond = vi.spyOn(api, 'approvalRespond').mockImplementation(async () => {
       resolved = true;
@@ -574,7 +676,10 @@ describe('Cowd Vue WebUI shell', () => {
     window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
     await settleAsync();
 
-    expect(wrapper.get('.chat-approval-modal').text()).toContain('Promote verified knowledge');
+    expect(pending).toHaveBeenCalledWith(
+      { sessionId: 'approval-session', domain: 'execution', blocksExecution: true },
+    );
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('Allow the current execution write');
     expect(wrapper.get('.global-approval-button').text()).toContain('1');
     await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
     await settleAsync();
@@ -584,6 +689,34 @@ describe('Cowd Vue WebUI shell', () => {
     wrapper.unmount();
     pending.mockRestore();
     respond.mockRestore();
+  });
+
+  it('does not auto-open non-execution governance approvals in Chat', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const pending = vi.spyOn(api, 'approvalPending').mockImplementation(async (filters = {}) => ({
+      kind: 'gateway.unified_approval_pending',
+      pending: Object.keys(filters).length ? [] : [{
+        approval_id: 'approval-knowledge-1',
+        status: 'pending',
+        action: 'knowledge.promote_l4',
+        summary: 'Promote verified knowledge',
+        risk: 'medium',
+        timeout_policy: 'pending',
+        domain: 'knowledge',
+        blocks_execution: false,
+        source: { session_id: 'approval-session' },
+      }],
+    } as any));
+    const store = useAppStore();
+    store.activeSessionId = 'approval-session';
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
+    await settleAsync();
+
+    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
+    expect(wrapper.get('.global-approval-button').text()).toContain('1');
+    wrapper.unmount();
+    pending.mockRestore();
   });
 
   it('keeps pending approvals available from the global top status outside Chat', async () => {
@@ -857,7 +990,7 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('renders one final answer with a compact execution timeline and aggregate token usage', async () => {
     const wrapper = await mountApp('/chat');
-    await settle();
+    await settleAsync();
     const store = useAppStore();
     const chat = useChatSessionsStore();
     store.activeSessionId = 'timeline-session';
@@ -3122,6 +3255,54 @@ describe('Cowd Vue WebUI shell', () => {
     await buttons[1].trigger('click');
     await settleAsync();
     expect(detach).toHaveBeenCalledWith('runtime-lease-session');
+  });
+
+  it('uses explicit approval scope choices in the Runtime workbench', async () => {
+    const pending = vi.spyOn(api, 'approvalPending').mockResolvedValue({
+      pending: [{
+        approval_id: 'runtime-approval-1',
+        summary: 'Allow a governed write',
+        action: 'tool.write',
+        status: 'pending',
+      }],
+    });
+    vi.spyOn(api, 'approvalGrants').mockResolvedValue({ grants: [] });
+    const respond = vi.spyOn(api, 'approvalRespond').mockResolvedValue({ status: 'approved' });
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const router = createRouter({
+      history: createWebHashHistory(),
+      routes: [{ path: '/runtime', component: RuntimePage }],
+    });
+    await router.push('/runtime?section=policy');
+    await router.isReady();
+    const wrapper = mount(RuntimePage, {
+      global: {
+        plugins: [pinia, router],
+        provide: { [activeCapabilitySectionKey as symbol]: computed(() => 'policy') },
+      },
+    });
+    await settleAsync();
+
+    const policyPanel = wrapper.get('[data-section="policy"]');
+    expect(policyPanel.find('select').exists()).toBe(false);
+    const scopeButtons = policyPanel.findAll('.runtime-approval-scope button');
+    expect(scopeButtons).toHaveLength(5);
+    expect(scopeButtons[0].classes()).toContain('active');
+    await scopeButtons[3].trigger('click');
+    expect(scopeButtons[3].classes()).toContain('active');
+    const approve = policyPanel.findAll('button').find((button) => button.text().includes('批准'));
+    expect(approve).toBeDefined();
+    await approve!.trigger('click');
+    await settleAsync();
+
+    expect(pending).toHaveBeenCalledWith({}, expect.any(AbortSignal));
+    expect(respond).toHaveBeenCalledWith(
+      'runtime-approval-1',
+      true,
+      'session',
+      'approved from Runtime Workbench',
+    );
   });
 
   it('loads a truthful five-request Runtime overview projection', async () => {

@@ -47,6 +47,7 @@ const leases = ref<any>({});
 const approvals = ref<any>([]);
 const approvalGrants = ref<any>({});
 const approvalScopes = ref<Record<string, string>>({});
+const approvalScopeOptions = ['once', 'turn', 'task', 'session', 'global'] as const;
 const timeline = ref<any>({});
 const tasks = ref<any>({});
 const growthStatus = ref<any>({});
@@ -254,7 +255,7 @@ async function loadSection(section = activeSection.value || 'overview', force = 
       }
     } else if (section === 'policy') {
       const [nextApprovals, nextGrants] = await Promise.all([
-        api.approvalPending(controller.signal),
+        api.approvalPending({}, controller.signal),
         api.approvalGrants(controller.signal),
       ]);
       if (!current()) return;
@@ -356,6 +357,26 @@ async function respondApproval(approval: any, approved: boolean) {
     approved ? 'approved from Runtime Workbench' : 'rejected from Runtime Workbench',
   );
   await loadSection('policy', true);
+}
+
+function approvalKey(approval: any) {
+  return String(approval?.approval_id || approval?.id || approval?.request_id || '');
+}
+
+function approvalScopeFor(approval: any) {
+  return approvalScopes.value[approvalKey(approval)] || 'once';
+}
+
+function setApprovalScope(approval: any, scope: typeof approvalScopeOptions[number]) {
+  approvalScopes.value[approvalKey(approval)] = scope;
+}
+
+function approvalScopeLabel(scope: typeof approvalScopeOptions[number]) {
+  if (scope === 'turn') return t('chat.approval.scope.turn');
+  if (scope === 'task') return t('chat.approval.scope.task');
+  if (scope === 'session') return t('chat.approval.scope.session');
+  if (scope === 'global') return t('chat.approval.scope.global');
+  return t('chat.approval.scope.once');
 }
 
 async function revokeApprovalGrant(grant: any) {
@@ -566,18 +587,23 @@ onUnmounted(() => {
           <span>{{ formatCount('pending', approvalItems.length) }}</span>
         </header>
         <div class="runtime-approval-list">
-          <article v-for="approval in approvalItems" :key="approval.id || approval.request_id">
+          <article v-for="approval in approvalItems" :key="approval.id || approval.request_id" class="runtime-approval-request">
             <div>
               <strong>{{ approval.summary || approval.reason || approval.id }}</strong>
               <p>{{ approval.command || approval.tool || approval.kind || t('page.runtime.page.inline.516d8685da') }}</p>
             </div>
-            <select v-model="approvalScopes[approval.approval_id || approval.id || approval.request_id]">
-              <option value="once">{{ t('chat.approval.scope.once') }}</option>
-              <option value="turn">{{ t('chat.approval.scope.turn') }}</option>
-              <option value="task">{{ t('chat.approval.scope.task') }}</option>
-              <option value="session">{{ t('chat.approval.scope.session') }}</option>
-              <option value="global">{{ t('chat.approval.scope.global') }}</option>
-            </select>
+            <fieldset class="runtime-approval-scope">
+              <legend>{{ t('chat.approval.scope') }}</legend>
+              <button
+                v-for="scope in approvalScopeOptions"
+                :key="scope"
+                type="button"
+                :class="{ active: approvalScopeFor(approval) === scope }"
+                @click="setApprovalScope(approval, scope)"
+              >
+                {{ approvalScopeLabel(scope) }}
+              </button>
+            </fieldset>
             <button class="ghost-action" type="button" @click="respondApproval(approval, false)">{{ t('page.runtime.page.text.ae4dd827f7') }}</button>
             <button class="primary-action" type="button" @click="respondApproval(approval, true)">
               <ShieldCheck :size="14" />

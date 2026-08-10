@@ -20,6 +20,7 @@ import {
   Paperclip,
   Search,
   Send,
+  ShieldCheck,
   Square,
   Workflow,
   Wrench,
@@ -28,7 +29,11 @@ import {
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
-import { api } from '../api/client';
+import {
+  api,
+  type SessionExecutionPolicyPreset,
+  type SessionExecutionPolicyResponse,
+} from '../api/client';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import ExecutionActivityTree from '../components/chat/ExecutionActivityTree.vue';
 import ReasoningGroup from '../components/chat/ReasoningGroup.vue';
@@ -71,6 +76,17 @@ onMounted(() => {
   store.loadChatCapabilities().catch(() => undefined);
 });
 const globalMissionGraphOpen = ref(false);
+const executionPolicyOpen = ref(false);
+const executionPolicyBusy = ref(false);
+const executionPolicyError = ref('');
+const executionPolicy = ref<SessionExecutionPolicyResponse | null>(null);
+const executionPolicyPresets: SessionExecutionPolicyPreset[] = [
+  'cautious',
+  'supervised',
+  'solo',
+  'yolo',
+  'stewarded',
+];
 const routingDialogOpen = ref(false);
 const routingBusy = ref(false);
 const routingError = ref('');
@@ -350,6 +366,21 @@ const showRequestedModel = computed(() => (
 ));
 const turnRunning = computed(() => !!chat.active?.pending || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(executionStatus.value));
 const submissionBusy = computed(() => store.sessionCreating || !!chat.active?.submitting);
+type ExecutionPolicyDisplayPreset = SessionExecutionPolicyPreset | 'custom' | 'unavailable';
+const activeExecutionPolicyPreset = computed<ExecutionPolicyDisplayPreset>(() => {
+  const response = executionPolicy.value;
+  if (!response) return 'unavailable';
+  if (response.__state && response.__state !== 'ready' && response.__state !== 'stale') {
+    return 'unavailable';
+  }
+  if (response.matched_preset === null) return 'custom';
+  return response.matched_preset || response.policy?.autonomy_profile || 'unavailable';
+});
+const canUpdateExecutionPolicy = computed(() => (
+  !!store.activeSessionId
+  && chat.active?.attachmentRole === 'writer'
+  && chat.active?.writable === true
+));
 const attachmentLabel = computed(() => {
   if (chat.active?.attachmentRole === 'writer') return t('page.chat.attachment.writer');
   if (chat.active?.attachmentRole === 'reader') return t('page.chat.attachment.reader');
@@ -363,8 +394,69 @@ const filteredCommands = computed(() => {
 
 useEscapeKey(() => store.closeModal(), () => !!store.activeModal);
 useEscapeKey(() => store.closeChatExecutionGraph(), () => store.chatExecutionGraphExpanded);
+useEscapeKey(() => { executionPolicyOpen.value = false; }, () => executionPolicyOpen.value);
+
+function executionPolicyLabel(preset: ExecutionPolicyDisplayPreset) {
+  if (preset === 'cautious') return t('chat.executionPolicy.preset.cautious');
+  if (preset === 'supervised') return t('chat.executionPolicy.preset.supervised');
+  if (preset === 'solo') return t('chat.executionPolicy.preset.solo');
+  if (preset === 'yolo') return t('chat.executionPolicy.preset.yolo');
+  if (preset === 'stewarded') return t('chat.executionPolicy.preset.stewarded');
+  if (preset === 'custom') return t('chat.executionPolicy.preset.custom');
+  return t('chat.executionPolicy.preset.unavailable');
+}
+
+function executionPolicyDetail(preset: SessionExecutionPolicyPreset) {
+  if (preset === 'cautious') return t('chat.executionPolicy.detail.cautious');
+  if (preset === 'supervised') return t('chat.executionPolicy.detail.supervised');
+  if (preset === 'solo') return t('chat.executionPolicy.detail.solo');
+  if (preset === 'yolo') return t('chat.executionPolicy.detail.yolo');
+  return t('chat.executionPolicy.detail.stewarded');
+}
+
+async function loadSessionExecutionPolicy(sessionId = store.activeSessionId) {
+  if (!sessionId) {
+    executionPolicy.value = null;
+    return;
+  }
+  const requestedSession = sessionId;
+  try {
+    const next = await api.sessionExecutionPolicy(requestedSession);
+    if (store.activeSessionId === requestedSession) {
+      executionPolicy.value = next;
+      executionPolicyError.value = next.__state && next.__state !== 'ready'
+        ? String(next.__error || t('chat.executionPolicy.unavailable'))
+        : '';
+    }
+  } catch (error) {
+    if (store.activeSessionId === requestedSession) {
+      executionPolicyError.value = error instanceof Error ? error.message : String(error);
+    }
+  }
+}
+
+async function updateExecutionPolicy(preset: SessionExecutionPolicyPreset) {
+  const sessionId = store.activeSessionId;
+  const revision = Number(executionPolicy.value?.policy?.revision || 0);
+  if (!sessionId || !revision || executionPolicyBusy.value || !canUpdateExecutionPolicy.value) return;
+  executionPolicyBusy.value = true;
+  executionPolicyError.value = '';
+  try {
+    executionPolicy.value = await api.updateSessionExecutionPolicy(sessionId, preset, revision);
+  } catch (error) {
+    executionPolicyError.value = error instanceof Error ? error.message : String(error);
+    await loadSessionExecutionPolicy(sessionId);
+  } finally {
+    executionPolicyBusy.value = false;
+  }
+}
+
 watch(() => store.activeSessionId, async (sessionId, previousSessionId) => {
   if (sessionId !== previousSessionId) store.closeChatExecutionGraph();
+  executionPolicy.value = null;
+  executionPolicyError.value = '';
+  executionPolicyOpen.value = false;
+  if (sessionId) loadSessionExecutionPolicy(sessionId).catch(() => undefined);
   if (
     sessionId
     && !previousSessionId
@@ -1613,6 +1705,18 @@ function chooseFirstCommand() {
         </span>
         <button
           type="button"
+          class="composer-runtime-chip execution-policy"
+          :data-preset="activeExecutionPolicyPreset"
+          :title="t('chat.executionPolicy.open')"
+          :disabled="!store.activeSessionId"
+          @click="executionPolicyOpen = true"
+        >
+          <ShieldCheck :size="13" />
+          <span>{{ t('chat.executionPolicy.label') }}</span>
+          <strong>{{ executionPolicyLabel(activeExecutionPolicyPreset) }}</strong>
+        </button>
+        <button
+          type="button"
           class="composer-runtime-chip"
           :title="t('page.chat.cleanCounters.tools')"
           @click="openChatCompanion('activity')"
@@ -1704,6 +1808,40 @@ function chooseFirstCommand() {
           <Boxes :size="15" />
           <span><strong>{{ commandName(command) }}</strong><small>{{ commandDescription(command) }}</small></span>
         </button>
+      </section>
+    </div>
+    <div v-if="executionPolicyOpen" class="modal-scrim" @click.self="executionPolicyOpen = false">
+      <section class="command-modal execution-policy-modal" role="dialog" aria-modal="true" :aria-label="t('chat.executionPolicy.title')">
+        <header>
+          <div>
+            <h2>{{ t('chat.executionPolicy.title') }}</h2>
+            <p>{{ t('chat.executionPolicy.help') }}</p>
+          </div>
+          <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="executionPolicyOpen = false"><X :size="16" /></button>
+        </header>
+        <div class="execution-policy-summary">
+          <span>{{ t('chat.executionPolicy.permission') }} <strong>{{ executionPolicy?.policy?.permission_mode || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.approval') }} <strong>{{ executionPolicy?.policy?.approval_profile || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.revision') }} <strong>{{ executionPolicy?.policy?.revision || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.origin') }} <strong>{{ executionPolicy?.policy?.origin || '—' }}</strong></span>
+        </div>
+        <div class="execution-policy-options">
+          <button
+            v-for="preset in executionPolicyPresets"
+            :key="preset"
+            type="button"
+            :data-preset="preset"
+            :class="{ active: activeExecutionPolicyPreset === preset }"
+            :disabled="executionPolicyBusy || !canUpdateExecutionPolicy"
+            @click="updateExecutionPolicy(preset)"
+          >
+            <span><ShieldCheck :size="15" /><strong>{{ executionPolicyLabel(preset) }}</strong></span>
+            <small>{{ executionPolicyDetail(preset) }}</small>
+          </button>
+        </div>
+        <p v-if="!canUpdateExecutionPolicy" class="modal-note">{{ t('chat.executionPolicy.writerRequired') }}</p>
+        <p v-if="executionPolicy?.applies_after_active_turn" class="modal-note">{{ t('chat.executionPolicy.nextTurn') }}</p>
+        <p v-if="executionPolicyError" class="file-error" role="alert">{{ executionPolicyError }}</p>
       </section>
     </div>
     <div v-if="routingDialogOpen" class="modal-scrim" @click.self="routingDialogOpen = false">

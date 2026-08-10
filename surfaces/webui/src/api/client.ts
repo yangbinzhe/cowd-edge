@@ -82,6 +82,35 @@ export interface SessionMessageSearchResponse extends ApiReadState {
   total: number;
 }
 
+export type SessionExecutionPolicyPreset = 'cautious' | 'supervised' | 'solo' | 'yolo' | 'stewarded';
+
+export interface SessionExecutionPolicyResponse extends ApiReadState {
+  session_id: string;
+  policy: {
+    autonomy_profile: SessionExecutionPolicyPreset;
+    permission_mode: 'read-only' | 'workspace-write' | 'danger-full-access';
+    approval_profile: 'supervised' | 'balanced' | 'autonomous';
+    interruption_policy: 'always_pause_for_human' | 'pause_on_risk' | 'continue_with_audit' | 'continue_until_blocked';
+    revision: number;
+    origin: 'config_default' | 'session_explicit' | 'surface_command' | 'recovery_replan';
+  };
+  matched_preset?: SessionExecutionPolicyPreset | null;
+  persisted?: boolean;
+  permission_revision?: number;
+  applied_to_active_runtime?: boolean;
+  applies_after_active_turn?: boolean;
+  active_turn?: {
+    state: 'applied' | 'applies_on_activation';
+    applied_revision?: number | null;
+  };
+}
+
+export interface ApprovalPendingFilters {
+  sessionId?: string;
+  domain?: 'execution' | 'knowledge' | 'skill' | 'evolution' | 'application' | 'system';
+  blocksExecution?: boolean;
+}
+
 export interface HarnessEvalRunOptions {
   level?: 'quick' | 'full' | 'deep' | 'deep-real';
   provider?: string;
@@ -1336,6 +1365,34 @@ export const api = {
     },
     { signal },
   ),
+  sessionExecutionPolicy: (sessionId: string, signal?: AbortSignal) => read<SessionExecutionPolicyResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/execution-policy`,
+    {
+      session_id: sessionId,
+      policy: {
+        autonomy_profile: 'supervised',
+        permission_mode: 'workspace-write',
+        approval_profile: 'balanced',
+        interruption_policy: 'pause_on_risk',
+        revision: 0,
+        origin: 'config_default',
+      },
+      matched_preset: null,
+      active_turn: { state: 'applies_on_activation', applied_revision: null },
+    },
+    { signal },
+  ),
+  updateSessionExecutionPolicy: (
+    sessionId: string,
+    preset: SessionExecutionPolicyPreset,
+    expectedRevision: number,
+  ) => write<SessionExecutionPolicyResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/execution-policy`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ preset, expected_revision: expectedRevision }),
+    },
+  ),
   sessionHistoryIndex: (sessionId: string, metadataLimit = 128, cardLimit = 64) => read<SessionHistoryIndexProjection>(
     `/api/sessions/${encodeURIComponent(sessionId)}/history-index?metadata_limit=${Math.max(1, Math.min(500, metadataLimit))}&card_limit=${Math.max(1, Math.min(200, cardLimit))}`,
     {
@@ -1673,7 +1730,16 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(config),
   }),
-  approvalPending: (signal?: AbortSignal) => read('/api/approval/pending', [], { signal }),
+  approvalPending: (filters: ApprovalPendingFilters = {}, signal?: AbortSignal) => {
+    const params = new URLSearchParams();
+    if (filters.sessionId) params.set('session_id', filters.sessionId);
+    if (filters.domain) params.set('domain', filters.domain);
+    if (filters.blocksExecution !== undefined) {
+      params.set('blocks_execution', String(filters.blocksExecution));
+    }
+    const query = params.size ? `?${params.toString()}` : '';
+    return read(`/api/approval/pending${query}`, [], { signal });
+  },
   approvalRiskReceipt: (toolName: string, input: unknown, sessionId?: string) => writeWithReceipt('/api/approval/risk-receipt', {
     method: 'POST',
     body: JSON.stringify({ tool_name: toolName, input, session_id: sessionId }),

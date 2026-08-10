@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "feishu",
   "name": "Feishu Message Connector",
-  "version": "0.9.662",
+  "version": "0.9.668",
   "kind": "message-connector",
   "runtime": {
     "kind": "managed",

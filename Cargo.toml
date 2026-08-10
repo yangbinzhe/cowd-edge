@@ -6,7 +6,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.9.662"
+version = "0.9.668"
 edition = "2021"
 license = "MIT"
 publish = false

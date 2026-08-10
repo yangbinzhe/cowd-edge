@@ -243,7 +243,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_approval_get_api_approval_pending"];
+        get: operations["approval_pending_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9322,6 +9322,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/execution-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * session GET /api/sessions/:id/execution-policy
+         * @description Query Gateway session capability through `/api/sessions/:id/execution-policy` handled by `get_session_execution_policy`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["session_execution_policy_get"];
+        /**
+         * session PUT /api/sessions/:id/execution-policy
+         * @description Replace Gateway session capability through `/api/sessions/:id/execution-policy` handled by `put_session_execution_policy`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        put: operations["session_execution_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/execution/live": {
         parameters: {
             query?: never;
@@ -11879,6 +11907,38 @@ export interface components {
         };
         /** @enum {string} */
         AdmissionProjectionStatus: "accepted" | "queued" | "waiting_resource" | "waiting_scope" | "waiting_approval" | "materialized" | "running" | "terminal" | "blocked" | "cancelled";
+        ApprovalPendingResponse: {
+            approvals: {
+                [key: string]: unknown;
+            } | null;
+            filter: {
+                blocks_execution?: boolean | null;
+                /** @enum {string|null} */
+                domain?: "execution" | "knowledge" | "skill" | "evolution" | "application" | "system" | null;
+                session_id?: string | null;
+            };
+            /** @constant */
+            kind: "gateway.unified_approval_pending";
+            pending: ({
+                action: string;
+                approval_id: string;
+                blocks_execution: boolean;
+                context: {
+                    [key: string]: unknown;
+                };
+                domain: string;
+                risk: string;
+                source: {
+                    [key: string]: unknown;
+                };
+                status: string;
+                summary: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        };
+        /** @enum {string} */
+        ApprovalProfile: "supervised" | "balanced" | "autonomous";
         AuthVerifyResponse: {
             auth_required: boolean;
             entitlement?: components["schemas"]["HumanEntitlementProjection"];
@@ -11886,6 +11946,8 @@ export interface components {
             transport?: "bearer" | "browser_session";
             valid: boolean;
         };
+        /** @enum {string} */
+        AutonomyProfileId: "cautious" | "supervised" | "solo" | "yolo" | "stewarded";
         CancelSessionTurnReceipt: {
             aborted: boolean;
             actor_id: string;
@@ -12661,6 +12723,8 @@ export interface components {
             granted: string[];
             profile_revision: number;
         };
+        /** @enum {string} */
+        InterruptionPolicy: "always_pause_for_human" | "pause_on_risk" | "continue_with_audit" | "continue_until_blocked";
         /**
          * @example {
          *       "agent_id": "agent-contract",
@@ -16557,6 +16621,8 @@ export interface components {
             };
             ttl_seconds?: number;
         };
+        /** @enum {string} */
+        PermissionMode: "read-only" | "workspace-write" | "danger-full-access";
         ProjectionCommandAvailability: {
             available: boolean;
             command: components["schemas"]["ExecutionCommandKind"];
@@ -16850,6 +16916,35 @@ export interface components {
         SessionExecutionIndicesProjection: {
             /** @default [] */
             items: components["schemas"]["SessionExecutionIndexProjection"][];
+        };
+        SessionExecutionPolicy: {
+            approval_profile: components["schemas"]["ApprovalProfile"];
+            autonomy_profile: components["schemas"]["AutonomyProfileId"];
+            interruption_policy: components["schemas"]["InterruptionPolicy"];
+            origin: components["schemas"]["SessionExecutionPolicyOrigin"];
+            permission_mode: components["schemas"]["PermissionMode"];
+            /** Format: uint64 */
+            revision: number;
+        };
+        SessionExecutionPolicyActiveTurn: {
+            /** Format: uint64 */
+            applied_revision?: number | null;
+            state: string;
+        };
+        /** @enum {string} */
+        SessionExecutionPolicyOrigin: "config_default" | "session_explicit" | "surface_command" | "recovery_replan";
+        /** SessionExecutionPolicyResponse */
+        SessionExecutionPolicyResponse: {
+            active_turn: components["schemas"]["SessionExecutionPolicyActiveTurn"];
+            applied_to_active_runtime?: boolean | null;
+            applies_after_active_turn?: boolean | null;
+            matched_preset?: components["schemas"]["AutonomyProfileId"] | null;
+            /** Format: uint64 */
+            permission_revision?: number | null;
+            persisted?: boolean | null;
+            policy: components["schemas"]["SessionExecutionPolicy"];
+            safe_replay?: string | null;
+            session_id: string;
         };
         SessionFocusClearRequest: {
             expected_revision: number;
@@ -17534,6 +17629,12 @@ export interface components {
             turn_id?: string | null;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** UpdateSessionExecutionPolicyRequest */
+        UpdateSessionExecutionPolicyRequest: {
+            /** Format: uint64 */
+            expected_revision: number;
+            preset: components["schemas"]["AutonomyProfileId"];
         };
         "mfg.alert.command.request.v1": components["schemas"]["MfgAlertCommandRequest"];
         "mfg.alert.command.response.v1": components["schemas"]["MfgMutationResponseV1"];
@@ -18298,7 +18399,7 @@ export interface operations {
             };
         };
     };
-    gateway_approval_get_api_approval_pending: {
+    approval_pending_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -18313,9 +18414,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ApprovalPendingResponse"];
                 };
             };
             /** @description Bad request */
@@ -44746,6 +44845,114 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_execution_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionExecutionPolicyResponse"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    session_execution_policy_put: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exact attached writer Surface identity. The same observer must own a compatible session lease. */
+                "x-cowd-observer-id": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSessionExecutionPolicyRequest"];
+                "multipart/form-data": components["schemas"]["UpdateSessionExecutionPolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionExecutionPolicyResponse"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, invalid, unattached, or read-only x-cowd-observer-id */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Writer lease conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
