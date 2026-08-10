@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="assets/manual.css"><script src="assets/project.js"></script><title>Cowd Edge 消息连接器</title></head>
+<body data-page="message"><a class="skip-link" href="#content" data-zh="跳到正文" data-en="Skip to content">跳到正文</a><header class="docs-header" data-docs-header></header><div class="docs-shell"><aside class="docs-sidebar" data-docs-sidebar></aside><button class="sidebar-backdrop" type="button" data-nav-dismiss aria-label="关闭目录"></button><main class="docs-main" id="content"><article class="article">
+  <header class="article-header"><p class="article-kicker" data-zh="消息连接器" data-en="MESSAGE CONNECTORS">消息连接器</p><h1 data-zh="渠道负责消息，Runtime 负责对话" data-en="Channels own messages; Runtime owns conversations">渠道负责消息，Runtime 负责对话</h1><p class="article-lead" data-zh="消息连接器把平台身份、消息、媒体与回调归一化为 Edge 事件。Gateway 负责可靠接纳并选择或创建 Session，Runtime 负责 Task 路由和回答，回复再经 outbox 送回原渠道。" data-en="Message connectors normalize platform identities, messages, media, and callbacks into Edge events. Gateway provides reliable admission and selects or creates a Session, Runtime routes Tasks and produces the response, and outbox delivery returns it to the originating channel.">消息连接器把平台身份、消息、媒体与回调归一化为 Edge 事件。Gateway 负责可靠接纳并选择或创建 Session，Runtime 负责 Task 路由和回答，回复再经 outbox 送回原渠道。</p></header>
+
+  <section aria-labelledby="message-flow"><h2 id="message-flow" data-zh="端到端消息链" data-en="End-to-end message chain">端到端消息链</h2>
+    <pre><code>platform event / long connection
+  → connector normalize + platform dedup key
+  → Gateway SurfaceHost inbox (received)
+  → identity binding + Session admission
+  → Runtime Task / Execution
+  → durable answer and evidence
+  → SurfaceHost outbox
+  → connector send / edit / media upload
+  → delivery receipt (replied | retry | DLQ)</code></pre>
+    <p data-zh="平台的 typing、reaction 或 processing 状态是消息生命周期的附属状态。正常回复、失败、取消和超时都必须清理，不能让已完成消息继续显示“处理中”。" data-en="Typing, reaction, or processing indicators are auxiliary message lifecycle state. Success, failure, cancellation, and timeout paths all clear them so a completed message never remains visibly processing.">平台的 typing、reaction 或 processing 状态是消息生命周期的附属状态。正常回复、失败、取消和超时都必须清理，不能让已完成消息继续显示“处理中”。</p>
+  </section>
+
+  <section aria-labelledby="matrix"><h2 id="matrix" data-zh="平台能力矩阵" data-en="Platform capability matrix">平台能力矩阵</h2>
+    <div class="table-wrap"><table><thead><tr><th data-zh="连接器" data-en="Connector">连接器</th><th data-zh="接入方式" data-en="Ingress">接入方式</th><th data-zh="发送能力" data-en="Send capabilities">发送能力</th><th data-zh="治理能力" data-en="Governance">治理能力</th></tr></thead><tbody>
+      <tr><td><code>feishu</code></td><td data-zh="WebSocket 长连接 + callback" data-en="WebSocket + callback">WebSocket 长连接 + callback</td><td data-zh="文本、图片、语音、文档、视频、卡片、编辑、删除" data-en="Text, image, voice, document, video, card, edit, delete">文本、图片、语音、文档、视频、卡片、编辑、删除</td><td data-zh="去重、群策略、@规则、机器人过滤、处理状态" data-en="Dedup, group policy, mentions, bot filtering, processing state">去重、群策略、@规则、机器人过滤、处理状态</td></tr>
+      <tr><td><code>email</code></td><td>IMAP</td><td>SMTP · text · document</td><td data-zh="账户配置、健康与消息幂等" data-en="Account config, health, message idempotency">账户配置、健康与消息幂等</td></tr>
+      <tr><td><code>wecom</code></td><td data-zh="加密 callback" data-en="Encrypted callback">加密 callback</td><td data-zh="文本" data-en="Text">文本</td><td data-zh="签名、解密、身份归一化" data-en="Signature, decryption, identity normalization">签名、解密、身份归一化</td></tr>
+      <tr><td><code>wechat-ilink</code></td><td data-zh="二维码绑定 + 长轮询" data-en="QR binding + long polling">二维码绑定 + 长轮询</td><td data-zh="文本、图片" data-en="Text, image">文本、图片</td><td data-zh="登录状态、断线恢复、健康" data-en="Login state, reconnect, health">登录状态、断线恢复、健康</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section aria-labelledby="sessions"><h2 id="sessions" data-zh="渠道会话与 Cowd Session" data-en="Channel conversations and Cowd sessions">渠道会话与 Cowd Session</h2>
+    <ul><li data-zh="连接器提供稳定的平台 account/chat/user/message 标识；Gateway 维护它们到 Cowd Session 的绑定。" data-en="The connector provides stable platform account/chat/user/message identifiers; Gateway maintains their binding to Cowd Sessions.">连接器提供稳定的平台 account/chat/user/message 标识；Gateway 维护它们到 Cowd Session 的绑定。</li><li data-zh="默认 `session_reset: none` 时，同一渠道会话持续复用；daily、idle、both 或 always 可显式改变重置策略。" data-en="With session_reset: none, a channel conversation continues using one Session. daily, idle, both, or always explicitly changes reset behavior.">默认 `session_reset: none` 时，同一渠道会话持续复用；daily、idle、both 或 always 可显式改变重置策略。</li><li data-zh="归档不等于遗忘。历史消息和 Task/Mission 绑定仍耐久保存，重新激活时按索引与热尾段恢复。" data-en="Archival is not forgetting. Historical messages and Task/Mission bindings remain durable and reactivate through indexes and a hot tail.">归档不等于遗忘。历史消息和 Task/Mission 绑定仍耐久保存，重新激活时按索引与热尾段恢复。</li><li data-zh="渠道不能自己生成第二套 Session ID 或绕过 Gateway 直接调用 Runtime。" data-en="A channel cannot invent a second Session identity or bypass Gateway to call Runtime.">渠道不能自己生成第二套 Session ID 或绕过 Gateway 直接调用 Runtime。</li></ul>
+  </section>
+
+  <section aria-labelledby="media"><h2 id="media" data-zh="附件与媒体" data-en="Attachments and media">附件与媒体</h2>
+    <p data-zh="连接器负责下载或上传平台媒体并返回规范化附件描述，Gateway 的资源层负责统一存放、配额、哈希、元数据和授权引用。图片可直接交给支持视觉的模型；其他文件由模型根据已有 Tool、Skill、Plugin 或 MCP 能力选择解析路径。连接器不内置文档业务操作。" data-en="The connector downloads or uploads platform media and returns normalized attachment descriptors. Gateway resource storage owns placement, quota, hashing, metadata, and authorized references. Images may go directly to a vision-capable model; other files are interpreted through available tools, skills, plugins, or MCP capabilities. Connectors do not embed document business operations.">连接器负责下载或上传平台媒体并返回规范化附件描述，Gateway 的资源层负责统一存放、配额、哈希、元数据和授权引用。图片可直接交给支持视觉的模型；其他文件由模型根据已有 Tool、Skill、Plugin 或 MCP 能力选择解析路径。连接器不内置文档业务操作。</p>
+  </section>
+
+  <section aria-labelledby="failure"><h2 id="failure" data-zh="失败与修复" data-en="Failure and repair">失败与修复</h2>
+    <div class="table-wrap"><table><thead><tr><th data-zh="位置" data-en="Stage">位置</th><th data-zh="证据" data-en="Evidence">证据</th><th data-zh="处理" data-en="Handling">处理</th></tr></thead><tbody><tr><td data-zh="接收失败" data-en="Ingress failure">接收失败</td><td data-zh="平台事件 ID、协议错误、连接状态" data-en="Platform event ID, protocol error, connection state">平台事件 ID、协议错误、连接状态</td><td data-zh="重连或 callback 重试，不创建重复 Session 输入" data-en="Reconnect or callback retry without duplicate Session input">重连或 callback 重试，不创建重复 Session 输入</td></tr><tr><td data-zh="Runtime 失败" data-en="Runtime failure">Runtime 失败</td><td data-zh="Execution、Activity、Provider/Tool evidence" data-en="Execution, activity, provider/tool evidence">Execution、Activity、Provider/Tool evidence</td><td data-zh="保存失败终态并发送诚实回复或等待批准" data-en="Commit failure and send an honest response or wait for approval">保存失败终态并发送诚实回复或等待批准</td></tr><tr><td data-zh="回复失败" data-en="Reply failure">回复失败</td><td data-zh="outbox、attempt、平台响应" data-en="Outbox, attempt, platform response">outbox、attempt、平台响应</td><td data-zh="有界退避；最终进入 DLQ，支持人工重放" data-en="Bounded backoff, then DLQ with operator replay">有界退避；最终进入 DLQ，支持人工重放</td></tr></tbody></table></div>
+  </section>
+
+  <div class="source-list"><strong data-zh="代码依据" data-en="Source anchors">代码依据</strong><code>crates/edge-adapters/src/message_sidecar.rs</code><code>crates/edge-adapters/src/platform/</code><code>crates/edge-contract/src/message.rs</code><code>connectors/message/**/surface.json</code></div>
+  <footer class="article-footer"><a href="source-connectors.html" data-zh="下一篇：数据源连接器" data-en="Next: Source connectors">下一篇：数据源连接器</a></footer>
+</article></main></div><script src="assets/manual.js"></script></body></html>
