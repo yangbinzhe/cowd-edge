@@ -11,4 +11,4 @@
 - [WebUI Surface](manual/webui.html)
 - [构建、配置与排障](manual/operations.html)
 
-说明书以 `v0.9.671` 的 manifest、Edge v2 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
+说明书以 `v0.9.672` 的 manifest、Edge v2 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
