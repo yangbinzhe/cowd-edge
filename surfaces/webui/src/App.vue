@@ -7,6 +7,7 @@ import {
   Menu, Network, PanelsTopLeft, RadioTower, Settings, Wrench, X,
 } from 'lucide-vue-next';
 import { useAppStore } from './stores/app';
+import { releaseAllLiveSubscriptions } from './stores/liveTransport';
 import type { NavId, NavItem } from './types';
 import { buildCapabilitySpecs } from './data/capabilities';
 import { appPluginForRoute, pluginCapabilitySpecs, pluginNavItems } from './plugins/registry';
@@ -186,6 +187,12 @@ watch(currentPage, (page) => {
 watch(() => store.authorizationState, (state) => {
   if (state === 'ready') void store.loadManagementCapabilities(currentPage.value);
 });
+watch(
+  () => route.path,
+  () => {
+    void releaseAllLiveSubscriptions();
+  },
+);
 
 async function selectCapabilitySection(sectionId: string) {
   if (!currentSections.value.some((section) => section.id === sectionId)) return;

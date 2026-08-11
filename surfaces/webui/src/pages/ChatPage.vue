@@ -910,6 +910,38 @@ function openFailedUserExecution(turns: ChatTurn[], index: number) {
   if (graphId) store.openChatExecutionGraph(graphId);
 }
 
+function blockedRecoveryForTurn(turns: ChatTurn[], index: number) {
+  const turn = turns[index];
+  const text = String(turn?.content || turn?.submission_error || '');
+  const markers = [
+    'semantic_compile_failed',
+    'recovery_hints',
+    'live subscription count exceeded',
+    'approval_skip_not_allowed_for_write',
+    'blocked',
+  ];
+  const marker = markers.find((candidate) => text.includes(candidate));
+  if (!marker) return null;
+  return {
+    marker,
+    reason: text.length > 320 ? `${text.slice(0, 320)}…` : text,
+  };
+}
+
+async function retryBlockedTurn(turns: ChatTurn[], index: number) {
+  const sessionId = String(store.activeSessionId || '');
+  if (!sessionId) return;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const candidate = turns[cursor];
+    if (candidate.role === 'user' && candidate.content.trim()) {
+      const text = candidate.content;
+      const input = store.composeChatInput(text);
+      await chat.send(sessionId, text, input);
+      return;
+    }
+  }
+}
+
 function isActiveStreamingTurn(turn: ChatTurn) {
   return turn.role === 'assistant'
     && turn.id === chat.active?.streamTurnId
@@ -1551,6 +1583,24 @@ function chooseFirstCommand() {
               >
                 <Workflow :size="13" />
               </button>
+            </div>
+            <div
+              v-if="blockedRecoveryForTurn(chat.active?.turns || [], index)"
+              class="turn-blocked-recovery"
+              role="alert"
+            >
+              <CircleAlert :size="14" />
+              <div>
+                <strong>{{ t('chat.execution.blockedTitle') }}</strong>
+                <p>{{ blockedRecoveryForTurn(chat.active?.turns || [], index)?.reason }}</p>
+                <button
+                  type="button"
+                  :disabled="turnRunning"
+                  @click="retryBlockedTurn(chat.active?.turns || [], index)"
+                >
+                  {{ t('chat.execution.blockedRetry') }}
+                </button>
+              </div>
             </div>
             <section
               v-if="turn.role !== 'user' && turn.role !== 'system'"

@@ -3,7 +3,7 @@ window.COWD_DOCS = {
   product: { zh: 'Cowd Edge', en: 'Cowd Edge' },
   subtitle: { zh: '外部连接与 WebUI 说明书', en: 'Connectivity & WebUI Manual' },
   title: { zh: 'Cowd Edge 系统说明书', en: 'Cowd Edge System Manual' },
-  version: 'v0.9.673',
+  version: 'v0.9.674',
   commit: '9d67a13',
   nav: [
     { id: 'index', icon: 'overview', href: 'index.html', zh: 'Edge 总览', en: 'Edge overview' },
