@@ -410,6 +410,11 @@ async function paneReady(instance: any) {
 
 function scheduleFit(instance = flow.value) {
   if (!instance || showList.value || !laidOutNodes.value.length) return;
+  // Preserve deliberate user zoom/pan: automatic fits (layout settle,
+  // inspector resize, node selection) must never reset a zoomed viewport.
+  if (typeof instance.getZoom === 'function' && Math.abs(instance.getZoom() - 1) > 0.02) {
+    return;
+  }
   const fit = () => instance.fitView?.({
     padding: props.compact ? 0.08 : 0.2,
     duration: 0,

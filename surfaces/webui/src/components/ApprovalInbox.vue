@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronLeft, ChevronRight, ShieldAlert, X } from 'lucide-vue-next';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { api } from '../api/client';
 import { t } from '../i18n';
 import { useEscapeKey } from '../composables/useEscapeKey';
@@ -9,7 +9,6 @@ import { appPluginForId } from '../plugins/registry';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
-const route = useRoute();
 const router = useRouter();
 const approvals = ref<Record<string, any>[]>([]);
 const blockingCurrentApprovals = ref<Record<string, any>[]>([]);
@@ -33,6 +32,16 @@ const orderedApprovals = computed(() => {
 });
 const activeApproval = computed(() => orderedApprovals.value[selectedIndex.value] || null);
 const activeSourceKind = computed(() => String(activeApproval.value?.source?.kind || '').toLowerCase());
+const approvalSessionLabel = computed(() => {
+  const approval = activeApproval.value;
+  if (!approval) return '';
+  const sessionId = String(approval?.source?.session_id || approval?.session_id || '');
+  if (!sessionId) return t('chat.approval.noSession');
+  const short = sessionId.length > 8 ? `${sessionId.slice(0, 8)}…` : sessionId;
+  const known = store.sessions.find((session: any) => String(session.id || session.session_id || '') === sessionId);
+  const title = known?.title ? String(known.title).slice(0, 40) : '';
+  return title ? `session:${short} · ${title}` : `session:${short}`;
+});
 const typedOwnerRoute = computed(() => {
   if (activeSourceKind.value === 'evolution') return '/audit?section=evolution';
   if (activeSourceKind.value !== 'application') return '';
@@ -174,9 +183,9 @@ function refreshWhenVisible() {
 }
 
 watch(
-  [() => route.path, activeSessionId, blockingCurrentApprovals],
+  [activeSessionId, blockingCurrentApprovals],
   () => {
-    if (route.path !== '/chat' || !activeSessionId.value) return;
+    if (!activeSessionId.value) return;
     const approval = blockingCurrentApprovals.value[0];
     const approvalId = String(approval?.approval_id || approval?.id || '');
     if (!approvalId || presentedInChat.has(approvalId)) return;
@@ -231,6 +240,7 @@ onBeforeUnmount(() => {
           <span>
             <strong>{{ t('chat.approval.title') }}</strong>
             <small>{{ activeApproval.action || activeApproval.risk || t('chat.approval.pending') }}</small>
+            <small class="approval-session-label">{{ approvalSessionLabel }}</small>
           </span>
         </div>
         <div class="approval-modal-actions">

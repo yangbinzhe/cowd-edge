@@ -120,11 +120,14 @@ function formatTime(value: unknown) {
 }
 .reasoning-group-latest {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   color: var(--text-muted);
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
 }
 .reasoning-running {
   color: var(--info);
@@ -160,17 +163,14 @@ function formatTime(value: unknown) {
 }
 .reasoning-segment-text {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   color: var(--text-muted);
   font-size: 11px;
   line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.reasoning-segments button.expanded .reasoning-segment-text {
-  overflow: visible;
+  text-overflow: clip;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 @keyframes reasoning-pulse {
   50% { opacity: .38; }

@@ -86,6 +86,24 @@ const sourceHealth = reactive(new Map<string, LiveEnvelope['source_health']>());
 const physicalConnectionCount = ref(0);
 let subscription: LiveSubscription | null = null;
 let stream: EventSource | null = null;
+let lastAuthorizationReloadAt = 0;
+
+function authorizationReasonNeedsRecovery(reason: string) {
+  return /credential epoch changed|no longer current|principal expired|no longer active/.test(reason);
+}
+
+function scheduleAuthorizationRecovery(reason: string) {
+  if (!authorizationReasonNeedsRecovery(reason)) return;
+  const now = Date.now();
+  if (now - lastAuthorizationReloadAt < 60_000) return;
+  lastAuthorizationReloadAt = now;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('cowd:authorization-invalidated', {
+      detail: { reason, automaticRecovery: true },
+    }));
+    window.setTimeout(() => window.location.reload(), 400);
+  }
+}
 let readyRevision = 0;
 let pendingRevisionEnvelopes: LiveEnvelope[] = [];
 let syncGeneration = 0;
@@ -516,6 +534,7 @@ export function openSessionLiveSource(
           };
         }
         if (envelope.event === 'source.authorization_revoked') {
+          scheduleAuthorizationRecovery(String(envelope.payload?.reason || ''));
           payload = {
             type: 'SessionAuthorizationRevoked',
             session_id: sessionId,

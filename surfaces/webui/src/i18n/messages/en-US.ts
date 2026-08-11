@@ -161,6 +161,7 @@ export const enUS: MessageCatalog = {
   "chat.approval.scope.task": "Current task",
   "chat.approval.scope.session": "Current session",
   "chat.approval.scope.global": "Global (human only)",
+  "chat.approval.noSession": "No linked session",
   "chat.approval.profile": "Approval policy",
   "chat.approval.profile.supervised": "Supervised",
   "chat.approval.profile.balanced": "Balanced",

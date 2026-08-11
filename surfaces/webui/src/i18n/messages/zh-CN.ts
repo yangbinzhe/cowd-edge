@@ -161,6 +161,7 @@ export const zhCN: MessageCatalog = {
   "chat.approval.scope.task": "当前任务",
   "chat.approval.scope.session": "当前会话",
   "chat.approval.scope.global": "全局（仅人工）",
+  "chat.approval.noSession": "未关联会话",
   "chat.approval.profile": "审批策略",
   "chat.approval.profile.supervised": "监督模式",
   "chat.approval.profile.balanced": "平衡模式",
