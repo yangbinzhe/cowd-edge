@@ -1745,9 +1745,9 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ tool_name: toolName, input, session_id: sessionId }),
   }),
-  approvalRespond: (id: string, approved: boolean, scope = 'once', reason = '') => write('/api/approval/respond', {
+  approvalRespond: (id: string, approved: boolean, scope = 'once', reason = '', skip = false) => write('/api/approval/respond', {
     method: 'POST',
-    body: JSON.stringify({ id, approved, scope, reason }),
+    body: JSON.stringify({ id, approved, scope, reason, skip }),
   }),
   approvalHistory: () => read('/api/approval/history?limit=20', []),
   approvalGrants: (signal?: AbortSignal) => read('/api/approval/grants', { grants: [] }, { signal }),

@@ -153,6 +153,7 @@ export const enUS: MessageCatalog = {
   "chat.approval.risk": "Risk",
   "chat.approval.timeout": "Wait policy",
   "chat.approval.reject": "Reject",
+  "chat.approval.skip": "Skip and continue",
   "chat.approval.approve": "Approve and continue",
   "chat.approval.scope": "Grant scope",
   "chat.approval.scope.once": "This invocation",

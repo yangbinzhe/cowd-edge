@@ -153,6 +153,7 @@ export const zhCN: MessageCatalog = {
   "chat.approval.risk": "风险",
   "chat.approval.timeout": "等待策略",
   "chat.approval.reject": "拒绝",
+  "chat.approval.skip": "跳过并继续",
   "chat.approval.approve": "批准并继续",
   "chat.approval.scope": "授权范围",
   "chat.approval.scope.once": "仅本次调用",

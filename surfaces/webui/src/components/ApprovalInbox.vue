@@ -140,6 +140,31 @@ async function decide(approved: boolean) {
   }
 }
 
+async function skipApproval() {
+  const approvalId = String(activeApproval.value?.approval_id || activeApproval.value?.id || '');
+  if (!approvalId || busy.value) return;
+  busy.value = true;
+  error.value = '';
+  try {
+    await api.approvalRespond(
+      approvalId,
+      false,
+      'once',
+      'skipped from WebUI',
+      true,
+    );
+    approvals.value = approvals.value.filter(
+      (approval) => String(approval?.approval_id || approval?.id || '') !== approvalId,
+    );
+    await refresh();
+    if (!approvals.value.length) modalOpen.value = false;
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : String(reason);
+  } finally {
+    busy.value = false;
+  }
+}
+
 function refreshFromRuntime() {
   refresh().catch(() => undefined);
 }
@@ -265,6 +290,9 @@ onBeforeUnmount(() => {
       <footer>
         <button v-if="!typedOwnerRoute" class="ghost-action" type="button" :disabled="busy" @click="decide(false)">
           {{ t('chat.approval.reject') }}
+        </button>
+        <button v-if="!typedOwnerRoute" class="ghost-action" type="button" :disabled="busy" @click="skipApproval()">
+          {{ t('chat.approval.skip') }}
         </button>
         <button v-if="!typedOwnerRoute" class="primary-action" type="button" :disabled="busy" @click="decide(true)">
           {{ t('chat.approval.approve') }}
