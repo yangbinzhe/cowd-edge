@@ -602,20 +602,3 @@ export function resetLiveTransportForTests() {
   subscriptionHealth.error = '';
   sourceHealth.clear();
 }
-
-/** Delete the current live subscription and close its physical stream.
- * Called on route changes so stale subscriptions never accumulate per
- * principal + Surface instance across page navigation. */
-export async function releaseAllLiveSubscriptions() {
-  const current = subscription;
-  subscription = null;
-  if (current) {
-    try {
-      await api.deleteLiveSubscription(current.id);
-    } catch {
-      // A transient delete failure is safe: the backend expires and reaps
-      // stale subscriptions, and the next create replaces them.
-    }
-  }
-  closePhysical();
-}
