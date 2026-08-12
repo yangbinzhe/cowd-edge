@@ -1591,9 +1591,10 @@ export const api = {
   }),
   runtimeTurn: (id: string) => read(`/api/runtime/turns/${encodeURIComponent(id)}`, {}),
   cancelRuntimeTurn: (id: string) => writeWithReceipt(`/api/runtime/turns/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
-  missionControl: (missionId = '') => {
+  missionControl: (missionId = '', detail = 'summary') => {
     const params = new URLSearchParams();
     if (missionId.trim()) params.set('mission_id', missionId.trim());
+    if (detail !== 'summary') params.set('detail', detail);
     const suffix = params.size ? `?${params.toString()}` : '';
     return read<MissionControlResponse>(`/api/mission/control${suffix}`, {
     ok: true,

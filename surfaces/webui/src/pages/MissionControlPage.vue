@@ -83,6 +83,37 @@ const loadedAuxiliarySections = new Set<string>();
 const controlProjection = computed<MissionControlProjection | Record<string, never>>(
   () => missionSnapshot.value?.projection || {},
 );
+const missionGraphDetail = ref<any>(null);
+const missionGraphDetailLoading = ref(false);
+const missionAggregateGraph = computed(() => adaptMissionControlGraph(
+  {
+    ...controlProjection.value,
+    mission_graph: missionGraphDetail.value || controlProjection.value?.mission_graph,
+  } as MissionControlProjection,
+  executionProjection.value ? [executionProjection.value] : [],
+));
+
+async function loadMissionGraphDetail() {
+  const missionId = String(mission.value?.mission_id || selectedMissionId.value || '').trim();
+  if (!missionId || missionGraphDetailLoading.value || missionGraphDetail.value) return;
+  missionGraphDetailLoading.value = true;
+  try {
+    const response = await api.missionControl(missionId, 'graph');
+    missionGraphDetail.value = response.snapshot?.projection?.mission_graph || null;
+  } catch {
+    // Summary facts remain available; the graph rehydrates on next refresh.
+  } finally {
+    missionGraphDetailLoading.value = false;
+  }
+}
+
+watch(
+  () => missionSnapshot.value?.projection?.mission_graph,
+  (graph) => {
+    if (graph?.available === true) void loadMissionGraphDetail();
+  },
+  { deep: false },
+);
 
 const missions = computed(() => Array.isArray(controlProjection.value?.missions)
   ? controlProjection.value.missions
@@ -258,10 +289,6 @@ const cleanCounters = computed(() => ({
   handoffs: relationCount.value,
 }));
 const executionProjection = computed(() => selectedExecutionId.value ? projections.projectionFor(selectedExecutionId.value) : null);
-const missionAggregateGraph = computed(() => adaptMissionControlGraph(
-  controlProjection.value as MissionControlProjection,
-  executionProjection.value ? [executionProjection.value] : [],
-));
 const executionCommandRows = computed(() => executionProjection.value?.available_commands || []);
 const executionNodeRows = computed(() => (executionProjection.value?.graph?.nodes || []).map((node: any) => ({
   id: node.node_id || '-',
