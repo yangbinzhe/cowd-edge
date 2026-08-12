@@ -1120,6 +1120,14 @@ describe('Cowd Vue WebUI shell', () => {
     expect(store.chatExecutionGraphExpanded).toBe(true);
     expect(store.chatExecutionGraphId).toBe('graph-turn-1');
     store.closeChatExecutionGraph();
+    const messageCopy = wrapper.get('.message-copy-link');
+    expect(messageCopy.attributes('title')).toBe('复制消息');
+    const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: clipboardWrite }, configurable: true });
+    await messageCopy.trigger('click');
+    expect(clipboardWrite).toHaveBeenCalledWith('分析 README');
+    expect(messageCopy.attributes('title')).toBe('已复制');
+    delete (navigator as any).clipboard;
     expect(wrapper.get('.answer-copy-link').attributes('title')).toBe('复制答案');
     await wrapper.get('.answer-copy-link').trigger('click');
     expect(wrapper.get('.answer-copy-link').attributes('title')).toBe('已复制');
@@ -1136,6 +1144,37 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.activity-detail-modal').text()).toContain('125 ms');
     expect(wrapper.findAll('.activity-detail-modal .activity-structured-section')).toHaveLength(1);
     expect(wrapper.findAll('.activity-detail-modal .raw-payload')).toHaveLength(1);
+  });
+
+  it('forks a new session from a final answer footer', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.sessions = [{ id: 'fork-source', title: 'Original' } as any];
+    store.activeSessionId = 'fork-source';
+    chat.activeSessionId = 'fork-source';
+    chat.active!.turns = [
+      { id: 'u1', role: 'user', content: '分析 fork 流程' },
+      { id: 'a1', role: 'assistant', content: '可以从此处分支。' },
+    ] as any;
+    const open = vi.spyOn(chat, 'open').mockResolvedValue();
+    vi.spyOn(api, 'branchSession').mockResolvedValue({
+      ok: true,
+      data: { id: 'fork-branch', title: 'Original (branch)', parent_session_id: 'fork-source' },
+    } as any);
+    await nextTick();
+
+    const branchLink = wrapper.get('.answer-branch-link');
+    expect(branchLink.attributes('title')).toBe('从此结果分支新会话');
+    await branchLink.trigger('click');
+    await settleAsync();
+
+    expect(api.branchSession).toHaveBeenCalledWith('fork-source');
+    expect(store.activeSessionId).toBe('fork-branch');
+    expect(store.sessions.map((session) => session.id)).toEqual(['fork-branch', 'fork-source']);
+    expect(open).toHaveBeenCalledWith('fork-branch');
+    wrapper.unmount();
   });
 
   it('shows a rolling live action before the causal thought and tool timeline', async () => {

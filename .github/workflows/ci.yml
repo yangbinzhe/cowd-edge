@@ -24,3 +24,27 @@ jobs:
       - run: npm ci --prefix surfaces/webui
       - run: npm --prefix surfaces/webui test
       - run: cargo test --workspace
+
+  webui-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: surfaces/webui/package-lock.json
+      - run: npm ci --prefix surfaces/webui
+      - run: npx --prefix surfaces/webui playwright install --with-deps chromium
+      - run: npm --prefix surfaces/webui run test:e2e
+      - run: npm --prefix surfaces/webui run build
+      - name: Serve built release and run smoke gate
+        run: |
+          npm --prefix surfaces/webui run preview -- --port 9241 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9241/index.html >/dev/null; then break; fi
+            sleep 1
+          done
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH="$(node -e "const {chromium}=require('./surfaces/webui/node_modules/@playwright/test');process.stdout.write(chromium.executablePath())")" \
+            COWD_E2E_WEB_URL=http://127.0.0.1:9241 \
+            npm --prefix surfaces/webui run test:smoke

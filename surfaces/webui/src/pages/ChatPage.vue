@@ -15,6 +15,7 @@ import {
   FileCheck2,
   Folder,
   Gauge,
+  GitBranch,
   History,
   LoaderCircle,
   Paperclip,
@@ -35,6 +36,7 @@ import {
   type SessionExecutionPolicyResponse,
 } from '../api/client';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
+import { copyTextToClipboard } from '../utils/clipboard';
 import ExecutionActivityTree from '../components/chat/ExecutionActivityTree.vue';
 import ReasoningGroup from '../components/chat/ReasoningGroup.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
@@ -109,6 +111,8 @@ const historyLoadInFlight = ref(false);
 const pendingTailSessionId = ref('');
 const copiedAnswerId = ref('');
 let copiedAnswerResetTimer: ReturnType<typeof setTimeout> | null = null;
+const copiedUserMessageId = ref('');
+let copiedUserMessageResetTimer: ReturnType<typeof setTimeout> | null = null;
 const unboundDraft = ref('');
 const draft = computed({
   get: () => store.activeSessionId ? (chat.active?.draft || '') : unboundDraft.value,
@@ -604,6 +608,7 @@ onBeforeUnmount(() => {
   projections.release(activeExecutionSummaryConsumer);
   projections.release(executionGraphConsumer);
   if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
+  if (copiedUserMessageResetTimer) clearTimeout(copiedUserMessageResetTimer);
 });
 
 function scrollTranscriptToLatest() {
@@ -1340,23 +1345,29 @@ function openAnswerExecutionGraph(turns: ChatTurn[], answerIndex: number) {
 async function copyAnswer(turn: ChatTurn) {
   const content = turn.content.trim();
   if (!content) return;
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(content);
-  } else {
-    const textarea = document.createElement('textarea');
-    textarea.value = content;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand?.('copy');
-    textarea.remove();
-  }
+  await copyTextToClipboard(content);
   copiedAnswerId.value = turn.id;
   if (copiedAnswerResetTimer) clearTimeout(copiedAnswerResetTimer);
   copiedAnswerResetTimer = setTimeout(() => {
     if (copiedAnswerId.value === turn.id) copiedAnswerId.value = '';
   }, 1_500);
+}
+
+async function copyUserMessage(turn: ChatTurn) {
+  const content = turn.content.trim();
+  if (!content) return;
+  await copyTextToClipboard(content);
+  copiedUserMessageId.value = turn.id;
+  if (copiedUserMessageResetTimer) clearTimeout(copiedUserMessageResetTimer);
+  copiedUserMessageResetTimer = setTimeout(() => {
+    if (copiedUserMessageId.value === turn.id) copiedUserMessageId.value = '';
+  }, 1_500);
+}
+
+async function branchCurrentAnswer() {
+  const sessionId = String(store.activeSessionId || '');
+  if (!sessionId || store.branchSessionBusy || turnRunning.value) return;
+  await store.branchSession(sessionId);
 }
 
 async function chooseCommand(command: any) {
@@ -1561,6 +1572,17 @@ function chooseFirstCommand() {
               v-if="turn.role === 'user' || turn.role === 'system'"
               :content="turn.content"
             />
+            <button
+              v-if="turn.role === 'user' || turn.role === 'system'"
+              class="message-copy-link"
+              type="button"
+              :title="copiedUserMessageId === turn.id ? t('common.copied') : t('chat.message.copy')"
+              :aria-label="copiedUserMessageId === turn.id ? t('common.copied') : t('chat.message.copy')"
+              @click="copyUserMessage(turn)"
+            >
+              <Check v-if="copiedUserMessageId === turn.id" :size="13" />
+              <Copy v-else :size="13" />
+            </button>
             <p
               v-if="turn.role === 'user' && turn.submission_error"
               class="turn-submission-error"
@@ -1658,6 +1680,17 @@ function chooseFirstCommand() {
                       {{ item.label }} <strong>{{ formatTokenQuantity(item.value) }}</strong>
                     </span>
                     <span class="answer-actions">
+                      <button
+                        class="answer-branch-link"
+                        type="button"
+                        :disabled="turnRunning || store.branchSessionBusy"
+                        :title="store.branchSessionBusy ? t('chat.answer.branching') : t('chat.answer.branch')"
+                        :aria-label="store.branchSessionBusy ? t('chat.answer.branching') : t('chat.answer.branch')"
+                        :aria-busy="store.branchSessionBusy ? 'true' : 'false'"
+                        @click="branchCurrentAnswer"
+                      >
+                        <GitBranch :size="13" />
+                      </button>
                       <button
                         v-if="exchangeExecutionEntry(chat.active?.turns || [], index)?.graph_id"
                         class="answer-execution-link"

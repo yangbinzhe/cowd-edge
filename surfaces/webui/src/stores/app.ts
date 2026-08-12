@@ -298,6 +298,7 @@ export const useAppStore = defineStore('app', () => {
   const sessionLoadingMore = ref(false);
   const selectedSessionIds = ref<string[]>([]);
   const sessionBulkDeleteProgress = ref({ active: false, done: 0, total: 0 });
+  const branchSessionBusy = ref(false);
   const openTurnActivity = ref<Record<string, boolean>>({});
   const pinnedSessionIds = ref<string[]>(readStoredArray(PINNED_SESSION_KEY));
   const sessionViewedCounts = ref<Record<string, number>>(readStoredRecord(VIEWED_SESSION_KEY));
@@ -930,17 +931,31 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function branchSession(sessionId: string) {
-    const receipt = await api.branchSession(sessionId);
-    if (receipt.ok && receipt.data) {
-      const next = receipt.data as SessionSummary;
-      sessions.value = [next, ...sessions.value.filter((item) => item.id !== next.id)];
-      activeSessionId.value = next.id;
-      await loadMessages(next.id);
-    } else {
-      selectedActivity.value = receipt as any;
-      companionTab.value = 'inspector';
+    if (branchSessionBusy.value) {
+      return {
+        ok: false,
+        endpoint: `/api/sessions/${encodeURIComponent(sessionId)}/branch`,
+        method: 'POST',
+        error: 'branch already in flight',
+        retryable: true,
+      };
     }
-    return receipt;
+    branchSessionBusy.value = true;
+    try {
+      const receipt = await api.branchSession(sessionId);
+      if (receipt.ok && receipt.data) {
+        const next = receipt.data as SessionSummary;
+        sessions.value = [next, ...sessions.value.filter((item) => item.id !== next.id)];
+        activeSessionId.value = next.id;
+        await loadMessages(next.id);
+      } else {
+        selectedActivity.value = receipt as any;
+        companionTab.value = 'inspector';
+      }
+      return receipt;
+    } finally {
+      branchSessionBusy.value = false;
+    }
   }
 
   async function compactSession(sessionId: string) {
@@ -2045,6 +2060,7 @@ export const useAppStore = defineStore('app', () => {
     sessionAttention,
     toggleSessionPin,
     revealMoreSessions,
+    branchSessionBusy,
     branchSession,
     compactSession,
     loadActivity,

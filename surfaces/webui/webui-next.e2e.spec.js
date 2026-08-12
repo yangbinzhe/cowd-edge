@@ -1966,3 +1966,90 @@ test('all shell controls remain interactive while a conversation is running', as
   await page.getByRole('button', { name: /Stop|停止/ }).click();
   await expect(page.locator('.modal-scrim')).toHaveCount(0);
 });
+
+test('copies sent messages and forks a new session from a final answer', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await installOfflineGatewayContract(page);
+  const sourceSession = 'copy-fork-source';
+  const branchSession = 'copy-fork-branch';
+  const messages = [
+    { id: 'message-1', role: 'user', content: 'copy this exact prompt', sequence: 1 },
+    { id: 'message-2', role: 'assistant', content: 'final answer ready to fork', sequence: 2 },
+  ];
+  let branchPosts = 0;
+  const json = (route, body, status = 200) => route.fulfill({
+    status,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+  await page.route(/^https?:\/\/[^/]+\/api\/sessions/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    if (path === '/api/sessions' && request.method() === 'GET') {
+      return json(route, {
+        sessions: [{
+          id: sourceSession,
+          title: 'Copy and fork source',
+          status: 'idle',
+          model: 'browser-test',
+          message_count: 2,
+          updated_at: '2026-08-05T00:00:00Z',
+        }],
+      });
+    }
+    if (path === `/api/sessions/${sourceSession}/messages` && request.method() === 'GET') {
+      return json(route, { session_id: sourceSession, messages, total: 2, offset: 0, has_more: false });
+    }
+    if (path === `/api/sessions/${branchSession}/messages` && request.method() === 'GET') {
+      return json(route, { session_id: branchSession, messages, total: 2, offset: 0, has_more: false });
+    }
+    if (path === `/api/sessions/${sourceSession}/history-index`) {
+      return json(route, {
+        schema_version: 1,
+        session_id: sourceSession,
+        projection_generation: 0,
+        durable_cursor: 0,
+        event_cursor: 0,
+        history_revision: 0,
+        total_messages: 2,
+        total_bytes: 0,
+        index_generation: 0,
+        index_card_count: 0,
+        index_complete: true,
+        recovery_state: 'ready',
+        recent_metadata: [],
+        cards: [],
+      });
+    }
+    if (path === `/api/sessions/${sourceSession}/branch` && request.method() === 'POST') {
+      branchPosts += 1;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return json(route, {
+        id: branchSession,
+        title: 'Copy and fork source (branch)',
+        parent_session_id: sourceSession,
+        status: 'idle',
+        message_count: 2,
+      });
+    }
+    return route.fallback();
+  });
+
+  await page.goto('/index.html#/chat');
+  const copyLink = page.locator('.turn[data-role="user"] .message-copy-link');
+  await expect(copyLink).toBeVisible();
+  await copyLink.click();
+  await expect(copyLink).toHaveAttribute('title', 'Copied');
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText().catch(() => '')))
+    .toBe('copy this exact prompt');
+
+  const branchLink = page.locator('.answer-branch-link');
+  await expect(branchLink).toBeVisible();
+  await expect(branchLink).toBeEnabled();
+  await branchLink.click();
+  await branchLink.click({ force: true });
+  await expect(page.locator('.session-row.active')).toContainText('Copy and fork source (branch)');
+  await expect(page.locator('.conversation-answer')).toContainText('final answer ready to fork');
+  expect(branchPosts).toBe(1);
+});
