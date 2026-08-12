@@ -1972,9 +1972,9 @@ test('copies sent messages and forks a new session from a final answer', async (
   await installOfflineGatewayContract(page);
   const sourceSession = 'copy-fork-source';
   const branchSession = 'copy-fork-branch';
-  const messages = [
-    { id: 'message-1', role: 'user', content: 'copy this exact prompt', sequence: 1 },
-    { id: 'message-2', role: 'assistant', content: 'final answer ready to fork', sequence: 2 },
+  const messagesFor = (sessionId) => [
+    { id: 'message-1', session_id: sessionId, role: 'user', content: 'copy this exact prompt', sequence: 1 },
+    { id: 'message-2', session_id: sessionId, role: 'assistant', content: 'final answer ready to fork', sequence: 2 },
   ];
   let branchPosts = 0;
   const json = (route, body, status = 200) => route.fulfill({
@@ -1999,10 +1999,10 @@ test('copies sent messages and forks a new session from a final answer', async (
       });
     }
     if (path === `/api/sessions/${sourceSession}/messages` && request.method() === 'GET') {
-      return json(route, { session_id: sourceSession, messages, total: 2, offset: 0, has_more: false });
+      return json(route, { session_id: sourceSession, messages: messagesFor(sourceSession), total: 2, offset: 0, has_more: false });
     }
     if (path === `/api/sessions/${branchSession}/messages` && request.method() === 'GET') {
-      return json(route, { session_id: branchSession, messages, total: 2, offset: 0, has_more: false });
+      return json(route, { session_id: branchSession, messages: messagesFor(branchSession), total: 2, offset: 0, has_more: false });
     }
     if (path === `/api/sessions/${sourceSession}/history-index`) {
       return json(route, {
