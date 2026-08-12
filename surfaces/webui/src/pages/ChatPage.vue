@@ -1601,10 +1601,6 @@ function chooseFirstCommand() {
             class="turn"
             :data-role="turn.role"
           >
-            <MarkdownBlock
-              v-if="turn.role === 'user' || turn.role === 'system'"
-              :content="turn.content"
-            />
             <span
               v-if="userTurnAcceptedBadge(turn)"
               class="turn-input-badge"
@@ -1615,6 +1611,10 @@ function chooseFirstCommand() {
               <Clock v-else-if="userTurnAcceptedBadge(turn)!.key === 'queued'" :size="13" />
               <Check v-else :size="13" />
             </span>
+            <MarkdownBlock
+              v-if="turn.role === 'user' || turn.role === 'system'"
+              :content="turn.content"
+            />
             <button
               v-if="turn.role === 'user' || turn.role === 'system'"
               class="message-copy-link"
