@@ -47,6 +47,11 @@ import {
   graphLayoutSignature,
   semanticToolColumnLayoutEdges,
 } from './graphRuntime';
+import {
+  restorableGraphViewport,
+  saveGraphViewport,
+  type SavedGraphViewport,
+} from './graphViewport';
 
 const props = withDefaults(defineProps<{
   model: GraphViewModel;
@@ -93,6 +98,7 @@ const laidOutNodes = ref<any[]>([]);
 let layoutEpoch = 0;
 const graphNodeLimit = 220;
 const layoutCache = new Map<string, Array<{ id: string; x: number; y: number }>>();
+const savedViewports = new Map<string, SavedGraphViewport>();
 let lastLayoutIdentity = '';
 let fitFrame = 0;
 let fitTimer = 0;
@@ -100,9 +106,21 @@ let layoutTimer = 0;
 let resizeObserver: ResizeObserver | null = null;
 let lastObservedSize = '';
 const userViewportChanged = ref(false);
+let directionChanged = false;
 
 function onUserViewport() {
   userViewportChanged.value = true;
+  persistCurrentViewport();
+}
+
+function persistCurrentViewport() {
+  const viewport = flow.value?.getViewport?.();
+  saveGraphViewport(
+    savedViewports,
+    props.model.id,
+    viewport,
+    topologySignature.value,
+  );
 }
 
 const nodeDescriptionKeys: Record<string, string> = {
@@ -363,10 +381,28 @@ async function layout() {
   });
   await nextTick();
   const layoutIdentity = `${props.model.id}:${direction.value}`;
-  if (lastLayoutIdentity === layoutIdentity && previousViewport) flow.value?.setViewport?.(previousViewport, { duration: 0 });
-  else {
+  if (lastLayoutIdentity === layoutIdentity && previousViewport) {
+    flow.value?.setViewport?.(previousViewport, { duration: 0 });
+  } else if (directionChanged) {
+    directionChanged = false;
     userViewportChanged.value = false;
     scheduleFit(flow.value, true);
+  } else {
+    const saved = restorableGraphViewport(
+      savedViewports,
+      props.model.id,
+      topologySignature.value,
+    );
+    if (saved && !showList.value) {
+      flow.value?.setViewport?.(
+        { x: saved.x, y: saved.y, zoom: saved.zoom },
+        { duration: 0 },
+      );
+      userViewportChanged.value = true;
+    } else {
+      userViewportChanged.value = false;
+      scheduleFit(flow.value, true);
+    }
   }
   lastLayoutIdentity = layoutIdentity;
 }
@@ -394,6 +430,7 @@ function emitViewState() {
 
 function toggleDirection() {
   userViewportChanged.value = false;
+  directionChanged = true;
   direction.value = nextDirection.value;
 }
 
@@ -527,6 +564,7 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key === '0') {
     userViewportChanged.value = false;
     flow.value?.fitView?.({ padding: 0.2 });
+    persistCurrentViewport();
   }
   if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
     event.preventDefault();
@@ -708,7 +746,7 @@ onBeforeUnmount(() => {
       <Panel position="top-right" class="execution-graph-controls">
         <button type="button" :title="t('runtime.execution.canvas.zoomIn')" :aria-label="t('runtime.execution.canvas.zoomIn')" @click="userViewportChanged = true; flow?.zoomIn()"><ZoomIn :size="15" /></button>
         <button type="button" :title="t('runtime.execution.canvas.zoomOut')" :aria-label="t('runtime.execution.canvas.zoomOut')" @click="userViewportChanged = true; flow?.zoomOut()"><ZoomOut :size="15" /></button>
-        <button type="button" :title="t('runtime.execution.canvas.fit')" :aria-label="t('runtime.execution.canvas.fit')" @click="userViewportChanged = false; flow?.fitView({ padding: 0.2 })"><Scan :size="15" /></button>
+        <button type="button" :title="t('runtime.execution.canvas.fit')" :aria-label="t('runtime.execution.canvas.fit')" @click="userViewportChanged = false; flow?.fitView({ padding: 0.2 }); persistCurrentViewport()"><Scan :size="15" /></button>
       </Panel>
       <Panel v-if="!compact" position="bottom-right" class="graph-minimap" :aria-label="t('graph.minimap.label')">
         <svg viewBox="0 0 160 100" role="img">

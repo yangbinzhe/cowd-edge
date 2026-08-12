@@ -75,6 +75,17 @@ function formatTime(value: unknown) {
   return timestamp > 0 ? new Date(timestamp).toLocaleTimeString() : '';
 }
 
+function commandCategory(activity: ActivityView) {
+  const raw = (activity.raw || {}) as Record<string, any>;
+  const payload = raw.payload || {};
+  return String(
+    payload.command_category
+    || raw.command_category
+    || raw.tool_invocation?.command_category
+    || '',
+  ).trim();
+}
+
 </script>
 
 <template>
@@ -109,6 +120,9 @@ function formatTime(value: unknown) {
           :class="{ 'has-tool-summary': activity.tool_summary }"
         >
           <strong>{{ activity.title }}</strong>
+          <small v-if="commandCategory(activity)" class="execution-tool-category">
+            {{ commandCategory(activity) }}
+          </small>
           <span v-if="activity.tool_summary" class="execution-tool-summary">
             <small>{{ t('chat.activity.tools.executed') }} {{ activity.tool_summary.executed }}/{{ activity.tool_summary.total }}</small>
             <small class="success"><CheckCircle2 :size="11" />{{ activity.tool_summary.succeeded }}</small>
@@ -205,6 +219,17 @@ function formatTime(value: unknown) {
 .execution-activity-copy { min-width: 0; display: grid; gap: 2px; }
 .execution-activity-copy.has-tool-summary { display: flex; align-items: center; gap: 8px; overflow: hidden; }
 .execution-activity-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.execution-activity-copy .execution-tool-category {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
 .execution-activity-copy small {
   display: -webkit-box;
   overflow: hidden;

@@ -474,4 +474,81 @@ describe('WebUI multiplex live transport', () => {
     expect(subscriptionApi.create).toHaveBeenCalledTimes(2);
     lease.close();
   });
+
+  it('uses a tab-nonce surface instance for live subscriptions (C6)', async () => {
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const subscriptionApi = mockSubscriptionApi();
+    const lease = openLiveSource(
+      { kind: 'session', id: 'session-tab-nonce' },
+      { envelope: vi.fn() },
+    );
+    await vi.waitFor(() => expect(subscriptionApi.create).toHaveBeenCalledTimes(1));
+    const request = subscriptionApi.create.mock.calls[0][0];
+    expect(request.surface_instance).toMatch(/:tab:/);
+    expect(request.surface_instance).not.toBe('webui:test');
+    lease.close();
+  });
+
+  it('recovers authorization automatically at most once per browser session (F2)', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const subscriptionApi = mockSubscriptionApi();
+    const reload = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { ...window.location, reload },
+      writable: true,
+    });
+    globalThis.sessionStorage?.removeItem('cowd.auth_recovery_used');
+
+    const source = openSessionLiveSource('session-auth-recovery', 0);
+    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
+    const stream = FakeEventSource.instances[0];
+    const ready = {
+      schema_version: 1,
+      subscription_id: 'live-test',
+      subscription_revision: subscriptionApi.revision(),
+      source_kind: 'subscription',
+      source_id: 'live-test',
+      detail_scope: 'summary',
+      delivery_class: 'snapshot_reconstructable',
+      source_health: 'baseline',
+      event: 'subscription.ready',
+      payload: { revision: subscriptionApi.revision() },
+    };
+    stream.emit(ready);
+    stream.emit({
+      schema_version: 1,
+      subscription_id: 'live-test',
+      subscription_revision: subscriptionApi.revision(),
+      source_kind: 'session',
+      source_id: 'session-auth-recovery',
+      detail_scope: 'summary',
+      delivery_class: 'snapshot_reconstructable',
+      source_health: 'revoked',
+      event: 'source.authorization_revoked',
+      payload: { reason: 'credential epoch changed' },
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(globalThis.sessionStorage?.getItem('cowd.auth_recovery_used')).toBe('1');
+
+    // Pass the in-memory throttle so the sessionStorage gate is the only
+    // remaining guard.
+    await vi.advanceTimersByTimeAsync(61_000);
+    stream.emit({
+      schema_version: 1,
+      subscription_id: 'live-test',
+      subscription_revision: subscriptionApi.revision(),
+      source_kind: 'session',
+      source_id: 'session-auth-recovery',
+      detail_scope: 'summary',
+      delivery_class: 'snapshot_reconstructable',
+      source_health: 'revoked',
+      event: 'source.authorization_revoked',
+      payload: { reason: 'principal expired' },
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(reload).toHaveBeenCalledTimes(1);
+    source.close();
+  });
 });

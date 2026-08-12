@@ -135,6 +135,7 @@ function semanticDetail(
   }
 
   if (domain === 'tool') {
+    const category = firstText(payload.command_category);
     const output = firstText(
       payload.output_preview,
       payload.model_visible_preview,
@@ -150,7 +151,7 @@ function semanticDetail(
       payload.full_output_ref ? `evidence ${payload.full_output_ref}` : '',
       Number(payload.context_saved_tokens) > 0 ? `${payload.context_saved_tokens} context tokens saved` : '',
     ].filter(Boolean).join(' · ');
-    return [output, metrics].filter(Boolean).join(' · ') || humanize(kind);
+    return [category, output, metrics].filter(Boolean).join(' · ') || humanize(kind);
   }
 
   switch (kind) {

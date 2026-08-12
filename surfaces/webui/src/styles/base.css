@@ -245,6 +245,7 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .turn-blocked-recovery > div { min-width: 0; }
 .turn-blocked-recovery strong { font-size: 12px; }
 .turn-blocked-recovery p { margin: 3px 0 6px; color: var(--text-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.turn-blocked-recovery .turn-blocked-hints { margin: 0 0 6px; padding: 0 0 0 16px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .turn-blocked-recovery button { min-height: 26px; border: 1px solid var(--border-2); border-radius: 6px; background: var(--surface); color: var(--text); padding: 3px 10px; font-size: 12px; cursor: pointer; }
 .turn[data-role="system"] .markdown-body { background: color-mix(in srgb, var(--info) 8%, var(--surface)); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; color: var(--text-muted); }
 .turn[data-role="tool"] .markdown-body { background: var(--surface); border-left: 2px solid var(--border-2); padding: 7px 10px; color: var(--text-muted); }

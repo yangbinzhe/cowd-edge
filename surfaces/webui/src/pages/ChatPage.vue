@@ -40,6 +40,7 @@ import ReasoningGroup from '../components/chat/ReasoningGroup.vue';
 import ExecutionGraphCanvas from '../components/mission/ExecutionGraphCanvas.vue';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { displayStatus } from '../i18n/domain/status';
+import { blockedRecoveryForTurn } from '../utils/blockedRecovery';
 import type {
   ActivityEvent,
   ChatTurn,
@@ -910,24 +911,6 @@ function openFailedUserExecution(turns: ChatTurn[], index: number) {
   if (graphId) store.openChatExecutionGraph(graphId);
 }
 
-function blockedRecoveryForTurn(turns: ChatTurn[], index: number) {
-  const turn = turns[index];
-  const text = String(turn?.content || turn?.submission_error || '');
-  const markers = [
-    'semantic_compile_failed',
-    'recovery_hints',
-    'live subscription count exceeded',
-    'approval_skip_not_allowed_for_write',
-    'blocked',
-  ];
-  const marker = markers.find((candidate) => text.includes(candidate));
-  if (!marker) return null;
-  return {
-    marker,
-    reason: text.length > 320 ? `${text.slice(0, 320)}…` : text,
-  };
-}
-
 async function retryBlockedTurn(turns: ChatTurn[], index: number) {
   const sessionId = String(store.activeSessionId || '');
   if (!sessionId) return;
@@ -1585,14 +1568,25 @@ function chooseFirstCommand() {
               </button>
             </div>
             <div
-              v-if="blockedRecoveryForTurn(chat.active?.turns || [], index)"
+              v-if="blockedRecoveryForTurn(turn)"
               class="turn-blocked-recovery"
               role="alert"
             >
               <CircleAlert :size="14" />
               <div>
                 <strong>{{ t('chat.execution.blockedTitle') }}</strong>
-                <p>{{ blockedRecoveryForTurn(chat.active?.turns || [], index)?.reason }}</p>
+                <p>{{ blockedRecoveryForTurn(turn)?.reason }}</p>
+                <ul
+                  v-if="blockedRecoveryForTurn(turn)?.recoveryHints?.length"
+                  class="turn-blocked-hints"
+                >
+                  <li
+                    v-for="hint in blockedRecoveryForTurn(turn)?.recoveryHints"
+                    :key="hint"
+                  >
+                    {{ hint }}
+                  </li>
+                </ul>
                 <button
                   type="button"
                   :disabled="turnRunning"
