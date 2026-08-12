@@ -1438,12 +1438,6 @@ function userTurnAcceptedBadge(turn: ChatTurn) {
   return null;
 }
 
-function exchangeAcceptedBadge(turns: ChatTurn[], answerIndex: number) {
-  const start = exchangeStartIndex(turns, answerIndex);
-  const userTurn = turns.slice(0, start).reverse().find((turn) => turn.role === 'user');
-  return userTurn ? userTurnAcceptedBadge(userTurn) : null;
-}
-
 async function chooseCommand(command: any) {
   const name = commandName(command);
   draft.value = `${name} `;
@@ -1654,8 +1648,7 @@ function chooseFirstCommand() {
                 :aria-label="userTurnAcceptedBadge(turn)!.label"
               >
                 <Zap v-if="userTurnAcceptedBadge(turn)!.key === 'applied'" :size="13" />
-                <LoaderCircle v-else-if="userTurnAcceptedBadge(turn)!.key === 'queued'" :size="13" />
-                <Check v-else :size="13" />
+                <LoaderCircle v-else :size="13" />
               </span>
               <button
                 class="message-copy-link"
@@ -1765,16 +1758,6 @@ function chooseFirstCommand() {
                       {{ item.label }} <strong>{{ formatTokenQuantity(item.value) }}</strong>
                     </span>
                     <span class="answer-actions">
-                      <span
-                        v-if="exchangeAcceptedBadge(chat.active?.turns || [], index)"
-                        class="turn-input-badge"
-                        :title="exchangeAcceptedBadge(chat.active?.turns || [], index)!.label"
-                        :aria-label="exchangeAcceptedBadge(chat.active?.turns || [], index)!.label"
-                      >
-                        <Zap v-if="exchangeAcceptedBadge(chat.active?.turns || [], index)!.key === 'applied'" :size="13" />
-                        <LoaderCircle v-else-if="exchangeAcceptedBadge(chat.active?.turns || [], index)!.key === 'queued'" :size="13" />
-                        <Check v-else :size="13" />
-                      </span>
                       <button
                         class="answer-branch-link"
                         type="button"
