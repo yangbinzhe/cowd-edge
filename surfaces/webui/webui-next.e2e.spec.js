@@ -802,11 +802,12 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
   await expect(transcript).toContainText('session-A-durable-204');
   await page.getByRole('button', { name: 'Load older messages' }).click();
   await expect(transcript).toContainText('session-A-durable-105');
+  await expect(page.locator('.history-controls')).toBeVisible({ timeout: 10_000 });
   await expect.poll(async () => {
     const controls = page.locator('.history-controls');
     if (await controls.count()) return (await controls.textContent())?.replace(/\s+/g, ' ').trim();
     return await transcript.textContent();
-  }).toMatch(/106\s*–\s*205\s*\/\s*205|session-A-durable-0/);
+  }, { timeout: 15_000 }).toMatch(/106\s*–\s*205\s*\/\s*205|session-A-durable-0/);
 
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
   await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to B');

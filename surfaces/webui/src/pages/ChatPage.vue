@@ -606,6 +606,17 @@ watch(
   },
   { immediate: true },
 );
+watch(
+  [() => store.activeSessionId, () => chat.active?.pending, () => chat.active?.streamTurnId],
+  ([sessionId]) => {
+    // Real-time status: whenever the active turn settles or changes identity,
+    // refresh the durable input projection so queued->accepted->consumed
+    // transitions are visible without a full page reload.
+    if (sessionId && !chat.active?.pending) {
+      void store.refreshSessionInputs(sessionId);
+    }
+  },
+);
 onBeforeUnmount(() => {
   projections.release(activeExecutionSummaryConsumer);
   projections.release(executionGraphConsumer);
@@ -1427,6 +1438,12 @@ function userTurnAcceptedBadge(turn: ChatTurn) {
   return null;
 }
 
+function exchangeAcceptedBadge(turns: ChatTurn[], answerIndex: number) {
+  const start = exchangeStartIndex(turns, answerIndex);
+  const userTurn = turns.slice(0, start).reverse().find((turn) => turn.role === 'user');
+  return userTurn ? userTurnAcceptedBadge(userTurn) : null;
+}
+
 async function chooseCommand(command: any) {
   const name = commandName(command);
   draft.value = `${name} `;
@@ -1625,31 +1642,32 @@ function chooseFirstCommand() {
             class="turn"
             :data-role="turn.role"
           >
-            <span
-              v-if="userTurnAcceptedBadge(turn)"
-              class="turn-input-badge"
-              :title="userTurnAcceptedBadge(turn)!.label"
-              :aria-label="userTurnAcceptedBadge(turn)!.label"
-            >
-              <Zap v-if="userTurnAcceptedBadge(turn)!.key === 'applied'" :size="13" />
-              <Clock v-else-if="userTurnAcceptedBadge(turn)!.key === 'queued'" :size="13" />
-              <Check v-else :size="13" />
-            </span>
             <MarkdownBlock
               v-if="turn.role === 'user' || turn.role === 'system'"
               :content="turn.content"
             />
-            <button
-              v-if="turn.role === 'user' || turn.role === 'system'"
-              class="message-copy-link"
-              type="button"
-              :title="copiedUserMessageId === turn.id ? t('common.copied') : t('chat.message.copy')"
-              :aria-label="copiedUserMessageId === turn.id ? t('common.copied') : t('chat.message.copy')"
-              @click="copyUserMessage(turn)"
-            >
-              <Check v-if="copiedUserMessageId === turn.id" :size="13" />
-              <Copy v-else :size="13" />
-            </button>
+            <div v-if="turn.role === 'user' || turn.role === 'system'" class="message-actions">
+              <span
+                v-if="userTurnAcceptedBadge(turn)"
+                class="turn-input-badge"
+                :title="userTurnAcceptedBadge(turn)!.label"
+                :aria-label="userTurnAcceptedBadge(turn)!.label"
+              >
+                <Zap v-if="userTurnAcceptedBadge(turn)!.key === 'applied'" :size="13" />
+                <LoaderCircle v-else-if="userTurnAcceptedBadge(turn)!.key === 'queued'" :size="13" />
+                <Check v-else :size="13" />
+              </span>
+              <button
+                class="message-copy-link"
+                type="button"
+                :title="copiedUserMessageId === turn.id ? t('common.copied') : t('chat.message.copy')"
+                :aria-label="copiedUserMessageId === turn.id ? t('common.copied') : t('chat.message.copy')"
+                @click="copyUserMessage(turn)"
+              >
+                <Check v-if="copiedUserMessageId === turn.id" :size="13" />
+                <Copy v-else :size="13" />
+              </button>
+            </div>
             <p
               v-if="turn.role === 'user' && turn.submission_error"
               class="turn-submission-error"
@@ -1747,6 +1765,16 @@ function chooseFirstCommand() {
                       {{ item.label }} <strong>{{ formatTokenQuantity(item.value) }}</strong>
                     </span>
                     <span class="answer-actions">
+                      <span
+                        v-if="exchangeAcceptedBadge(chat.active?.turns || [], index)"
+                        class="turn-input-badge"
+                        :title="exchangeAcceptedBadge(chat.active?.turns || [], index)!.label"
+                        :aria-label="exchangeAcceptedBadge(chat.active?.turns || [], index)!.label"
+                      >
+                        <Zap v-if="exchangeAcceptedBadge(chat.active?.turns || [], index)!.key === 'applied'" :size="13" />
+                        <LoaderCircle v-else-if="exchangeAcceptedBadge(chat.active?.turns || [], index)!.key === 'queued'" :size="13" />
+                        <Check v-else :size="13" />
+                      </span>
                       <button
                         class="answer-branch-link"
                         type="button"
