@@ -1,5 +1,6 @@
 import { reactive, ref } from 'vue';
 import { api, ApiWriteError, claimWebuiObserverId } from '../api/client';
+import { buildLiveSurfaceInstance } from '../utils/surfaceIdentity';
 
 export type LiveSourceKind = 'session' | 'execution' | 'mission';
 export type LiveDetailScope = 'summary' | 'full';
@@ -133,15 +134,6 @@ let pendingCreate: PendingCreate | null = null;
 let subscriptionMutationInFlight = false;
 let pendingAcknowledgementEnvelopes: LiveEnvelope[] = [];
 let activeEnvelopeConsumer: ((envelope: LiveEnvelope) => void) | null = null;
-// C6: each tab owns a document-local nonce. The writer lease
-// (`x-cowd-observer-id`) stays per browser session, while the live
-// surface_instance becomes `observerId:tab:<nonce>` so parallel tabs never
-// share one subscription counter and cannot trigger the 429 live-cap ceiling.
-const TAB_NONCE = (() => {
-  const cryptoApi = globalThis.crypto;
-  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-})();
 
 export function parseLiveEnvelope(data: string): LiveEnvelope {
   const envelope = JSON.parse(data) as LiveEnvelope;
@@ -432,7 +424,7 @@ async function synchronize() {
     try {
       subscriptionHealth.state = 'syncing';
       const observerId = await claimWebuiObserverId();
-      const surfaceInstance = `${observerId}:tab:${TAB_NONCE}`;
+      const surfaceInstance = buildLiveSurfaceInstance(observerId);
       if (!subscription && pendingDelete) {
         const stale = pendingDelete;
         try {
