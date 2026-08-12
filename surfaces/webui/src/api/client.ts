@@ -1344,9 +1344,12 @@ export const api = {
     `/api/sessions/${encodeURIComponent(sessionId)}`,
     { id: sessionId },
   ),
-  createSession: (model?: string) => write<SessionSummary>('/api/sessions', {
+  createSession: (model?: string, executionPolicyPreset?: SessionExecutionPolicyPreset) => write<SessionSummary>('/api/sessions', {
     method: 'POST',
-    body: JSON.stringify({ model }),
+    body: JSON.stringify({
+      model,
+      ...(executionPolicyPreset ? { execution_policy_preset: executionPolicyPreset } : {}),
+    }),
   }),
   deleteSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' }),
   branchSession: (sessionId: string) => writeWithReceipt<BranchSessionReceipt>(`/api/sessions/${encodeURIComponent(sessionId)}/branch`, {
@@ -1394,6 +1397,17 @@ export const api = {
     {
       method: 'PUT',
       body: JSON.stringify({ preset, expected_revision: expectedRevision }),
+    },
+  ),
+  executionPolicyDefaults: () => read(
+    '/api/sessions/execution-policy-defaults',
+    {},
+  ),
+  updateExecutionPolicyDefaults: (permissionMode: string, approvalProfile: string) => write(
+    '/api/sessions/execution-policy-defaults',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ permission_mode: permissionMode, approval_profile: approvalProfile }),
     },
   ),
   sessionHistoryIndex: (sessionId: string, metadataLimit = 128, cardLimit = 64) => read<SessionHistoryIndexProjection>(

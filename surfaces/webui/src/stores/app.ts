@@ -753,7 +753,7 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function createSession(): Promise<SessionSummary> {
+  async function createSession(executionPolicyPreset?: any): Promise<SessionSummary> {
     if (sessionCreateFlight) return sessionCreateFlight;
     const previousSessionId = activeSessionId.value;
     const creationGeneration = ++activeSessionLoadGeneration;
@@ -764,7 +764,10 @@ export const useAppStore = defineStore('app', () => {
     sessionCreateFlight = (async () => {
       let session: SessionSummary;
       try {
-        session = await api.createSession(selectedModel.value || undefined);
+        session = await api.createSession(
+          selectedModel.value || undefined,
+          executionPolicyPreset,
+        );
       } catch (error) {
         if (
           activeSessionLoadGeneration === creationGeneration

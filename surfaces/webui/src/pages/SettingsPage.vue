@@ -29,6 +29,9 @@ const theme = ref(document.documentElement.dataset.theme || localStorage.getItem
 const approvalDraft = ref('');
 const approvalPruneDays = ref(3);
 const approvalPruneResult = ref('');
+const executionPolicyDefaults = ref<any>(null);
+const defaultPermissionMode = ref('workspace-write');
+const defaultApprovalProfile = ref('balanced');
 const origin = computed(() => location.origin);
 const accessModeLabels = {
   internal: 'settings.access.internal',
@@ -247,6 +250,9 @@ watch([activeSettingsSection, () => store.authorizationState], ([section, author
     && !forceCredentialReplacement.value
     && !authResult.value
   ) void verifyAuth();
+  if (section === 'policy' && authorizationState === 'ready') {
+    void loadExecutionPolicyDefaults();
+  }
 }, { immediate: true });
 
 async function run(label: string, action: () => Promise<unknown>) {
@@ -337,6 +343,25 @@ async function pruneOldApprovals() {
     const days = Math.max(1, Math.min(365, Number(approvalPruneDays.value) || 3));
     const receipt = await api.approvalPrune(days, 'pruned from Settings');
     approvalPruneResult.value = `pruned=${receipt?.pruned ?? 0}, failed=${receipt?.failed ?? 0}`;
+  });
+}
+
+async function loadExecutionPolicyDefaults() {
+  try {
+    executionPolicyDefaults.value = await api.executionPolicyDefaults();
+    defaultPermissionMode.value = String(executionPolicyDefaults.value?.permission_mode || 'workspace-write');
+    defaultApprovalProfile.value = String(executionPolicyDefaults.value?.approval_profile || 'balanced');
+  } catch {
+    // Defaults remain editable; a failed load only leaves the current values.
+  }
+}
+
+async function saveExecutionPolicyDefaults() {
+  await run('execution-policy-defaults', async () => {
+    executionPolicyDefaults.value = await api.updateExecutionPolicyDefaults(
+      defaultPermissionMode.value,
+      defaultApprovalProfile.value,
+    );
   });
 }
 
@@ -659,6 +684,24 @@ function selectSettingsSection(id: string) {
             {{ t('settings.policy.prune.action') }}
           </button>
           <span v-if="approvalPruneResult" class="approval-prune-result">{{ approvalPruneResult }}</span>
+        </div>
+        <div class="execution-policy-defaults">
+          <h3>{{ t('settings.policy.defaults.title') }}</h3>
+          <label for="default-permission-mode">{{ t('settings.policy.defaults.permission') }}</label>
+          <select id="default-permission-mode" v-model="defaultPermissionMode">
+            <option value="read-only">read-only</option>
+            <option value="workspace-write">workspace-write</option>
+            <option value="danger-full-access">danger-full-access</option>
+          </select>
+          <label for="default-approval-profile">{{ t('settings.policy.defaults.approval') }}</label>
+          <select id="default-approval-profile" v-model="defaultApprovalProfile">
+            <option value="supervised">supervised</option>
+            <option value="balanced">balanced</option>
+            <option value="autonomous">autonomous</option>
+          </select>
+          <button class="ghost-action" type="button" :disabled="!!busyAction" @click="saveExecutionPolicyDefaults">
+            {{ t('settings.policy.defaults.save') }}
+          </button>
         </div>
         <p v-if="store.settingsSavedAt" class="save-state">{{ t('page.settings.approval.savedAt', { time: store.settingsSavedAt }) }}</p>
       </section>

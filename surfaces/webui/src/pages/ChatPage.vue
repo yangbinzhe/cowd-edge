@@ -81,6 +81,7 @@ const executionPolicyOpen = ref(false);
 const executionPolicyBusy = ref(false);
 const executionPolicyError = ref('');
 const executionPolicy = ref<SessionExecutionPolicyResponse | null>(null);
+const draftExecutionPolicyPreset = ref<SessionExecutionPolicyPreset>('supervised');
 const executionPolicyPresets: SessionExecutionPolicyPreset[] = [
   'cautious',
   'supervised',
@@ -377,10 +378,18 @@ const activeExecutionPolicyPreset = computed<ExecutionPolicyDisplayPreset>(() =>
   if (response.matched_preset === null) return 'custom';
   return response.matched_preset || response.policy?.autonomy_profile || 'unavailable';
 });
+const displayExecutionPolicyPreset = computed<ExecutionPolicyDisplayPreset>(() => (
+  store.activeSessionId
+    ? activeExecutionPolicyPreset.value
+    : draftExecutionPolicyPreset.value
+));
 const canUpdateExecutionPolicy = computed(() => (
   !!store.activeSessionId
   && chat.active?.attachmentRole === 'writer'
   && chat.active?.writable === true
+));
+const canChooseExecutionPolicy = computed(() => (
+  canUpdateExecutionPolicy.value || !store.activeSessionId
 ));
 const attachmentLabel = computed(() => {
   if (chat.active?.attachmentRole === 'writer') return t('page.chat.attachment.writer');
@@ -439,7 +448,15 @@ async function loadSessionExecutionPolicy(sessionId = store.activeSessionId) {
 async function updateExecutionPolicy(preset: SessionExecutionPolicyPreset) {
   const sessionId = store.activeSessionId;
   const revision = Number(executionPolicy.value?.policy?.revision || 0);
-  if (!sessionId || !revision || executionPolicyBusy.value || !canUpdateExecutionPolicy.value) return;
+  if (!sessionId) {
+    // P0: before a session exists, the selection becomes the creation-time
+    // policy for the next session instead of mutating an active one.
+    draftExecutionPolicyPreset.value = preset;
+    executionPolicyError.value = '';
+    executionPolicyOpen.value = false;
+    return;
+  }
+  if (!revision || executionPolicyBusy.value || !canUpdateExecutionPolicy.value) return;
   executionPolicyBusy.value = true;
   executionPolicyError.value = '';
   try {
@@ -809,7 +826,9 @@ async function submit() {
     // unrelated global startup work.
     if (!store.activeSessionId) {
       await store.boot();
-      if (!store.activeSessionId) await store.createSession();
+      if (!store.activeSessionId) {
+        await store.createSession(draftExecutionPolicyPreset.value);
+      }
     }
     const sessionId = store.activeSessionId;
     if (!sessionId) return;
@@ -1750,14 +1769,13 @@ function chooseFirstCommand() {
         <button
           type="button"
           class="composer-runtime-chip execution-policy"
-          :data-preset="activeExecutionPolicyPreset"
+          :data-preset="displayExecutionPolicyPreset"
           :title="t('chat.executionPolicy.open')"
-          :disabled="!store.activeSessionId"
           @click="executionPolicyOpen = true"
         >
           <ShieldCheck :size="13" />
           <span>{{ t('chat.executionPolicy.label') }}</span>
-          <strong>{{ executionPolicyLabel(activeExecutionPolicyPreset) }}</strong>
+          <strong>{{ executionPolicyLabel(displayExecutionPolicyPreset) }}</strong>
         </button>
         <button
           type="button"
@@ -1875,14 +1893,15 @@ function chooseFirstCommand() {
             :key="preset"
             type="button"
             :data-preset="preset"
-            :class="{ active: activeExecutionPolicyPreset === preset }"
-            :disabled="executionPolicyBusy || !canUpdateExecutionPolicy"
+            :class="{ active: displayExecutionPolicyPreset === preset }"
+            :disabled="executionPolicyBusy || !canChooseExecutionPolicy"
             @click="updateExecutionPolicy(preset)"
           >
             <span><ShieldCheck :size="15" /><strong>{{ executionPolicyLabel(preset) }}</strong></span>
             <small>{{ executionPolicyDetail(preset) }}</small>
           </button>
         </div>
+        <p v-if="!store.activeSessionId" class="modal-note">{{ t('chat.executionPolicy.appliesToNewSession') }}</p>
         <p v-if="!canUpdateExecutionPolicy" class="modal-note">{{ t('chat.executionPolicy.writerRequired') }}</p>
         <p v-if="executionPolicy?.applies_after_active_turn" class="modal-note">{{ t('chat.executionPolicy.nextTurn') }}</p>
         <p v-if="executionPolicyError" class="file-error" role="alert">{{ executionPolicyError }}</p>
