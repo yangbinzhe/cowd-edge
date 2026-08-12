@@ -51,6 +51,25 @@ export type MissionCommand = GatewayComponents['schemas']['MissionCommand'];
 export type MissionCommandResponse = GatewayComponents['schemas']['MissionCommandResponse'];
 export type MissionControlProjection = GatewayComponents['schemas']['MissionControlProjection'];
 export type MissionControlResponse = GatewayComponents['schemas']['MissionControlResponse'];
+
+/// M-01/M-04: lightweight mission summary envelope. The full typed
+/// MissionMaterializedSnapshot stays on the main route; this is the small
+/// payload for first-panel consumers that do not need the full graph.
+export interface MissionControlSummaryEnvelope {
+  ok: boolean;
+  summary: {
+    mission_id?: string;
+    cursor: number;
+    revision: number;
+    graph: {
+      available: boolean;
+      node_count: number;
+      edge_count: number;
+      hash: string;
+    };
+    projection: Record<string, unknown>;
+  };
+}
 export type MissionMaterializedSnapshot = GatewayComponents['schemas']['MissionMaterializedSnapshot'];
 export type MissionProjectionDelta = GatewayComponents['schemas']['MissionProjectionDelta'];
 export type SessionHistoryIndexProjection = GatewayComponents['schemas']['SessionHistoryIndexProjection'];
@@ -82,6 +101,9 @@ export interface ChatTurn {
   execution_id?: string;
   turn_id?: string;
   ingress_message_id?: string;
+  /// C-02: durable SessionInput id bound to this user message. Badge status
+  /// lookup must use this id, never content matching.
+  input_id?: string;
 }
 
 export interface ActivityEvent {

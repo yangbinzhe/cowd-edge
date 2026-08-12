@@ -2,7 +2,7 @@
 import { t } from '../i18n';
 import { displayStatus } from '../i18n/domain/status';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { AlertTriangle, Ban, CircleAlert, CircleCheck, GitFork, Plus, Radio, Search, Trash2, X } from 'lucide-vue-next';
+import { AlertTriangle, Ban, CircleAlert, CircleCheck, GitFork, LoaderCircle, Plus, Radio, Search, Trash2, X } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
@@ -93,7 +93,7 @@ async function branchSession(sessionId: string) {
 }
 
 async function deleteSession(sessionId: string) {
-  await store.deleteSession(sessionId);
+  store.requestDeleteSession(sessionId);
 }
 
 function localSessionExecutionStatus(sessionId: string) {
@@ -292,8 +292,9 @@ useEscapeKey(() => {
             <button class="icon-action" type="button" :aria-label="t('session.action.fork')" :title="t('session.action.fork')" @click.stop="branchSession(session.id)">
               <GitFork :size="12" />
             </button>
-            <button class="icon-action danger" type="button" :aria-label="t('session.action.delete')" :title="t('session.action.delete')" @click.stop="deleteSession(session.id)">
-              <X :size="13" />
+            <button class="icon-action danger" type="button" :disabled="store.deletingSessionIds.includes(session.id)" :aria-label="t('session.action.delete')" :title="t('session.action.delete')" @click.stop="deleteSession(session.id)">
+              <X v-if="!store.deletingSessionIds.includes(session.id)" :size="13" />
+              <LoaderCircle v-else :size="13" />
             </button>
           </span>
         </div>
@@ -322,6 +323,22 @@ useEscapeKey(() => {
           <button class="ghost-action" type="button" :disabled="batchDeleting" @click="confirmBulkDelete = false">{{ t('common.cancel') }}</button>
           <button class="danger-action" type="button" :disabled="batchDeleting" @click="confirmDeleteSelected">
             <Trash2 :size="14" />{{ t('session.bulk.delete') }}
+          </button>
+        </footer>
+      </section>
+    </div>
+    <div v-if="store.pendingDeleteSessionId" class="modal-scrim" @click.self="store.cancelDeleteSession()">
+      <section class="session-delete-confirm" role="dialog" :aria-label="t('session.delete.confirmTitle')">
+        <header>
+          <AlertTriangle :size="18" />
+          <strong>{{ t('session.delete.confirmTitle') }}</strong>
+          <button class="icon-action" type="button" :aria-label="t('common.close')" @click="store.cancelDeleteSession()"><X :size="15" /></button>
+        </header>
+        <p>{{ t('session.delete.confirmBody') }}</p>
+        <footer>
+          <button class="ghost-action" type="button" @click="store.cancelDeleteSession()">{{ t('common.cancel') }}</button>
+          <button class="danger-action" type="button" @click="store.confirmDeleteSession()">
+            <Trash2 :size="14" />{{ t('session.delete.confirm') }}
           </button>
         </footer>
       </section>

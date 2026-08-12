@@ -544,6 +544,7 @@ function reconcileOptimisticUserTurn(
     sequence?: number;
     executionId?: string;
     turnId?: string;
+    inputId?: string;
   },
 ) {
   if (!canonical.messageId) return;
@@ -569,6 +570,7 @@ function reconcileOptimisticUserTurn(
     optimistic.execution_id = canonical.executionId;
     optimistic.turn_id = canonical.turnId;
     optimistic.ingress_message_id = canonical.messageId;
+    optimistic.input_id = canonical.inputId || canonical.messageId;
     return;
   }
   state.turns.push({
@@ -580,6 +582,7 @@ function reconcileOptimisticUserTurn(
     execution_id: canonical.executionId,
     turn_id: canonical.turnId,
     ingress_message_id: canonical.messageId,
+    input_id: canonical.inputId || canonical.messageId,
   });
 }
 
@@ -600,6 +603,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   const projections = useProjectionRegistryStore();
   const activeSessionId = ref('');
+  const lastInputProjection = ref<any>(null);
+  const lastTurnInbox = ref<any>(null);
   const active = computed(() => activeSessionId.value ? stateFor(activeSessionId.value) : null);
   const activeSourceCount = ref(0);
 
@@ -2658,6 +2663,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       const receipt: any = mutation.value;
       if (state.submissionEpoch !== epoch || state.reconnectBlocked) return false;
       const canonicalMessageId = String(receipt?.message?.message_id || '');
+      const canonicalInputId = String(receipt?.input?.input_id || receipt?.message?.message_id || '');
       const canonicalSequence = Number(receipt?.message?.sequence);
       reconcileOptimisticUserTurn(state, {
         messageId: canonicalMessageId,
@@ -2665,7 +2671,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         sequence: Number.isFinite(canonicalSequence) ? canonicalSequence : undefined,
         executionId: String(receipt?.execution?.graph_id || receipt?.execution_id || ''),
         turnId: String(receipt?.message?.turn_id || receipt?.execution?.turn_id || ''),
+        inputId: canonicalInputId,
       });
+      // C-03: the send receipt carries the authoritative durable projections;
+      // surface them immediately so badge state never waits for a later poll.
+      lastInputProjection.value = receipt?.input_projection || null;
+      lastTurnInbox.value = receipt?.turn_inbox || null;
       const localTurn = state.turns.find((turn) => turn.id === localId);
       if (localTurn) localTurn.status = 'complete';
       if (supplementing) {
@@ -2882,6 +2893,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   return {
     states,
     activeSessionId,
+    lastInputProjection,
+    lastTurnInbox,
     active,
     activeSourceCount,
     open,

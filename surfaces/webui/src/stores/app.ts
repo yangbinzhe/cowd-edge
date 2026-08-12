@@ -299,6 +299,8 @@ export const useAppStore = defineStore('app', () => {
   const selectedSessionIds = ref<string[]>([]);
   const sessionBulkDeleteProgress = ref({ active: false, done: 0, total: 0 });
   const branchSessionBusy = ref(false);
+  const deletingSessionIds = ref<string[]>([]);
+  const pendingDeleteSessionId = ref<string | null>(null);
   const openTurnActivity = ref<Record<string, boolean>>({});
   const pinnedSessionIds = ref<string[]>(readStoredArray(PINNED_SESSION_KEY));
   const sessionViewedCounts = ref<Record<string, number>>(readStoredRecord(VIEWED_SESSION_KEY));
@@ -805,16 +807,64 @@ export const useAppStore = defineStore('app', () => {
   }
 
   async function deleteSession(sessionId: string) {
-    await api.deleteSession(sessionId);
-    const chat = chatSessions;
-    chat.setDraft(sessionId, '');
-    chat.close(sessionId);
-    sessions.value = sessions.value.filter((session) => session.id !== sessionId);
-    selectedSessionIds.value = selectedSessionIds.value.filter((id) => id !== sessionId);
-    if (activeSessionId.value === sessionId) {
-      activeSessionId.value = sessions.value[0]?.id || '';
-      if (activeSessionId.value) await loadMessages(activeSessionId.value);
+    const existing = sessionDeleteFlights.get(sessionId);
+    if (existing) return existing;
+    if (!deletingSessionIds.value.includes(sessionId)) {
+      deletingSessionIds.value = [...deletingSessionIds.value, sessionId];
     }
+    const flight = (async () => {
+      try {
+        await api.deleteSession(sessionId);
+        const chat = chatSessions;
+        chat.setDraft(sessionId, '');
+        chat.close(sessionId);
+        sessions.value = sessions.value.filter((session) => session.id !== sessionId);
+        selectedSessionIds.value = selectedSessionIds.value.filter((id) => id !== sessionId);
+        if (activeSessionId.value === sessionId) {
+          activeSessionId.value = sessions.value[0]?.id || '';
+          if (activeSessionId.value) await loadMessages(activeSessionId.value);
+        }
+      } finally {
+        deletingSessionIds.value = deletingSessionIds.value.filter((id) => id !== sessionId);
+        sessionDeleteFlights.delete(sessionId);
+      }
+    })();
+    sessionDeleteFlights.set(sessionId, flight);
+    return flight;
+  }
+
+  const sessionDeleteFlights = new Map<string, Promise<void>>();
+  const SESSION_DELETE_CONFIRM_KEY = 'cowd.webui.sessionDeleteConfirmed.v1';
+
+  function requestDeleteSession(sessionId: string) {
+    if (!sessionId || pendingDeleteSessionId.value) return;
+    let confirmed = false;
+    try {
+      confirmed = localStorage.getItem(SESSION_DELETE_CONFIRM_KEY) === '1';
+    } catch {
+      confirmed = false;
+    }
+    if (confirmed) {
+      void deleteSession(sessionId);
+    } else {
+      pendingDeleteSessionId.value = sessionId;
+    }
+  }
+
+  function confirmDeleteSession() {
+    const sessionId = pendingDeleteSessionId.value;
+    if (!sessionId) return;
+    try {
+      localStorage.setItem(SESSION_DELETE_CONFIRM_KEY, '1');
+    } catch {
+      // Storage unavailable: keep per-action confirmation (safe fallback).
+    }
+    pendingDeleteSessionId.value = null;
+    void deleteSession(sessionId);
+  }
+
+  function cancelDeleteSession() {
+    pendingDeleteSessionId.value = null;
   }
 
   async function ensureSessionTitleFromFirstMessage(sessionId: string, content = '') {
@@ -2063,6 +2113,11 @@ export const useAppStore = defineStore('app', () => {
     branchSessionBusy,
     branchSession,
     compactSession,
+    deletingSessionIds,
+    pendingDeleteSessionId,
+    requestDeleteSession,
+    confirmDeleteSession,
+    cancelDeleteSession,
     loadActivity,
     isTurnActivityOpen,
     toggleTurnActivity,

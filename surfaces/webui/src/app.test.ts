@@ -962,7 +962,7 @@ describe('Cowd Vue WebUI shell', () => {
     store.activeSessionId = 'supplement-badge-session';
     chat.activeSessionId = 'supplement-badge-session';
     chat.active!.turns = [
-      { id: 'input-supplement-1', role: 'user', content: '之前的方案可能不合理，请全新生成一版' },
+      { id: 'message-1', input_id: 'input-supplement-1', role: 'user', content: '之前的方案可能不合理，请全新生成一版' },
     ] as any;
     store.sessionInputProjection = {
       session_id: 'supplement-badge-session',
@@ -978,6 +978,84 @@ describe('Cowd Vue WebUI shell', () => {
 
     const badge = wrapper.get('.turn[data-role="user"] .turn-input-badge');
     expect(badge.attributes('title')).toBe('已接纳 · 已修正当前执行');
+    wrapper.unmount();
+  });
+
+  it('never cross-labels identical message text without an input_id mapping', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'duplicate-text-session';
+    chat.activeSessionId = 'duplicate-text-session';
+    chat.active!.turns = [
+      { id: 'message-a', input_id: 'input-a', role: 'user', content: '重试同一条指令' },
+      { id: 'message-b', role: 'user', content: '重试同一条指令' },
+    ] as any;
+    store.sessionInputProjection = {
+      session_id: 'duplicate-text-session',
+      inputs: [{
+        input_id: 'input-a',
+        decision: 'supplement_current_turn',
+        status: 'attached_to_turn',
+        application_receipt: { action: 'amend_current_turn', state: 'applied' },
+      }],
+    } as any;
+    await nextTick();
+
+    const badges = wrapper.findAll('.turn[data-role="user"] .turn-input-badge');
+    expect(badges).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('confirms single delete once per browser and deduplicates concurrent deletes', async () => {
+    localStorage.removeItem('cowd.webui.sessionDeleteConfirmed.v1');
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.sessions = [{ id: 'delete-me', title: 'Delete me' } as any];
+    store.activeSessionId = 'delete-me';
+    const apiDelete = vi.spyOn(api, 'deleteSession').mockResolvedValue({ ok: true } as any);
+
+    store.requestDeleteSession('delete-me');
+    expect(store.pendingDeleteSessionId).toBe('delete-me');
+    expect(apiDelete).not.toHaveBeenCalled();
+
+    store.confirmDeleteSession();
+    await settleAsync();
+    expect(apiDelete).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('cowd.webui.sessionDeleteConfirmed.v1')).toBe('1');
+
+    store.sessions = [{ id: 'delete-me-2', title: 'Second' } as any];
+    store.activeSessionId = 'delete-me-2';
+    store.requestDeleteSession('delete-me-2');
+    expect(store.pendingDeleteSessionId).toBeNull();
+    await settleAsync();
+    expect(apiDelete).toHaveBeenCalledTimes(2);
+    wrapper.unmount();
+    localStorage.removeItem('cowd.webui.sessionDeleteConfirmed.v1');
+  });
+
+  it('returns the same flight for concurrent deletes of the same session', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    store.sessions = [{ id: 'same-delete', title: 'Same' } as any];
+    store.activeSessionId = 'same-delete';
+    let release!: () => void;
+    vi.spyOn(api, 'deleteSession').mockImplementation(() => (
+      new Promise((resolve) => {
+        release = () => resolve({ ok: true } as any);
+      })
+    ));
+
+    const first = store.deleteSession('same-delete');
+    const second = store.deleteSession('same-delete');
+    release();
+    await Promise.all([first, second]);
+
+    expect(api.deleteSession).toHaveBeenCalledTimes(1);
+    expect(store.deletingSessionIds).toEqual([]);
     wrapper.unmount();
   });
 

@@ -680,11 +680,21 @@ async function openRoutingDialog() {
   routingDialogOpen.value = true;
   routingError.value = '';
   try {
-    const control = await api.missionControl();
-    missionOptions.value = (control.snapshot?.projection?.missions || []).map((mission) => ({
+    // M-04: first-panel routing uses the bounded summary contract; the full
+    // typed snapshot is only requested when the summary lacks the mission list.
+    const control = await api.missionControlSummary();
+    const missions = (control.summary?.projection?.missions as any[]) || [];
+    missionOptions.value = (missions.length ? missions : []).map((mission) => ({
       mission_id: mission.mission_id,
       objective: mission.objective,
     }));
+    if (!missions.length) {
+      const full = await api.missionControl();
+      missionOptions.value = (full.snapshot?.projection?.missions || []).map((mission) => ({
+        mission_id: mission.mission_id,
+        objective: mission.objective,
+      }));
+    }
     selectedMissionFocus.value = routingFocus.value.mission?.mission_id
       || currentTask.value?.mission_id
       || missionOptions.value[0]?.mission_id
@@ -858,6 +868,7 @@ async function submit() {
     const input = store.composeChatInput(text);
     let accepted = false;
     accepted = await chat.send(sessionId, text, input);
+    applyLatestInputProjection();
     if (accepted && store.activeSessionId === sessionId) {
       await store.ensureSessionTitleFromFirstMessage(sessionId, text);
       store.clearSubmittedResourceAttachments(input.resourceIds);
@@ -946,6 +957,7 @@ async function retryBlockedTurn(turns: ChatTurn[], index: number) {
       const text = candidate.content;
       const input = store.composeChatInput(text);
       await chat.send(sessionId, text, input);
+      applyLatestInputProjection();
       return;
     }
   }
@@ -1377,11 +1389,23 @@ function inputRecordForTurn(turn: ChatTurn) {
     ...(Array.isArray(store.turnInbox?.items) ? store.turnInbox.items : []),
     ...(Array.isArray(store.sessionInputProjection?.inputs) ? store.sessionInputProjection.inputs : []),
   ];
+  const inputId = String(turn.input_id || '').trim();
+  if (inputId) {
+    const byInput = rows.find((item: any) => (
+      String(item?.input_id || item?.id || '').trim() === inputId
+    ));
+    if (byInput) return byInput;
+  }
   const turnId = String(turn.id || '').trim();
   return rows.find((item: any) => String(item?.input_id || item?.id || '').trim() === turnId)
-    || rows.find((item: any) => (
-      String(item?.content_preview || '').trim() === turn.content.trim()
-    ));
+    || null;
+}
+
+function applyLatestInputProjection() {
+  // C-03: the send receipt is the authoritative durable projection; write it
+  // to the app store immediately so badge state never waits for a later poll.
+  if (chat.lastInputProjection) store.sessionInputProjection = chat.lastInputProjection;
+  if (chat.lastTurnInbox) store.turnInbox = chat.lastTurnInbox;
 }
 
 function userTurnAcceptedBadge(turn: ChatTurn) {

@@ -746,4 +746,28 @@ describe('WebUI authorization catalogue', () => {
       'mission.observe',
     ]);
   });
+
+  it('loads the bounded mission summary contract from its dedicated route', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+      ok: true,
+      summary: {
+        cursor: 7,
+        revision: 3,
+        graph: { available: true, node_count: 2, edge_count: 1, hash: 'abc' },
+        projection: {},
+      },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await api.missionControlSummary('mission-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/mission/control/summary?mission_id=mission-1',
+      expect.anything(),
+    );
+    expect(result.summary.graph.node_count).toBe(2);
+  });
 });

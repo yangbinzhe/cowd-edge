@@ -7,6 +7,7 @@ import type {
   MissionCommand,
   MissionCommandResponse,
   MissionControlResponse,
+  MissionControlSummaryEnvelope,
   MissionProjectionDelta,
   ExecutionLiveUpdate,
   ExecutionActivityDetailProjection,
@@ -1657,6 +1658,20 @@ export const api = {
       changed_domains: [],
       events: [],
       patch: {},
+    });
+  },
+  missionControlSummary: (missionId = '') => {
+    const params = new URLSearchParams();
+    if (missionId.trim()) params.set('mission_id', missionId.trim());
+    const suffix = params.size ? `?${params.toString()}` : '';
+    return read<MissionControlSummaryEnvelope>(`/api/mission/control/summary${suffix}`, {
+      ok: true,
+      summary: {
+        cursor: 0,
+        revision: 0,
+        graph: { available: false, node_count: 0, edge_count: 0, hash: '' },
+        projection: {},
+      },
     });
   },
   missionControlCommand: (body: MissionCommand) => writeWithReceipt<MissionCommandResponse>('/api/mission/control', {

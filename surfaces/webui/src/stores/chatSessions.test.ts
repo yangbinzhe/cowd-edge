@@ -1075,10 +1075,13 @@ describe('chatSessions', () => {
       .mockResolvedValueOnce({
         mode: 'attached_to_active_turn',
         execution: { graph_id: 'execution-one' },
+        message: { message_id: 'supplement-message-1', sequence: 2 },
         input: {
           input_id: 'supplement-one',
           decision: 'supplement_current_turn',
         },
+        input_projection: { session_id: 'single-session', inputs: [{ input_id: 'supplement-one' }] },
+        turn_inbox: { session_id: 'single-session', items: [{ input_id: 'supplement-one' }] },
       } as any);
 
     expect(await chat.send('single-session', 'first')).toBe(true);
@@ -1087,6 +1090,11 @@ describe('chatSessions', () => {
     expect(chat.states['single-session'].pending).toBe(true);
     expect(chat.states['single-session'].activity).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'supplement-one', status: 'complete' }),
+    ]));
+    expect(chat.lastInputProjection?.inputs?.[0]?.input_id).toBe('supplement-one');
+    expect(chat.lastTurnInbox?.items?.[0]?.input_id).toBe('supplement-one');
+    expect(chat.states['single-session'].turns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'supplement-message-1', input_id: 'supplement-one', content: 'second' }),
     ]));
     expect(api.sendMessage).toHaveBeenCalledTimes(2);
   });
