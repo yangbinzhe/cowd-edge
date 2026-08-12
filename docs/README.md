@@ -11,4 +11,14 @@
 - [WebUI Surface](manual/webui.html)
 - [构建、配置与排障](manual/operations.html)
 
-说明书以 `v0.9.674` 的 manifest、Edge v2 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
+说明书以 `v0.9.675` 的 manifest、Edge v2 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
+
+## v0.9.675 WebUI 能力要点
+
+- live 订阅收敛为单条物理连接，surface_instance 使用 `observerId:tab:<nonce>`，多标签不再共享
+  订阅计数；页面卸载必定关闭租约。
+- 授权失效自动恢复每浏览器会话最多一次，再次失效只提示、不循环刷新。
+- 执行图视口按图 id 持久化：缩放/平移后打开节点详情不再回弹；拓扑变化或方向切换才重新 fit。
+- 阻断卡片只渲染结构化 `failure_kind`/`recovery_hints`，不再按正文关键词猜测。
+- bash 等工具活动树显示 `command_category` 标签；`get_context_remaining`、`current_time`、
+  `request_plugin_install`（显式不支持）已进入能力合同。

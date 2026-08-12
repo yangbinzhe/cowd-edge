@@ -453,8 +453,8 @@ async function synchronize() {
           expected_revision: subscription.revision,
           idempotency_key: `webui-live-patch:${subscription.id}:${subscription.revision}`,
           selector: { sources: selected },
-        })
-        : await api.createLiveSubscription(liveCreateRequest(surfaceInstance, selected));
+        }, surfaceInstance)
+        : await api.createLiveSubscription(liveCreateRequest(surfaceInstance, selected), surfaceInstance);
       if (response?.__state && response.__state !== 'ready') {
         throw new Error(String(response.__error || response.__state));
       }

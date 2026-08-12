@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "mysql",
   "name": "MySQL Source Connector",
-  "version": "0.9.674",
+  "version": "0.9.675",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",

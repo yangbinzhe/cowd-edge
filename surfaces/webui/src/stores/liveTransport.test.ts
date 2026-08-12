@@ -486,6 +486,9 @@ describe('WebUI multiplex live transport', () => {
     const request = subscriptionApi.create.mock.calls[0][0];
     expect(request.surface_instance).toMatch(/:tab:/);
     expect(request.surface_instance).not.toBe('webui:test');
+    // The same tab-nonce instance must be carried as the observer header so
+    // the Gateway's header/body binding matches (C6).
+    expect(subscriptionApi.create.mock.calls[0][1]).toBe(request.surface_instance);
     lease.close();
   });
 

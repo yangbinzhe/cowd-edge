@@ -1187,15 +1187,17 @@ async function writeWithReceipt<T>(path: string, init: RequestInit = {}): Promis
 }
 
 export const api = {
-  createLiveSubscription: (request: any) => write('/api/runtime/live-subscriptions', {
+  createLiveSubscription: (request: any, observerHeader = '') => write('/api/runtime/live-subscriptions', {
     method: 'POST',
     body: JSON.stringify(request),
+    ...(observerHeader ? { headers: { 'x-cowd-observer-id': observerHeader } } : {}),
   }),
-  patchLiveSubscription: (subscriptionId: string, request: any) => write(
+  patchLiveSubscription: (subscriptionId: string, request: any, observerHeader = '') => write(
     `/api/runtime/live-subscriptions/${encodeURIComponent(subscriptionId)}`,
     {
       method: 'PATCH',
       body: JSON.stringify(request),
+      ...(observerHeader ? { headers: { 'x-cowd-observer-id': observerHeader } } : {}),
     },
   ),
   deleteLiveSubscription: (subscriptionId: string) => write(
