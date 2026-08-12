@@ -954,6 +954,33 @@ describe('Cowd Vue WebUI shell', () => {
     wrapper.unmount();
   });
 
+  it('shows an accepted-supplement badge on the sent user message', async () => {
+    const wrapper = await mountApp('/chat');
+    await settle();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'supplement-badge-session';
+    chat.activeSessionId = 'supplement-badge-session';
+    chat.active!.turns = [
+      { id: 'input-supplement-1', role: 'user', content: '之前的方案可能不合理，请全新生成一版' },
+    ] as any;
+    store.sessionInputProjection = {
+      session_id: 'supplement-badge-session',
+      inputs: [{
+        input_id: 'input-supplement-1',
+        decision: 'supplement_current_turn',
+        status: 'attached_to_turn',
+        application_receipt: { action: 'amend_current_turn', state: 'applied' },
+        content_preview: '之前的方案可能不合理，请全新生成一版',
+      }],
+    } as any;
+    await nextTick();
+
+    const badge = wrapper.get('.turn[data-role="user"] .turn-input-badge');
+    expect(badge.attributes('title')).toBe('已接纳 · 已修正当前执行');
+    wrapper.unmount();
+  });
+
   it('clears a submitted draft immediately and never overwrites newer input on failure', async () => {
     const wrapper = await mountApp('/chat');
     await settle();

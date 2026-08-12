@@ -235,6 +235,7 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .answer-execution-link:hover, .answer-copy-link:hover, .answer-branch-link:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .message-copy-link { width: 25px; height: 25px; display: inline-grid; place-items: center; margin-left: 2px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; vertical-align: middle; }
 .message-copy-link:hover { border-color: var(--border); color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.turn-input-badge { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-left: 2px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); vertical-align: middle; cursor: help; }
 .turn[data-role="user"] .markdown-body { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; }
 .turn-submission-error { width: min(var(--user-content-max), 100%); margin: 0; display: flex; justify-content: flex-end; align-items: flex-start; gap: 5px; color: var(--danger); font-size: 11px; line-height: 1.45; text-align: right; }
 .turn-submission-error svg { flex: 0 0 auto; margin-top: 1px; }

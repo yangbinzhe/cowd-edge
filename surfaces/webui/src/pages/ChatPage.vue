@@ -9,6 +9,7 @@ import {
   Check,
   CircleAlert,
   CircleDot,
+  Clock,
   Coins,
   Copy,
   Eye,
@@ -26,6 +27,7 @@ import {
   Workflow,
   Wrench,
   X,
+  Zap,
 } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
@@ -1370,6 +1372,37 @@ async function branchCurrentAnswer() {
   await store.branchSession(sessionId);
 }
 
+function inputRecordForTurn(turn: ChatTurn) {
+  const rows = [
+    ...(Array.isArray(store.turnInbox?.items) ? store.turnInbox.items : []),
+    ...(Array.isArray(store.sessionInputProjection?.inputs) ? store.sessionInputProjection.inputs : []),
+  ];
+  const turnId = String(turn.id || '').trim();
+  return rows.find((item: any) => String(item?.input_id || item?.id || '').trim() === turnId)
+    || rows.find((item: any) => (
+      String(item?.content_preview || '').trim() === turn.content.trim()
+    ));
+}
+
+function userTurnAcceptedBadge(turn: ChatTurn) {
+  if (turn.role !== 'user') return null;
+  const record = inputRecordForTurn(turn);
+  if (!record) return null;
+  const status = String(record.status || '').toLowerCase();
+  const applied = record.application_receipt?.state === 'applied'
+    || Boolean(record.application_receipt?.action);
+  if (status === 'consumed') {
+    return { key: 'consumed', label: t('chat.input.badge.consumed') };
+  }
+  if (status === 'attached_to_turn' || applied) {
+    return { key: 'applied', label: t('chat.input.badge.applied') };
+  }
+  if (['queued_next', 'queued', 'pending', 'accepted'].includes(status)) {
+    return { key: 'queued', label: t('chat.input.badge.queued') };
+  }
+  return null;
+}
+
 async function chooseCommand(command: any) {
   const name = commandName(command);
   draft.value = `${name} `;
@@ -1572,6 +1605,16 @@ function chooseFirstCommand() {
               v-if="turn.role === 'user' || turn.role === 'system'"
               :content="turn.content"
             />
+            <span
+              v-if="userTurnAcceptedBadge(turn)"
+              class="turn-input-badge"
+              :title="userTurnAcceptedBadge(turn)!.label"
+              :aria-label="userTurnAcceptedBadge(turn)!.label"
+            >
+              <Zap v-if="userTurnAcceptedBadge(turn)!.key === 'applied'" :size="13" />
+              <Clock v-else-if="userTurnAcceptedBadge(turn)!.key === 'queued'" :size="13" />
+              <Check v-else :size="13" />
+            </span>
             <button
               v-if="turn.role === 'user' || turn.role === 'system'"
               class="message-copy-link"

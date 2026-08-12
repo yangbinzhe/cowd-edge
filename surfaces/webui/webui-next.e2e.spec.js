@@ -2004,6 +2004,18 @@ test('copies sent messages and forks a new session from a final answer', async (
     if (path === `/api/sessions/${branchSession}/messages` && request.method() === 'GET') {
       return json(route, { session_id: branchSession, messages: messagesFor(branchSession), total: 2, offset: 0, has_more: false });
     }
+    if (path === `/api/sessions/${sourceSession}/inputs`) {
+      return json(route, {
+        session_id: sourceSession,
+        inputs: [{
+          input_id: 'message-1',
+          decision: 'supplement_current_turn',
+          status: 'attached_to_turn',
+          application_receipt: { action: 'amend_current_turn', state: 'applied' },
+          content_preview: 'copy this exact prompt',
+        }],
+      });
+    }
     if (path === `/api/sessions/${sourceSession}/history-index`) {
       return json(route, {
         schema_version: 1,
@@ -2039,6 +2051,9 @@ test('copies sent messages and forks a new session from a final answer', async (
   await page.goto('/index.html#/chat');
   const copyLink = page.locator('.turn[data-role="user"] .message-copy-link');
   await expect(copyLink).toBeVisible();
+  const inputBadge = page.locator('.turn[data-role="user"] .turn-input-badge');
+  await expect(inputBadge).toBeVisible();
+  await expect(inputBadge).toHaveAttribute('title', 'Accepted · amends current execution');
   await copyLink.click();
   await expect(copyLink).toHaveAttribute('title', 'Copied');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText().catch(() => '')))
