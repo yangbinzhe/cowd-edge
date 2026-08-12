@@ -11,9 +11,9 @@
 - [WebUI Surface](manual/webui.html)
 - [构建、配置与排障](manual/operations.html)
 
-说明书以 `v0.9.675` 的 manifest、Edge v2 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
+说明书以 `v0.9.676` 的 manifest、Edge v2 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
 
-## v0.9.675 WebUI 能力要点
+## v0.9.676 WebUI 能力要点
 
 - live 订阅收敛为单条物理连接，surface_instance 使用 `observerId:tab:<nonce>`，多标签不再共享
   订阅计数；页面卸载必定关闭租约。
