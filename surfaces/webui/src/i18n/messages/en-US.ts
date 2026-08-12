@@ -2203,6 +2203,8 @@ export const enUS: MessageCatalog = {
   "settings.providers.modelRequired": "model is required",
   "settings.policy.draftHelp": "Edit approval policy in a local draft first; Gateway is updated only after saving the current section.",
   "settings.policy.invalidJson": "Invalid JSON: {error}",
+  "settings.policy.prune.label": "Prune approvals pending longer than (days)",
+  "settings.policy.prune.action": "Prune stale approvals",
   "settings.profile.delete": "Delete profile",
   "settings.access.internal": "same-origin internal access ready",
   "settings.access.offline": "gateway offline",

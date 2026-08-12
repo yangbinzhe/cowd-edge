@@ -27,6 +27,8 @@ const lastSavedSection = ref('');
 const lastRestoredSection = ref('');
 const theme = ref(document.documentElement.dataset.theme || localStorage.getItem('cowd-theme') || 'dark');
 const approvalDraft = ref('');
+const approvalPruneDays = ref(3);
+const approvalPruneResult = ref('');
 const origin = computed(() => location.origin);
 const accessModeLabels = {
   internal: 'settings.access.internal',
@@ -327,6 +329,14 @@ async function saveApprovalGoverned(payload: Record<string, unknown> = {}) {
     settingsReceipt.value = await api.updateApprovalConfig(nextConfig);
     store.approvalConfig = settingsReceipt.value?.data || nextConfig;
     approvalDraft.value = JSON.stringify(store.approvalConfig || nextConfig, null, 2);
+  });
+}
+
+async function pruneOldApprovals() {
+  await run('approval-prune', async () => {
+    const days = Math.max(1, Math.min(365, Number(approvalPruneDays.value) || 3));
+    const receipt = await api.approvalPrune(days, 'pruned from Settings');
+    approvalPruneResult.value = `pruned=${receipt?.pruned ?? 0}, failed=${receipt?.failed ?? 0}`;
   });
 }
 
@@ -642,6 +652,14 @@ function selectSettingsSection(id: string) {
           @dry-run="previewApprovalGoverned"
           @live="saveApprovalGoverned"
         />
+        <div class="approval-prune-row">
+          <label for="approval-prune-days">{{ t('settings.policy.prune.label') }}</label>
+          <input id="approval-prune-days" v-model.number="approvalPruneDays" type="number" min="1" max="365" />
+          <button class="ghost-action" type="button" :disabled="!!busyAction" @click="pruneOldApprovals">
+            {{ t('settings.policy.prune.action') }}
+          </button>
+          <span v-if="approvalPruneResult" class="approval-prune-result">{{ approvalPruneResult }}</span>
+        </div>
         <p v-if="store.settingsSavedAt" class="save-state">{{ t('page.settings.approval.savedAt', { time: store.settingsSavedAt }) }}</p>
       </section>
 

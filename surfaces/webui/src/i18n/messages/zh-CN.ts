@@ -2203,6 +2203,8 @@ export const zhCN: MessageCatalog = {
   "settings.providers.modelRequired": "必须选择模型",
   "settings.policy.draftHelp": "审批策略先在本地草稿中编辑，保存当前分区后才写入 Gateway。",
   "settings.policy.invalidJson": "JSON 无效：{error}",
+  "settings.policy.prune.label": "清理超过(天)未决策的待审批",
+  "settings.policy.prune.action": "清理超期审批",
   "settings.profile.delete": "删除 Profile",
   "settings.access.internal": "同源内部访问就绪",
   "settings.access.offline": "Gateway 离线",

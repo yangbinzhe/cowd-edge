@@ -1751,6 +1751,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ id, approved, scope, reason, skip }),
   }),
+  approvalPrune: (olderThanDays: number, reason = '') => write('/api/approval/prune', {
+    method: 'POST',
+    body: JSON.stringify({ older_than_days: olderThanDays, reason }),
+  }),
   approvalHistory: () => read('/api/approval/history?limit=20', []),
   approvalGrants: (signal?: AbortSignal) => read('/api/approval/grants', { grants: [] }, { signal }),
   revokeApprovalGrant: (id: string, reason = '') => write(`/api/approval/grants/${encodeURIComponent(id)}/revoke`, {
