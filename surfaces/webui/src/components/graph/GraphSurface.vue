@@ -99,6 +99,11 @@ let fitTimer = 0;
 let layoutTimer = 0;
 let resizeObserver: ResizeObserver | null = null;
 let lastObservedSize = '';
+const userViewportChanged = ref(false);
+
+function onUserViewport() {
+  userViewportChanged.value = true;
+}
 
 const nodeDescriptionKeys: Record<string, string> = {
   'agent': 'graph.nodeType.agent',
@@ -359,7 +364,10 @@ async function layout() {
   await nextTick();
   const layoutIdentity = `${props.model.id}:${direction.value}`;
   if (lastLayoutIdentity === layoutIdentity && previousViewport) flow.value?.setViewport?.(previousViewport, { duration: 0 });
-  else scheduleFit();
+  else {
+    userViewportChanged.value = false;
+    scheduleFit(flow.value, true);
+  }
   lastLayoutIdentity = layoutIdentity;
 }
 
@@ -385,6 +393,7 @@ function emitViewState() {
 }
 
 function toggleDirection() {
+  userViewportChanged.value = false;
   direction.value = nextDirection.value;
 }
 
@@ -405,16 +414,15 @@ function selectEdge(event: any) {
 async function paneReady(instance: any) {
   flow.value = instance;
   await nextTick();
-  scheduleFit(instance);
+  userViewportChanged.value = false;
+  scheduleFit(instance, true);
 }
 
-function scheduleFit(instance = flow.value) {
+function scheduleFit(instance = flow.value, force = false) {
   if (!instance || showList.value || !laidOutNodes.value.length) return;
-  // Preserve deliberate user zoom/pan: automatic fits (layout settle,
-  // inspector resize, node selection) must never reset a zoomed viewport.
-  if (typeof instance.getZoom === 'function' && Math.abs(instance.getZoom() - 1) > 0.02) {
-    return;
-  }
+  // Automatic fits must never override a deliberate user zoom/pan. Only
+  // explicit user interaction sets this flag; zoom values are not a proxy.
+  if (userViewportChanged.value && !force) return;
   const fit = () => instance.fitView?.({
     padding: props.compact ? 0.08 : 0.2,
     duration: 0,
@@ -508,9 +516,18 @@ async function toggleFullscreen() {
 
 function onKeydown(event: KeyboardEvent) {
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLButtonElement) return;
-  if (event.key === '+' || event.key === '=') flow.value?.zoomIn?.();
-  if (event.key === '-') flow.value?.zoomOut?.();
-  if (event.key === '0') flow.value?.fitView?.({ padding: 0.2 });
+  if (event.key === '+' || event.key === '=') {
+    userViewportChanged.value = true;
+    flow.value?.zoomIn?.();
+  }
+  if (event.key === '-') {
+    userViewportChanged.value = true;
+    flow.value?.zoomOut?.();
+  }
+  if (event.key === '0') {
+    userViewportChanged.value = false;
+    flow.value?.fitView?.({ padding: 0.2 });
+  }
   if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
     event.preventDefault();
     const nodes = visibleNodes.value;
@@ -652,6 +669,8 @@ onBeforeUnmount(() => {
       :nodes-focusable="true"
       :edges-focusable="true"
       :min-zoom="minimumZoom"
+      @move="onUserViewport"
+      @zoom="onUserViewport"
       @pane-ready="paneReady"
       @nodes-initialized="scheduleFit()"
       @node-click="selectNode"
@@ -687,9 +706,9 @@ onBeforeUnmount(() => {
         <Handle id="transfer-output-bottom" class="graph-handle transfer-handle" type="source" :position="Position.Bottom" />
       </template>
       <Panel position="top-right" class="execution-graph-controls">
-        <button type="button" :title="t('runtime.execution.canvas.zoomIn')" :aria-label="t('runtime.execution.canvas.zoomIn')" @click="flow?.zoomIn()"><ZoomIn :size="15" /></button>
-        <button type="button" :title="t('runtime.execution.canvas.zoomOut')" :aria-label="t('runtime.execution.canvas.zoomOut')" @click="flow?.zoomOut()"><ZoomOut :size="15" /></button>
-        <button type="button" :title="t('runtime.execution.canvas.fit')" :aria-label="t('runtime.execution.canvas.fit')" @click="flow?.fitView({ padding: 0.2 })"><Scan :size="15" /></button>
+        <button type="button" :title="t('runtime.execution.canvas.zoomIn')" :aria-label="t('runtime.execution.canvas.zoomIn')" @click="userViewportChanged = true; flow?.zoomIn()"><ZoomIn :size="15" /></button>
+        <button type="button" :title="t('runtime.execution.canvas.zoomOut')" :aria-label="t('runtime.execution.canvas.zoomOut')" @click="userViewportChanged = true; flow?.zoomOut()"><ZoomOut :size="15" /></button>
+        <button type="button" :title="t('runtime.execution.canvas.fit')" :aria-label="t('runtime.execution.canvas.fit')" @click="userViewportChanged = false; flow?.fitView({ padding: 0.2 })"><Scan :size="15" /></button>
       </Panel>
       <Panel v-if="!compact" position="bottom-right" class="graph-minimap" :aria-label="t('graph.minimap.label')">
         <svg viewBox="0 0 160 100" role="img">
