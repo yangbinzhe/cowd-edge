@@ -27,7 +27,6 @@ import {
   Workflow,
   Wrench,
   X,
-  Zap,
 } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
@@ -89,9 +88,9 @@ const draftExecutionPolicyPreset = ref<SessionExecutionPolicyPreset>('supervised
 const executionPolicyPresets: SessionExecutionPolicyPreset[] = [
   'cautious',
   'supervised',
-  'solo',
-  'yolo',
   'stewarded',
+  'autonomous',
+  'yolo',
 ];
 const routingDialogOpen = ref(false);
 const routingBusy = ref(false);
@@ -415,7 +414,7 @@ useEscapeKey(() => { executionPolicyOpen.value = false; }, () => executionPolicy
 function executionPolicyLabel(preset: ExecutionPolicyDisplayPreset) {
   if (preset === 'cautious') return t('chat.executionPolicy.preset.cautious');
   if (preset === 'supervised') return t('chat.executionPolicy.preset.supervised');
-  if (preset === 'solo') return t('chat.executionPolicy.preset.solo');
+  if (preset === 'autonomous') return t('chat.executionPolicy.preset.autonomous');
   if (preset === 'yolo') return t('chat.executionPolicy.preset.yolo');
   if (preset === 'stewarded') return t('chat.executionPolicy.preset.stewarded');
   if (preset === 'custom') return t('chat.executionPolicy.preset.custom');
@@ -425,7 +424,7 @@ function executionPolicyLabel(preset: ExecutionPolicyDisplayPreset) {
 function executionPolicyDetail(preset: SessionExecutionPolicyPreset) {
   if (preset === 'cautious') return t('chat.executionPolicy.detail.cautious');
   if (preset === 'supervised') return t('chat.executionPolicy.detail.supervised');
-  if (preset === 'solo') return t('chat.executionPolicy.detail.solo');
+  if (preset === 'autonomous') return t('chat.executionPolicy.detail.autonomous');
   if (preset === 'yolo') return t('chat.executionPolicy.detail.yolo');
   return t('chat.executionPolicy.detail.stewarded');
 }
@@ -458,6 +457,7 @@ async function updateExecutionPolicy(preset: SessionExecutionPolicyPreset) {
     // P0: before a session exists, the selection becomes the creation-time
     // policy for the next session instead of mutating an active one.
     draftExecutionPolicyPreset.value = preset;
+    store.setPendingSessionExecutionPolicy(preset);
     executionPolicyError.value = '';
     executionPolicyOpen.value = false;
     return;
@@ -855,7 +855,7 @@ async function submit() {
     if (!store.activeSessionId) {
       await store.boot();
       if (!store.activeSessionId) {
-        await store.createSession(draftExecutionPolicyPreset.value);
+        await store.createSession();
       }
     }
     const sessionId = store.activeSessionId;
@@ -1424,15 +1424,31 @@ function userTurnAcceptedBadge(turn: ChatTurn) {
   const record = inputRecordForTurn(turn);
   if (!record) return null;
   const status = String(record.status || '').toLowerCase();
-  const applied = record.application_receipt?.state === 'applied'
-    || Boolean(record.application_receipt?.action);
+  const applicationState = String(record.application_receipt?.state || '').toLowerCase();
+  const applied = applicationState === 'applied' || Boolean(record.application_receipt?.action);
   if (status === 'consumed') {
     return { key: 'consumed', label: t('chat.input.badge.consumed') };
   }
   if (status === 'attached_to_turn' || applied) {
-    return { key: 'applied', label: t('chat.input.badge.applied') };
+    return { key: 'accepted', label: t('chat.input.badge.applied') };
   }
-  if (['queued_next', 'queued', 'pending', 'accepted'].includes(status)) {
+  if (status === 'interrupt_requested') {
+    return { key: 'waiting', label: t('chat.input.badge.waiting') };
+  }
+  if (['dispatched_subtask', 'dispatched_session', 'new_session_created'].includes(status)) {
+    return { key: 'dispatched', label: t('chat.input.badge.dispatched') };
+  }
+  if (status === 'control_resolved') {
+    return { key: 'accepted', label: t('chat.input.badge.applied') };
+  }
+  if (['cancelled', 'failed', 'rejected_duplicate', 'rejected_policy'].includes(status)) {
+    return { key: 'error', label: t('chat.input.badge.error') };
+  }
+  if (status === 'superseded') {
+    return { key: 'superseded', label: t('chat.input.badge.superseded') };
+  }
+  if (applicationState === 'prepared' || applicationState === 'materializing'
+    || ['received', 'persisted', 'classified', 'queued_next', 'queued', 'pending', 'accepted'].includes(status)) {
     return { key: 'queued', label: t('chat.input.badge.queued') };
   }
   return null;
@@ -1647,8 +1663,11 @@ function chooseFirstCommand() {
                 :title="userTurnAcceptedBadge(turn)!.label"
                 :aria-label="userTurnAcceptedBadge(turn)!.label"
               >
-                <Zap v-if="userTurnAcceptedBadge(turn)!.key === 'applied'" :size="13" />
-                <LoaderCircle v-else :size="13" />
+                <LoaderCircle v-if="userTurnAcceptedBadge(turn)!.key === 'queued'" :size="13" />
+                <Check v-else-if="userTurnAcceptedBadge(turn)!.key === 'accepted' || userTurnAcceptedBadge(turn)!.key === 'consumed'" :size="13" />
+                <Clock v-else-if="userTurnAcceptedBadge(turn)!.key === 'waiting'" :size="13" />
+                <Workflow v-else-if="userTurnAcceptedBadge(turn)!.key === 'dispatched'" :size="13" />
+                <CircleAlert v-else :size="13" />
               </span>
               <button
                 class="message-copy-link"

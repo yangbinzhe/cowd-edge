@@ -69,7 +69,7 @@ function approvalRows(payload: any) {
     ? payload
     : payload?.pending || payload?.approvals?.requests || payload?.approvals?.pending || [];
   return Array.isArray(rows)
-    ? rows.filter((item) => String(item?.status || 'pending') === 'pending')
+    ? rows.filter((item) => ['pending', 'timed_out'].includes(String(item?.status || 'pending')))
     : [];
 }
 
@@ -270,6 +270,9 @@ onBeforeUnmount(() => {
       </header>
       <div class="chat-approval-content">
         <p>{{ activeApproval.summary || t('chat.approval.fallbackSummary') }}</p>
+        <p v-if="String(activeApproval?.status || '').toLowerCase() === 'timed_out'" class="approval-timeout-note">
+          {{ t('chat.approval.timedOut') }}
+        </p>
         <dl>
           <div>
             <dt>{{ t('chat.approval.risk') }}</dt>

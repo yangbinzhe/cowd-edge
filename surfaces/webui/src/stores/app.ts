@@ -290,6 +290,7 @@ export const useAppStore = defineStore('app', () => {
   const activeModal = ref<'model' | 'workspace' | 'commands' | null>(null);
   const selectedModel = ref('');
   const selectedProfile = ref('default');
+  const pendingSessionExecutionPolicyPreset = ref<any>(null);
   const commandError = ref('');
   const sessionQuery = ref('');
   const sessionPageLimit = ref(50);
@@ -758,6 +759,7 @@ export const useAppStore = defineStore('app', () => {
 
   async function createSession(executionPolicyPreset?: any): Promise<SessionSummary> {
     if (sessionCreateFlight) return sessionCreateFlight;
+    const preset = executionPolicyPreset ?? pendingSessionExecutionPolicyPreset.value;
     const previousSessionId = activeSessionId.value;
     const creationGeneration = ++activeSessionLoadGeneration;
     activeSessionId.value = '';
@@ -769,7 +771,7 @@ export const useAppStore = defineStore('app', () => {
       try {
         session = await api.createSession(
           selectedModel.value || undefined,
-          executionPolicyPreset,
+          preset,
         );
       } catch (error) {
         if (
@@ -804,6 +806,10 @@ export const useAppStore = defineStore('app', () => {
       sessionCreateFlight = null;
     });
     return sessionCreateFlight;
+  }
+
+  function setPendingSessionExecutionPolicy(preset: any) {
+    pendingSessionExecutionPolicyPreset.value = preset;
   }
 
   async function deleteSession(sessionId: string) {
@@ -2073,6 +2079,8 @@ export const useAppStore = defineStore('app', () => {
     activeModal,
     selectedModel,
     selectedProfile,
+    pendingSessionExecutionPolicyPreset,
+    setPendingSessionExecutionPolicy,
     availableModels,
     availableProfiles,
     commandError,

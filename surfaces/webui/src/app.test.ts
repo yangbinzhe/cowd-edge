@@ -447,7 +447,7 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
 
     expect(updatePolicy).toHaveBeenCalledWith('policy-ui-session', 'yolo', 7);
-    expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('全自主');
+    expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('YOLO 全信任');
     wrapper.unmount();
   });
 
@@ -977,7 +977,7 @@ describe('Cowd Vue WebUI shell', () => {
     await nextTick();
 
     const badge = wrapper.get('.turn[data-role="user"] .turn-input-badge');
-    expect(badge.attributes('title')).toBe('已接纳 · 已修正当前执行');
+    expect(badge.attributes('title')).toBe('已接纳');
     wrapper.unmount();
   });
 

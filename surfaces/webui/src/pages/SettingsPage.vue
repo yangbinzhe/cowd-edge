@@ -32,6 +32,14 @@ const approvalPruneResult = ref('');
 const executionPolicyDefaults = ref<any>(null);
 const defaultPermissionMode = ref('workspace-write');
 const defaultApprovalProfile = ref('balanced');
+const defaultAutonomyPreset = ref('supervised');
+const autonomyPresetParts: Record<string, { permission: string; approval: string }> = {
+  cautious: { permission: 'read-only', approval: 'supervised' },
+  supervised: { permission: 'workspace-write', approval: 'balanced' },
+  stewarded: { permission: 'workspace-write', approval: 'autonomous' },
+  autonomous: { permission: 'danger-full-access', approval: 'autonomous' },
+  yolo: { permission: 'danger-full-access', approval: 'trust_all' },
+};
 const origin = computed(() => location.origin);
 const accessModeLabels = {
   internal: 'settings.access.internal',
@@ -349,8 +357,11 @@ async function pruneOldApprovals() {
 async function loadExecutionPolicyDefaults() {
   try {
     executionPolicyDefaults.value = await api.executionPolicyDefaults();
-    defaultPermissionMode.value = String(executionPolicyDefaults.value?.permission_mode || 'workspace-write');
-    defaultApprovalProfile.value = String(executionPolicyDefaults.value?.approval_profile || 'balanced');
+    const permission = String(executionPolicyDefaults.value?.permission_mode || 'workspace-write');
+    const approval = String(executionPolicyDefaults.value?.approval_profile || 'balanced');
+    defaultPermissionMode.value = permission;
+    defaultApprovalProfile.value = approval;
+    defaultAutonomyPreset.value = autonomyPresetFromParts(permission, approval);
   } catch {
     // Defaults remain editable; a failed load only leaves the current values.
   }
@@ -358,11 +369,19 @@ async function loadExecutionPolicyDefaults() {
 
 async function saveExecutionPolicyDefaults() {
   await run('execution-policy-defaults', async () => {
+    const parts = autonomyPresetParts[defaultAutonomyPreset.value] || autonomyPresetParts.supervised;
     executionPolicyDefaults.value = await api.updateExecutionPolicyDefaults(
-      defaultPermissionMode.value,
-      defaultApprovalProfile.value,
+      parts.permission,
+      parts.approval,
     );
   });
+}
+
+function autonomyPresetFromParts(permission: string, approval: string) {
+  const entry = Object.entries(autonomyPresetParts).find(([, parts]) => (
+    parts.permission === permission && parts.approval === approval
+  ));
+  return entry?.[0] || 'supervised';
 }
 
 function updateApprovalDraftField(field: 'profile' | 'low_risk_timeout', event: Event) {
@@ -687,17 +706,13 @@ function selectSettingsSection(id: string) {
         </div>
         <div class="execution-policy-defaults">
           <h3>{{ t('settings.policy.defaults.title') }}</h3>
-          <label for="default-permission-mode">{{ t('settings.policy.defaults.permission') }}</label>
-          <select id="default-permission-mode" v-model="defaultPermissionMode">
-            <option value="read-only">read-only</option>
-            <option value="workspace-write">workspace-write</option>
-            <option value="danger-full-access">danger-full-access</option>
-          </select>
-          <label for="default-approval-profile">{{ t('settings.policy.defaults.approval') }}</label>
-          <select id="default-approval-profile" v-model="defaultApprovalProfile">
+          <label for="default-autonomy-preset">{{ t('settings.policy.defaults.autonomy') }}</label>
+          <select id="default-autonomy-preset" v-model="defaultAutonomyPreset">
+            <option value="cautious">cautious</option>
             <option value="supervised">supervised</option>
-            <option value="balanced">balanced</option>
+            <option value="stewarded">stewarded</option>
             <option value="autonomous">autonomous</option>
+            <option value="yolo">yolo</option>
           </select>
           <button class="ghost-action" type="button" :disabled="!!busyAction" @click="saveExecutionPolicyDefaults">
             {{ t('settings.policy.defaults.save') }}

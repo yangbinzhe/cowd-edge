@@ -2054,7 +2054,7 @@ test('copies sent messages and forks a new session from a final answer', async (
   await expect(copyLink).toBeVisible();
   const inputBadge = page.locator('.turn[data-role="user"] .turn-input-badge');
   await expect(inputBadge).toBeVisible();
-  await expect(inputBadge).toHaveAttribute('title', 'Accepted · amends current execution');
+  await expect(inputBadge).toHaveAttribute('title', 'Accepted');
   await copyLink.click();
   await expect(copyLink).toHaveAttribute('title', 'Copied');
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText().catch(() => '')))

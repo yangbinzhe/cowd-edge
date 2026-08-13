@@ -83,7 +83,7 @@ export interface SessionMessageSearchResponse extends ApiReadState {
   total: number;
 }
 
-export type SessionExecutionPolicyPreset = 'cautious' | 'supervised' | 'solo' | 'yolo' | 'stewarded';
+export type SessionExecutionPolicyPreset = 'cautious' | 'supervised' | 'stewarded' | 'autonomous' | 'yolo';
 
 export interface SessionExecutionPolicyResponse extends ApiReadState {
   session_id: string;

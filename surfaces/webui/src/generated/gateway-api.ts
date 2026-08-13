@@ -11938,7 +11938,7 @@ export interface components {
             })[];
         };
         /** @enum {string} */
-        ApprovalProfile: "supervised" | "balanced" | "autonomous";
+        ApprovalProfile: "supervised" | "balanced" | "autonomous" | "trust-all";
         AuthVerifyResponse: {
             auth_required: boolean;
             entitlement?: components["schemas"]["HumanEntitlementProjection"];
@@ -11947,7 +11947,7 @@ export interface components {
             valid: boolean;
         };
         /** @enum {string} */
-        AutonomyProfileId: "cautious" | "supervised" | "solo" | "yolo" | "stewarded";
+        AutonomyProfileId: "cautious" | "supervised" | "stewarded" | "autonomous" | "yolo";
         CancelSessionTurnReceipt: {
             aborted: boolean;
             actor_id: string;
