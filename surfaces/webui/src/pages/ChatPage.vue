@@ -394,7 +394,7 @@ const canUpdateExecutionPolicy = computed(() => (
   && chat.active?.writable === true
 ));
 const canChooseExecutionPolicy = computed(() => (
-  canUpdateExecutionPolicy.value || !store.activeSessionId
+  true
 ));
 const attachmentLabel = computed(() => {
   if (chat.active?.attachmentRole === 'writer') return t('page.chat.attachment.writer');
@@ -462,11 +462,24 @@ async function updateExecutionPolicy(preset: SessionExecutionPolicyPreset) {
     executionPolicyOpen.value = false;
     return;
   }
-  if (!revision || executionPolicyBusy.value || !canUpdateExecutionPolicy.value) return;
+  if (!revision || executionPolicyBusy.value) return;
   executionPolicyBusy.value = true;
   executionPolicyError.value = '';
   try {
-    executionPolicy.value = await api.updateSessionExecutionPolicy(sessionId, preset, revision);
+    const mutation = canUpdateExecutionPolicy.value
+      ? {
+        attached: true as const,
+        value: await api.updateSessionExecutionPolicy(sessionId, preset, revision),
+      }
+      : await chat.withWriterMutation(
+        sessionId,
+        () => api.updateSessionExecutionPolicy(sessionId, preset, revision),
+      );
+    if (!mutation.attached) {
+      executionPolicyError.value = t('chat.executionPolicy.writerRequired');
+      return;
+    }
+    executionPolicy.value = mutation.value;
   } catch (error) {
     executionPolicyError.value = error instanceof Error ? error.message : String(error);
     await loadSessionExecutionPolicy(sessionId);
@@ -2032,7 +2045,6 @@ function chooseFirstCommand() {
           </button>
         </div>
         <p v-if="!store.activeSessionId" class="modal-note">{{ t('chat.executionPolicy.appliesToNewSession') }}</p>
-        <p v-if="!canUpdateExecutionPolicy" class="modal-note">{{ t('chat.executionPolicy.writerRequired') }}</p>
         <p v-if="executionPolicy?.applies_after_active_turn" class="modal-note">{{ t('chat.executionPolicy.nextTurn') }}</p>
         <p v-if="executionPolicyError" class="file-error" role="alert">{{ executionPolicyError }}</p>
       </section>

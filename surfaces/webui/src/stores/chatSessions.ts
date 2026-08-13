@@ -2910,6 +2910,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     refreshProjection,
     attachSurface,
     runSessionCommandMutation,
+    withWriterMutation,
     detachSurface,
     failClosedAllSessionAuthorization,
     refreshAuthorization,
