@@ -99,7 +99,7 @@ export class StreamingMarkdownRenderer {
     const visibleTail = tail.slice(-MAX_UNSTABLE_TAIL_CHARS);
     const hiddenTailChars = tail.length - visibleTail.length;
     const tailHtml = visibleTail
-      ? `<pre class="markdown-stream-tail" data-hidden-chars="${hiddenTailChars}">${escapeHtml(visibleTail)}</pre>`
+      ? `<div class="markdown-stream-tail" data-hidden-chars="${hiddenTailChars}">${escapeHtml(visibleTail)}</div>`
       : '';
     return {
       html: `${this.stableHtml.join('')}${tailHtml}`,
