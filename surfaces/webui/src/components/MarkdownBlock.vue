@@ -11,7 +11,8 @@ const html = ref('');
 watch(
   () => [props.content, props.streaming] as const,
   ([content, streaming]) => {
-    html.value = renderer.render(content, streaming).html;
+    const normalized = String(content || '').replace(/\r\n/g, '\n');
+    html.value = renderer.render(normalized, streaming).html;
   },
   { immediate: true },
 );

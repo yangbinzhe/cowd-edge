@@ -234,6 +234,58 @@ export function combineExecutionLineage(
     canonical_activity_id: activity.id,
     });
   });
+  if (text(root.graph?.terminal_result_ref)) {
+    const terminalAnswerNode = {
+      node_id: `terminal-answer:${root.execution_id}`,
+      semantic_view: true,
+      kind: 'terminal_answer',
+      executor_kind: 'terminal_answer',
+      status: effectiveRootStatus,
+      summary: '最终答复',
+      description: rootActivity
+        ? graphOutputSummary(rootActivity, [])
+        : '执行已结束',
+      output_summary: '',
+      input: {
+        mission_id: root.graph?.objective ? text(root.graph.objective) : '',
+        task_id: '',
+        session_id: root.session_id || '',
+        turn_id: root.turn_id || '',
+      },
+      output: {
+        artifact_refs: [],
+        evidence_refs: [],
+      },
+      usage: { duration_ms: root.live?.last_progress_at_ms || 0 },
+      duration_ms: root.live?.last_progress_at_ms || 0,
+      sequence: 0,
+      started_at_ms: 0,
+      completed_at_ms: 0,
+      parallel_group_id: undefined,
+      team_id: undefined,
+      agent_id: undefined,
+      team_run_id: undefined,
+      agent_instance_id: undefined,
+      agent_run_id: undefined,
+      skill_id: undefined,
+      skill_revision: undefined,
+      skill_activation_id: undefined,
+      tool_contract_id: undefined,
+      definition_refs: [],
+      tool_call_id: undefined,
+      approval_id: undefined,
+      evidence_refs: [],
+      artifact_refs: [],
+      execution_id: root.execution_id,
+      parent_execution_id: undefined,
+      session_id: root.session_id || '',
+      turn_id: root.turn_id || '',
+      task_id: '',
+      mission_id: '',
+      canonical_activity_id: `terminal-answer:${root.execution_id}`,
+    } as (typeof nodes)[number];
+    nodes.push(terminalAnswerNode);
+  }
   const edges = relations.map((relation) => ({
     from: relation.from_activity_id,
     to: relation.to_activity_id,

@@ -270,7 +270,7 @@ button.chat-fact, button.session-evidence-head { cursor: pointer; }
 .markdown-body code { font-family: var(--font-mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
 .markdown-body pre { max-width: 100%; overflow-x: auto; overflow-y: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
 .markdown-body pre code { border: 0; padding: 0; background: transparent; }
-.markdown-body table { width: 100%; max-width: 100%; border-collapse: collapse; margin: 12px 0 16px; display: block; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border); border-radius: 8px; }
+.markdown-body table { width: 100%; max-width: 100%; border-collapse: collapse; margin: 12px 0 16px; border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; }
 .markdown-body th, .markdown-body td { padding: 8px 10px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
 .markdown-body th { background: var(--surface-2); color: var(--text); font-weight: 700; }
 .markdown-body tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 42%, transparent); }
