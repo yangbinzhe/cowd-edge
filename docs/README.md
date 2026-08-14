@@ -11,15 +11,13 @@
 - [WebUI Surface](manual/webui.html)
 - [构建、配置与排障](manual/operations.html)
 
-说明书以 `v0.9.677` 的 manifest、Edge v2 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
+说明书以当前 manifest、Edge 合同、WebUI 源码和发布门禁为事实依据。运行状态以 Gateway 的 Edge 投影为准，静态文档不代替在线健康检查。
 
-## v0.9.677 WebUI 能力要点
+## WebUI 能力要点
 
 - Chat 用户/系统消息一键复制（Clipboard API + 兼容回退）。
 - 每个最终结果“分支新会话”：复用 `branchSession`，创建后自动切换并重载消息；store 级 in-flight guard 防双击。
 - 发布门禁：`npm run test:smoke` 校验 12 路由渲染、dist 静态引用完整性与 P12 锚点；CI 新增 Playwright e2e + dist 完整性。
-- 执行图视口修复与 v0.9.676 能力保持不回退（见下方历史要点）。
-
 - live 订阅收敛为单条物理连接，surface_instance 使用 `observerId:tab:<nonce>`，多标签不再共享
   订阅计数；页面卸载必定关闭租约。
 - 授权失效自动恢复每浏览器会话最多一次，再次失效只提示、不循环刷新。

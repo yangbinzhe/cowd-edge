@@ -1,6 +1,6 @@
 # Cowd Edge
 
-> 当前版本：`0.9.677` · 外部连接与浏览器 Surface 仓库
+> 外部连接与浏览器 Surface 仓库
 
 Cowd Edge 把用户界面、消息平台和外部数据源接入 Cowd Gateway，同时将平台 SDK、长连接协议、邮件协议和数据库驱动隔离在 Core 之外。Gateway 是唯一 EdgeHost；Runtime 不依赖本仓库。
 
@@ -43,8 +43,8 @@ npm run dev:webui
 npm run check
 npm run build
 
-# 版本、manifest 与 Core 合同门禁
-node scripts/edge-version-gate.mjs --version 0.9.677 --core ../cowd
+# manifest 与 Core 合同门禁
+node scripts/edge-version-gate.mjs --core ../cowd
 ```
 
 九个逻辑连接器复用六个发布 artifact；每个逻辑连接器仍有独立 ID、配置、健康和修复状态。安装后由 Gateway 自动发现，配置通过校验后热应用或有界重启。
