@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { formatCount, t } from '../i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Brain, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CircleDashed, Clipboard, Clock3, Code2, Coins, Download, Edit3, ExternalLink, FileCheck2, FileText, Folder, Info, Link2, LoaderCircle, MemoryStick, RotateCcw, Save, Search, ShieldCheck, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
+import { Brain, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CircleDashed, Clipboard, Clock3, Code2, Coins, Download, Edit3, ExternalLink, FileCheck2, FileText, Folder, Info, Link2, LoaderCircle, Maximize2, MemoryStick, Minimize2, RotateCcw, Save, Search, ShieldCheck, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
 import { useAppStore } from '../stores/app';
 import { useChatSessionsStore } from '../stores/chatSessions';
 import { useProjectionRegistryStore } from '../stores/projectionRegistry';
@@ -61,6 +61,37 @@ const resizing = ref(false);
 const executionHistoryLimit = ref(50);
 const collapsedTurnIds = ref(new Set<string>());
 const activityMode = ref<'business' | 'technical'>('business');
+const companionFullscreen = ref(false);
+const companionMobileHeight = ref<number | null>(null);
+
+const companionPanelStyle = computed(() => {
+  if (companionFullscreen.value || companionMobileHeight.value === null) return undefined;
+  return { '--companion-mobile-height': `${companionMobileHeight.value}px` } as Record<string, string>;
+});
+
+function toggleCompanionFullscreen() {
+  companionFullscreen.value = !companionFullscreen.value;
+  if (!companionFullscreen.value) companionMobileHeight.value = null;
+}
+
+function startCompanionGrab(event: PointerEvent) {
+  if (companionFullscreen.value || window.matchMedia('(min-width: 1181px)').matches) return;
+  event.preventDefault();
+  const minHeight = Math.round(window.innerHeight * 0.2);
+  const maxHeight = Math.round(window.innerHeight * 0.95);
+  const apply = (clientY: number) => {
+    const height = Math.min(Math.max(window.innerHeight - clientY, minHeight), maxHeight);
+    companionMobileHeight.value = height;
+  };
+  apply(event.clientY);
+  const onMove = (move: PointerEvent) => apply(move.clientY);
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+}
 
 const previewKind = computed(() => store.selectedFile ? workspacePreviewKind(store.selectedFile) : 'binary');
 const rawFileUrl = computed(() => store.rawWorkspaceFileUrl(store.selectedFile));
@@ -727,7 +758,28 @@ watch(
 </script>
 
 <template>
-  <aside class="companion-panel" :aria-label="t('component.companion.panel.aria-label.98b3d09f27')">
+  <aside
+    class="companion-panel"
+    :class="{ 'companion-fullscreen': companionFullscreen }"
+    :style="companionPanelStyle"
+    :aria-label="t('component.companion.panel.aria-label.98b3d09f27')"
+  >
+    <button
+      class="companion-grab"
+      type="button"
+      :aria-label="t('workspace.panel.grab')"
+      @pointerdown="startCompanionGrab"
+    ></button>
+    <button
+      class="companion-fullscreen-toggle"
+      type="button"
+      :aria-label="companionFullscreen ? t('workspace.panel.exitFullscreen') : t('workspace.panel.fullscreen')"
+      :title="companionFullscreen ? t('workspace.panel.exitFullscreen') : t('workspace.panel.fullscreen')"
+      @click="toggleCompanionFullscreen"
+    >
+      <Minimize2 v-if="companionFullscreen" :size="16" />
+      <Maximize2 v-else :size="16" />
+    </button>
     <button class="companion-resizer" type="button" :aria-label="t('workspace.preview.resize')" @mousedown="startResize"></button>
     <div class="companion-tabs" role="tablist">
       <button :class="{ active: store.companionTab === 'activity' }" type="button" @click="store.openCompanion('activity')">

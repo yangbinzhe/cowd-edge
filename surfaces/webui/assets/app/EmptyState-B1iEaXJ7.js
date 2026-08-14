@@ -1,0 +1,1 @@
+import{H as e,O as t,S as n,x as r,xt as i,y as a}from"./app-i18n-C7O2c0DP.js";var o={class:`empty-state`},s={key:0},c=t({__name:`EmptyState`,props:{title:{},detail:{}},setup(t){return(c,l)=>(e(),n(`div`,o,[a(`strong`,null,i(t.title),1),t.detail?(e(),n(`p`,s,i(t.detail),1)):r(``,!0)]))}});export{c as t};

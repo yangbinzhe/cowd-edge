@@ -332,6 +332,8 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .app-shell[data-companion="open"] .companion-toggle { right: calc(var(--companion-width, 384px) + 16px); }
 .companion-resizer { position: absolute; left: -4px; top: 0; bottom: 0; z-index: 4; width: 8px; border: 0; background: transparent; cursor: col-resize; }
 .companion-resizer:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.companion-grab,
+.companion-fullscreen-toggle { display: none; }
 .companion-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 8px; gap: 6px; border-bottom: 1px solid var(--border); }
 .companion-tabs button { min-height: 34px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 7px; }
 .companion-tabs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1226,7 +1228,14 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .capability-section-select { display: block; flex: 1 1 auto; }
   .capability-section-tabs { display: none; }
   .capability-page, .settings-page, .memory-page, .agents-page, .runtime-page, .context-page, .gateway-page { overflow: auto; }
-  .companion-panel { min-height: 0; max-height: 45dvh; border-left: 0; border-top: 1px solid var(--border); }
+  .companion-panel { min-height: 0; height: min(var(--companion-mobile-height, 45dvh), 100dvh); max-height: none; border-left: 0; border-top: 1px solid var(--border); }
+  .companion-grab { display: block; position: absolute; top: 0; left: 0; right: 0; z-index: 5; height: 16px; border: 0; background: transparent; cursor: row-resize; touch-action: none; }
+  .companion-fullscreen-toggle { display: grid; place-items: center; position: absolute; top: 8px; right: 8px; z-index: 6; width: 36px; height: 36px; padding: 0; border: 1px solid var(--border-2); border-radius: 9px; background: var(--surface); color: var(--text-muted); box-shadow: 0 6px 18px rgb(0 0 0 / 16%); }
+  .companion-panel.companion-fullscreen { position: fixed; inset: 0; z-index: var(--z-modal); width: 100vw; height: 100dvh; max-height: none; border-top: 0; }
+  .companion-fullscreen .companion-fullscreen-toggle { top: 12px; right: 12px; }
+  .companion-body.workspace-tab { display: block; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .workspace-tab .workspace-tree-shell { flex: none; }
+  .workspace-tab .workspace-tree { overflow: visible; max-height: none; }
   .execution-stream-summary.activity-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .graph-minimap { display: none; }
   .app-shell[data-companion="collapsed"] .rail,
