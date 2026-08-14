@@ -1,5 +1,6 @@
 import { reactive, ref } from 'vue';
 import { api, ApiWriteError, claimWebuiObserverId } from '../api/client';
+import type { TerminalDeliveryEvent } from '../types';
 import { buildLiveSurfaceInstance } from '../utils/surfaceIdentity';
 
 export type LiveSourceKind = 'session' | 'execution' | 'mission';
@@ -33,6 +34,72 @@ export type LiveEnvelope = {
   start_bytes?: number;
   end_bytes?: number;
 };
+
+const TERMINAL_DELIVERY_EVENTS = new Set<TerminalDeliveryEvent['event']>([
+  'terminal_presentation_started',
+  'text_delta',
+  'terminal_presentation_superseded',
+  'terminal_presentation_aborted',
+  'terminal_presentation_committed',
+  'cancellation_committed',
+]);
+
+function nonEmptyString(value: unknown) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Extract the typed terminal-delivery payload while retaining the canonical
+ * LiveEnvelope as the only transport/recovery owner. Unknown live events are
+ * not coerced into this contract.
+ */
+export function terminalDeliveryEventFromEnvelope(
+  envelope: LiveEnvelope,
+): TerminalDeliveryEvent | null {
+  const payload = envelope.payload && typeof envelope.payload === 'object'
+    ? envelope.payload as Record<string, unknown>
+    : {};
+  if (payload.type !== 'TerminalDelivery' && envelope.event !== 'TerminalDelivery') return null;
+  const delivery = payload.delivery && typeof payload.delivery === 'object'
+    ? payload.delivery as Record<string, unknown>
+    : null;
+  if (!delivery) {
+    throw new Error('Gateway live stream emitted an invalid TerminalDelivery payload');
+  }
+  const event = String(delivery.event || '') as TerminalDeliveryEvent['event'];
+  if (!TERMINAL_DELIVERY_EVENTS.has(event)) {
+    throw new Error('Gateway live stream emitted an invalid TerminalDelivery discriminator');
+  }
+  const candidate = {
+    ...delivery,
+    event,
+    session_id: payload.session_id || envelope.source_id,
+    execution_id: payload.execution_id || envelope.execution_id,
+    turn_id: payload.turn_id,
+  } as Record<string, unknown>;
+  const hasAttempt = nonEmptyString(candidate.presentation_id)
+    && nonEmptyString(candidate.attempt_id);
+  const valid = event === 'cancellation_committed'
+    ? nonEmptyString((candidate.receipt as any)?.cancellation_id)
+    : event === 'terminal_presentation_started'
+      ? hasAttempt
+        && nonEmptyString(candidate.envelope_id)
+        && Number.isInteger(Number(candidate.envelope_revision))
+      : event === 'text_delta'
+        ? hasAttempt
+          && Number.isInteger(Number(candidate.byte_start))
+          && Number.isInteger(Number(candidate.byte_end))
+          && typeof candidate.delta === 'string'
+      : event === 'terminal_presentation_committed'
+        ? hasAttempt
+          && nonEmptyString(candidate.answer_origin)
+          && nonEmptyString(candidate.terminal_id)
+        : hasAttempt && nonEmptyString(candidate.reason);
+  if (!valid) {
+    throw new Error(`Gateway live stream emitted an invalid ${event} payload`);
+  }
+  return candidate as unknown as TerminalDeliveryEvent;
+}
 
 type SourceCallbacks = {
   open?: () => void;
@@ -540,6 +607,17 @@ export function openSessionLiveSource(
       error: () => adapter.onerror?.(new Event('error')),
       envelope: (envelope) => {
         let payload = envelope.payload;
+        try {
+          const terminalDelivery = terminalDeliveryEventFromEnvelope(envelope);
+          if (terminalDelivery) payload = terminalDelivery;
+        } catch (error) {
+          payload = {
+            type: 'session_stream_resync',
+            session_id: sessionId,
+            runtime_commit_cursor: envelope.source_cursor,
+            reason: error instanceof Error ? error.message : String(error),
+          };
+        }
         if (
           payload
           && typeof payload === 'object'

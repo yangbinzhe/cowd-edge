@@ -8,7 +8,36 @@ import causalTimelineFixture from '../testFixtures/causal-surface-timeline-v1.js
 vi.mock('./liveTransport', () => ({
   openSessionLiveSource: (sessionId: string) => {
     if (typeof EventSource !== 'undefined') {
-      return new EventSource(`/test/live/session/${sessionId}`);
+      const physical = new EventSource(`/test/live/session/${sessionId}`);
+      const adapter = {
+        onopen: null as (() => void) | null,
+        onerror: null as ((event: Event) => void) | null,
+        onmessage: null as ((event: MessageEvent) => void) | null,
+        close: () => physical.close(),
+        update: () => undefined,
+      };
+      physical.onopen = () => adapter.onopen?.();
+      physical.onerror = (event) => adapter.onerror?.(event);
+      physical.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          const projected = payload?.type === 'TerminalDelivery' && payload?.delivery
+            ? {
+                ...payload.delivery,
+                session_id: payload.session_id || sessionId,
+                execution_id: payload.execution_id,
+                turn_id: payload.turn_id,
+              }
+            : payload;
+          adapter.onmessage?.({
+            ...event,
+            data: JSON.stringify(projected),
+          } as MessageEvent);
+        } catch {
+          adapter.onmessage?.(event);
+        }
+      };
+      return adapter;
     }
     return { onopen: null, onerror: null, onmessage: null, close() {}, update() {} };
   },
@@ -2746,5 +2775,720 @@ describe('chatSessions', () => {
     expect(chat.states[`cancel-${status}`].writable).toBe(true);
     expect(chat.states[`cancel-${status}`].lastError).toContain(`HTTP ${status}`);
     expect(release).not.toHaveBeenCalled();
+  });
+
+  it('reduces one root presentation attempt and replaces queued preview with durable text', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    let durableMessages: any[] = [];
+    vi.spyOn(api, 'messages').mockImplementation(async (sessionId) => ({
+      session_id: sessionId,
+      messages: durableMessages.map((message) => ({ ...message, session_id: sessionId })),
+      total: durableMessages.length,
+      has_more: false,
+    }) as any);
+    vi.spyOn(api, 'sessionExecution').mockImplementation(async (sessionId) => ({
+      session_id: sessionId,
+      active_execution_ids: [],
+    }) as any);
+    vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({ __state: 'not_found' } as any);
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found' } as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'presentation-execution', turn_id: 'presentation-turn' },
+    } as any);
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 1;
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = nextFrame++;
+      frames.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    const chat = useChatSessionsStore();
+
+    await chat.open('presentation-session');
+    await chat.send('presentation-session', 'summarize');
+    const emit = (delivery: Record<string, unknown>) => streams[0].onmessage?.({
+      data: JSON.stringify({
+        type: 'TerminalDelivery',
+        session_id: 'presentation-session',
+        execution_id: 'presentation-execution',
+        turn_id: 'presentation-turn',
+        delivery,
+      }),
+    } as MessageEvent);
+    emit({
+      event: 'terminal_presentation_started',
+      presentation_id: 'presentation-1',
+      attempt_id: 'attempt-1',
+      envelope_id: 'envelope-1',
+      envelope_revision: 1,
+      objective_scope: 'root',
+    });
+    emit({
+      event: 'text_delta',
+      presentation_id: 'presentation-1',
+      attempt_id: 'attempt-1',
+      byte_start: 0,
+      byte_end: 7,
+      delta: 'preview',
+    });
+    expect(frames.size).toBe(1);
+    durableMessages = [{
+      id: 'assistant-durable',
+      sequence: 2,
+      role: 'assistant',
+      blocks: [{
+        type: 'text',
+        text: 'durable answer',
+        cowd_execution_id: 'presentation-execution',
+        cowd_turn_id: 'presentation-turn',
+      }],
+    }];
+    emit({
+      event: 'terminal_presentation_committed',
+      presentation_id: 'presentation-1',
+      attempt_id: 'attempt-1',
+      answer_origin: 'terminal_narrator',
+      terminal_id: 'terminal-1',
+    });
+
+    expect(frames.size).toBe(0);
+    await vi.waitFor(() => expect(chat.states['presentation-session'].turns.some(
+      (turn) => turn.id === 'assistant-durable' && turn.content === 'durable answer',
+    )).toBe(true));
+    expect(chat.states['presentation-session'].presentation?.state).toBe('committed');
+    expect(chat.states['presentation-session'].pending).toBe(false);
+    emit({
+      event: 'text_delta',
+      presentation_id: 'presentation-1',
+      attempt_id: 'attempt-1',
+      byte_start: 7,
+      byte_end: 11,
+      delta: 'late',
+    });
+    expect(chat.states['presentation-session'].turns.some(
+      (turn) => turn.content.includes('late'),
+    )).toBe(false);
+  });
+
+  it('supersedes an old presentation attempt and drops its late deltas', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found' } as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'supersede-execution', turn_id: 'supersede-turn' },
+    } as any);
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const chat = useChatSessionsStore();
+    await chat.open('supersede-session');
+    await chat.send('supersede-session', 'answer');
+    const emit = (delivery: Record<string, unknown>) => streams[0].onmessage?.({
+      data: JSON.stringify({
+        type: 'TerminalDelivery',
+        session_id: 'supersede-session',
+        execution_id: 'supersede-execution',
+        turn_id: 'supersede-turn',
+        delivery,
+      }),
+    } as MessageEvent);
+    emit({ event: 'terminal_presentation_started', presentation_id: 'p', attempt_id: 'a1', envelope_id: 'e', envelope_revision: 1 });
+    emit({ event: 'text_delta', presentation_id: 'p', attempt_id: 'a1', byte_start: 0, byte_end: 3, delta: 'old' });
+    emit({ event: 'terminal_presentation_superseded', presentation_id: 'p', attempt_id: 'a1', reason: 'fallback' });
+    emit({ event: 'terminal_presentation_started', presentation_id: 'p', attempt_id: 'a2', envelope_id: 'e', envelope_revision: 1 });
+    emit({ event: 'text_delta', presentation_id: 'p', attempt_id: 'a1', byte_start: 3, byte_end: 7, delta: 'late' });
+    emit({ event: 'text_delta', presentation_id: 'p', attempt_id: 'a2', byte_start: 0, byte_end: 3, delta: 'new' });
+
+    const preview = chat.states['supersede-session'].turns.find(
+      (turn) => turn.id === chat.states['supersede-session'].streamTurnId,
+    );
+    expect(preview?.content).toBe('new');
+    expect(preview?.presentation_attempt_id).toBe('a2');
+  });
+
+  it('clears a stale root preview when queue-full resync proves no presentation winner', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'drop-abort-execution', turn_id: 'drop-abort-turn' },
+    } as any);
+    const live = {
+      status: 'running',
+      turn_id: 'drop-abort-turn',
+      output_bytes: 10,
+      output_parts: [{
+        model_step_id: 'drop-abort-step',
+        item_id: 'drop-abort-item',
+        part_id: 'drop-abort-item:text:0',
+        causal_sequence: 1,
+        completed: false,
+        preview: 'stale root',
+        preview_start_bytes: 0,
+        bytes: 10,
+      }],
+    };
+    vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({
+      execution_id: 'drop-abort-execution',
+      live,
+    } as any);
+    const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'drop-abort-execution',
+      revision: 9,
+      cursor: 9,
+      live,
+      terminal_presentation: null,
+      cancellation_receipt: null,
+    } as any);
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const chat = useChatSessionsStore();
+    await chat.send('drop-abort-session', 'produce a final answer');
+    const emit = (delivery: Record<string, unknown>) => streams[0].onmessage?.({
+      data: JSON.stringify({
+        type: 'TerminalDelivery',
+        session_id: 'drop-abort-session',
+        execution_id: 'drop-abort-execution',
+        turn_id: 'drop-abort-turn',
+        delivery,
+      }),
+    } as MessageEvent);
+    emit({
+      event: 'terminal_presentation_started',
+      presentation_id: 'dropped-presentation',
+      attempt_id: 'dropped-attempt',
+      envelope_id: 'drop-abort-envelope',
+      envelope_revision: 1,
+      objective_scope: 'root',
+    });
+    emit({
+      event: 'text_delta',
+      presentation_id: 'dropped-presentation',
+      attempt_id: 'dropped-attempt',
+      byte_start: 0,
+      byte_end: 10,
+      delta: 'stale root',
+    });
+    expect(chat.states['drop-abort-session'].turns.some(
+      (turn) => turn.role === 'assistant' && turn.content === 'stale root',
+    )).toBe(true);
+
+    // The queue-full gap means the aborted event itself was not delivered.
+    // A successful live-byte recovery is insufficient: only the latest
+    // execution projection can prove that no root attempt remains active.
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'session_stream_resync',
+      session_id: 'drop-abort-session',
+      runtime_commit_cursor: 8,
+      reason: 'terminal delivery queue full; abort event dropped',
+    }) } as MessageEvent);
+
+    await vi.waitFor(() => expect(projection).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => {
+      expect(chat.states['drop-abort-session'].presentation).toBeNull();
+    });
+    const state = chat.states['drop-abort-session'];
+    expect(state.pending).toBe(true);
+    expect(state.cancelRequested).toBe(false);
+    expect(state.turns.some((turn) => (
+      turn.role === 'assistant' && turn.content === 'stale root'
+    ))).toBe(false);
+
+    emit({
+      event: 'text_delta',
+      presentation_id: 'dropped-presentation',
+      attempt_id: 'dropped-attempt',
+      byte_start: 10,
+      byte_end: 14,
+      delta: 'late',
+    });
+    expect(state.presentation).toBeNull();
+    expect(state.turns.some((turn) => turn.content.includes('late'))).toBe(false);
+  });
+
+  it('deduplicates user cancellation receipts without creating an assistant answer', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'executionProjection').mockImplementation(() => new Promise(() => {}) as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'cancel-receipt-execution', turn_id: 'cancel-receipt-turn' },
+    } as any);
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const requestedReceipt = {
+      cancellation_id: 'cancel-receipt-1',
+      session_id: 'cancel-receipt-session',
+      turn_id: 'cancel-receipt-turn',
+      execution_id: 'cancel-receipt-execution',
+      actor_id: 'user',
+      cause: 'user_requested',
+      requested_at_ms: 100,
+      effective_at_ms: null,
+      status: 'requested',
+      journal_sequence: 7,
+      projection_revision: 8,
+    };
+    vi.spyOn(api, 'cancelSessionTurn').mockResolvedValue({
+      ok: true,
+      endpoint: '/api/sessions/cancel-receipt-session/cancel',
+      method: 'POST',
+      data: requestedReceipt,
+    } as any);
+    const chat = useChatSessionsStore();
+    await chat.send('cancel-receipt-session', 'run');
+
+    expect(await chat.stop('cancel-receipt-session')).toBe(true);
+    expect(chat.states['cancel-receipt-session'].pending).toBe(true);
+    expect(chat.states['cancel-receipt-session'].cancelRequested).toBe(false);
+    expect(chat.states['cancel-receipt-session'].cancellations).toHaveLength(1);
+    expect(chat.states['cancel-receipt-session'].cancellations[0].status).toBe('requested');
+    expect(chat.states['cancel-receipt-session'].activity.filter(
+      (event) => event.id === 'cancellation:cancel-receipt-1',
+    )).toHaveLength(1);
+
+    // The same identity upgrades monotonically when Runtime makes the
+    // cancellation effective; it remains one activity instead of two.
+    const cancelledReceipt = {
+      ...requestedReceipt,
+      effective_at_ms: 110,
+      status: 'cancelled',
+      journal_sequence: 8,
+      projection_revision: 9,
+    };
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'cancel-receipt-session',
+      execution_id: 'cancel-receipt-execution',
+      turn_id: 'cancel-receipt-turn',
+      delivery: { event: 'cancellation_committed', receipt: cancelledReceipt },
+    }) } as MessageEvent);
+    expect(chat.states['cancel-receipt-session'].cancellations).toHaveLength(1);
+    expect(chat.states['cancel-receipt-session'].cancellations[0].status).toBe('cancelled');
+    expect(chat.states['cancel-receipt-session'].activity.filter(
+      (event) => event.id === 'cancellation:cancel-receipt-1',
+    )).toHaveLength(1);
+    expect(chat.states['cancel-receipt-session'].activity.find(
+      (event) => event.id === 'cancellation:cancel-receipt-1',
+    )?.status).toBe('cancelled');
+    expect(chat.states['cancel-receipt-session'].pending).toBe(false);
+    expect(chat.states['cancel-receipt-session'].cancelRequested).toBe(true);
+    expect(chat.states['cancel-receipt-session'].turns.some(
+      (turn) => turn.role === 'assistant',
+    )).toBe(false);
+
+    // A delayed Requested replay cannot downgrade the terminal receipt.
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'cancel-receipt-session',
+      execution_id: 'cancel-receipt-execution',
+      turn_id: 'cancel-receipt-turn',
+      delivery: { event: 'cancellation_committed', receipt: requestedReceipt },
+    }) } as MessageEvent);
+    expect(chat.states['cancel-receipt-session'].cancellations[0].status).toBe('cancelled');
+
+    // The accepted user cancellation is the terminal winner. Late model
+    // presentation events from the same execution/turn cannot reopen it.
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'cancel-receipt-session',
+      execution_id: 'cancel-receipt-execution',
+      turn_id: 'cancel-receipt-turn',
+      delivery: {
+        event: 'terminal_presentation_started',
+        presentation_id: 'late-presentation',
+        attempt_id: 'late-attempt',
+        envelope_id: 'late-envelope',
+        envelope_revision: 9,
+        objective_scope: 'root',
+      },
+    }) } as MessageEvent);
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'cancel-receipt-session',
+      execution_id: 'cancel-receipt-execution',
+      turn_id: 'cancel-receipt-turn',
+      delivery: {
+        event: 'text_delta',
+        presentation_id: 'late-presentation',
+        attempt_id: 'late-attempt',
+        byte_start: 0,
+        byte_end: 4,
+        delta: 'late',
+      },
+    }) } as MessageEvent);
+    expect(chat.states['cancel-receipt-session'].cancelRequested).toBe(true);
+    expect(chat.states['cancel-receipt-session'].pending).toBe(false);
+    expect(chat.states['cancel-receipt-session'].presentation).toBeNull();
+    expect(chat.states['cancel-receipt-session'].turns.some(
+      (turn) => turn.role === 'assistant',
+    )).toBe(false);
+  });
+
+  it('fences stale terminal delivery from an older execution and turn', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found' } as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'current-execution', turn_id: 'current-turn' },
+    } as any);
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const chat = useChatSessionsStore();
+    await chat.send('turn-fence-session', 'run current turn');
+    const emit = (
+      delivery: Record<string, unknown>,
+      executionId = 'current-execution',
+      turnId = 'current-turn',
+    ) => streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'turn-fence-session',
+      execution_id: executionId,
+      turn_id: turnId,
+      delivery,
+    }) } as MessageEvent);
+
+    emit({
+      event: 'terminal_presentation_started',
+      presentation_id: 'current-presentation',
+      attempt_id: 'current-attempt',
+      envelope_id: 'current-envelope',
+      envelope_revision: 1,
+      objective_scope: 'root',
+    });
+    emit({
+      event: 'text_delta',
+      presentation_id: 'current-presentation',
+      attempt_id: 'current-attempt',
+      byte_start: 0,
+      byte_end: 5,
+      delta: 'stale',
+    }, 'old-execution', 'old-turn');
+    emit({
+      event: 'terminal_presentation_committed',
+      presentation_id: 'current-presentation',
+      attempt_id: 'current-attempt',
+      answer_origin: 'terminal_narrator',
+      terminal_id: 'old-terminal',
+    }, 'old-execution', 'old-turn');
+    emit({
+      event: 'cancellation_committed',
+      receipt: {
+        cancellation_id: 'old-cancellation',
+        session_id: 'turn-fence-session',
+        turn_id: 'old-turn',
+        execution_id: 'old-execution',
+        actor_id: 'user',
+        cause: 'user_requested',
+        requested_at_ms: 100,
+        effective_at_ms: 101,
+        status: 'cancelled',
+        journal_sequence: 3,
+        projection_revision: 4,
+      },
+    }, 'old-execution', 'old-turn');
+
+    const state = chat.states['turn-fence-session'];
+    expect(state.presentation?.state).toBe('started');
+    expect(state.pending).toBe(true);
+    expect(state.cancelRequested).toBe(false);
+    expect(state.cancellations).toHaveLength(0);
+    expect(state.turns.find((turn) => turn.id === state.streamTurnId)?.content).toBe('');
+
+    emit({
+      event: 'text_delta',
+      presentation_id: 'current-presentation',
+      attempt_id: 'current-attempt',
+      byte_start: 0,
+      byte_end: 7,
+      delta: 'current',
+    });
+    expect(state.turns.find((turn) => turn.id === state.streamTurnId)?.content).toBe('current');
+  });
+
+  it('keeps cancelled projection authoritative over committed presentation and output recovery', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'cancel-recovery-execution', turn_id: 'cancel-recovery-turn' },
+    } as any);
+    const receipt = {
+      cancellation_id: 'cancel-recovery-id',
+      session_id: 'cancel-recovery-session',
+      turn_id: 'cancel-recovery-turn',
+      execution_id: 'cancel-recovery-execution',
+      actor_id: 'user',
+      cause: 'user_requested',
+      requested_at_ms: 200,
+      effective_at_ms: 210,
+      status: 'cancelled',
+      journal_sequence: 10,
+      projection_revision: 11,
+    };
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'cancel-recovery-execution',
+      revision: 11,
+      cursor: 11,
+      cancellation_receipt: receipt,
+      terminal_presentation: {
+        presentation_id: 'must-not-win',
+        attempt_id: 'must-not-win-attempt',
+        envelope_id: 'cancel-recovery-envelope',
+        envelope_revision: 11,
+        state: 'committed',
+        answer_origin: 'terminal_narrator',
+      },
+      live: {
+        status: 'cancelled',
+        turn_id: 'cancel-recovery-turn',
+        output_bytes: 11,
+        output_parts: [{
+          model_step_id: 'late-step',
+          item_id: 'late-item',
+          part_id: 'late-item:text:0',
+          causal_sequence: 1,
+          completed: false,
+          preview: 'late answer',
+          preview_start_bytes: 0,
+          bytes: 11,
+        }],
+      },
+    } as any);
+    const clearPending = vi.spyOn(api, 'clearPendingCancellationRequest');
+    const chat = useChatSessionsStore();
+
+    await chat.send('cancel-recovery-session', 'cancel this turn');
+    await chat.refreshProjection('cancel-recovery-session');
+
+    const state = chat.states['cancel-recovery-session'];
+    expect(state.cancelRequested).toBe(true);
+    expect(state.pending).toBe(false);
+    expect(state.presentation).toBeNull();
+    expect(state.cancellations).toHaveLength(1);
+    expect(state.turns.some((turn) => (
+      turn.role === 'assistant' && turn.content.includes('late answer')
+    ))).toBe(false);
+    expect(clearPending).toHaveBeenCalledWith(
+      'cancel-recovery-session',
+      'cancel-recovery-execution',
+      'cancel-recovery-turn',
+    );
+  });
+
+  it('installs a terminal fence from cancelled live recovery without a receipt', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'cancel-live-execution', turn_id: 'cancel-live-turn' },
+    } as any);
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({
+      schema_version: 2,
+      execution_id: 'cancel-live-execution',
+      revision: 12,
+      cursor: 12,
+      live: {
+        status: 'cancelled',
+        turn_id: 'cancel-live-turn',
+        output_bytes: 11,
+        output_parts: [{
+          model_step_id: 'recovered-step',
+          item_id: 'recovered-item',
+          part_id: 'recovered-item:text:0',
+          causal_sequence: 1,
+          completed: false,
+          preview: 'late answer',
+          preview_start_bytes: 0,
+          bytes: 11,
+        }],
+      },
+    } as any);
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const chat = useChatSessionsStore();
+    await chat.send('cancel-live-session', 'cancelled during recovery');
+
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'cancel-live-session',
+      execution_id: 'cancel-live-execution',
+      turn_id: 'cancel-live-turn',
+      delivery: {
+        event: 'terminal_presentation_started',
+        presentation_id: 'recovered-presentation',
+        attempt_id: 'recovered-attempt',
+        envelope_id: 'recovered-envelope',
+        envelope_revision: 1,
+        objective_scope: 'root',
+      },
+    }) } as MessageEvent);
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'cancel-live-session',
+      execution_id: 'cancel-live-execution',
+      turn_id: 'cancel-live-turn',
+      delivery: {
+        event: 'text_delta',
+        presentation_id: 'recovered-presentation',
+        attempt_id: 'recovered-attempt',
+        byte_start: 0,
+        byte_end: 7,
+        delta: 'preview',
+      },
+    }) } as MessageEvent);
+    expect(chat.states['cancel-live-session'].turns.some(
+      (turn) => turn.role === 'assistant' && turn.content === 'preview',
+    )).toBe(true);
+
+    await chat.refreshProjection('cancel-live-session');
+
+    const state = chat.states['cancel-live-session'];
+    expect(state.cancelRequested).toBe(true);
+    expect(state.pending).toBe(false);
+    expect(state.presentation).toBeNull();
+    expect(state.streamTurnId).toBe('');
+    expect(state.cancellations).toHaveLength(0);
+    expect(state.turns.some((turn) => turn.role === 'assistant')).toBe(false);
+
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TerminalDelivery',
+      session_id: 'cancel-live-session',
+      execution_id: 'cancel-live-execution',
+      turn_id: 'cancel-live-turn',
+      delivery: {
+        event: 'terminal_presentation_started',
+        presentation_id: 'late-presentation',
+        attempt_id: 'late-attempt',
+        envelope_id: 'late-envelope',
+        envelope_revision: 2,
+        objective_scope: 'root',
+      },
+    }) } as MessageEvent);
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'TextDelta',
+      session_id: 'cancel-live-session',
+      execution_id: 'cancel-live-execution',
+      turn_id: 'cancel-live-turn',
+      ...causalFields('late-text', 'text'),
+      part_id: 'late-text:text:0',
+      start_bytes: 0,
+      end_bytes: 4,
+      text: 'late',
+    }) } as MessageEvent);
+    streams[0].onmessage?.({ data: JSON.stringify({
+      type: 'ToolStart',
+      session_id: 'cancel-live-session',
+      execution_id: 'cancel-live-execution',
+      turn_id: 'cancel-live-turn',
+      ...causalFields('late-tool-item', 'tool'),
+      tool_call_id: 'late-tool',
+      name: 'must-not-reopen-preview',
+    }) } as MessageEvent);
+
+    expect(state.cancelRequested).toBe(true);
+    expect(state.presentation).toBeNull();
+    expect(state.streamTurnId).toBe('');
+    expect(state.turns.some((turn) => turn.role === 'assistant')).toBe(false);
+    expect(state.activity.some((event) => event.tool_call_id === 'late-tool')).toBe(false);
+  });
+
+  it('submits while the live source is still connecting', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const send = vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'connecting-execution', turn_id: 'connecting-turn' },
+    } as any);
+    const chat = useChatSessionsStore();
+
+    expect(await chat.send('connecting-session', 'do not wait for SSE')).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(chat.states['connecting-session'].streamState).toBe('connecting');
   });
 });

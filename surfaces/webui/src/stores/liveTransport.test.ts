@@ -6,6 +6,7 @@ import {
   openSessionLiveSource,
   parseLiveEnvelope,
   resetLiveTransportForTests,
+  terminalDeliveryEventFromEnvelope,
   type LiveEnvelope,
 } from './liveTransport';
 import {
@@ -78,6 +79,57 @@ afterEach(() => {
 });
 
 describe('WebUI multiplex live transport', () => {
+  it('extracts the typed terminal delivery discriminator from the canonical envelope', () => {
+    const envelope: LiveEnvelope = {
+      schema_version: 1,
+      subscription_id: 'live-terminal',
+      subscription_revision: 1,
+      source_kind: 'session',
+      source_id: 'session-terminal',
+      detail_scope: 'summary',
+      delivery_class: 'ephemeral_preview',
+      source_health: 'live',
+      event: 'TerminalDelivery',
+      payload: {
+        type: 'TerminalDelivery',
+        session_id: 'session-terminal',
+        execution_id: 'execution-terminal',
+        turn_id: 'turn-terminal',
+        delivery: {
+          event: 'terminal_presentation_started',
+          presentation_id: 'presentation-1',
+          attempt_id: 'attempt-1',
+          envelope_id: 'envelope-1',
+          envelope_revision: 3,
+          objective_scope: 'root',
+        },
+      },
+    };
+
+    expect(terminalDeliveryEventFromEnvelope(envelope)).toEqual({
+      event: 'terminal_presentation_started',
+      presentation_id: 'presentation-1',
+      attempt_id: 'attempt-1',
+      envelope_id: 'envelope-1',
+      envelope_revision: 3,
+      objective_scope: 'root',
+      session_id: 'session-terminal',
+      execution_id: 'execution-terminal',
+      turn_id: 'turn-terminal',
+    });
+    expect(() => terminalDeliveryEventFromEnvelope({
+      ...envelope,
+      payload: {
+        ...envelope.payload,
+        delivery: {
+          event: 'text_delta',
+          presentation_id: 'presentation-1',
+          attempt_id: 'attempt-1',
+        },
+      },
+    })).toThrow('invalid text_delta payload');
+  });
+
   it('consumes the canonical Gateway LiveEnvelope fixture and schema hash', () => {
     const envelope = parseLiveEnvelope(JSON.stringify(LIVE_ENVELOPE_CANONICAL_FIXTURE));
     expect(LIVE_CONTRACT_SCHEMA_VERSION).toBe(1);
@@ -416,12 +468,50 @@ describe('WebUI multiplex live transport', () => {
         projection: { pending_count: 1 },
       },
     });
+    FakeEventSource.instances[0].emit({
+      schema_version: 1,
+      subscription_id: 'live-test',
+      subscription_revision: revision,
+      source_kind: 'session',
+      source_id: 'session-input',
+      detail_scope: 'summary',
+      delivery_class: 'ephemeral_preview',
+      source_health: 'live',
+      event: 'TerminalDelivery',
+      payload: {
+        type: 'TerminalDelivery',
+        session_id: 'session-input',
+        execution_id: 'execution-input',
+        turn_id: 'turn-input',
+        delivery: {
+          event: 'text_delta',
+          presentation_id: 'presentation-input',
+          attempt_id: 'attempt-input',
+          byte_start: 0,
+          byte_end: 2,
+          delta: 'ok',
+        },
+      },
+    });
 
-    expect(received).toEqual([{
-      type: 'SessionInputProjection',
-      session_id: 'session-input',
-      projection: { pending_count: 1 },
-    }]);
+    expect(received).toEqual([
+      {
+        type: 'SessionInputProjection',
+        session_id: 'session-input',
+        projection: { pending_count: 1 },
+      },
+      {
+        event: 'text_delta',
+        presentation_id: 'presentation-input',
+        attempt_id: 'attempt-input',
+        byte_start: 0,
+        byte_end: 2,
+        delta: 'ok',
+        session_id: 'session-input',
+        execution_id: 'execution-input',
+        turn_id: 'turn-input',
+      },
+    ]);
     source.close();
   });
 

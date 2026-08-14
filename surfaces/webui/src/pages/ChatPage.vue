@@ -46,6 +46,7 @@ import { displayStatus } from '../i18n/domain/status';
 import { blockedRecoveryForTurn } from '../utils/blockedRecovery';
 import type {
   ActivityEvent,
+  CancellationReceipt,
   ChatTurn,
   SessionRoutingFocusProjection,
   TaskAggregateProjection,
@@ -371,7 +372,11 @@ const chatEvidenceCount = computed(() => new Set(
 const showRequestedModel = computed(() => (
   !!store.selectedModel && effectiveModel.value !== store.selectedModel
 ));
-const turnRunning = computed(() => !!chat.active?.pending || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing'].includes(executionStatus.value));
+const turnRunning = computed(() => !chat.active?.cancelRequested && (
+  !!chat.active?.pending
+  || ['queued', 'preparing_context', 'calling_model', 'thinking', 'calling_tool', 'waiting_approval', 'finalizing']
+    .includes(executionStatus.value)
+));
 const submissionBusy = computed(() => store.sessionCreating || !!chat.active?.submitting);
 type ExecutionPolicyDisplayPreset = SessionExecutionPolicyPreset | 'custom' | 'unavailable';
 const activeExecutionPolicyPreset = computed<ExecutionPolicyDisplayPreset>(() => {
@@ -906,6 +911,20 @@ async function submit() {
 
 async function stop() {
   if (store.activeSessionId) await chat.stop(store.activeSessionId);
+}
+
+const CANCELLATION_STATUS_KEYS: Record<CancellationReceipt['status'], string> = {
+  requested: 'chat.cancellation.status.requested',
+  cancelled: 'chat.cancellation.status.cancelled',
+  already_terminal: 'chat.cancellation.status.already_terminal',
+};
+
+function cancellationLabel(status: CancellationReceipt['status']) {
+  return t(CANCELLATION_STATUS_KEYS[status]);
+}
+
+function cancellationTime(value: number) {
+  return value > 0 ? new Date(value).toLocaleTimeString() : '';
 }
 
 function numberFrom(value: unknown) {
@@ -1828,6 +1847,23 @@ function chooseFirstCommand() {
             </section>
           </article>
         </template>
+        <ol
+          v-if="chat.active?.cancellations.length"
+          class="cancellation-timeline"
+          :aria-label="t('chat.cancellation.timeline')"
+        >
+          <li
+            v-for="receipt in chat.active.cancellations"
+            :key="receipt.cancellation_id"
+            :data-status="receipt.status"
+          >
+            <Clock :size="13" />
+            <span>{{ cancellationLabel(receipt.status) }}</span>
+            <time :datetime="new Date(receipt.effective_at_ms || receipt.requested_at_ms).toISOString()">
+              {{ cancellationTime(receipt.effective_at_ms || receipt.requested_at_ms) }}
+            </time>
+          </li>
+        </ol>
       </div>
       <button
         v-if="!transcriptPinnedToTail"
@@ -2083,3 +2119,31 @@ function chooseFirstCommand() {
     />
   </section>
 </template>
+
+<style scoped>
+.cancellation-timeline {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 14px;
+  padding: 0;
+  color: var(--text-muted);
+  list-style: none;
+}
+
+.cancellation-timeline li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.cancellation-timeline time {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+</style>

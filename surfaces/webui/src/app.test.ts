@@ -2878,11 +2878,96 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('requests current session cancellation through a write receipt endpoint', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ cancelled: true }), { status: 200 })));
+    vi.spyOn(Date, 'now').mockReturnValue(123_456);
+    const fetchMock = vi.fn((_path: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body || '{}'));
+      return Promise.resolve(new Response(JSON.stringify({
+        cancellation_id: request.cancellation_id,
+        session_id: 'session-1',
+        turn_id: 'turn-1',
+        execution_id: 'execution-1',
+        actor_id: 'principal:user',
+        cause: 'user_requested',
+        reason: request.reason,
+        requested_at_ms: request.requested_at_ms,
+        effective_at_ms: request.requested_at_ms,
+        status: 'cancelled',
+        journal_sequence: 1,
+        projection_revision: 1,
+      }), { status: 200 }));
+    });
     vi.stubGlobal('fetch', fetchMock);
     const receipt = await api.cancelSessionTurn('session-1');
     expect(receipt.ok).toBe(true);
+    const request = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/cancel', expect.objectContaining({ method: 'POST' }));
+    expect(request).toEqual({
+      reason: 'cancel requested from WebUI',
+      cancellation_id: expect.stringMatching(/^webui-cancel:/),
+      requested_at_ms: 123_456,
+    });
+    expect(receipt.data?.cancellation_id).toBe(request.cancellation_id);
+  });
+
+  it('reuses cancellation identity and request time after an ambiguous lost response', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(456_789);
+    const requests: Array<Record<string, unknown>> = [];
+    const fetchMock = vi.fn((_path: RequestInfo | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body || '{}'));
+      requests.push(request);
+      if (requests.length === 1) return Promise.reject(new Error('response lost'));
+      return Promise.resolve(new Response(JSON.stringify({
+        cancellation_id: request.cancellation_id,
+        session_id: 'session-cancel-retry',
+        turn_id: requests.length === 4 ? 'turn-next' : 'turn-retry',
+        execution_id: requests.length === 4 ? 'execution-next' : 'execution-retry',
+        actor_id: 'principal:user',
+        cause: 'user_requested',
+        reason: request.reason,
+        requested_at_ms: request.requested_at_ms,
+        effective_at_ms: requests.length === 2 ? null : request.requested_at_ms,
+        status: requests.length === 2 ? 'requested' : 'cancelled',
+        journal_sequence: requests.length,
+        projection_revision: requests.length,
+      }), { status: 200 }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const lost = await api.cancelSessionTurn(
+      'session-cancel-retry',
+      'execution-retry',
+      'turn-retry',
+    );
+    const recovered = await api.cancelSessionTurn(
+      'session-cancel-retry',
+      'execution-retry',
+      'turn-retry',
+    );
+    const finalized = await api.cancelSessionTurn(
+      'session-cancel-retry',
+      'execution-retry',
+      'turn-retry',
+    );
+    const nextTurn = await api.cancelSessionTurn(
+      'session-cancel-retry',
+      'execution-next',
+      'turn-next',
+    );
+
+    expect(lost.ok).toBe(false);
+    expect(lost.retryable).toBe(true);
+    expect(recovered.ok).toBe(true);
+    expect(recovered.data?.status).toBe('requested');
+    expect(finalized.ok).toBe(true);
+    expect(finalized.data?.status).toBe('cancelled');
+    expect(nextTurn.ok).toBe(true);
+    expect(requests).toHaveLength(4);
+    expect(requests[1].cancellation_id).toBe(requests[0].cancellation_id);
+    expect(requests[1].requested_at_ms).toBe(requests[0].requested_at_ms);
+    expect(requests[2].cancellation_id).toBe(requests[0].cancellation_id);
+    expect(requests[2].requested_at_ms).toBe(requests[0].requested_at_ms);
+    expect(requests[0].requested_at_ms).toBe(456_789);
+    expect(requests[3].cancellation_id).not.toBe(requests[0].cancellation_id);
   });
 
   it('reads Mission Control projections through gateway endpoints', async () => {

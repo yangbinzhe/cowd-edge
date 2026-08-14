@@ -104,6 +104,10 @@ export interface ChatTurn {
   /// C-02: durable SessionInput id bound to this user message. Badge status
   /// lookup must use this id, never content matching.
   input_id?: string;
+  presentation_id?: string;
+  presentation_attempt_id?: string;
+  answer_origin?: AnswerOrigin;
+  preview?: boolean;
 }
 
 export interface ActivityEvent {
@@ -309,12 +313,172 @@ export interface SessionEvidenceProjection {
   freshness: EvidenceFreshness;
 }
 
+export type PipelineStatus = 'waiting' | 'completed' | 'failed' | 'cancelled';
+export type DeliveryStatus = 'satisfied' | 'partial' | 'denied' | 'unavailable';
+export type DeliveryBranchStatus = 'completed' | 'failed' | 'cancelled' | 'blocked';
+export type VerifiedEffectStatus = 'applied' | 'not_applied' | 'uncertain';
+export type AnswerOrigin = 'model_direct' | 'terminal_delegate' | 'team_synthesizer'
+  | 'terminal_narrator' | 'fallback_model' | 'programmatic_fallback'
+  | 'cancellation_receipt';
+export type TerminalPresentationState = 'started' | 'streaming' | 'validating'
+  | 'committed' | 'aborted' | 'superseded';
+
+export interface CancellationReceipt {
+  cancellation_id: string;
+  session_id: string;
+  turn_id: string;
+  execution_id: string;
+  actor_id: string;
+  cause: 'user_requested' | 'system' | 'parent' | 'deadline' | 'lease_lost';
+  reason?: string | null;
+  requested_at_ms: number;
+  effective_at_ms?: number | null;
+  status: 'requested' | 'cancelled' | 'already_terminal';
+  journal_sequence: number;
+  projection_revision: number;
+}
+
+export interface DeliveryCoverage {
+  required_obligation_ids: string[];
+  satisfied_obligation_ids: string[];
+  coverage_basis_points: number;
+}
+
+export interface DeliveryUnresolved {
+  unresolved_id: string;
+  kind: string;
+  summary: string;
+  source_execution_id?: string | null;
+  obligation_id?: string | null;
+}
+
+export interface DeliveryEnvelope {
+  envelope_id: string;
+  revision: number;
+  objective_id: string;
+  pipeline_status: PipelineStatus;
+  delivery_status: DeliveryStatus;
+  branch_terminals: Array<{
+    branch_id: string;
+    execution_id?: string | null;
+    status: DeliveryBranchStatus;
+    result_ref?: string | null;
+    failure_ref?: string | null;
+  }>;
+  verified_receipts: Array<{
+    reference_id: string;
+    kind: string;
+    source_execution_id?: string | null;
+  }>;
+  verified_artifacts: Array<{
+    reference_id: string;
+    kind: string;
+    source_execution_id?: string | null;
+  }>;
+  verified_effects: Array<{
+    effect_id: string;
+    kind: string;
+    status: VerifiedEffectStatus;
+    receipt_ref?: string | null;
+    source_execution_id?: string | null;
+  }>;
+  coverage: DeliveryCoverage;
+  unresolved: DeliveryUnresolved[];
+  conflicts: Array<{
+    conflict_id: string;
+    summary: string;
+    source_execution_ids: string[];
+  }>;
+  cancellation?: CancellationReceipt | null;
+  user_answer_contract: {
+    language: string;
+    format: 'human_text' | 'markdown' | 'strict_json' | 'other';
+    detail: 'concise' | 'balanced' | 'detailed';
+    conclusion_only: boolean;
+    evidence_preference: 'none' | 'when_useful' | 'required';
+    citation_preference: 'none' | 'when_available' | 'required';
+    structural_constraints: string[];
+    other_format?: string | null;
+  };
+  created_at_ms: number;
+}
+
+export interface TerminalPresentation {
+  presentation_id: string;
+  attempt_id: string;
+  envelope_id: string;
+  envelope_revision: number;
+  state: TerminalPresentationState;
+  answer_origin: AnswerOrigin;
+  source_execution_id?: string | null;
+  narrator_model?: string | null;
+  narrator_provider?: string | null;
+  models_attempted: Array<{ provider: string; model: string; failure?: string | null }>;
+  validation: {
+    status: 'pending' | 'valid' | 'invalid';
+    findings: string[];
+    envelope_revision?: number | null;
+  };
+  fallback_reason?: string | null;
+  generated_at_ms: number;
+  committed_at_ms?: number | null;
+}
+
+export interface TerminalDeliveryCorrelation {
+  session_id?: string;
+  execution_id?: string;
+  turn_id?: string;
+}
+
+export type TerminalDeliveryEvent = ({
+  event: 'terminal_presentation_started';
+  presentation_id: string;
+  attempt_id: string;
+  envelope_id: string;
+  envelope_revision: number;
+  objective_scope?: 'root' | 'subtask';
+} | {
+  event: 'text_delta';
+  presentation_id: string;
+  attempt_id: string;
+  byte_start: number;
+  byte_end: number;
+  delta: string;
+} | {
+  event: 'terminal_presentation_superseded' | 'terminal_presentation_aborted';
+  presentation_id: string;
+  attempt_id: string;
+  reason: string;
+} | {
+  event: 'terminal_presentation_committed';
+  presentation_id: string;
+  attempt_id: string;
+  answer_origin: AnswerOrigin;
+  terminal_id: string;
+} | {
+  event: 'cancellation_committed';
+  receipt: CancellationReceipt;
+}) & TerminalDeliveryCorrelation;
+
+export interface ActiveTerminalPresentation {
+  presentation_id: string;
+  attempt_id: string;
+  envelope_id: string;
+  envelope_revision: number;
+  state: TerminalPresentationState;
+  answer_origin?: AnswerOrigin;
+  terminal_id?: string;
+}
+
 export type ExecutionProjection = GatewayComponents['schemas']['ExecutionProjection'] & {
   live?: ExecutionLiveState | null;
   task_id?: string | null;
   turn_id?: string | null;
   activities?: ExecutionActivityProjection[];
   activity_relations?: ExecutionActivityRelation[];
+  delivery_envelope?: DeliveryEnvelope | null;
+  terminal_presentation?: TerminalPresentation | null;
+  cancellation_receipt?: CancellationReceipt | null;
 };
 export type ExecutionProjectionDelta = GatewayComponents['schemas']['ProjectionDelta'];
 

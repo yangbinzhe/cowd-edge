@@ -3,13 +3,17 @@ import { computed, onScopeDispose, reactive, ref } from 'vue';
 import {
   api,
   invalidateSessionAuthorization,
+  type ApiReceipt,
 } from '../api/client';
 import type {
+  ActiveTerminalPresentation,
   ActivityEvent,
+  CancellationReceipt,
   ChatTurn,
   ExecutionLiveState,
   SessionExecutionIndexProjection,
   SessionHistoryIndexProjection,
+  TerminalDeliveryEvent,
 } from '../types';
 import { mergeActivityEvent, normalizeTurnActivity } from '../utils/turnSettlement';
 import {
@@ -41,6 +45,9 @@ export type SessionChatState = {
   latestIngressSequence: number;
   streamTurnId: string;
   terminalId: string;
+  presentation: ActiveTerminalPresentation | null;
+  cancellations: CancellationReceipt[];
+  cancelRequested: boolean;
   live: LiveExecutionState | null;
   executionIndex: SessionExecutionIndexProjection | null;
   historyIndex: SessionHistoryIndexProjection | null;
@@ -77,6 +84,13 @@ export type SessionChatState = {
 };
 
 const SESSION_DRAFT_KEY_PREFIX = 'cowd.webui.sessionDraft.v1:';
+const CANCELLATION_CAUSE_KEYS: Record<CancellationReceipt['cause'], string> = {
+  user_requested: 'chat.cancellation.cause.user_requested',
+  system: 'chat.cancellation.cause.system',
+  parent: 'chat.cancellation.cause.parent',
+  deadline: 'chat.cancellation.cause.deadline',
+  lease_lost: 'chat.cancellation.cause.lease_lost',
+};
 
 function sessionDraftStorageKey(sessionId: string) {
   return `${SESSION_DRAFT_KEY_PREFIX}${encodeURIComponent(sessionId)}`;
@@ -106,8 +120,6 @@ const SESSION_ACTIVITY_CAP = 2_000;
 const TURN_ACTIVITY_CAP = 500;
 const LIVE_RECOVERY_INTERVAL_MS = 1_500;
 const LIVE_RECOVERY_SILENCE_MS = 2_000;
-const LIVE_SOURCE_READY_TIMEOUT_MS = import.meta.env.MODE === 'test' ? 0 : 5_000;
-const LIVE_SOURCE_READY_POLL_MS = 25;
 const DURABLE_MESSAGE_ROLES = new Set(['user', 'assistant', 'system', 'tool']);
 const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'Connected',
@@ -139,6 +151,14 @@ const SESSION_SCOPED_STREAM_EVENTS = new Set([
   'ApprovalResolved',
   'TurnError',
   'TerminalCommitted',
+]);
+const TERMINAL_DELIVERY_EVENT_NAMES = new Set([
+  'terminal_presentation_started',
+  'text_delta',
+  'terminal_presentation_superseded',
+  'terminal_presentation_aborted',
+  'terminal_presentation_committed',
+  'cancellation_committed',
 ]);
 
 function textFromBlocks(blocks: any[]) {
@@ -592,6 +612,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
   const deltaBuffers = new Map<string, string>();
   const flushFrames = new Map<string, number>();
   const streamByteEnds = new Map<string, number>();
+  const presentationDeltaBuffers = new Map<string, { attemptKey: string; text: string }>();
+  const presentationFlushFrames = new Map<string, number>();
+  const presentationByteEnds = new Map<string, number>();
   const openFlights = new Map<string, Promise<void>>();
   const attachmentFlights = new Map<string, Promise<unknown>>();
   const canonicalResyncFlights = new Map<string, Promise<void>>();
@@ -613,7 +636,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       states[sessionId] = {
         sessionId, turns: [], activity: [], executionId: '', executionGraphId: '', executionTurnId: '', executionGeneration: 0,
         streamGeneration: 0, runtimeCommitCursor: 0, reconnectBlocked: false,
-        latestIngressSequence: -1, streamTurnId: '', terminalId: '', live: null, executionIndex: null, historyIndex: null, streamState: 'offline',
+        latestIngressSequence: -1, streamTurnId: '', terminalId: '', presentation: null, cancellations: [], cancelRequested: false,
+        live: null, executionIndex: null, historyIndex: null, streamState: 'offline',
         loadEpoch: 0, submissionEpoch: 0, attachmentEpoch: 0,
         pending: false, submitting: false, lastError: '', unread: 0,
         lastEventAtMs: 0, lastProgressAtMs: 0, degradedReason: '', resyncCount: 0,
@@ -709,6 +733,78 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     scheduleFlush(sessionId);
   }
 
+  function presentationAttemptKey(
+    sessionId: string,
+    presentationId: string,
+    attemptId: string,
+  ) {
+    return `${sessionId}\u0000${presentationId}\u0000${attemptId}`;
+  }
+
+  function clearPresentationDelta(sessionId: string) {
+    const frame = presentationFlushFrames.get(sessionId);
+    if (frame) cancelAnimationFrame(frame);
+    presentationFlushFrames.delete(sessionId);
+    presentationDeltaBuffers.delete(sessionId);
+  }
+
+  function schedulePresentationFlush(sessionId: string) {
+    if (presentationFlushFrames.has(sessionId)) return;
+    let flushedSynchronously = false;
+    const frame = requestAnimationFrame(() => {
+      flushedSynchronously = true;
+      presentationFlushFrames.delete(sessionId);
+      const pending = presentationDeltaBuffers.get(sessionId);
+      if (!pending) return;
+      const state = stateFor(sessionId);
+      const active = state.presentation;
+      const activeKey = active
+        ? presentationAttemptKey(sessionId, active.presentation_id, active.attempt_id)
+        : '';
+      if (activeKey !== pending.attemptKey || active?.state !== 'streaming') {
+        presentationDeltaBuffers.delete(sessionId);
+        return;
+      }
+      const turn = state.turns.find((item) => item.id === state.streamTurnId);
+      if (
+        turn?.presentation_id === active.presentation_id
+        && turn.presentation_attempt_id === active.attempt_id
+      ) {
+        turn.content += pending.text;
+      }
+      presentationDeltaBuffers.delete(sessionId);
+    });
+    if (!flushedSynchronously) presentationFlushFrames.set(sessionId, frame);
+  }
+
+  function queuePresentationDelta(sessionId: string, attemptKey: string, content: string) {
+    const pending = presentationDeltaBuffers.get(sessionId);
+    presentationDeltaBuffers.set(sessionId, {
+      attemptKey,
+      text: `${pending?.attemptKey === attemptKey ? pending.text : ''}${content}`,
+    });
+    schedulePresentationFlush(sessionId);
+  }
+
+  function removePresentationPreview(sessionId: string, presentationId: string, attemptId: string) {
+    const state = stateFor(sessionId);
+    state.turns = state.turns.filter((turn) => !(
+      turn.id === state.streamTurnId
+      && turn.presentation_id === presentationId
+      && turn.presentation_attempt_id === attemptId
+      && turn.preview === true
+    ));
+  }
+
+  function clearPresentationAttemptBytes(sessionId: string, presentationId?: string, attemptId?: string) {
+    const prefix = presentationId && attemptId
+      ? presentationAttemptKey(sessionId, presentationId, attemptId)
+      : `${sessionId}\u0000`;
+    for (const key of presentationByteEnds.keys()) {
+      if (key.startsWith(prefix)) presentationByteEnds.delete(key);
+    }
+  }
+
   function clearStreamByteEnds(sessionId: string) {
     const prefix = `${sessionId}\u0000`;
     for (const key of streamByteEnds.keys()) {
@@ -796,7 +892,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
   }
 
-  function upsertSessionActivity(sessionId: string, event: ActivityEvent) {
+  function upsertSessionTimelineActivity(sessionId: string, event: ActivityEvent) {
     const state = stateFor(sessionId);
     const normalized = normalizeTurnActivity(event);
     const identity = activityIdentityKey(normalized);
@@ -806,6 +902,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
     else state.activity.push(normalized);
     state.activity = causalActivityTimeline(state.activity, SESSION_ACTIVITY_CAP);
+    return { state, normalized, identity };
+  }
+
+  function upsertSessionActivity(sessionId: string, event: ActivityEvent) {
+    const { state, normalized, identity } = upsertSessionTimelineActivity(sessionId, event);
     ensureStreamTurn(state);
     const turn = state.turns.find((item) => item.id === state.streamTurnId);
     if (turn) {
@@ -817,6 +918,265 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       else activity.push(normalized);
       turn.activity = causalActivityTimeline(activity, TURN_ACTIVITY_CAP);
     }
+  }
+
+  function discardLegacyAnswerDelta(sessionId: string) {
+    const frame = flushFrames.get(sessionId);
+    if (frame) cancelAnimationFrame(frame);
+    flushFrames.delete(sessionId);
+    deltaBuffers.delete(sessionId);
+  }
+
+  function matchesActiveTurn(
+    state: SessionChatState,
+    executionId?: string | null,
+    turnId?: string | null,
+  ) {
+    if (state.executionId && executionId !== state.executionId) return false;
+    if (state.executionTurnId && turnId !== state.executionTurnId) return false;
+    return true;
+  }
+
+  function cancellationReceiptIsNewer(
+    incoming: CancellationReceipt,
+    current: CancellationReceipt,
+  ) {
+    if (incoming.projection_revision !== current.projection_revision) {
+      return incoming.projection_revision > current.projection_revision;
+    }
+    if (incoming.journal_sequence !== current.journal_sequence) {
+      return incoming.journal_sequence > current.journal_sequence;
+    }
+    return Number(incoming.effective_at_ms || incoming.requested_at_ms)
+      > Number(current.effective_at_ms || current.requested_at_ms);
+  }
+
+  function recordCancellationReceipt(sessionId: string, receipt: CancellationReceipt) {
+    const state = stateFor(sessionId);
+    if (!receipt.cancellation_id) return;
+    if (receipt.session_id !== sessionId) {
+      requestCanonicalResync(
+        sessionId,
+        `cancellation receipt session mismatch: expected ${sessionId}, received ${receipt.session_id || 'missing'}`,
+      );
+      return;
+    }
+    if (!matchesActiveTurn(state, receipt.execution_id, receipt.turn_id)) return;
+    const existingIndex = state.cancellations.findIndex(
+      (existing) => existing.cancellation_id === receipt.cancellation_id,
+    );
+    const existing = existingIndex >= 0 ? state.cancellations[existingIndex] : null;
+    if (
+      existing
+      && (
+        existing.session_id !== receipt.session_id
+        || existing.execution_id !== receipt.execution_id
+        || existing.turn_id !== receipt.turn_id
+        || existing.actor_id !== receipt.actor_id
+        || existing.cause !== receipt.cause
+        || existing.requested_at_ms !== receipt.requested_at_ms
+      )
+    ) {
+      requestCanonicalResync(sessionId, 'cancellation receipt identity changed after persistence');
+      return;
+    }
+    const existingTerminal = existing?.status === 'cancelled'
+      || existing?.status === 'already_terminal';
+    const incomingTerminal = receipt.status === 'cancelled'
+      || receipt.status === 'already_terminal';
+    if (incomingTerminal) {
+      api.clearPendingCancellationRequest(sessionId, receipt.execution_id, receipt.turn_id);
+    }
+    if (
+      existingTerminal
+      && receipt.status !== existing?.status
+    ) return;
+    if (
+      existing
+      && receipt.status === existing.status
+      && !cancellationReceiptIsNewer(receipt, existing)
+    ) return;
+    if (existingTerminal && receipt.status === 'requested') return;
+    const canonical = existing
+      ? {
+          ...existing,
+          ...receipt,
+          reason: receipt.reason ?? existing.reason,
+          effective_at_ms: receipt.effective_at_ms ?? existing.effective_at_ms,
+        }
+      : receipt;
+    if (existingIndex >= 0) state.cancellations.splice(existingIndex, 1, canonical);
+    else state.cancellations.push(canonical);
+    if (state.cancellations.length > 100) {
+      state.cancellations.splice(0, state.cancellations.length - 100);
+    }
+    upsertSessionTimelineActivity(sessionId, {
+      id: `cancellation:${canonical.cancellation_id}`,
+      kind: 'runtime',
+      title: t('chat.cancellation.title'),
+      detail: canonical.reason || t(CANCELLATION_CAUSE_KEYS[canonical.cause]),
+      status: canonical.status,
+      at: canonical.effective_at_ms || canonical.requested_at_ms,
+      session_id: canonical.session_id,
+      execution_id: canonical.execution_id,
+      turn_id: canonical.turn_id,
+      event_kind: 'cancellation_committed',
+      sequence: canonical.journal_sequence,
+      raw: { cancellation_receipt: canonical },
+    });
+    if (
+      canonical.cause !== 'user_requested'
+      || canonical.status !== 'cancelled'
+      || existing?.status === 'cancelled'
+    ) return;
+    const active = state.presentation;
+    clearPresentationDelta(sessionId);
+    discardLegacyAnswerDelta(sessionId);
+    if (active) {
+      removePresentationPreview(sessionId, active.presentation_id, active.attempt_id);
+    }
+    if (state.streamTurnId) {
+      state.turns = state.turns.filter((turn) => turn.id !== state.streamTurnId);
+      state.streamTurnId = '';
+    }
+    state.pending = false;
+    state.cancelRequested = true;
+    stopProgressRecovery(sessionId);
+    state.live = {
+      ...(state.live || {}),
+      status: state.live?.status || 'running',
+      status_detail: t('chat.cancellation.accepted'),
+      last_progress_at_ms: canonical.effective_at_ms || canonical.requested_at_ms || Date.now(),
+    } as LiveExecutionState;
+    void releaseWriter(sessionId);
+  }
+
+  /**
+   * Single root-presentation reducer. Runtime/model activity streams may be
+   * displayed elsewhere, but only this reducer may mutate the root answer
+   * preview after a terminal presentation attempt starts.
+   */
+  function reduceTerminalDeliveryEvent(sessionId: string, event: TerminalDeliveryEvent) {
+    const state = stateFor(sessionId);
+    if (!matchesActiveTurn(state, event.execution_id, event.turn_id)) return;
+    if (event.event === 'cancellation_committed') {
+      recordCancellationReceipt(sessionId, event.receipt);
+      return;
+    }
+    // A user cancellation is the terminal winner for this execution/turn.
+    // Delayed presentation events from the same Runtime bus cannot reopen the
+    // answer slot; a newly adopted turn resets this fence explicitly.
+    if (state.cancelRequested) return;
+    if (event.event === 'terminal_presentation_started') {
+      if (event.objective_scope === 'subtask') return;
+      const current = state.presentation;
+      if (
+        current
+        && (
+          event.envelope_revision < current.envelope_revision
+          || (current.state === 'committed' && event.envelope_revision <= current.envelope_revision)
+        )
+      ) return;
+      clearPresentationDelta(sessionId);
+      discardLegacyAnswerDelta(sessionId);
+      if (current) {
+        removePresentationPreview(sessionId, current.presentation_id, current.attempt_id);
+        clearPresentationAttemptBytes(sessionId, current.presentation_id, current.attempt_id);
+      }
+      state.presentation = {
+        presentation_id: event.presentation_id,
+        attempt_id: event.attempt_id,
+        envelope_id: event.envelope_id,
+        envelope_revision: event.envelope_revision,
+        state: 'started',
+      };
+      state.cancelRequested = false;
+      state.pending = true;
+      ensureStreamTurn(state);
+      const turn = state.turns.find((item) => item.id === state.streamTurnId);
+      if (turn) {
+        turn.content = '';
+        turn.status = 'streaming';
+        turn.presentation_id = event.presentation_id;
+        turn.presentation_attempt_id = event.attempt_id;
+        turn.preview = true;
+      }
+      recordProgress(sessionId);
+      return;
+    }
+    const active = state.presentation;
+    if (
+      !active
+      || active.presentation_id !== event.presentation_id
+      || active.attempt_id !== event.attempt_id
+    ) return;
+    const attemptKey = presentationAttemptKey(
+      sessionId,
+      event.presentation_id,
+      event.attempt_id,
+    );
+    if (event.event === 'text_delta') {
+      if (!['started', 'streaming'].includes(active.state)) return;
+      const encoded = new TextEncoder().encode(event.delta);
+      if (
+        event.byte_start < 0
+        || event.byte_end < event.byte_start
+        || event.byte_end - event.byte_start !== encoded.byteLength
+      ) {
+        requestCanonicalResync(sessionId, 'terminal presentation emitted an invalid UTF-8 byte range');
+        return;
+      }
+      const consumed = presentationByteEnds.get(attemptKey) || 0;
+      if (event.byte_start > consumed) {
+        requestCanonicalResync(sessionId, 'terminal presentation emitted a byte range gap');
+        return;
+      }
+      if (event.byte_end <= consumed) return;
+      const overlap = Math.max(0, consumed - event.byte_start);
+      presentationByteEnds.set(attemptKey, event.byte_end);
+      active.state = 'streaming';
+      const delta = new TextDecoder().decode(encoded.slice(overlap));
+      if (delta) queuePresentationDelta(sessionId, attemptKey, delta);
+      recordProgress(sessionId);
+      return;
+    }
+    clearPresentationDelta(sessionId);
+    clearPresentationAttemptBytes(sessionId, event.presentation_id, event.attempt_id);
+    if (
+      event.event === 'terminal_presentation_superseded'
+      || event.event === 'terminal_presentation_aborted'
+    ) {
+      active.state = event.event === 'terminal_presentation_superseded'
+        ? 'superseded'
+        : 'aborted';
+      removePresentationPreview(sessionId, event.presentation_id, event.attempt_id);
+      return;
+    }
+    if (event.event !== 'terminal_presentation_committed') return;
+    active.state = 'committed';
+    active.answer_origin = event.answer_origin;
+    active.terminal_id = event.terminal_id;
+    state.terminalId = event.terminal_id;
+    state.pending = false;
+    state.cancelRequested = false;
+    api.clearPendingCancellationRequest(sessionId, event.execution_id, event.turn_id);
+    stopProgressRecovery(sessionId);
+    const turn = state.turns.find((item) => item.id === state.streamTurnId);
+    if (
+      turn?.presentation_id === event.presentation_id
+      && turn.presentation_attempt_id === event.attempt_id
+    ) {
+      turn.answer_origin = event.answer_origin;
+      turn.preview = true;
+    }
+    // Durable transcript is the only committed answer. Keep already-painted
+    // preview visible while replacing it, but discard every queued RAF delta
+    // before requesting the canonical transcript tail.
+    void Promise.allSettled([
+      syncTranscriptTail(sessionId),
+      refreshProjection(sessionId),
+    ]);
+    void releaseWriter(sessionId);
   }
 
   function projectInputDisposition(sessionId: string, base: ActivityEvent, receipt: any) {
@@ -1244,10 +1604,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   function requestCanonicalResync(sessionId: string, reason: string) {
     const state = stateFor(sessionId);
+    const resyncCursor = state.runtimeCommitCursor;
+    const rootPresentationWasActive = !!state.presentation
+      && ['started', 'streaming', 'validating'].includes(state.presentation.state);
     const frame = flushFrames.get(sessionId);
     if (frame) cancelAnimationFrame(frame);
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
+    clearPresentationDelta(sessionId);
     state.resyncCount += 1;
     state.streamState = 'degraded';
     state.degradedReason = reason;
@@ -1258,12 +1622,23 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       // Recover from the cheapest canonical source first. A transient preview
       // gap should not immediately fan out into history, live and graph loads.
       try {
-        if (await refreshLiveExecution(sessionId)) return;
+        const liveRecovered = await refreshLiveExecution(sessionId);
+        // ExecutionLive can recover text bytes but cannot prove whether a
+        // root presentation was aborted/superseded. When such an attempt was
+        // active at the gap, the execution projection is the next authority.
+        if (
+          liveRecovered
+          && (
+            !rootPresentationWasActive
+            || state.cancelRequested
+            || !state.presentation
+          )
+        ) return;
       } catch {
         // Escalate to the next canonical layer.
       }
       try {
-        if (await refreshProjection(sessionId)) return;
+        if (await refreshProjection(sessionId, 'summary', resyncCursor)) return;
       } catch {
         // Durable history is the final recovery boundary.
       }
@@ -1332,6 +1707,9 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.executionTurnId = '';
     state.streamTurnId = '';
     state.terminalId = '';
+    state.presentation = null;
+    state.cancellations = [];
+    state.cancelRequested = false;
     state.latestIngressSequence = -1;
     state.runtimeCommitCursor = 0;
     state.historyTotal = 0;
@@ -1355,6 +1733,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (frame) cancelAnimationFrame(frame);
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
+    clearPresentationDelta(sessionId);
+    clearPresentationAttemptBytes(sessionId);
     clearStreamByteEnds(sessionId);
     stopProgressRecovery(sessionId);
   }
@@ -1385,7 +1765,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const next = executionId.trim();
     if (!next) return false;
     if (state.executionId === next) {
-      if (turnId) state.executionTurnId = turnId;
+      if (turnId && turnId !== state.executionTurnId) {
+        api.clearPendingCancellationRequest(
+          sessionId,
+          state.executionId,
+          state.executionTurnId,
+        );
+        state.executionTurnId = turnId;
+      }
       if (initialStatus) {
         state.live = {
           ...(state.live || {}),
@@ -1408,7 +1795,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (frame) cancelAnimationFrame(frame);
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
+    clearPresentationDelta(sessionId);
+    clearPresentationAttemptBytes(sessionId);
     clearStreamByteEnds(sessionId);
+    api.clearPendingCancellationRequest(
+      sessionId,
+      state.executionId,
+      state.executionTurnId,
+    );
     const previousStreamTurn = state.streamTurnId
       ? state.turns.find((turn) => turn.id === state.streamTurnId)
       : undefined;
@@ -1420,6 +1814,8 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     state.executionTurnId = turnId;
     state.executionGeneration += 1;
     state.terminalId = '';
+    state.presentation = null;
+    state.cancelRequested = false;
     state.streamTurnId = `stream:${sessionId}:${next}`;
     state.pending = markPending;
     state.live = {
@@ -1889,13 +2285,46 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     sessionId: string,
     executionId: string,
     recoveredLive: LiveExecutionState,
+    suppressPreviewRecovery = false,
   ): Promise<boolean> {
     const state = stateFor(sessionId);
     if (!state.executionId || executionId !== state.executionId) return false;
+    const recoveredTurnId = String(recoveredLive.turn_id || '');
+    if (
+      state.executionTurnId
+      && recoveredTurnId
+      && recoveredTurnId !== state.executionTurnId
+    ) return false;
+    if (!state.executionTurnId && recoveredTurnId) state.executionTurnId = recoveredTurnId;
+    const projectionStatus = String(recoveredLive.status || '');
+    // Once cancellation owns this execution/turn, an older non-terminal live
+    // snapshot cannot downgrade that terminal decision.
+    if (state.cancelRequested && projectionStatus !== 'cancelled') return true;
     let streamRecovered = state.streamState !== 'degraded';
     state.live = recoveredLive;
-    const projectionStatus = String(recoveredLive.status || '');
     const terminalProjection = ['complete', 'error', 'cancelled'].includes(projectionStatus);
+    const cancellationOwnsCurrent = state.cancelRequested || projectionStatus === 'cancelled';
+    if (cancellationOwnsCurrent) {
+      const active = state.presentation;
+      clearPresentationDelta(sessionId);
+      discardLegacyAnswerDelta(sessionId);
+      if (active) {
+        removePresentationPreview(sessionId, active.presentation_id, active.attempt_id);
+        clearPresentationAttemptBytes(sessionId, active.presentation_id, active.attempt_id);
+      }
+      clearStreamByteEnds(sessionId);
+      if (state.streamTurnId) {
+        state.turns = state.turns.filter((turn) => turn.id !== state.streamTurnId);
+      }
+      state.streamTurnId = '';
+      state.presentation = null;
+      state.cancelRequested = true;
+      api.clearPendingCancellationRequest(
+        sessionId,
+        state.executionId,
+        state.executionTurnId,
+      );
+    }
     const durableAssistantPresent = hasDurableAssistantForExecution(
       state,
       state.executionId,
@@ -1904,7 +2333,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const outputBytes = Number(recoveredLive.output_bytes);
     const outputParts = [...(recoveredLive.output_parts || [])]
       .sort((left, right) => Number(left.causal_sequence) - Number(right.causal_sequence));
-    if (outputParts.length > 0) {
+    if (outputParts.length > 0 && !cancellationOwnsCurrent && !suppressPreviewRecovery) {
       const recoveredText: string[] = [];
       let recoveredBytes = 0;
       let valid = true;
@@ -1956,7 +2385,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         state.lastError = state.degradedReason;
         streamRecovered = false;
       }
-    } else if (Number.isFinite(outputBytes) && outputBytes > 0) {
+    } else if (
+      !cancellationOwnsCurrent
+      && !suppressPreviewRecovery
+      && Number.isFinite(outputBytes)
+      && outputBytes > 0
+    ) {
       state.streamState = 'degraded';
       state.degradedReason = 'canonical output projection is missing Runtime-owned output parts';
       state.lastError = state.degradedReason;
@@ -1999,20 +2433,107 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     return false;
   }
 
+  function applyProjectionTerminalFacts(
+    sessionId: string,
+    projection: any,
+    authoritativeAbsence = false,
+  ) {
+    const state = stateFor(sessionId);
+    const cancellation = projection?.cancellation_receipt
+      || projection?.delivery_envelope?.cancellation;
+    if (cancellation?.cancellation_id) {
+      recordCancellationReceipt(sessionId, cancellation as CancellationReceipt);
+    }
+    const presentation = projection?.terminal_presentation;
+    const canonicalPresentationActive = !!presentation?.presentation_id
+      && !!presentation?.attempt_id
+      && ['started', 'streaming', 'validating'].includes(String(presentation.state || ''));
+    const durableTerminalWinner = String(presentation?.state || '') === 'committed'
+      || state.presentation?.state === 'committed';
+    const durableCancellationWinner = state.cancelRequested
+      || ['cancelled', 'already_terminal'].includes(String(cancellation?.status || ''));
+    let stalePresentationCleared = false;
+    if (
+      authoritativeAbsence
+      && state.presentation
+      && !canonicalPresentationActive
+      && !durableTerminalWinner
+      && !durableCancellationWinner
+    ) {
+      const stale = state.presentation;
+      clearPresentationDelta(sessionId);
+      discardLegacyAnswerDelta(sessionId);
+      clearPresentationAttemptBytes(sessionId, stale.presentation_id, stale.attempt_id);
+      removePresentationPreview(sessionId, stale.presentation_id, stale.attempt_id);
+      state.presentation = null;
+      stalePresentationCleared = true;
+    }
+    if (state.cancelRequested) return stalePresentationCleared;
+    if (!presentation?.presentation_id || !presentation?.attempt_id) {
+      return stalePresentationCleared;
+    }
+    const current = state.presentation;
+    if (
+      current
+      && Number(presentation.envelope_revision || 0) < current.envelope_revision
+    ) return stalePresentationCleared;
+    state.presentation = {
+      presentation_id: String(presentation.presentation_id),
+      attempt_id: String(presentation.attempt_id),
+      envelope_id: String(presentation.envelope_id || ''),
+      envelope_revision: Number(presentation.envelope_revision || 0),
+      state: String(presentation.state || 'started') as ActiveTerminalPresentation['state'],
+      answer_origin: presentation.answer_origin,
+    };
+    if (presentation.state !== 'committed') return stalePresentationCleared;
+    clearPresentationDelta(sessionId);
+    discardLegacyAnswerDelta(sessionId);
+    state.pending = false;
+    state.cancelRequested = false;
+    api.clearPendingCancellationRequest(
+      sessionId,
+      state.executionId,
+      state.executionTurnId,
+    );
+    stopProgressRecovery(sessionId);
+    const turn = state.turns.find((item) => item.id === state.streamTurnId);
+    if (turn) {
+      turn.answer_origin = presentation.answer_origin;
+      turn.preview = true;
+    }
+    void syncTranscriptTail(sessionId);
+    void releaseWriter(sessionId);
+    return stalePresentationCleared;
+  }
+
   async function refreshProjection(
     sessionId: string,
     scope: 'summary' | 'full' = 'summary',
+    presentationAbsenceProofCursor?: number,
   ): Promise<boolean> {
     const state = stateFor(sessionId);
     const projectionId = executionProjectionId(state);
     if (!projectionId) return false;
     const projection = await projections.load(projectionId, scope, sessionId);
     if (projection?.execution_id === projectionId) {
+      const entry = projections.entries[projectionId];
+      const authoritativeAbsence = presentationAbsenceProofCursor !== undefined
+        && Number(projection.cursor || 0) >= presentationAbsenceProofCursor
+        && !!entry
+        && !entry.reconnectBlocked
+        && !entry.lastError
+        && !['stale', 'error', 'materializing'].includes(entry.connectionState);
+      const stalePresentationCleared = applyProjectionTerminalFacts(
+        sessionId,
+        projection,
+        authoritativeAbsence,
+      );
       if (projection.live && projection.execution_id === state.executionId) {
         return applyRecoveredLive(
           sessionId,
           state.executionId,
           projection.live as LiveExecutionState,
+          stalePresentationCleared,
         );
       }
     } else {
@@ -2181,6 +2702,18 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         );
         return;
       }
+      if (TERMINAL_DELIVERY_EVENT_NAMES.has(String(payload.event || ''))) {
+        reduceTerminalDeliveryEvent(sessionId, payload as TerminalDeliveryEvent);
+        return;
+      }
+      // A recovered Cancelled projection may not include a receipt. Its
+      // execution/turn identity is still a durable terminal fence: delayed
+      // Runtime activity must not recreate an assistant preview.
+      if (
+        state.cancelRequested
+        && matchesActiveTurn(state, payload.execution_id, payload.turn_id)
+        && payload.type !== 'UserMessageCommitted'
+      ) return;
       if (
         [
           'UserMessageCommitted',
@@ -2269,7 +2802,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
           adoptExecutionGraph(sessionId, graphId);
         }
       }
-      if (payload.type === 'TextDelta' && matchesActiveExecution(state, payload)) {
+      if (
+        payload.type === 'TextDelta'
+        && !state.presentation
+        && matchesActiveExecution(state, payload)
+      ) {
         recordProgress(sessionId);
         const accepted = acceptCanonicalDelta(sessionId, state, payload);
         if (accepted.error) {
@@ -2322,8 +2859,12 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         void releaseWriter(sessionId);
       }
       if (payload.type === 'TerminalCommitted') {
+        const terminalTargetsCurrent = matchesActiveExecution(state, payload);
+        const cancellationOwnsCurrent = state.cancelRequested
+          || state.live?.status === 'cancelled';
         const settlesCurrentTurn = !payload.replayed
-          && matchesActiveExecution(state, payload)
+          && terminalTargetsCurrent
+          && !cancellationOwnsCurrent
           && (!state.terminalId || payload.terminal_id === state.terminalId);
         if (settlesCurrentTurn) {
           recordProgress(sessionId);
@@ -2341,31 +2882,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         // materialization. Reloading for every replayed terminal multiplies
         // the history/evidence requests and can keep the transcript blank
         // until the whole replay finishes.
-        if (!payload.replayed) syncTranscriptTail(sessionId).catch(() => undefined);
+        if (!payload.replayed && !(terminalTargetsCurrent && cancellationOwnsCurrent)) {
+          syncTranscriptTail(sessionId).catch(() => undefined);
+        }
         if (settlesCurrentTurn) refreshLiveExecution(sessionId).catch(() => undefined);
         if (settlesCurrentTurn) refreshProjection(sessionId).catch(() => undefined);
         if (settlesCurrentTurn) void releaseWriter(sessionId);
       }
     };
-  }
-
-  async function waitForSessionLiveReady(
-    sessionId: string,
-    timeoutMs = LIVE_SOURCE_READY_TIMEOUT_MS,
-  ) {
-    const state = stateFor(sessionId);
-    connect(sessionId);
-    if (state.streamState === 'connected') return true;
-    const deadline = Date.now() + Math.max(0, timeoutMs);
-    while (
-      Date.now() < deadline
-      && !state.reconnectBlocked
-      && state.streamState !== 'degraded'
-    ) {
-      if (state.streamState === 'connected') return true;
-      await new Promise((resolve) => setTimeout(resolve, LIVE_SOURCE_READY_POLL_MS));
-    }
-    return state.streamState === 'connected';
   }
 
   async function attachReader(sessionId: string) {
@@ -2621,6 +3145,15 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const idempotencyKey = uniqueSubmissionKey(sessionId);
     state.lastError = '';
     if (!supplementing) {
+      state.presentation = null;
+      state.cancelRequested = false;
+      api.clearPendingCancellationRequest(
+        sessionId,
+        state.executionId,
+        state.executionTurnId,
+      );
+      clearPresentationDelta(sessionId);
+      clearPresentationAttemptBytes(sessionId);
       state.live = {
         ...(state.live || {}),
         status: 'queued',
@@ -2637,9 +3170,6 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       ensureStreamTurn(state);
     }
     try {
-      if (!await waitForSessionLiveReady(sessionId)) {
-        state.degradedReason = 'live Session source was not ready before submission; canonical recovery remains active';
-      }
       // Writer promotion and the mutation share one attachment lane. A
       // terminal-event demotion cannot interleave between admission and POST.
       const mutation = await withWriterMutation(sessionId, () => api.sendMessage(
@@ -2731,17 +3261,18 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     const state = stateFor(sessionId);
     const mutation = await withWriterMutation(
       sessionId,
-      () => api.cancelSessionTurn(sessionId),
+      () => api.cancelSessionTurn(sessionId, state.executionId, state.executionTurnId),
     );
     if (!mutation.attached) {
       state.lastError = state.degradedReason || 'this WebUI tab is attached read-only';
       return false;
     }
-    const receipt: any = mutation.value;
-    if (!receipt?.ok) {
-      const status = Number(receipt?.status);
+    const writeReceipt = mutation.value as ApiReceipt<CancellationReceipt>;
+    const cancellationReceipt = writeReceipt?.data;
+    if (!writeReceipt?.ok || !cancellationReceipt?.cancellation_id) {
+      const status = Number(writeReceipt?.status);
       const prefix = Number.isFinite(status) && status > 0 ? `HTTP ${status} ` : '';
-      state.lastError = `cancel failed: ${prefix}${String(receipt?.error || 'Gateway rejected cancellation')}`;
+      state.lastError = `cancel failed: ${prefix}${String(writeReceipt?.error || 'Gateway rejected cancellation')}`;
       state.degradedReason = state.lastError;
       state.live = {
         ...(state.live || {}),
@@ -2751,16 +3282,39 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
       };
       return false;
     }
+    if (
+      cancellationReceipt
+      && !matchesActiveTurn(
+        state,
+        String(cancellationReceipt.execution_id || ''),
+        String(cancellationReceipt.turn_id || ''),
+      )
+    ) {
+      state.lastError = 'cancel receipt does not match the active execution turn';
+      state.degradedReason = state.lastError;
+      requestCanonicalResync(sessionId, state.lastError);
+      return false;
+    }
     state.lastError = '';
     state.degradedReason = '';
+    const alreadyTerminal = cancellationReceipt.status === 'already_terminal';
+    recordCancellationReceipt(sessionId, cancellationReceipt);
     state.live = {
       ...(state.live || {}),
       status: state.live?.status || 'running',
-      status_detail: 'cancel requested; waiting for canonical terminal state',
+      status_detail: alreadyTerminal
+        ? t('chat.cancellation.alreadyTerminal')
+        : t('chat.cancellation.accepted'),
       last_progress_at_ms: Date.now(),
     };
-    await refreshLiveExecution(sessionId);
-    await refreshProjection(sessionId);
+    // Cancellation acceptance is the interaction boundary. Canonical state
+    // refreshes and writer demotion continue independently and never keep the
+    // stop control busy.
+    void Promise.allSettled([
+      refreshLiveExecution(sessionId),
+      refreshProjection(sessionId),
+    ]);
+    if (alreadyTerminal) void releaseWriter(sessionId);
     return true;
   }
 
@@ -2816,10 +3370,14 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (frame) cancelAnimationFrame(frame);
     flushFrames.delete(sessionId);
     deltaBuffers.delete(sessionId);
+    clearPresentationDelta(sessionId);
+    clearPresentationAttemptBytes(sessionId);
     clearStreamByteEnds(sessionId);
     stopProgressRecovery(sessionId);
     state.streamState = 'offline';
     state.degradedReason = '';
+    state.presentation = null;
+    state.cancelRequested = false;
     state.writable = false;
     if (state.attachmentRole !== 'detached') {
       await detachSurface(sessionId);
@@ -2863,12 +3421,16 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     }
     for (const stream of sourceLeases.values()) stream.close();
     for (const frame of flushFrames.values()) cancelAnimationFrame(frame);
+    for (const frame of presentationFlushFrames.values()) cancelAnimationFrame(frame);
     for (const timer of progressRecoveryTimers.values()) clearInterval(timer);
     for (const timer of presenceHeartbeatTimers.values()) clearTimeout(timer);
     sourceLeases.clear();
     deltaBuffers.clear();
     flushFrames.clear();
     streamByteEnds.clear();
+    presentationDeltaBuffers.clear();
+    presentationFlushFrames.clear();
+    presentationByteEnds.clear();
     openFlights.clear();
     attachmentFlights.clear();
     canonicalResyncFlights.clear();

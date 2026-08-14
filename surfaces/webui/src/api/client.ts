@@ -2,6 +2,7 @@ import type {
   ApiReadState,
   ApiReadStatus,
   BranchSessionReceipt,
+  CancellationReceipt,
   GatewayCapabilityContract,
   GatewayOpenAiTools,
   MissionCommand,
@@ -280,6 +281,91 @@ function requestIdempotencyKey(scope: string) {
   const suffix = globalThis.crypto?.randomUUID?.()
     || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   return `${scope}:${suffix}`;
+}
+
+type CancellationRequestIdentity = {
+  cancellation_id: string;
+  requested_at_ms: number;
+  execution_id: string;
+  turn_id: string;
+};
+
+// An ambiguous transport failure may happen after Gateway durably committed
+// the cancellation. Keep one browser-generated identity per Session until a
+// matching receipt returns so a retry observes the same durable operation.
+const pendingCancellationRequests = new Map<string, CancellationRequestIdentity>();
+
+function cancellationRequestFor(
+  sessionId: string,
+  executionId = '',
+  turnId = '',
+): CancellationRequestIdentity {
+  const existing = pendingCancellationRequests.get(sessionId);
+  if (
+    existing
+    && existing.execution_id === executionId
+    && existing.turn_id === turnId
+  ) return existing;
+  const created = {
+    cancellation_id: requestIdempotencyKey('webui-cancel'),
+    requested_at_ms: Math.max(1, Date.now()),
+    execution_id: executionId,
+    turn_id: turnId,
+  };
+  pendingCancellationRequests.set(sessionId, created);
+  return created;
+}
+
+async function cancelSessionTurn(
+  sessionId: string,
+  executionId = '',
+  turnId = '',
+): Promise<ApiReceipt<CancellationReceipt>> {
+  const request = cancellationRequestFor(sessionId, executionId, turnId);
+  const result = await writeWithReceipt<CancellationReceipt>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/cancel`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: 'cancel requested from WebUI',
+        cancellation_id: request.cancellation_id,
+        requested_at_ms: request.requested_at_ms,
+        expected_execution_id: request.execution_id,
+        expected_turn_id: request.turn_id,
+      }),
+    },
+  );
+  if (!result.ok) return result;
+  if (
+    result.data?.cancellation_id !== request.cancellation_id
+    || result.data?.requested_at_ms !== request.requested_at_ms
+    || (executionId && result.data?.execution_id !== executionId)
+    || (turnId && result.data?.turn_id !== turnId)
+  ) {
+    return {
+      ...result,
+      ok: false,
+      data: undefined,
+      error: 'Gateway cancellation receipt identity does not match the submitted request',
+      retryable: true,
+    };
+  }
+  if (result.data.status !== 'requested') {
+    pendingCancellationRequests.delete(sessionId);
+  }
+  return result;
+}
+
+function clearPendingCancellationRequest(
+  sessionId: string,
+  executionId = '',
+  turnId = '',
+) {
+  const current = pendingCancellationRequests.get(sessionId);
+  if (!current) return;
+  if (executionId && current.execution_id !== executionId) return;
+  if (turnId && current.turn_id !== turnId) return;
+  pendingCancellationRequests.delete(sessionId);
 }
 
 function withoutServerActor(value: Record<string, unknown>, fields = ['actor_principal']): Record<string, unknown> {
@@ -1358,10 +1444,8 @@ export const api = {
     body: JSON.stringify({ idempotency_key: requestIdempotencyKey(`session-branch:${sessionId}`) }),
   }),
   compactSession: (sessionId: string) => write(`/api/sessions/${encodeURIComponent(sessionId)}/compact`, { method: 'POST' }),
-  cancelSessionTurn: (sessionId: string) => writeWithReceipt(`/api/sessions/${encodeURIComponent(sessionId)}/cancel`, {
-    method: 'POST',
-    body: JSON.stringify({ reason: 'cancel requested from WebUI' }),
-  }),
+  cancelSessionTurn,
+  clearPendingCancellationRequest,
   sessionStats: (sessionId: string) => read(`/api/sessions/${encodeURIComponent(sessionId)}/stats`, {}),
   sessionExecution: (sessionId: string, signal?: AbortSignal) => read<SessionExecutionIndexProjection>(
     `/api/sessions/${encodeURIComponent(sessionId)}/execution`,

@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { t } from '../../i18n';
 import { displayStatus } from '../../i18n/domain/status';
-import type { ExecutionProjection } from '../../types';
+import type { AnswerOrigin, DeliveryStatus, ExecutionProjection } from '../../types';
 import RawPayload from '../workbench/RawPayload.vue';
 import StatusPill from '../workbench/StatusPill.vue';
 
@@ -22,6 +22,38 @@ function latestPayload(type: 'admission' | 'outcome') {
 
 const admission = computed(() => latestPayload('admission') as any);
 const outcome = computed(() => latestPayload('outcome') as any);
+const delivery = computed(() => props.projection.delivery_envelope || null);
+const presentation = computed(() => props.projection.terminal_presentation || null);
+const coverage = computed(() => delivery.value?.coverage || null);
+const DELIVERY_STATUS_KEYS: Record<DeliveryStatus, string> = {
+  satisfied: 'runtime.truth.deliveryStatus.satisfied',
+  partial: 'runtime.truth.deliveryStatus.partial',
+  denied: 'runtime.truth.deliveryStatus.denied',
+  unavailable: 'runtime.truth.deliveryStatus.unavailable',
+};
+const ANSWER_ORIGIN_KEYS: Record<AnswerOrigin, string> = {
+  model_direct: 'runtime.truth.answerOriginValue.model_direct',
+  terminal_delegate: 'runtime.truth.answerOriginValue.terminal_delegate',
+  team_synthesizer: 'runtime.truth.answerOriginValue.team_synthesizer',
+  terminal_narrator: 'runtime.truth.answerOriginValue.terminal_narrator',
+  fallback_model: 'runtime.truth.answerOriginValue.fallback_model',
+  programmatic_fallback: 'runtime.truth.answerOriginValue.programmatic_fallback',
+  cancellation_receipt: 'runtime.truth.answerOriginValue.cancellation_receipt',
+};
+const coverageLabel = computed(() => {
+  if (!coverage.value) return '-';
+  const required = coverage.value.required_obligation_ids?.length || 0;
+  const satisfied = coverage.value.satisfied_obligation_ids?.length || 0;
+  const percent = Math.min(100, Math.max(0, Number(coverage.value.coverage_basis_points || 0) / 100));
+  return `${satisfied}/${required} (${percent.toFixed(percent % 1 ? 1 : 0)}%)`;
+});
+function deliveryStatusLabel(value?: DeliveryStatus) {
+  return value ? t(DELIVERY_STATUS_KEYS[value]) : '-';
+}
+
+function answerOriginLabel(value?: AnswerOrigin) {
+  return value ? t(ANSWER_ORIGIN_KEYS[value]) : '-';
+}
 const evidenceRows = computed(() => props.projection.evidence.map((entity) => {
   const evidence = entity.payload?.type === 'evidence' ? entity.payload.value : null;
   return {
@@ -82,6 +114,20 @@ const lifecycleStatus = computed(() => (
         <dt>{{ t('runtime.truth.freshness') }}</dt>
         <dd>{{ outcome ? `${Number(outcome.freshness_ms || 0)} ms` : '-' }}</dd>
       </dl>
+      <dl>
+        <dt>{{ t('runtime.truth.pipeline') }}</dt>
+        <dd>{{ displayStatus(delivery?.pipeline_status || 'unknown') }}</dd>
+        <dt>{{ t('runtime.truth.delivery') }}</dt>
+        <dd>{{ deliveryStatusLabel(delivery?.delivery_status) }}</dd>
+        <dt>{{ t('runtime.truth.coverage') }}</dt>
+        <dd>{{ coverageLabel }}</dd>
+        <dt>{{ t('runtime.truth.effects') }}</dt>
+        <dd>{{ delivery ? `${delivery.verified_effects.filter((effect) => effect.status === 'applied').length}/${delivery.verified_effects.length}` : '-' }}</dd>
+        <dt>{{ t('runtime.truth.unresolved') }}</dt>
+        <dd>{{ delivery?.unresolved.length ?? '-' }}</dd>
+        <dt>{{ t('runtime.truth.answerOrigin') }}</dt>
+        <dd>{{ answerOriginLabel(presentation?.answer_origin) }}</dd>
+      </dl>
     </div>
 
     <div v-if="evidenceRows.length" class="execution-truth-evidence">
@@ -91,7 +137,7 @@ const lifecycleStatus = computed(() => (
         <small>{{ displayStatus(evidence.completeness) }} · {{ evidence.freshness }}</small>
       </article>
     </div>
-    <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, evidence: projection.evidence }" />
+    <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, delivery, presentation, cancellation: projection.cancellation_receipt, evidence: projection.evidence }" />
   </section>
 </template>
 
@@ -122,7 +168,7 @@ const lifecycleStatus = computed(() => (
 
 .execution-truth-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
   background: var(--border);
   border: 1px solid var(--border);
