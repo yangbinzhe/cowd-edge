@@ -10,6 +10,7 @@ import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import { displayBoolean, displayStatus } from '../i18n/domain/status';
 import { useRoute, useRouter } from 'vue-router';
+import { policyAxisValue } from '../adapters/approvalPresentation';
 
 const store = useAppStore();
 const route = useRoute();
@@ -40,6 +41,9 @@ const autonomyPresetParts: Record<string, { permission: string; approval: string
   autonomous: { permission: 'danger-full-access', approval: 'autonomous' },
   yolo: { permission: 'danger-full-access', approval: 'trust_all' },
 };
+const effectiveExecutionPolicyDefaults = computed(() => (
+  executionPolicyDefaults.value?.policy || executionPolicyDefaults.value || {}
+));
 const origin = computed(() => location.origin);
 const accessModeLabels = {
   internal: 'settings.access.internal',
@@ -357,11 +361,15 @@ async function pruneOldApprovals() {
 async function loadExecutionPolicyDefaults() {
   try {
     executionPolicyDefaults.value = await api.executionPolicyDefaults();
-    const permission = String(executionPolicyDefaults.value?.permission_mode || 'workspace-write');
-    const approval = String(executionPolicyDefaults.value?.approval_profile || 'balanced');
+    const actual = executionPolicyDefaults.value?.policy || executionPolicyDefaults.value || {};
+    const permission = String(actual.permission_mode || 'workspace-write');
+    const approval = String(actual.approval_profile || 'balanced');
     defaultPermissionMode.value = permission;
     defaultApprovalProfile.value = approval;
-    defaultAutonomyPreset.value = autonomyPresetFromParts(permission, approval);
+    const matchedPreset = executionPolicyDefaults.value?.matched_preset;
+    if (typeof matchedPreset === 'string' && Object.hasOwn(autonomyPresetParts, matchedPreset)) {
+      defaultAutonomyPreset.value = matchedPreset;
+    }
   } catch {
     // Defaults remain editable; a failed load only leaves the current values.
   }
@@ -375,13 +383,6 @@ async function saveExecutionPolicyDefaults() {
       parts.approval,
     );
   });
-}
-
-function autonomyPresetFromParts(permission: string, approval: string) {
-  const entry = Object.entries(autonomyPresetParts).find(([, parts]) => (
-    parts.permission === permission && parts.approval === approval
-  ));
-  return entry?.[0] || 'supervised';
 }
 
 function updateApprovalDraftField(field: 'profile' | 'low_risk_timeout', event: Event) {
@@ -706,7 +707,15 @@ function selectSettingsSection(id: string) {
         </div>
         <div class="execution-policy-defaults">
           <h3>{{ t('settings.policy.defaults.title') }}</h3>
-          <label for="default-autonomy-preset">{{ t('settings.policy.defaults.autonomy') }}</label>
+          <dl class="execution-policy-summary">
+            <span>{{ t('chat.executionPolicy.autonomy') }} <strong>{{ policyAxisValue(effectiveExecutionPolicyDefaults, 'autonomy_profile') || '—' }}</strong></span>
+            <span>{{ t('chat.executionPolicy.permission') }} <strong>{{ policyAxisValue(effectiveExecutionPolicyDefaults, 'permission_mode') || '—' }}</strong></span>
+            <span>{{ t('chat.executionPolicy.approval') }} <strong>{{ policyAxisValue(effectiveExecutionPolicyDefaults, 'approval_profile') || '—' }}</strong></span>
+            <span>{{ t('chat.executionPolicy.sandbox') }} <strong>{{ policyAxisValue(effectiveExecutionPolicyDefaults, 'sandbox_posture') || '—' }}</strong></span>
+            <span>{{ t('chat.executionPolicy.interruption') }} <strong>{{ policyAxisValue(effectiveExecutionPolicyDefaults, 'interruption_policy') || '—' }}</strong></span>
+          </dl>
+          <p class="panel-note">{{ t('chat.executionPolicy.guardrail') }}</p>
+          <label for="default-autonomy-preset">{{ t('settings.policy.defaults.requestedPreset') }}</label>
           <select id="default-autonomy-preset" v-model="defaultAutonomyPreset">
             <option value="cautious">cautious</option>
             <option value="supervised">supervised</option>

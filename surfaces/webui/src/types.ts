@@ -51,6 +51,9 @@ export type MissionCommand = GatewayComponents['schemas']['MissionCommand'];
 export type MissionCommandResponse = GatewayComponents['schemas']['MissionCommandResponse'];
 export type MissionControlProjection = GatewayComponents['schemas']['MissionControlProjection'];
 export type MissionControlResponse = GatewayComponents['schemas']['MissionControlResponse'];
+export type ApprovalPendingResponse = GatewayComponents['schemas']['ApprovalPendingResponse'];
+export type ApprovalPendingItem = ApprovalPendingResponse['pending'][number];
+export type SessionExecutionPolicyResponse = GatewayComponents['schemas']['SessionExecutionPolicyResponse'] & ApiReadState;
 
 /// M-01/M-04: lightweight mission summary envelope. The full typed
 /// MissionMaterializedSnapshot stays on the main route; this is the small

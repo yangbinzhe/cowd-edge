@@ -240,6 +240,30 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.find('[data-section="ui"]').exists()).toBe(false);
   });
 
+  it('keeps actual policy axes separate from the next requested preset when defaults drift', async () => {
+    vi.spyOn(api, 'executionPolicyDefaults').mockResolvedValue({
+      matched_preset: null,
+      policy: {
+        autonomy_profile: 'yolo',
+        permission_mode: 'workspace-write',
+        approval_profile: 'supervised',
+        sandbox_posture: 'read_only_sandbox',
+        interruption_policy: 'always_pause_for_human',
+      },
+    } as any);
+    const wrapper = await mountApp('/settings?section=policy');
+    await settleAsync();
+
+    const summary = wrapper.get('.execution-policy-defaults .execution-policy-summary').text();
+    expect(summary).toContain('yolo');
+    expect(summary).toContain('workspace-write');
+    expect(summary).toContain('read_only_sandbox');
+    expect(summary).toContain('always_pause_for_human');
+    expect((wrapper.get('#default-autonomy-preset').element as HTMLSelectElement).value)
+      .toBe('supervised');
+    wrapper.unmount();
+  });
+
   it('registers MFG through the generated external APP catalog', async () => {
     const plugin = webuiPagePlugins.find((item) => item.appId === 'mfg');
     expect(plugin).toBeTruthy();
@@ -411,13 +435,25 @@ describe('Cowd Vue WebUI shell', () => {
         autonomy_profile: 'supervised',
         permission_mode: 'workspace-write',
         approval_profile: 'balanced',
+        sandbox_posture: 'workspace_write_sandbox',
         interruption_policy: 'pause_on_risk',
         revision: 7,
         origin: 'session_explicit',
       },
+      state: {
+        effective: {
+          autonomy_profile: 'supervised',
+          permission_mode: 'workspace-write',
+          approval_profile: 'balanced',
+          sandbox_posture: 'workspace_write_sandbox',
+          interruption_policy: 'pause_on_risk',
+          revision: 7,
+          origin: 'session_explicit',
+        },
+      },
       matched_preset: 'supervised',
       active_turn: { state: 'applied', applied_revision: 7 },
-    });
+    } as any);
     const updatePolicy = vi.spyOn(api, 'updateSessionExecutionPolicy').mockResolvedValue({
       session_id: 'policy-ui-session',
       policy: {
@@ -427,6 +463,17 @@ describe('Cowd Vue WebUI shell', () => {
         interruption_policy: 'continue_until_blocked',
         revision: 8,
         origin: 'session_explicit',
+      },
+      state: {
+        effective: {
+          autonomy_profile: 'yolo',
+          permission_mode: 'danger-full-access',
+          approval_profile: 'autonomous',
+          sandbox_posture: 'host_full_access',
+          interruption_policy: 'continue_until_blocked',
+          revision: 8,
+          origin: 'session_explicit',
+        },
       },
       matched_preset: 'yolo',
       active_turn: { state: 'applied', applied_revision: 8 },
@@ -443,11 +490,89 @@ describe('Cowd Vue WebUI shell', () => {
 
     expect(readPolicy).toHaveBeenCalledWith('policy-ui-session');
     await wrapper.get('.composer-runtime-chip.execution-policy').trigger('click');
+    const policySummary = wrapper.get('.execution-policy-summary').text();
+    expect(policySummary).toContain('supervised');
+    expect(policySummary).toContain('workspace_write_sandbox');
+    expect(policySummary).toContain('pause_on_risk');
     await wrapper.get('.execution-policy-options [data-preset="yolo"]').trigger('click');
     await settleAsync();
 
     expect(updatePolicy).toHaveBeenCalledWith('policy-ui-session', 'yolo', 7);
     expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('YOLO 全信任');
+    wrapper.unmount();
+  });
+
+  it('keeps the effective policy visible while a desired revision is draining', async () => {
+    vi.spyOn(api, 'sessionExecutionPolicy').mockResolvedValue({
+      session_id: 'policy-transition-session',
+      state: {
+        effective: {
+          autonomy_profile: 'supervised',
+          permission_mode: 'workspace-write',
+          approval_profile: 'balanced',
+          sandbox_posture: 'workspace_write_sandbox',
+          interruption_policy: 'pause_on_risk',
+          revision: 7,
+          origin: 'session_explicit',
+        },
+        desired: {
+          autonomy_profile: 'yolo',
+          permission_mode: 'danger-full-access',
+          approval_profile: 'trust_all',
+          sandbox_posture: 'host_full_access',
+          interruption_policy: 'continue_until_blocked',
+          revision: 8,
+          origin: 'session_explicit',
+        },
+        pending_transition: {
+          transition_id: 'policy-transition-8',
+          phase: 'draining',
+          desired_revision: 8,
+          effective_revision: 7,
+          old_revision_active_attempts: 2,
+          requested_at_ms: 1_700_000_000_000,
+          blocker: 'waiting for 2 old attempts',
+        },
+      },
+      policy: {
+        autonomy_profile: 'yolo',
+        permission_mode: 'danger-full-access',
+        approval_profile: 'trust_all',
+        sandbox_posture: 'host_full_access',
+        interruption_policy: 'continue_until_blocked',
+        revision: 8,
+        origin: 'session_explicit',
+      },
+      matched_preset: 'yolo',
+      active_turn: { state: 'draining_previous_revision', applied_revision: 7 },
+      transition: {
+        transition_id: 'policy-transition-8',
+        phase: 'draining',
+        desired_revision: 8,
+        effective_revision: 7,
+        old_revision_active_attempts: 2,
+        requested_at_ms: 1_700_000_000_000,
+        blocker: 'waiting for 2 old attempts',
+      },
+    } as any);
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const store = useAppStore();
+    const chat = useChatSessionsStore();
+    store.activeSessionId = 'policy-transition-session';
+    chat.activeSessionId = 'policy-transition-session';
+    await settleAsync();
+
+    expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('监督');
+    expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).not.toContain('YOLO');
+    await wrapper.get('.composer-runtime-chip.execution-policy').trigger('click');
+    const transition = wrapper.get('.execution-policy-transition');
+    expect(transition.attributes('data-active')).toBe('true');
+    expect(transition.text()).toContain('排空旧版本执行');
+    expect(transition.text()).toContain('supervised@7');
+    expect(transition.text()).toContain('yolo@8');
+    expect(transition.text()).toContain('2');
+    expect(transition.text()).toContain('waiting for 2 old attempts');
     wrapper.unmount();
   });
 
@@ -462,6 +587,17 @@ describe('Cowd Vue WebUI shell', () => {
         interruption_policy: 'continue_until_blocked',
         revision: 4,
         origin: 'session_explicit',
+      },
+      state: {
+        effective: {
+          autonomy_profile: 'yolo',
+          permission_mode: 'danger-full-access',
+          approval_profile: 'supervised',
+          sandbox_posture: 'host_full_access',
+          interruption_policy: 'continue_until_blocked',
+          revision: 4,
+          origin: 'session_explicit',
+        },
       },
       matched_preset: null,
       active_turn: { state: 'applied', applied_revision: 4 },
@@ -487,6 +623,17 @@ describe('Cowd Vue WebUI shell', () => {
         revision: 0,
         origin: 'config_default',
       },
+      state: {
+        effective: {
+          autonomy_profile: 'supervised',
+          permission_mode: 'workspace-write',
+          approval_profile: 'balanced',
+          sandbox_posture: 'workspace_write_sandbox',
+          interruption_policy: 'pause_on_risk',
+          revision: 0,
+          origin: 'config_default',
+        },
+      },
       matched_preset: null,
       active_turn: { state: 'applies_on_activation', applied_revision: null },
       __state: 'forbidden',
@@ -499,6 +646,8 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.get('.composer-runtime-chip.execution-policy').text()).toContain('不可用');
     await wrapper.get('.composer-runtime-chip.execution-policy').trigger('click');
     expect(wrapper.get('.execution-policy-modal').text()).toContain('policy access denied');
+    expect(wrapper.get('.execution-policy-summary').findAll('strong').every((value) => value.text() === '—'))
+      .toBe(true);
     wrapper.unmount();
   });
 
@@ -664,6 +813,20 @@ describe('Cowd Vue WebUI shell', () => {
           domain: 'execution',
           blocks_execution: true,
           source: { session_id: 'approval-session' },
+          context: {
+            requested_sandbox_posture: 'workspace_write_sandbox',
+            effective_sandbox_posture: 'workspace_write_sandbox',
+          },
+          allowed_scopes: ['once', 'session'],
+          skippable: true,
+          effect_assessment: {
+            operation: 'workspace.write',
+            read_write_class: 'write',
+            reversibility: 'reversible',
+            resource_targets: [{ resource: 'workspace', operation: 'write', target: 'README.md' }],
+          },
+          policy_revision: 8,
+          revision: 2,
         }],
         filter: filters,
       } as any));
@@ -671,6 +834,22 @@ describe('Cowd Vue WebUI shell', () => {
       resolved = true;
       return { ok: true } as any;
     });
+    const exact = vi.spyOn(api, 'approvalExact').mockResolvedValue({
+      approval_id: 'approval-chat-1',
+      status: 'approved',
+      action: 'tool.workspace_write',
+      summary: 'Allow the current execution write',
+      risk: 'medium',
+      domain: 'execution',
+      blocks_execution: true,
+      context: {},
+      source: { session_id: 'approval-session' },
+      decision: {
+        actor: { actor_id: 'human:operator' },
+        reason: 'approved from WebUI',
+        decided_at_ms: 1_700_000_000_000,
+      },
+    } as any);
     const store = useAppStore();
     store.activeSessionId = 'approval-session';
     window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
@@ -680,15 +859,106 @@ describe('Cowd Vue WebUI shell', () => {
       { sessionId: 'approval-session', domain: 'execution', blocksExecution: true },
     );
     expect(wrapper.get('.chat-approval-modal').text()).toContain('Allow the current execution write');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('workspace.write');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('workspace:write:README.md');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('workspace_write_sandbox');
+    expect(wrapper.get('.chat-approval-modal').text()).not.toContain('跳过并继续');
     expect(wrapper.get('.global-approval-button').text()).toContain('1');
     await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
     await settleAsync();
 
-    expect(respond).toHaveBeenCalledWith('approval-chat-1', true, 'once', 'approved from WebUI');
-    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
+    expect(respond).toHaveBeenCalledWith('approval-chat-1', true, 'once', 'approved from WebUI', false);
+    expect(exact).toHaveBeenCalledWith('approval-chat-1');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('审批已进入终态：approved');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('human:operator');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('approved from WebUI');
+    expect(wrapper.get('.chat-approval-modal').text()).not.toContain('批准并继续');
     wrapper.unmount();
     pending.mockRestore();
     respond.mockRestore();
+    exact.mockRestore();
+  });
+
+  it('offers only backend-authorized scopes and skip for a typed read approval', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    let resolved = false;
+    vi.spyOn(api, 'approvalPending').mockImplementation(async (filters = {}) => ({
+      kind: 'gateway.unified_approval_pending',
+      pending: resolved ? [] : [{
+        approval_id: 'approval-read-1',
+        status: 'pending',
+        action: 'workspace.read',
+        summary: 'Read a workspace report',
+        risk: 'low',
+        domain: 'execution',
+        blocks_execution: true,
+        context: {},
+        source: { session_id: 'approval-read-session' },
+        allowed_scopes: ['turn', 'task'],
+        skippable: true,
+        effect_assessment: { read_write_class: 'read_only' },
+      }],
+      filter: filters,
+      approvals: null,
+    } as any));
+    const respond = vi.spyOn(api, 'approvalRespond').mockImplementation(async () => {
+      resolved = true;
+      return { ok: true } as any;
+    });
+    const store = useAppStore();
+    store.activeSessionId = 'approval-read-session';
+    window.dispatchEvent(new CustomEvent('cowd:runtime-live-reconnected'));
+    await settleAsync();
+
+    const modal = wrapper.get('.chat-approval-modal');
+    expect(modal.findAll('.approval-scope-options button').map((button) => button.text()))
+      .toEqual(['当前回合', '当前任务']);
+    const skip = modal.findAll('footer button').find((button) => button.text().includes('跳过并继续'));
+    expect(skip).toBeDefined();
+    await skip!.trigger('click');
+    await settleAsync();
+
+    expect(respond).toHaveBeenCalledWith('approval-read-1', false, 'once', 'skipped from WebUI', true);
+    wrapper.unmount();
+  });
+
+  it('restores a blocking approval from the canonical endpoint after live reconnect', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    let reconnected = false;
+    const pending = vi.spyOn(api, 'approvalPending').mockImplementation(async (filters = {}) => ({
+      kind: 'gateway.unified_approval_pending',
+      pending: reconnected ? [{
+        approval_id: 'approval-recovered-1',
+        status: 'pending',
+        action: 'tool.write',
+        summary: 'Recovered after reconnect',
+        risk: 'high',
+        domain: 'execution',
+        blocks_execution: true,
+        context: {},
+        source: { session_id: 'approval-recovery-session' },
+        allowed_scopes: ['once'],
+        effect_assessment: { read_write_class: 'write' },
+      }] : [],
+      filter: filters,
+      approvals: null,
+    } as any));
+    const store = useAppStore();
+    store.activeSessionId = 'approval-recovery-session';
+    await settleAsync();
+    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
+
+    reconnected = true;
+    window.dispatchEvent(new CustomEvent('cowd:runtime-live-reconnected'));
+    await settleAsync();
+
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('Recovered after reconnect');
+    expect(pending).toHaveBeenCalledWith(
+      { sessionId: 'approval-recovery-session', domain: 'execution', blocksExecution: true },
+    );
+    wrapper.unmount();
   });
 
   it('does not auto-open non-execution governance approvals in Chat', async () => {
@@ -2905,6 +3175,8 @@ describe('Cowd Vue WebUI shell', () => {
       reason: 'cancel requested from WebUI',
       cancellation_id: expect.stringMatching(/^webui-cancel:/),
       requested_at_ms: 123_456,
+      expected_execution_id: '',
+      expected_turn_id: '',
     });
     expect(receipt.data?.cancellation_id).toBe(request.cancellation_id);
   });
@@ -3549,8 +3821,10 @@ describe('Cowd Vue WebUI shell', () => {
         summary: 'Allow a governed write',
         action: 'tool.write',
         status: 'pending',
+        allowed_scopes: ['once', 'session'],
+        effect_assessment: { read_write_class: 'write' },
       }],
-    });
+    } as any);
     vi.spyOn(api, 'approvalGrants').mockResolvedValue({ grants: [] });
     const respond = vi.spyOn(api, 'approvalRespond').mockResolvedValue({ status: 'approved' });
     const pinia = createPinia();
@@ -3572,10 +3846,10 @@ describe('Cowd Vue WebUI shell', () => {
     const policyPanel = wrapper.get('[data-section="policy"]');
     expect(policyPanel.find('select').exists()).toBe(false);
     const scopeButtons = policyPanel.findAll('.runtime-approval-scope button');
-    expect(scopeButtons).toHaveLength(5);
+    expect(scopeButtons).toHaveLength(2);
     expect(scopeButtons[0].classes()).toContain('active');
-    await scopeButtons[3].trigger('click');
-    expect(scopeButtons[3].classes()).toContain('active');
+    await scopeButtons[1].trigger('click');
+    expect(scopeButtons[1].classes()).toContain('active');
     const approve = policyPanel.findAll('button').find((button) => button.text().includes('批准'));
     expect(approve).toBeDefined();
     await approve!.trigger('click');

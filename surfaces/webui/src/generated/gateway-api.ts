@@ -252,6 +252,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/approval/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * approval POST /api/approval/prune
+         * @description Invoke or create Gateway approval capability through `/api/approval/prune` handled by `approval_prune_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_approval_post_api_approval_prune"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/approval/respond": {
         parameters: {
             query?: never;
@@ -6934,6 +6956,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mission/control/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * mission GET /api/mission/control/summary
+         * @description Query Gateway mission capability through `/api/mission/control/summary` handled by `mission_control_summary_handler`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["gateway_mission_get_api_mission_control_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mission/control/teams": {
         parameters: {
             query?: never;
@@ -8918,6 +8962,34 @@ export interface paths {
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
          */
         post: operations["gateway_session_post_api_sessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/execution-policy-defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * session GET /api/sessions/execution-policy-defaults
+         * @description Query Gateway session capability through `/api/sessions/execution-policy-defaults` handled by `get_execution_policy_defaults`.
+         *
+         *     Risk: read. Side effects: may_change_ai_harness_execution_state.
+         */
+        get: operations["gateway_session_get_api_sessions_execution_policy_defaults"];
+        /**
+         * session PUT /api/sessions/execution-policy-defaults
+         * @description Replace Gateway session capability through `/api/sessions/execution-policy-defaults` handled by `put_execution_policy_defaults`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        put: operations["gateway_session_put_api_sessions_execution_policy_defaults"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -11907,6 +11979,18 @@ export interface components {
         };
         /** @enum {string} */
         AdmissionProjectionStatus: "accepted" | "queued" | "waiting_resource" | "waiting_scope" | "waiting_approval" | "materialized" | "running" | "terminal" | "blocked" | "cancelled";
+        /** @enum {string} */
+        AnswerOrigin: "model_direct" | "terminal_delegate" | "team_synthesizer" | "terminal_narrator" | "fallback_model" | "programmatic_fallback" | "cancellation_receipt";
+        AnswerValidation: {
+            /** Format: uint64 */
+            envelope_revision?: number | null;
+            /** @default [] */
+            findings: string[];
+            /** @default pending */
+            status: components["schemas"]["AnswerValidationStatus"];
+        };
+        /** @enum {string} */
+        AnswerValidationStatus: "pending" | "valid" | "invalid";
         ApprovalPendingResponse: {
             approvals: {
                 [key: string]: unknown;
@@ -11938,7 +12022,7 @@ export interface components {
             })[];
         };
         /** @enum {string} */
-        ApprovalProfile: "supervised" | "balanced" | "autonomous" | "trust-all";
+        ApprovalProfile: "supervised" | "balanced" | "autonomous" | "trust_all";
         AuthVerifyResponse: {
             auth_required: boolean;
             entitlement?: components["schemas"]["HumanEntitlementProjection"];
@@ -11949,20 +12033,67 @@ export interface components {
         /** @enum {string} */
         AutonomyProfileId: "cautious" | "supervised" | "stewarded" | "autonomous" | "yolo";
         CancelSessionTurnReceipt: {
-            aborted: boolean;
             actor_id: string;
-            execution_ids: string[];
-            /** @constant */
-            ok: true;
-            reason: string;
-            run_id?: string | null;
+            cancellation_id: string;
+            /** @enum {string} */
+            cause: "user_requested" | "system" | "parent" | "deadline" | "lease_lost";
+            effective_at_ms?: number | null;
+            execution_id: string;
+            journal_sequence: number;
+            projection_revision: number;
+            reason?: string | null;
+            requested_at_ms: number;
             session_id: string;
-            /** @constant */
-            status: "cancel_requested";
+            /** @enum {string} */
+            status: "requested" | "cancelled" | "already_terminal";
+            turn_id: string;
         };
         CancelSessionTurnRequest: {
+            cancellation_id?: string | null;
+            expected_execution_id?: string | null;
+            expected_turn_id?: string | null;
             reason?: string | null;
+            requested_at_ms?: number | null;
         };
+        /**
+         * @description Stable cause of a cancellation request.  Only `UserRequested` bypasses a
+         *     model-authored terminal answer; all other causes remain delivery facts for
+         *     the root presentation gate.
+         * @enum {string}
+         */
+        CancellationCause: "user_requested" | "system" | "parent" | "deadline" | "lease_lost";
+        /**
+         * @description Durable, idempotent cancellation fact shared by HTTP, live delivery and
+         *     projection replay.  It is an activity receipt, never assistant prose.
+         */
+        CancellationReceipt: {
+            actor_id: string;
+            cancellation_id: string;
+            /** @default system */
+            cause: components["schemas"]["CancellationCause"];
+            /** Format: uint64 */
+            effective_at_ms?: number | null;
+            execution_id: string;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            journal_sequence: number;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            projection_revision: number;
+            reason?: string | null;
+            /** Format: uint64 */
+            requested_at_ms: number;
+            session_id: string;
+            /** @default requested */
+            status: components["schemas"]["CancellationStatus"];
+            turn_id: string;
+        };
+        /** @enum {string} */
+        CancellationStatus: "requested" | "cancelled" | "already_terminal";
         /**
          * @description Summary of one direct or transitive child graph included in a root
          *     execution projection. Its nodes remain in that graph's own projection;
@@ -12034,6 +12165,101 @@ export interface components {
             surface_instance: string;
             ttl_seconds?: number;
         };
+        /** @enum {string} */
+        DeliveryBranchStatus: "completed" | "failed" | "cancelled" | "blocked";
+        /** @description One terminal branch consumed by the Runtime finally reducer. */
+        DeliveryBranchTerminal: {
+            branch_id: string;
+            execution_id?: string | null;
+            failure_ref?: string | null;
+            result_ref?: string | null;
+            /** @default blocked */
+            status: components["schemas"]["DeliveryBranchStatus"];
+        };
+        DeliveryConflict: {
+            conflict_id: string;
+            /** @default [] */
+            source_execution_ids: string[];
+            summary: string;
+        };
+        /**
+         * @description Deterministic obligation coverage computed from RequiredAcceptance and
+         *     ObservedAcceptance by Runtime.
+         */
+        DeliveryCoverage: {
+            /**
+             * Format: uint16
+             * @default 0
+             */
+            coverage_basis_points: number;
+            /** @default [] */
+            required_obligation_ids: string[];
+            /** @default [] */
+            satisfied_obligation_ids: string[];
+        };
+        /**
+         * @description The only durable fact packet presented to the terminal answer gate.
+         *     Reducers own construction; answer models receive a read-only serialized
+         *     view and return an [`AnswerCandidate`] instead of a modified envelope.
+         */
+        DeliveryEnvelope: {
+            /** @default [] */
+            branch_terminals: components["schemas"]["DeliveryBranchTerminal"][];
+            cancellation?: components["schemas"]["CancellationReceipt"] | null;
+            /** @default [] */
+            conflicts: components["schemas"]["DeliveryConflict"][];
+            /**
+             * @default {
+             *       "coverage_basis_points": 0,
+             *       "required_obligation_ids": [],
+             *       "satisfied_obligation_ids": []
+             *     }
+             */
+            coverage: components["schemas"]["DeliveryCoverage"];
+            /** Format: uint64 */
+            created_at_ms: number;
+            /** @default unavailable */
+            delivery_status: components["schemas"]["DeliveryStatus"];
+            envelope_id: string;
+            objective_id: string;
+            /** @default waiting */
+            pipeline_status: components["schemas"]["PipelineStatus"];
+            /** Format: uint64 */
+            revision: number;
+            /** @default [] */
+            unresolved: components["schemas"]["DeliveryUnresolved"][];
+            /**
+             * @default {
+             *       "citation_preference": "when_available",
+             *       "conclusion_only": false,
+             *       "detail": "balanced",
+             *       "evidence_preference": "when_useful",
+             *       "format": "markdown",
+             *       "language": "auto",
+             *       "structural_constraints": []
+             *     }
+             */
+            user_answer_contract: components["schemas"]["UserAnswerContract"];
+            /** @default [] */
+            verified_artifacts: components["schemas"]["VerifiedDeliveryReference"][];
+            /** @default [] */
+            verified_effects: components["schemas"]["VerifiedDeliveryEffect"][];
+            /** @default [] */
+            verified_receipts: components["schemas"]["VerifiedDeliveryReference"][];
+        };
+        /**
+         * @description Runtime-derived business delivery state.  Model-generated wording cannot
+         *     promote this value.
+         * @enum {string}
+         */
+        DeliveryStatus: "satisfied" | "partial" | "denied" | "unavailable";
+        DeliveryUnresolved: {
+            kind: string;
+            obligation_id?: string | null;
+            source_execution_id?: string | null;
+            summary: string;
+            unresolved_id: string;
+        };
         Empty: Record<string, never>;
         EvidenceAccessRef: {
             /** Format: uint64 */
@@ -12048,9 +12274,23 @@ export interface components {
         /** @enum {string} */
         EvidenceCompleteness: "none" | "partial" | "sufficient";
         /** @enum {string} */
+        EvidenceCoverageKind: "exact_content" | "scoped_content" | "directory_listing" | "recursive_content" | "glob_discovery" | "write_effect";
+        /** @enum {string} */
         EvidenceDurability: "pending" | "durable" | "unavailable";
         /** @enum {string} */
         EvidenceFreshness: "live" | "durable" | "unavailable";
+        /**
+         * @description Runtime-compiled evidence requirement. Raw prompt/constraint strings may
+         *     be compilation input, but never become acceptance truth after this type is
+         *     materialized.
+         */
+        EvidenceObligation: {
+            kind: components["schemas"]["EvidenceObligationKind"];
+            obligation_id: string;
+            target: components["schemas"]["EvidenceTargetIdentity"];
+        };
+        /** @enum {string} */
+        EvidenceObligationKind: "content_read" | "directory_listing" | "recursive_scan" | "glob_discovery" | "write_effect" | "verify_after_write" | "verify_upstream_change" | "network_evidence";
         EvidenceProjection: {
             completeness: components["schemas"]["EvidenceCompleteness"];
             evidence_ref: components["schemas"]["EvidenceRef"];
@@ -12073,10 +12313,39 @@ export interface components {
             ref_type: string;
             source?: string | null;
         };
+        EvidenceTargetIdentity: {
+            /** @constant */
+            kind: "workspace";
+            scope: components["schemas"]["WorkspaceScopeIdentity"];
+        } | {
+            endpoint: string;
+            /** @constant */
+            kind: "network";
+        } | {
+            candidates: string[];
+            display_alias: string;
+            /** @constant */
+            kind: "ambiguous_workspace";
+        } | {
+            display_alias: string;
+            /** @constant */
+            kind: "unavailable_workspace";
+            reason: string;
+        };
         ExecutionAcceptance: {
             criteria: string[];
             /** Format: uint16 */
             minimum_score_basis_points?: number | null;
+            /**
+             * @description Runtime-compiled requirement truth. The legacy fields below remain
+             *     deserialization inputs until graph construction has compiled them;
+             *     they are never observations.
+             * @default {
+             *       "criteria": [],
+             *       "evidence_obligations": []
+             *     }
+             */
+            required: components["schemas"]["RequiredAcceptance"];
             required_evidence: string[];
         };
         ExecutionActivityContentProjection: {
@@ -12270,6 +12539,9 @@ export interface components {
             minimum: number;
             /** @constant */
             mode: "quorum";
+        } | {
+            /** @constant */
+            mode: "finally";
         };
         /** @enum {string} */
         ExecutionEdgeKind: "depends_on" | "verifies" | "produces";
@@ -12305,6 +12577,7 @@ export interface components {
         ExecutionGraphProjection: {
             /** Format: uint64 */
             commit_cursor: number;
+            delivery_envelope?: components["schemas"]["DeliveryEnvelope"] | null;
             edges: components["schemas"]["ExecutionEdgeProjection"][];
             graph_id: string;
             lineage?: components["schemas"]["ExecutionGraphLineage"] | null;
@@ -12316,6 +12589,7 @@ export interface components {
             revision: number;
             /** @default interactive */
             service_class: components["schemas"]["ExecutionServiceClass"];
+            terminal_presentation?: components["schemas"]["TerminalPresentation"] | null;
             terminal_result_ref?: string | null;
             work?: components["schemas"]["ExecutionWorkGraphProjection"] | null;
         };
@@ -12471,6 +12745,10 @@ export interface components {
              * @default {
              *       "criteria": [],
              *       "minimum_score_basis_points": null,
+             *       "required": {
+             *         "criteria": [],
+             *         "evidence_obligations": []
+             *       },
              *       "required_evidence": []
              *     }
              */
@@ -12503,8 +12781,17 @@ export interface components {
              *       "duration_ms": 0,
              *       "input_tokens": 0,
              *       "max_tool_concurrency_observed": 0,
+             *       "observed_acceptance": {
+             *         "observed_evidence": [],
+             *         "satisfied_criteria": [],
+             *         "unresolved_obligation_ids": []
+             *       },
              *       "output_tokens": 0,
              *       "parallel_tool_batches": 0,
+             *       "required_acceptance": {
+             *         "criteria": [],
+             *         "evidence_obligations": []
+             *       },
              *       "tool_calls": 0
              *     }
              */
@@ -12537,6 +12824,27 @@ export interface components {
         };
         /** @enum {string} */
         ExecutionPattern: "direct" | "explore" | "execute" | "deliberate" | "collaborate" | "supervise";
+        /**
+         * @description Immutable execution-policy snapshot bound to one concrete Session admission.
+         *
+         *     Schedules and Tasks retain this value after admission so later policy changes
+         *     cannot silently widen already admitted work. `permission_ceiling` is the
+         *     product-owned upper bound; every other effective axis comes from the target
+         *     Session policy after intersecting that bound.
+         */
+        ExecutionPolicyBinding: {
+            approval_profile: components["schemas"]["ApprovalProfile"];
+            autonomy_profile: components["schemas"]["AutonomyProfileId"];
+            ceiling_digest: string;
+            interruption_policy: components["schemas"]["InterruptionPolicy"];
+            permission_ceiling: components["schemas"]["PermissionMode"];
+            permission_mode: components["schemas"]["PermissionMode"];
+            policy_digest: string;
+            /** Format: uint64 */
+            policy_revision: number;
+            sandbox_posture: components["schemas"]["SandboxPosture"];
+            session_id: string;
+        };
         /** ExecutionProjection */
         ExecutionProjection: {
             /** @default [] */
@@ -12553,12 +12861,19 @@ export interface components {
             authorization_revision: number;
             /** @default [] */
             available_commands: components["schemas"]["ProjectionCommandAvailability"][];
+            /** @description Durable cancellation activity; it is never rendered as assistant text. */
+            cancellation_receipt?: components["schemas"]["CancellationReceipt"] | null;
             /** @default [] */
             child_executions: components["schemas"]["ChildExecutionProjection"][];
             /** @default [] */
             context: components["schemas"]["ProjectionEntity"][];
             /** Format: uint64 */
             cursor: number;
+            /**
+             * @description Runtime-derived delivery facts.  Older snapshots omit this additive
+             *     field and continue to deserialize with `None`.
+             */
+            delivery_envelope?: components["schemas"]["DeliveryEnvelope"] | null;
             detail_scope: components["schemas"]["ProjectionDetailScope"];
             /** @default [] */
             evidence: components["schemas"]["ProjectionEntity"][];
@@ -12588,6 +12903,8 @@ export interface components {
             task_id?: string | null;
             /** @default [] */
             teams: components["schemas"]["ProjectionEntity"][];
+            /** @description Latest recoverable terminal presentation attempt. */
+            terminal_presentation?: components["schemas"]["TerminalPresentation"] | null;
             turn_id?: string | null;
             /** @default [] */
             usage: components["schemas"]["ProjectionEntity"][];
@@ -12647,6 +12964,14 @@ export interface components {
              *     fallback before any provider output is emitted.
              */
             model?: string | null;
+            /**
+             * @default {
+             *       "observed_evidence": [],
+             *       "satisfied_criteria": [],
+             *       "unresolved_obligation_ids": []
+             *     }
+             */
+            observed_acceptance: components["schemas"]["ObservedAcceptance"];
             /** Format: uint64 */
             output_tokens: number;
             /**
@@ -12654,6 +12979,20 @@ export interface components {
              * @default 0
              */
             parallel_tool_batches: number;
+            /**
+             * @description The exact requirement contract used for this execution attempt. This
+             *     may include deterministic predecessor-derived obligations that were
+             *     unavailable when the original graph node was compiled.
+             * @default {
+             *       "criteria": [],
+             *       "evidence_obligations": []
+             *     }
+             */
+            required_acceptance: components["schemas"]["RequiredAcceptance"];
+            /**
+             * @description Durable pre-R1 projection only. New node results carry observation
+             *     truth in `observed_acceptance` and never populate this field.
+             */
             runtime_observed_resource_scopes?: string[];
             runtime_write_attempt_paths?: string[];
             /** Format: uint64 */
@@ -16566,6 +16905,30 @@ export interface components {
             title: string;
             workspace_id: string;
         };
+        ObservedAcceptance: {
+            observed_evidence: components["schemas"]["ObservedEvidence"][];
+            satisfied_criteria: string[];
+            unresolved_obligation_ids: string[];
+        };
+        ObservedEvidence: {
+            evidence_ref?: components["schemas"]["EvidenceAccessRef"] | null;
+            obligation_id: string;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            observed_at_sequence: number;
+            /** @default retained_replay */
+            provenance: components["schemas"]["ObservedEvidenceProvenance"];
+            target: components["schemas"]["EvidenceTargetIdentity"];
+            tool_name?: string;
+            /**
+             * @description Canonical ToolHost-attested pre-image for a workspace write. Runtime
+             *     never reconstructs this from the filesystem after execution.
+             */
+            workspace_prior_state?: components["schemas"]["WorkspacePriorState"] | null;
+        };
+        ObservedEvidenceProvenance: "fresh_execution" | "retained_replay";
         OutcomeProjection: {
             agent_id?: string | null;
             /** Format: uint64 */
@@ -16623,6 +16986,36 @@ export interface components {
         };
         /** @enum {string} */
         PermissionMode: "read-only" | "workspace-write" | "danger-full-access";
+        /**
+         * @description Runtime-owned pipeline state.  This is deliberately independent from
+         *     [`DeliveryStatus`]: a pipeline can complete while the user's objective is
+         *     only partially satisfied.
+         * @enum {string}
+         */
+        PipelineStatus: "waiting" | "completed" | "failed" | "cancelled";
+        /** @enum {string} */
+        PolicyTransitionPhase: "requested" | "persisted" | "freezing" | "draining" | "rebinding" | "stable" | "failed" | "cancelled";
+        PolicyTransitionReceipt: {
+            blocker?: string | null;
+            /** Format: uint64 */
+            desired_revision: number;
+            /** Format: uint64 */
+            effective_at_ms?: number | null;
+            /** Format: uint64 */
+            effective_revision: number;
+            failure?: string | null;
+            /** Format: uint64 */
+            old_revision_active_attempts: number;
+            phase: components["schemas"]["PolicyTransitionPhase"];
+            /** Format: uint64 */
+            requested_at_ms: number;
+            transition_id: string;
+        };
+        PresentationModelAttempt: {
+            failure?: string | null;
+            model: string;
+            provider: string;
+        };
         ProjectionCommandAvailability: {
             available: boolean;
             command: components["schemas"]["ExecutionCommandKind"];
@@ -16773,6 +17166,10 @@ export interface components {
          * @enum {string}
          */
         RealityBoundary: "observed" | "inferred" | "simulated" | "hypothetical" | "conflict" | "unknown";
+        RequiredAcceptance: {
+            criteria: string[];
+            evidence_obligations: components["schemas"]["EvidenceObligation"][];
+        };
         /**
          * @description Stable, ID-deduplicated counters for a running execution.  A missing live
          *     projection is intentionally distinct from zero-valued counters.
@@ -16824,6 +17221,12 @@ export interface components {
              */
             total_tokens: number;
         };
+        /**
+         * @description Execution boundary derived from an autonomy preset. It is a Runtime-owned
+         *     contract, never a model-authored switch.
+         * @enum {string}
+         */
+        SandboxPosture: "read_only_sandbox" | "workspace_write_sandbox" | "host_full_access";
         SendMessageReceipt: {
             execution: {
                 [key: string]: unknown;
@@ -16925,6 +17328,7 @@ export interface components {
             permission_mode: components["schemas"]["PermissionMode"];
             /** Format: uint64 */
             revision: number;
+            sandbox_posture: components["schemas"]["SandboxPosture"];
         };
         SessionExecutionPolicyActiveTurn: {
             /** Format: uint64 */
@@ -16945,6 +17349,22 @@ export interface components {
             policy: components["schemas"]["SessionExecutionPolicy"];
             safe_replay?: string | null;
             session_id: string;
+            /**
+             * @description Canonical effective/desired transition state. Surfaces must render
+             *     `effective` as authoritative until the pending receipt reaches Stable;
+             *     `policy` remains the requested/current convenience projection.
+             */
+            state: components["schemas"]["SessionExecutionPolicyState"];
+            transition?: components["schemas"]["PolicyTransitionReceipt"] | null;
+        };
+        SessionExecutionPolicyState: {
+            /**
+             * @description Full desired five-axis policy required to resume a non-terminal
+             *     transition after restart. Stable states carry `None`.
+             */
+            desired?: components["schemas"]["SessionExecutionPolicy"] | null;
+            effective: components["schemas"]["SessionExecutionPolicy"];
+            pending_transition?: components["schemas"]["PolicyTransitionReceipt"] | null;
         };
         SessionFocusClearRequest: {
             expected_revision: number;
@@ -17178,8 +17598,6 @@ export interface components {
             origin_session_id: string;
             origin_turn_id: string;
             task_id: string;
-            /** @default false */
-            yolo_mode: boolean;
         };
         StrategyActualProjection: {
             /** Format: uint16 */
@@ -17403,14 +17821,23 @@ export interface components {
             surface: string;
             workspace_id: string;
         };
+        /** @enum {string} */
+        TaskContinuationPolicy: "standard" | "continue_until_blocked";
         TaskDetailResponse: {
             task: components["schemas"]["TaskAggregate"];
             turns: components["schemas"]["TaskTurnBinding"][];
         };
+        /**
+         * @description Task-local liveness policy plus one immutable Session execution binding.
+         *     Specs may be unbound while a router is planning; durable Task admission
+         *     rejects them until Runtime attaches the effective Session snapshot.
+         */
         TaskExecutionPolicy: {
+            binding?: components["schemas"]["TaskPolicyBinding"] | null;
+            /** @default standard */
+            continuation: components["schemas"]["TaskContinuationPolicy"];
             /** Format: uint32 */
             max_failures_before_block: number;
-            yolo_mode: boolean;
         };
         TaskFailureRequest: {
             evidence_refs?: components["schemas"]["EvidenceRef"][];
@@ -17554,6 +17981,9 @@ export interface components {
             evidence_refs: components["schemas"]["EvidenceRef"][];
             outcome: string;
         };
+        TaskPolicyBinding: {
+            execution: components["schemas"]["ExecutionPolicyBinding"];
+        };
         /** @enum {string} */
         TaskStatus: "pending" | "running" | "reviewing" | "completed" | "blocked" | "cancelled" | "failed";
         TaskTransitionRequest: {
@@ -17580,6 +18010,34 @@ export interface components {
             task_id: string;
             turns: components["schemas"]["TaskTurnBinding"][];
         };
+        TerminalPresentation: {
+            answer_origin: components["schemas"]["AnswerOrigin"];
+            attempt_id: string;
+            /** Format: uint64 */
+            committed_at_ms?: number | null;
+            envelope_id: string;
+            /** Format: uint64 */
+            envelope_revision: number;
+            fallback_reason?: string | null;
+            /** Format: uint64 */
+            generated_at_ms: number;
+            /** @default [] */
+            models_attempted: components["schemas"]["PresentationModelAttempt"][];
+            narrator_model?: string | null;
+            narrator_provider?: string | null;
+            presentation_id: string;
+            source_execution_id?: string | null;
+            state: components["schemas"]["TerminalPresentationState"];
+            /**
+             * @default {
+             *       "findings": [],
+             *       "status": "pending"
+             *     }
+             */
+            validation: components["schemas"]["AnswerValidation"];
+        };
+        /** @enum {string} */
+        TerminalPresentationState: "started" | "streaming" | "validating" | "committed" | "aborted" | "superseded";
         /**
          * @description A stable, deterministic relation between one durable Session turn and its
          *     Runtime execution.  This is a binding/capability record, not a second copy
@@ -17635,6 +18093,93 @@ export interface components {
             /** Format: uint64 */
             expected_revision: number;
             preset: components["schemas"]["AutonomyProfileId"];
+        };
+        /** @enum {string} */
+        UserAnswerCitationPreference: "none" | "when_available" | "required";
+        /**
+         * @description Presentation preferences negotiated from the user request and system
+         *     capability.  It constrains wording only; it does not alter delivery facts.
+         */
+        UserAnswerContract: {
+            /** @default when_available */
+            citation_preference: components["schemas"]["UserAnswerCitationPreference"];
+            /** @default false */
+            conclusion_only: boolean;
+            /** @default balanced */
+            detail: components["schemas"]["UserAnswerDetail"];
+            /** @default when_useful */
+            evidence_preference: components["schemas"]["UserAnswerEvidencePreference"];
+            /** @default markdown */
+            format: components["schemas"]["UserAnswerFormat"];
+            /** @default auto */
+            language: string;
+            other_format?: string | null;
+            /** @default [] */
+            structural_constraints: string[];
+        };
+        /** @enum {string} */
+        UserAnswerDetail: "concise" | "balanced" | "detailed";
+        /** @enum {string} */
+        UserAnswerEvidencePreference: "none" | "when_useful" | "required";
+        /** @enum {string} */
+        UserAnswerFormat: "human_text" | "markdown" | "strict_json" | "other";
+        /**
+         * @description Runtime-attested effect state.  In particular, presentation success must
+         *     never turn `not_applied` into `applied`.
+         */
+        VerifiedDeliveryEffect: {
+            effect_id: string;
+            kind: string;
+            receipt_ref?: string | null;
+            source_execution_id?: string | null;
+            /** @default uncertain */
+            status: components["schemas"]["VerifiedEffectStatus"];
+        };
+        /**
+         * @description Opaque, verified durable reference.  Raw payloads stay behind the evidence
+         *     store and are never copied into a delivery envelope.
+         */
+        VerifiedDeliveryReference: {
+            kind: string;
+            reference_id: string;
+            source_execution_id?: string | null;
+        };
+        /** @enum {string} */
+        VerifiedEffectStatus: "applied" | "not_applied" | "uncertain";
+        /** @enum {string} */
+        WorkspaceAccessMode: "read" | "write";
+        /** @enum {string} */
+        WorkspaceObjectKind: "file" | "directory";
+        /**
+         * @description Stable identity for a workspace object. Display aliases are deliberately
+         *     excluded: authorization, receipts and acceptance compare these identities,
+         *     while Surfaces may render either relative path for humans.
+         */
+        WorkspacePathIdentity: {
+            object_kind: components["schemas"]["WorkspaceObjectKind"];
+            observed_revision_or_digest?: string | null;
+            repository_id: string;
+            repository_relative_path: string;
+            workspace_id: string;
+            workspace_relative_path: string;
+        };
+        WorkspacePriorState: {
+            sha256: string;
+            /** @constant */
+            state: "existing";
+        } | {
+            /** @constant */
+            state: "absent";
+        };
+        /**
+         * @description Typed scope used by authorization, execution receipts and acceptance.
+         *     Coverage is directional: a directory listing is never exact file content,
+         *     and an exact file read never proves recursive directory coverage.
+         */
+        WorkspaceScopeIdentity: {
+            access_mode: components["schemas"]["WorkspaceAccessMode"];
+            coverage: components["schemas"]["EvidenceCoverageKind"];
+            path: components["schemas"]["WorkspacePathIdentity"];
         };
         "mfg.alert.command.request.v1": components["schemas"]["MfgAlertCommandRequest"];
         "mfg.alert.command.response.v1": components["schemas"]["MfgMutationResponseV1"];
@@ -18415,6 +18960,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApprovalPendingResponse"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_approval_post_api_approval_prune: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Bad request */
@@ -38572,6 +39175,49 @@ export interface operations {
             };
         };
     };
+    gateway_mission_get_api_mission_control_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_mission_get_api_mission_control_teams: {
         parameters: {
             query?: never;
@@ -43592,6 +44238,107 @@ export interface operations {
         };
     };
     gateway_session_post_api_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_session_get_api_sessions_execution_policy_defaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_session_put_api_sessions_execution_policy_defaults: {
         parameters: {
             query?: never;
             header?: never;

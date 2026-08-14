@@ -23,6 +23,11 @@ import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
 import { appPluginForId } from '../plugins/registry';
+import {
+  approvalPresentation,
+  type ApprovalPresentation,
+  type ApprovalScope,
+} from '../adapters/approvalPresentation';
 
 const store = useAppStore();
 const chatSessions = useChatSessionsStore();
@@ -47,7 +52,7 @@ const leases = ref<any>({});
 const approvals = ref<any>([]);
 const approvalGrants = ref<any>({});
 const approvalScopes = ref<Record<string, string>>({});
-const approvalScopeOptions = ['once', 'turn', 'task', 'session', 'global'] as const;
+const busyApprovalId = ref('');
 const timeline = ref<any>({});
 const tasks = ref<any>({});
 const growthStatus = ref<any>({});
@@ -77,7 +82,10 @@ const configReloadRestartFields = computed(() => {
   return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
 });
 const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.status || 'unknown'));
-const approvalItems = computed(() => Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || []);
+const approvalItems = computed(() => {
+  const rows = Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || [];
+  return rows.map((approval: any) => ({ approval, view: approvalPresentation(approval) }));
+});
 const activeApprovalGrants = computed(() => {
   const rows = Array.isArray(approvalGrants.value?.grants) ? approvalGrants.value.grants : [];
   return rows.filter((grant: any) => String(grant?.status || '') === 'active');
@@ -155,8 +163,8 @@ const runtimeEvidence = computed(() => [
     summary: row.summary || row.target_id || 'growth promotion',
     source: 'runtime.growth.promotions',
   })),
-  ...approvalItems.value.slice(0, 3).map((approval: any) => ({
-    id: String(approval.id || approval.request_id || ''),
+  ...approvalItems.value.slice(0, 3).map(({ approval, view }) => ({
+    id: view.id,
     kind: 'approval.pending',
     status: 'blocked',
     summary: approval.summary || approval.reason || approval.command || 'approval request',
@@ -334,7 +342,7 @@ async function releaseLease() {
   await loadSection('runs', true);
 }
 
-async function respondApproval(approval: any, approved: boolean) {
+async function respondApproval(approval: any, view: ApprovalPresentation, approved: boolean) {
   const sourceApp = appPluginForId(String(approval?.source?.kind || '').toLowerCase());
   if (sourceApp) {
     const reportRef = String(approval?.source?.resource_ref || '');
@@ -348,30 +356,37 @@ async function respondApproval(approval: any, approved: boolean) {
     });
     return;
   }
-  const id = approval?.approval_id || approval?.id || approval?.request_id;
-  const scope = approved ? (approvalScopes.value[id] || 'once') : 'once';
-  actionResult.value = await api.approvalRespond(
-    id,
-    approved,
-    scope,
-    approved ? 'approved from Runtime Workbench' : 'rejected from Runtime Workbench',
-  );
-  await loadSection('policy', true);
+  const id = view.id;
+  if (!id || busyApprovalId.value) return;
+  const scope = approved ? approvalScopeFor(view) : 'once';
+  if (approved && !view.allowedScopes.includes(scope)) return;
+  busyApprovalId.value = id;
+  try {
+    actionResult.value = await api.approvalRespond(
+      id,
+      approved,
+      scope,
+      approved ? 'approved from Runtime Workbench' : 'rejected from Runtime Workbench',
+    );
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed', { detail: { approval_id: id } }));
+    await loadSection('policy', true);
+  } finally {
+    if (busyApprovalId.value === id) busyApprovalId.value = '';
+  }
 }
 
-function approvalKey(approval: any) {
-  return String(approval?.approval_id || approval?.id || approval?.request_id || '');
+function approvalScopeFor(view: ApprovalPresentation): ApprovalScope {
+  const current = approvalScopes.value[view.id] as ApprovalScope | undefined;
+  return current && view.allowedScopes.includes(current)
+    ? current
+    : view.allowedScopes[0] || 'once';
 }
 
-function approvalScopeFor(approval: any) {
-  return approvalScopes.value[approvalKey(approval)] || 'once';
+function setApprovalScope(view: ApprovalPresentation, scope: ApprovalScope) {
+  if (view.allowedScopes.includes(scope)) approvalScopes.value[view.id] = scope;
 }
 
-function setApprovalScope(approval: any, scope: typeof approvalScopeOptions[number]) {
-  approvalScopes.value[approvalKey(approval)] = scope;
-}
-
-function approvalScopeLabel(scope: typeof approvalScopeOptions[number]) {
+function approvalScopeLabel(scope: ApprovalScope) {
   if (scope === 'turn') return t('chat.approval.scope.turn');
   if (scope === 'task') return t('chat.approval.scope.task');
   if (scope === 'session') return t('chat.approval.scope.session');
@@ -587,25 +602,27 @@ onUnmounted(() => {
           <span>{{ formatCount('pending', approvalItems.length) }}</span>
         </header>
         <div class="runtime-approval-list">
-          <article v-for="approval in approvalItems" :key="approval.id || approval.request_id" class="runtime-approval-request">
+          <article v-for="item in approvalItems" :key="item.view.id" class="runtime-approval-request">
             <div>
-              <strong>{{ approval.summary || approval.reason || approval.id }}</strong>
-              <p>{{ approval.command || approval.tool || approval.kind || t('page.runtime.page.inline.516d8685da') }}</p>
+              <strong>{{ item.view.summary || item.view.id }}</strong>
+              <p>{{ item.view.operation || item.view.effectKind || t('page.runtime.page.inline.516d8685da') }}</p>
+              <small>{{ t('chat.approval.risk') }}: {{ item.view.risk || '—' }} · {{ t('chat.approval.effectivePosture') }}: {{ item.view.effectivePosture || '—' }}</small>
             </div>
-            <fieldset class="runtime-approval-scope">
+            <fieldset v-if="item.view.allowedScopes.length" class="runtime-approval-scope" :disabled="!!busyApprovalId">
               <legend>{{ t('chat.approval.scope') }}</legend>
               <button
-                v-for="scope in approvalScopeOptions"
+                v-for="scope in item.view.allowedScopes"
                 :key="scope"
                 type="button"
-                :class="{ active: approvalScopeFor(approval) === scope }"
-                @click="setApprovalScope(approval, scope)"
+                :class="{ active: approvalScopeFor(item.view) === scope }"
+                @click="setApprovalScope(item.view, scope)"
               >
                 {{ approvalScopeLabel(scope) }}
               </button>
             </fieldset>
-            <button class="ghost-action" type="button" @click="respondApproval(approval, false)">{{ t('page.runtime.page.text.ae4dd827f7') }}</button>
-            <button class="primary-action" type="button" @click="respondApproval(approval, true)">
+            <p v-else class="approval-owner-note">{{ t('chat.approval.noAllowedScope') }}</p>
+            <button class="ghost-action" type="button" :disabled="!!busyApprovalId" @click="respondApproval(item.approval, item.view, false)">{{ t('page.runtime.page.text.ae4dd827f7') }}</button>
+            <button class="primary-action" type="button" :disabled="!!busyApprovalId || !item.view.allowedScopes.length" @click="respondApproval(item.approval, item.view, true)">
               <ShieldCheck :size="14" />
               {{ t('template.pages.runtimepage.7b2c7f146a') }}
             </button>

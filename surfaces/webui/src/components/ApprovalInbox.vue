@@ -3,22 +3,29 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ChevronLeft, ChevronRight, ShieldAlert, X } from 'lucide-vue-next';
 import { useRouter } from 'vue-router';
 import { api } from '../api/client';
+import {
+  approvalPresentation,
+  type ApprovalScope,
+} from '../adapters/approvalPresentation';
 import { t } from '../i18n';
 import { useEscapeKey } from '../composables/useEscapeKey';
 import { appPluginForId } from '../plugins/registry';
 import { useAppStore } from '../stores/app';
+import type { ApprovalPendingItem } from '../types';
 
 const store = useAppStore();
 const router = useRouter();
-const approvals = ref<Record<string, any>[]>([]);
-const blockingCurrentApprovals = ref<Record<string, any>[]>([]);
+const approvals = ref<ApprovalPendingItem[]>([]);
+const blockingCurrentApprovals = ref<ApprovalPendingItem[]>([]);
+const resolvedApproval = ref<ApprovalPendingItem | null>(null);
 const modalOpen = ref(false);
 const selectedIndex = ref(0);
-const busy = ref(false);
+const busyApprovalId = ref('');
 const error = ref('');
-const approvalScope = ref('once');
+const approvalScope = ref<ApprovalScope>('once');
+const nowMs = ref(Date.now());
 const presentedInChat = new Set<string>();
-const approvalScopes = ['once', 'turn', 'task', 'session', 'global'] as const;
+let deadlineTimer: ReturnType<typeof setInterval> | null = null;
 
 const activeSessionId = computed(() => String(store.activeSessionId || ''));
 const orderedApprovals = computed(() => {
@@ -30,7 +37,23 @@ const orderedApprovals = computed(() => {
     return Number(left?.created_at_ms || 0) - Number(right?.created_at_ms || 0);
   });
 });
-const activeApproval = computed(() => orderedApprovals.value[selectedIndex.value] || null);
+const activeApproval = computed(() => (
+  orderedApprovals.value[selectedIndex.value] || resolvedApproval.value
+));
+const activeApprovalView = computed(() => activeApproval.value
+  ? approvalPresentation(activeApproval.value)
+  : null);
+const busy = computed(() => busyApprovalId.value === activeApprovalView.value?.id);
+const actionableApproval = computed(() => activeApprovalView.value?.status === 'pending');
+const deadlineLabel = computed(() => {
+  const expiresAt = activeApprovalView.value?.expiresAtMs;
+  if (!expiresAt) return t('chat.approval.deadline.none');
+  const remaining = expiresAt - nowMs.value;
+  if (remaining <= 0) return t('chat.approval.deadline.expired');
+  const seconds = Math.ceil(remaining / 1000);
+  if (seconds < 60) return t('chat.approval.deadline.seconds', { count: seconds });
+  return t('chat.approval.deadline.minutes', { count: Math.ceil(seconds / 60) });
+});
 const activeSourceKind = computed(() => String(activeApproval.value?.source?.kind || '').toLowerCase());
 const approvalSessionLabel = computed(() => {
   const approval = activeApproval.value;
@@ -52,11 +75,11 @@ const activePosition = computed(() => orderedApprovals.value.length
   ? `${selectedIndex.value + 1} / ${orderedApprovals.value.length}`
   : '0 / 0');
 
-function approvalSessionId(approval: Record<string, any>) {
+function approvalSessionId(approval: ApprovalPendingItem) {
   return String(approval?.source?.session_id || approval?.session_id || '');
 }
 
-function approvalScopeLabel(scope: typeof approvalScopes[number]) {
+function approvalScopeLabel(scope: ApprovalScope) {
   if (scope === 'turn') return t('chat.approval.scope.turn');
   if (scope === 'task') return t('chat.approval.scope.task');
   if (scope === 'session') return t('chat.approval.scope.session');
@@ -64,12 +87,16 @@ function approvalScopeLabel(scope: typeof approvalScopes[number]) {
   return t('chat.approval.scope.once');
 }
 
-function approvalRows(payload: any) {
+function formatTimestamp(value: number | null | undefined) {
+  return value ? new Date(value).toLocaleString() : '—';
+}
+
+function approvalRows(payload: any): ApprovalPendingItem[] {
   const rows = Array.isArray(payload)
     ? payload
     : payload?.pending || payload?.approvals?.requests || payload?.approvals?.pending || [];
   return Array.isArray(rows)
-    ? rows.filter((item) => ['pending', 'timed_out'].includes(String(item?.status || 'pending')))
+    ? rows.filter((item: ApprovalPendingItem) => ['pending', 'timed_out'].includes(String(item?.status || 'pending')))
     : [];
 }
 
@@ -80,7 +107,7 @@ async function refresh() {
       api.approvalPending(),
       sessionId
         ? api.approvalPending({ sessionId, domain: 'execution', blocksExecution: true })
-        : Promise.resolve([]),
+        : Promise.resolve({ pending: [] }),
     ]);
     const allRows = approvalRows(all);
     const blockingRows = approvalRows(blocking);
@@ -105,6 +132,7 @@ function openInbox() {
   selectedIndex.value = currentIndex >= 0 ? currentIndex : 0;
   error.value = '';
   approvalScope.value = 'once';
+  resolvedApproval.value = null;
   modalOpen.value = true;
 }
 
@@ -117,6 +145,7 @@ function selectOffset(offset: number) {
   if (!count) return;
   selectedIndex.value = (selectedIndex.value + offset + count) % count;
   error.value = '';
+  resolvedApproval.value = null;
 }
 
 async function openTypedOwner() {
@@ -125,53 +154,39 @@ async function openTypedOwner() {
   await router.push(typedOwnerRoute.value);
 }
 
-async function decide(approved: boolean) {
-  const approvalId = String(activeApproval.value?.approval_id || activeApproval.value?.id || '');
-  if (!approvalId || busy.value) return;
-  busy.value = true;
+async function decide(approved: boolean, skip = false) {
+  const view = activeApprovalView.value;
+  const approvalId = view?.id || '';
+  if (!approvalId || busyApprovalId.value) return;
+  if (skip && !view?.canSkip) return;
+  if (approved && (!view?.allowedScopes.length || !view.allowedScopes.includes(approvalScope.value))) {
+    error.value = t('chat.approval.noAllowedScope');
+    return;
+  }
+  busyApprovalId.value = approvalId;
   error.value = '';
   try {
     await api.approvalRespond(
       approvalId,
       approved,
       approved ? approvalScope.value : 'once',
-      approved ? 'approved from WebUI' : 'rejected from WebUI',
+      skip ? 'skipped from WebUI' : approved ? 'approved from WebUI' : 'rejected from WebUI',
+      skip,
     );
-    approvals.value = approvals.value.filter(
-      (approval) => String(approval?.approval_id || approval?.id || '') !== approvalId,
-    );
+    const resolved = await api.approvalExact(approvalId);
+    if (resolved?.approval_id) resolvedApproval.value = resolved;
     await refresh();
-    if (!approvals.value.length) modalOpen.value = false;
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed', { detail: { approval_id: approvalId } }));
+    if (!approvals.value.length && !resolvedApproval.value) modalOpen.value = false;
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
   } finally {
-    busy.value = false;
+    if (busyApprovalId.value === approvalId) busyApprovalId.value = '';
   }
 }
 
 async function skipApproval() {
-  const approvalId = String(activeApproval.value?.approval_id || activeApproval.value?.id || '');
-  if (!approvalId || busy.value) return;
-  busy.value = true;
-  error.value = '';
-  try {
-    await api.approvalRespond(
-      approvalId,
-      false,
-      'once',
-      'skipped from WebUI',
-      true,
-    );
-    approvals.value = approvals.value.filter(
-      (approval) => String(approval?.approval_id || approval?.id || '') !== approvalId,
-    );
-    await refresh();
-    if (!approvals.value.length) modalOpen.value = false;
-  } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : String(reason);
-  } finally {
-    busy.value = false;
-  }
+  await decide(false, true);
 }
 
 function refreshFromRuntime() {
@@ -199,9 +214,17 @@ watch(
   { deep: true },
 );
 
+watch(activeApprovalView, (view) => {
+  if (!view) return;
+  if (!view.allowedScopes.includes(approvalScope.value)) {
+    approvalScope.value = view.allowedScopes[0] || 'once';
+  }
+});
+
 useEscapeKey(closeInbox, () => modalOpen.value);
 
 onMounted(() => {
+  deadlineTimer = setInterval(() => { nowMs.value = Date.now(); }, 1_000);
   refreshFromRuntime();
   window.addEventListener('focus', refreshFromRuntime);
   window.addEventListener('online', refreshFromRuntime);
@@ -211,6 +234,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (deadlineTimer) clearInterval(deadlineTimer);
   window.removeEventListener('focus', refreshFromRuntime);
   window.removeEventListener('online', refreshFromRuntime);
   window.removeEventListener('cowd:approval-changed', refreshFromRuntime);
@@ -239,7 +263,7 @@ onBeforeUnmount(() => {
           <ShieldAlert :size="18" />
           <span>
             <strong>{{ t('chat.approval.title') }}</strong>
-            <small>{{ activeApproval.action || activeApproval.risk || t('chat.approval.pending') }}</small>
+            <small>{{ activeApprovalView?.operation || activeApprovalView?.risk || t('chat.approval.pending') }}</small>
             <small class="approval-session-label">{{ approvalSessionLabel }}</small>
           </span>
         </div>
@@ -269,27 +293,93 @@ onBeforeUnmount(() => {
         </div>
       </header>
       <div class="chat-approval-content">
-        <p>{{ activeApproval.summary || t('chat.approval.fallbackSummary') }}</p>
-        <p v-if="String(activeApproval?.status || '').toLowerCase() === 'timed_out'" class="approval-timeout-note">
+        <p>{{ activeApprovalView?.summary || t('chat.approval.fallbackSummary') }}</p>
+        <p v-if="activeApprovalView?.status === 'timed_out'" class="approval-timeout-note">
           {{ t('chat.approval.timedOut') }}
         </p>
-        <dl>
+        <p v-else-if="!actionableApproval" class="approval-timeout-note">
+          {{ t('chat.approval.finalState', { status: activeApprovalView?.status || '—' }) }}
+        </p>
+        <dl class="approval-fact-grid">
+          <div>
+            <dt>{{ t('chat.approval.operation') }}</dt>
+            <dd>{{ activeApprovalView?.operation || '—' }}</dd>
+          </div>
           <div>
             <dt>{{ t('chat.approval.risk') }}</dt>
-            <dd>{{ activeApproval.risk || '—' }}</dd>
+            <dd>{{ activeApprovalView?.risk || '—' }}</dd>
           </div>
           <div>
-            <dt>{{ t('chat.approval.timeout') }}</dt>
-            <dd>{{ activeApproval.timeout_policy || 'pending' }}</dd>
+            <dt>{{ t('chat.approval.effect') }}</dt>
+            <dd>{{ activeApprovalView?.effectKind || '—' }}</dd>
           </div>
+          <div>
+            <dt>{{ t('chat.approval.reversibility') }}</dt>
+            <dd>{{ activeApprovalView?.reversibility || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.externality') }}</dt>
+            <dd>{{ activeApprovalView?.externality || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.dataSensitivity') }}</dt>
+            <dd>{{ activeApprovalView?.dataSensitivity || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.cost') }}</dt>
+            <dd>{{ activeApprovalView?.cost || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.authorization') }}</dt>
+            <dd>{{ activeApprovalView?.authorizationStatus || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.profile') }}</dt>
+            <dd>{{ activeApprovalView?.approvalProfile || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.policyRevision') }}</dt>
+            <dd>{{ activeApprovalView?.policyRevision || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.approvalRevision') }}</dt>
+            <dd>{{ activeApprovalView?.approvalRevision || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.requestedAt') }}</dt>
+            <dd>{{ formatTimestamp(activeApprovalView?.requestedAtMs) }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.deadline.label') }}</dt>
+            <dd>{{ deadlineLabel }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.requestedPosture') }}</dt>
+            <dd>{{ activeApprovalView?.requestedPosture || '—' }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('chat.approval.effectivePosture') }}</dt>
+            <dd>{{ activeApprovalView?.effectivePosture || '—' }}</dd>
+          </div>
+        </dl>
+        <div v-if="activeApprovalView?.resources.length" class="approval-resources">
+          <strong>{{ t('chat.approval.resources') }}</strong>
+          <ul>
+            <li v-for="resource in activeApprovalView.resources" :key="resource">{{ resource }}</li>
+          </ul>
+        </div>
+        <dl v-if="activeApprovalView?.decisionActor || activeApprovalView?.decisionReason" class="approval-decision">
+          <div><dt>{{ t('chat.approval.decisionActor') }}</dt><dd>{{ activeApprovalView?.decisionActor || '—' }}</dd></div>
+          <div><dt>{{ t('chat.approval.decisionReason') }}</dt><dd>{{ activeApprovalView?.decisionReason || '—' }}</dd></div>
+          <div><dt>{{ t('chat.approval.decisionTime') }}</dt><dd>{{ formatTimestamp(activeApprovalView?.decidedAtMs) }}</dd></div>
         </dl>
         <p v-if="typedOwnerRoute" class="approval-owner-note">
           {{ t('chat.approval.typedOwner') }}
         </p>
-        <fieldset v-if="!typedOwnerRoute" class="approval-scope-options" :disabled="busy">
+        <fieldset v-if="!typedOwnerRoute && activeApprovalView?.allowedScopes.length" class="approval-scope-options" :disabled="busy">
           <legend>{{ t('chat.approval.scope') }}</legend>
           <button
-            v-for="scope in approvalScopes"
+            v-for="scope in activeApprovalView.allowedScopes"
             :key="scope"
             type="button"
             :class="{ active: approvalScope === scope }"
@@ -298,21 +388,23 @@ onBeforeUnmount(() => {
             {{ approvalScopeLabel(scope) }}
           </button>
         </fieldset>
+        <p v-else-if="!typedOwnerRoute" class="approval-owner-note">{{ t('chat.approval.noAllowedScope') }}</p>
         <p v-if="error" class="file-error" role="alert">{{ error }}</p>
       </div>
       <footer>
-        <button v-if="!typedOwnerRoute" class="ghost-action" type="button" :disabled="busy" @click="decide(false)">
+        <button v-if="!typedOwnerRoute && actionableApproval" class="ghost-action" type="button" :disabled="!!busyApprovalId" @click="decide(false)">
           {{ t('chat.approval.reject') }}
         </button>
-        <button v-if="!typedOwnerRoute" class="ghost-action" type="button" :disabled="busy" @click="skipApproval()">
+        <button v-if="!typedOwnerRoute && actionableApproval && activeApprovalView?.canSkip" class="ghost-action" type="button" :disabled="!!busyApprovalId" @click="skipApproval()">
           {{ t('chat.approval.skip') }}
         </button>
-        <button v-if="!typedOwnerRoute" class="primary-action" type="button" :disabled="busy" @click="decide(true)">
-          {{ t('chat.approval.approve') }}
+        <button v-if="!typedOwnerRoute && actionableApproval" class="primary-action" type="button" :disabled="!!busyApprovalId || !activeApprovalView?.allowedScopes.length" @click="decide(true)">
+          {{ busy ? t('chat.approval.processing') : t('chat.approval.approve') }}
         </button>
-        <button v-else class="primary-action" type="button" @click="openTypedOwner">
+        <button v-else-if="typedOwnerRoute && actionableApproval" class="primary-action" type="button" @click="openTypedOwner">
           {{ t('chat.approval.openOwner') }}
         </button>
+        <button v-else class="primary-action" type="button" @click="closeInbox">{{ t('common.close') }}</button>
       </footer>
     </section>
   </div>

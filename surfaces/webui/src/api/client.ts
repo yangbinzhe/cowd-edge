@@ -1,6 +1,8 @@
 import type {
   ApiReadState,
   ApiReadStatus,
+  ApprovalPendingItem,
+  ApprovalPendingResponse,
   BranchSessionReceipt,
   CancellationReceipt,
   GatewayCapabilityContract,
@@ -17,6 +19,7 @@ import type {
   SessionExecutionIndexProjection,
   SessionHistoryIndexProjection,
   SessionSummary,
+  SessionExecutionPolicyResponse,
   TaskFocusProjection,
   MissionFocusProjection,
   TaskDetailProjection,
@@ -85,27 +88,6 @@ export interface SessionMessageSearchResponse extends ApiReadState {
 }
 
 export type SessionExecutionPolicyPreset = 'cautious' | 'supervised' | 'stewarded' | 'autonomous' | 'yolo';
-
-export interface SessionExecutionPolicyResponse extends ApiReadState {
-  session_id: string;
-  policy: {
-    autonomy_profile: SessionExecutionPolicyPreset;
-    permission_mode: 'read-only' | 'workspace-write' | 'danger-full-access';
-    approval_profile: 'supervised' | 'balanced' | 'autonomous';
-    interruption_policy: 'always_pause_for_human' | 'pause_on_risk' | 'continue_with_audit' | 'continue_until_blocked';
-    revision: number;
-    origin: 'config_default' | 'session_explicit' | 'surface_command' | 'recovery_replan';
-  };
-  matched_preset?: SessionExecutionPolicyPreset | null;
-  persisted?: boolean;
-  permission_revision?: number;
-  applied_to_active_runtime?: boolean;
-  applies_after_active_turn?: boolean;
-  active_turn?: {
-    state: 'applied' | 'applies_on_activation';
-    applied_revision?: number | null;
-  };
-}
 
 export interface ApprovalPendingFilters {
   sessionId?: string;
@@ -294,6 +276,10 @@ type CancellationRequestIdentity = {
 // the cancellation. Keep one browser-generated identity per Session until a
 // matching receipt returns so a retry observes the same durable operation.
 const pendingCancellationRequests = new Map<string, CancellationRequestIdentity>();
+const approvalDecisionFlights = new Map<string, {
+  fingerprint: string;
+  flight: Promise<unknown>;
+}>();
 
 function cancellationRequestFor(
   sessionId: string,
@@ -1273,6 +1259,34 @@ async function writeWithReceipt<T>(path: string, init: RequestInit = {}): Promis
   }
 }
 
+function respondToApproval(
+  id: string,
+  approved: boolean,
+  scope = 'once',
+  reason = '',
+  skip = false,
+) {
+  const approvalId = id.trim();
+  if (!approvalId) return Promise.reject(new Error('approval id is required'));
+  const fingerprint = JSON.stringify({ approved, scope, skip });
+  const existing = approvalDecisionFlights.get(approvalId);
+  if (existing) {
+    if (existing.fingerprint === fingerprint) return existing.flight;
+    return Promise.reject(new Error('a different decision for this approval is already in flight'));
+  }
+  let flight!: Promise<unknown>;
+  flight = write('/api/approval/respond', {
+    method: 'POST',
+    body: JSON.stringify({ id: approvalId, approved, scope, reason, skip }),
+  }).finally(() => {
+    if (approvalDecisionFlights.get(approvalId)?.flight === flight) {
+      approvalDecisionFlights.delete(approvalId);
+    }
+  });
+  approvalDecisionFlights.set(approvalId, { fingerprint, flight });
+  return flight;
+}
+
 export const api = {
   createLiveSubscription: (request: any, observerHeader = '') => write('/api/runtime/live-subscriptions', {
     method: 'POST',
@@ -1467,6 +1481,17 @@ export const api = {
         interruption_policy: 'pause_on_risk',
         revision: 0,
         origin: 'config_default',
+      },
+      state: {
+        effective: {
+          autonomy_profile: 'supervised',
+          permission_mode: 'workspace-write',
+          approval_profile: 'balanced',
+          sandbox_posture: 'workspace_write_sandbox',
+          interruption_policy: 'pause_on_risk',
+          revision: 0,
+          origin: 'config_default',
+        },
       },
       matched_preset: null,
       active_turn: { state: 'applies_on_activation', applied_revision: null },
@@ -1855,16 +1880,22 @@ export const api = {
       params.set('blocks_execution', String(filters.blocksExecution));
     }
     const query = params.size ? `?${params.toString()}` : '';
-    return read(`/api/approval/pending${query}`, [], { signal });
+    return read<ApprovalPendingResponse>(`/api/approval/pending${query}`, {
+      kind: 'gateway.unified_approval_pending',
+      filter: {},
+      pending: [],
+      approvals: null,
+    }, { signal });
   },
   approvalRiskReceipt: (toolName: string, input: unknown, sessionId?: string) => writeWithReceipt('/api/approval/risk-receipt', {
     method: 'POST',
     body: JSON.stringify({ tool_name: toolName, input, session_id: sessionId }),
   }),
-  approvalRespond: (id: string, approved: boolean, scope = 'once', reason = '', skip = false) => write('/api/approval/respond', {
-    method: 'POST',
-    body: JSON.stringify({ id, approved, scope, reason, skip }),
-  }),
+  approvalRespond: respondToApproval,
+  approvalExact: (id: string) => read<ApprovalPendingItem | null>(
+    `/api/approval/${encodeURIComponent(id)}`,
+    null,
+  ),
   approvalPrune: (olderThanDays: number, reason = '') => write('/api/approval/prune', {
     method: 'POST',
     body: JSON.stringify({ older_than_days: olderThanDays, reason }),

@@ -59,6 +59,27 @@ describe('API authorization epoch', () => {
     expect(secondResult.__state).toBe('ready');
   });
 
+  it('single-flights identical approval decisions and rejects a conflicting in-flight decision', async () => {
+    let finish!: (response: Response) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {
+      finish = resolve;
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = api.approvalRespond('approval-1', true, 'turn', 'first');
+    const retry = api.approvalRespond('approval-1', true, 'turn', 'retry');
+    const conflict = api.approvalRespond('approval-1', false, 'once', 'reject');
+
+    await expect(conflict).rejects.toThrow('already in flight');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finish(new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+    await expect(Promise.all([first, retry])).resolves.toEqual([{ ok: true }, { ok: true }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('coalesces signalled reads while allowing one caller to cancel independently', async () => {
     let finish!: (response: Response) => void;
     const fetchMock = vi.fn(() => new Promise<Response>((resolve) => {

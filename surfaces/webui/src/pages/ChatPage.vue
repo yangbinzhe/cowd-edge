@@ -34,7 +34,6 @@ import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import {
   api,
   type SessionExecutionPolicyPreset,
-  type SessionExecutionPolicyResponse,
 } from '../api/client';
 import MarkdownBlock from '../components/MarkdownBlock.vue';
 import { copyTextToClipboard } from '../utils/clipboard';
@@ -49,8 +48,10 @@ import type {
   CancellationReceipt,
   ChatTurn,
   SessionRoutingFocusProjection,
+  SessionExecutionPolicyResponse,
   TaskAggregateProjection,
 } from '../types';
+import { policyAxisValue } from '../adapters/approvalPresentation';
 import { causalActivityTimeline } from '../utils/causalTimeline';
 import { mergeActivityEvent } from '../utils/turnSettlement';
 import { releaseProjection } from '../release';
@@ -385,9 +386,41 @@ const activeExecutionPolicyPreset = computed<ExecutionPolicyDisplayPreset>(() =>
   if (response.__state && response.__state !== 'ready' && response.__state !== 'stale') {
     return 'unavailable';
   }
+  if (response.state?.pending_transition) {
+    return response.state.effective.autonomy_profile as SessionExecutionPolicyPreset;
+  }
   if (response.matched_preset === null) return 'custom';
-  return response.matched_preset || response.policy?.autonomy_profile || 'unavailable';
+  return response.matched_preset || 'unavailable';
 });
+const effectiveExecutionPolicy = computed(() => {
+  const response = executionPolicy.value;
+  if (!response) return null;
+  if (response.__state && response.__state !== 'ready' && response.__state !== 'stale') return null;
+  return response.state?.effective || null;
+});
+const desiredExecutionPolicy = computed(() => executionPolicy.value?.state?.desired || null);
+const policyTransition = computed(() => (
+  executionPolicy.value?.state?.pending_transition
+  || executionPolicy.value?.transition
+  || null
+));
+const policyTransitionActive = computed(() => !!executionPolicy.value?.state?.pending_transition);
+const policyTransitionPhaseKeys: Record<string, string> = {
+  requested: 'chat.executionPolicy.phase.requested',
+  persisted: 'chat.executionPolicy.phase.persisted',
+  freezing: 'chat.executionPolicy.phase.freezing',
+  draining: 'chat.executionPolicy.phase.draining',
+  rebinding: 'chat.executionPolicy.phase.rebinding',
+  stable: 'chat.executionPolicy.phase.stable',
+  failed: 'chat.executionPolicy.phase.failed',
+  cancelled: 'chat.executionPolicy.phase.cancelled',
+};
+function policyTransitionPhaseLabel(phase: string | undefined) {
+  return t(policyTransitionPhaseKeys[phase || 'stable'] || 'chat.executionPolicy.phase.stable');
+}
+function policyTransitionTime(value: number | null | undefined) {
+  return value ? new Date(value).toLocaleString() : '—';
+}
 const displayExecutionPolicyPreset = computed<ExecutionPolicyDisplayPreset>(() => (
   store.activeSessionId
     ? activeExecutionPolicyPreset.value
@@ -2061,11 +2094,27 @@ function chooseFirstCommand() {
           <button class="modal-close icon-action" type="button" :aria-label="t('common.close')" @click="executionPolicyOpen = false"><X :size="16" /></button>
         </header>
         <div class="execution-policy-summary">
-          <span>{{ t('chat.executionPolicy.permission') }} <strong>{{ executionPolicy?.policy?.permission_mode || '—' }}</strong></span>
-          <span>{{ t('chat.executionPolicy.approval') }} <strong>{{ executionPolicy?.policy?.approval_profile || '—' }}</strong></span>
-          <span>{{ t('chat.executionPolicy.revision') }} <strong>{{ executionPolicy?.policy?.revision || '—' }}</strong></span>
-          <span>{{ t('chat.executionPolicy.origin') }} <strong>{{ executionPolicy?.policy?.origin || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.autonomy') }} <strong>{{ effectiveExecutionPolicy?.autonomy_profile || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.permission') }} <strong>{{ effectiveExecutionPolicy?.permission_mode || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.approval') }} <strong>{{ effectiveExecutionPolicy?.approval_profile || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.sandbox') }} <strong>{{ policyAxisValue(effectiveExecutionPolicy, 'sandbox_posture') || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.interruption') }} <strong>{{ effectiveExecutionPolicy?.interruption_policy || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.revision') }} <strong>{{ effectiveExecutionPolicy?.revision || '—' }}</strong></span>
+          <span>{{ t('chat.executionPolicy.origin') }} <strong>{{ effectiveExecutionPolicy?.origin || '—' }}</strong></span>
         </div>
+        <section v-if="policyTransition" class="execution-policy-transition" :data-active="policyTransitionActive">
+          <strong>{{ policyTransitionActive ? t('chat.executionPolicy.transitioning') : t('chat.executionPolicy.transitionStable') }}</strong>
+          <div class="execution-policy-summary">
+            <span>{{ t('chat.executionPolicy.phaseLabel') }} <strong>{{ policyTransitionPhaseLabel(policyTransition.phase) }}</strong></span>
+            <span>{{ t('chat.executionPolicy.effectivePolicy') }} <strong>{{ effectiveExecutionPolicy?.autonomy_profile || '—' }}@{{ effectiveExecutionPolicy?.revision || '—' }}</strong></span>
+            <span>{{ t('chat.executionPolicy.desiredPolicy') }} <strong>{{ desiredExecutionPolicy?.autonomy_profile || '—' }}@{{ desiredExecutionPolicy?.revision || '—' }}</strong></span>
+            <span>{{ t('chat.executionPolicy.oldAttempts') }} <strong>{{ policyTransition.old_revision_active_attempts }}</strong></span>
+            <span>{{ t('chat.executionPolicy.requestedAt') }} <strong>{{ policyTransitionTime(policyTransition.requested_at_ms) }}</strong></span>
+            <span>{{ t('chat.executionPolicy.effectiveAt') }} <strong>{{ policyTransitionTime(policyTransition.effective_at_ms) }}</strong></span>
+          </div>
+          <p v-if="policyTransition.blocker" class="modal-note">{{ t('chat.executionPolicy.blocker', { blocker: policyTransition.blocker }) }}</p>
+        </section>
+        <p class="modal-note">{{ t('chat.executionPolicy.guardrail') }}</p>
         <div class="execution-policy-options">
           <button
             v-for="preset in executionPolicyPresets"
@@ -2081,7 +2130,7 @@ function chooseFirstCommand() {
           </button>
         </div>
         <p v-if="!store.activeSessionId" class="modal-note">{{ t('chat.executionPolicy.appliesToNewSession') }}</p>
-        <p v-if="executionPolicy?.applies_after_active_turn" class="modal-note">{{ t('chat.executionPolicy.nextTurn') }}</p>
+        <p v-if="policyTransitionActive" class="modal-note">{{ t('chat.executionPolicy.nextTurn') }}</p>
         <p v-if="executionPolicyError" class="file-error" role="alert">{{ executionPolicyError }}</p>
       </section>
     </div>
