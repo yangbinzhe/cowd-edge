@@ -5,6 +5,8 @@ const MAX_UNSTABLE_TAIL_CHARS = 16 * 1024;
 
 export type MarkdownRenderResult = {
   html: string;
+  stableHtml: string;
+  visibleTail: string;
   stableBlockCount: number;
   hiddenTailChars: number;
   canonical: boolean;
@@ -74,6 +76,8 @@ export class StreamingMarkdownRenderer {
       this.parseCountValue += 1;
       return {
         html: markdown.render(source),
+        stableHtml: '',
+        visibleTail: '',
         stableBlockCount: 0,
         hiddenTailChars: 0,
         canonical: true,
@@ -103,6 +107,8 @@ export class StreamingMarkdownRenderer {
       : '';
     return {
       html: `${this.stableHtml.join('')}${tailHtml}`,
+      stableHtml: this.stableHtml.join(''),
+      visibleTail,
       stableBlockCount: this.stableHtml.length,
       hiddenTailChars,
       canonical: false,

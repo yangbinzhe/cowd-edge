@@ -15,6 +15,9 @@ describe('StreamingMarkdownRenderer', () => {
 
     expect(afterFirstBlock).toBe(1);
     expect(renderer.parseCount).toBe(afterFirstBlock);
+    const rendered = renderer.render('# Heading\n\nunfinished tail grows again', true);
+    expect(rendered.stableHtml).toContain('<h1>Heading</h1>');
+    expect(rendered.visibleTail).toBe('unfinished tail grows again');
   });
 
   it('keeps an open fence escaped and bounded until completion', () => {

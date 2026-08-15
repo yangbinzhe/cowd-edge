@@ -607,6 +607,14 @@ function reconcileOptimisticUserTurn(
 }
 
 export const useChatSessionsStore = defineStore('chatSessions', () => {
+  // Drain a network burst over at most four visual frames. Small deltas remain
+  // immediate; large bursts scale up without turning one RAF into an unbounded
+  // reactive update. The outer bounds are frame-safety rails, not model/task
+  // token limits.
+  const streamFlushCharsForBacklog = (characters: number) => Math.min(
+    32 * 1024,
+    Math.max(2 * 1024, Math.ceil(characters / 4)),
+  );
   const states = reactive<Record<string, SessionChatState>>({});
   const sourceLeases = new Map<string, SessionLiveSource>();
   const deltaBuffers = new Map<string, string>();
@@ -770,7 +778,17 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
         turn?.presentation_id === active.presentation_id
         && turn.presentation_attempt_id === active.attempt_id
       ) {
-        turn.content += pending.text;
+        const batch = pending.text.slice(0, streamFlushCharsForBacklog(pending.text.length));
+        const remaining = pending.text.slice(batch.length);
+        turn.content += batch;
+        if (remaining) {
+          presentationDeltaBuffers.set(sessionId, {
+            attemptKey: pending.attemptKey,
+            text: remaining,
+          });
+          schedulePresentationFlush(sessionId);
+          return;
+        }
       }
       presentationDeltaBuffers.delete(sessionId);
     });
