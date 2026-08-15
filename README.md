@@ -2,7 +2,7 @@
 
 > Cowd 的浏览器控制面、消息渠道与外部数据接入层
 
-当前版本：`0.9.690`
+当前版本：`0.9.691`
 
 Cowd Edge 把人、平台与数据接入 Cowd Gateway，同时把前端技术栈、平台 SDK、长连接、邮件协议和数据库驱动隔离在 Core Runtime 之外。它不是另一套 AI Runtime：Gateway 是唯一 EdgeHost，Core 仍然拥有 Session、Task、Mission、模型循环、Memory、Matrix、权限、审计与恢复。
 
