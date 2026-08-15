@@ -2,6 +2,14 @@ import type { MessageCatalog } from '../keys';
 
 export const zhCN: MessageCatalog = {
   "app.aria-label.4afc7f101b": "Cowd 主导航",
+  "app.catalog.unavailable": "应用目录不可用",
+  "app.catalog.unavailableDetail": "核心工作区仍可使用。在 Gateway 发布有效目录前，应用导航保持关闭。",
+  "app.catalog.notFound": "未找到应用",
+  "app.catalog.notFoundDetail": "当前用户可见目录中不存在此应用。",
+  "app.capabilities.title": "有效能力",
+  "app.capabilities.empty": "当前未授予任何应用能力。",
+  "app.capabilities.noProfile": "未配置授权画像",
+  "app.approval.ownerUnavailable": "所属应用不在当前有效目录中，此处不开放该审批。",
   "common.cancel": "取消",
   "presentation.renderer.unsupported": "不支持的渲染契约：{renderer} / {kind}",
   "presentation.table.empty": "暂无数据",

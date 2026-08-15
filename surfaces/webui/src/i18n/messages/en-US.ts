@@ -2,6 +2,14 @@ import type { MessageCatalog } from '../keys';
 
 export const enUS: MessageCatalog = {
   "app.aria-label.4afc7f101b": "Cowd primary navigation",
+  "app.catalog.unavailable": "Application Catalog unavailable",
+  "app.catalog.unavailableDetail": "Core workspaces remain available. Application navigation is closed until the Gateway publishes a valid Catalog.",
+  "app.catalog.notFound": "Application not found",
+  "app.catalog.notFoundDetail": "This application is not present in the current user-visible Catalog.",
+  "app.capabilities.title": "Effective capabilities",
+  "app.capabilities.empty": "No application capabilities are granted.",
+  "app.capabilities.noProfile": "No authorization profile",
+  "app.approval.ownerUnavailable": "The owning application is outside the current effective Catalog; this approval is closed here.",
   "common.cancel": "Cancel",
   "presentation.renderer.unsupported": "Unsupported renderer contract: {renderer} / {kind}",
   "presentation.table.empty": "No rows",

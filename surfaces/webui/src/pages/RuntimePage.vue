@@ -22,7 +22,7 @@ import { useProjectionRegistryStore } from '../stores/projectionRegistry';
 import type { EvidenceObject } from '../types/evidence';
 import { displayStatus } from '../i18n/domain/status';
 import { adaptRuntimeTimeline } from '../adapters/graph/runtimeTimeline';
-import { appPluginForId } from '../plugins/registry';
+import { appPluginForId, applicationAppIdFromApproval } from '../plugins/registry';
 import {
   approvalPresentation,
   type ApprovalPresentation,
@@ -343,17 +343,11 @@ async function releaseLease() {
 }
 
 async function respondApproval(approval: any, view: ApprovalPresentation, approved: boolean) {
-  const sourceApp = appPluginForId(String(approval?.source?.kind || '').toLowerCase());
-  if (sourceApp) {
-    const reportRef = String(approval?.source?.resource_ref || '');
-    await router.push({
-      path: sourceApp.route,
-      query: {
-        section: 'reports',
-        report: reportRef || undefined,
-        review: approval?.source?.review_ref || undefined,
-      },
-    });
+  const sourceAppId = applicationAppIdFromApproval(approval);
+  if (sourceAppId) {
+    const sourceApp = appPluginForId(sourceAppId);
+    if (sourceApp) await router.push(sourceApp.route);
+    else actionResult.value = { ok: false, error: t('app.approval.ownerUnavailable') };
     return;
   }
   const id = view.id;

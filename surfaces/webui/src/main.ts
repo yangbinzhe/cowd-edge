@@ -3,34 +3,25 @@ import { createPinia } from 'pinia';
 import { createRouter, createWebHashHistory } from 'vue-router';
 import App from './App.vue';
 import ChatPage from './pages/ChatPage.vue';
-import { configureEnabledAppPlugins, pluginRoutes } from './plugins/registry';
+import { configureAppCatalog, configureAppCatalogFailure, pluginRoutes } from './plugins/registry';
+import { fetchAppCatalog } from './services/appCatalogClient';
 import { claimWebuiObserverId } from './api/client';
 import { applyDocumentLocale } from './i18n';
 import './styles/tokens.css';
 import './styles/base.css';
 
-const APP_MANIFEST_TIMEOUT_MS = 2_000;
+const APP_PROTOCOL_DIGEST = 'sha256:54030ea4f653de5c1e4ebb4fd5cd236df8e5ea51136dd74f3dcd648beb8ca87d';
 
 async function configureGatewayApps() {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), APP_MANIFEST_TIMEOUT_MS);
   try {
-    const response = await fetch('/api/webui/manifest', {
-      credentials: 'same-origin',
-      signal: controller.signal,
+    const catalog = await fetchAppCatalog({
+      endpoint: '/api/apps',
+      timeoutMs: 2_000,
+      expectedProtocolDigest: APP_PROTOCOL_DIGEST,
     });
-    if (!response.ok) throw new Error(`Gateway manifest returned ${response.status}`);
-    const manifest = await response.json() as { enabled_app_ids?: unknown };
-    const enabledAppIds = Array.isArray(manifest.enabled_app_ids)
-      ? manifest.enabled_app_ids.filter((id): id is string => typeof id === 'string')
-      : [];
-    configureEnabledAppPlugins(enabledAppIds);
-  } catch {
-    // A stale WebUI must fail closed for APP extensions. Core WebUI remains
-    // available, and a later page reload will reconcile after Gateway returns.
-    configureEnabledAppPlugins([]);
-  } finally {
-    window.clearTimeout(timeout);
+    configureAppCatalog(catalog);
+  } catch (error) {
+    configureAppCatalogFailure(error);
   }
 }
 

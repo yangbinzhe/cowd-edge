@@ -1,93 +1,187 @@
-import type { RouteRecordRaw } from 'vue-router';
-import { Factory, type Icon } from 'lucide-vue-next';
-import { registerMessages, t } from '../i18n';
-import { appContributions } from '../apps.generated';
-import type { CowdWebUiAppContribution } from '../apps/types';
+import { Boxes } from 'lucide-vue-next';
+import { computed, defineComponent, h, type Component } from 'vue';
+import { useRoute, useRouter, type RouteRecordRaw } from 'vue-router';
+import type { AppCatalogEntryV1, AppCatalogV1 } from '../apps/catalog';
+import AppPage from '../components/app/AppPage.vue';
+import { t } from '../i18n';
 import type { CapabilitySpec, NavItem } from '../types';
 
-export interface WebuiPagePlugin extends CowdWebUiAppContribution {
-  icon: Icon;
+export interface WebuiPagePlugin {
+  appId: string;
   label: string;
-  routeRecord: RouteRecordRaw;
+  route: string;
+  icon: Component;
+  entry: AppCatalogEntryV1;
 }
 
-const iconByName: Record<string, Icon> = { factory: Factory };
+export interface AppCatalogDiagnostic {
+  status: 'ready' | 'unavailable';
+  message: string;
+}
 
-function capabilityFor(plugin: CowdWebUiAppContribution): CapabilitySpec {
+let catalog: AppCatalogV1 | null = null;
+
+export let webuiPagePlugins: WebuiPagePlugin[] = [];
+export let pluginNavItems: NavItem[] = [];
+export let pluginCapabilitySpecs: Record<string, CapabilitySpec> = {};
+export let appCatalogDiagnostic: AppCatalogDiagnostic = {
+  status: 'unavailable',
+  message: 'Application Catalog has not been loaded.',
+};
+
+function capabilityFor(entry: AppCatalogEntryV1): CapabilitySpec {
   return {
-    id: plugin.appId,
-    title: t(plugin.capability.titleKey),
-    subtitle: t(plugin.capability.subtitleKey),
-    primaryAction: plugin.capability.actions[0] ? t(plugin.capability.actions[0].labelKey) : t('common.loading'),
-    metrics: [], chartKind: 'bar', chartTitle: '', chartData: [], tableTitle: '', rows: [],
-    sections: plugin.capability.sections.map((section) => ({
-      id: section.id, label: t(section.labelKey), description: t(section.descriptionKey),
-      displayMode: section.displayMode || 'detail', density: section.density || 'standard', primaryObject: section.primaryObject,
+    id: entry.app_id,
+    title: entry.display_name,
+    subtitle: entry.effective_authorization_profile,
+    primaryAction: '',
+    metrics: [],
+    chartKind: 'bar',
+    chartTitle: '',
+    chartData: [],
+    tableTitle: '',
+    rows: [],
+    sections: entry.effective_capabilities.map((capability) => ({
+      id: capability,
+      label: capability,
+      description: capability,
+      displayMode: 'detail',
+      density: 'compact',
     })),
-    actions: plugin.capability.actions.map((action) => ({ label: t(action.labelKey), kind: action.kind, endpoint: action.endpoint })),
-    inspector: plugin.capability.inspector.map((item) => ({ label: t(item.labelKey), value: item.value })),
+    actions: [],
+    inspector: entry.effective_capabilities.map((capability) => ({
+      label: capability,
+      value: entry.effective_authorization_profile,
+    })),
   };
 }
 
-function materializePlugins(contributions: CowdWebUiAppContribution[]): WebuiPagePlugin[] {
-  return contributions.map((contribution) => {
-    registerMessages(contribution.messages);
-    const icon = iconByName[contribution.navigation.icon];
-    if (!icon) throw new Error(`APP ${contribution.appId} declares unsupported navigation icon`);
-    return {
-      ...contribution,
-      icon,
-      label: t(contribution.navigation.titleKey),
-      routeRecord: {
-        path: contribution.route,
-        component: contribution.page,
-        meta: {
-          pluginId: contribution.appId,
-          requiredCapabilities: contribution.readiness.requiredCapabilities,
-          apiNamespace: contribution.readiness.appApi.replace(/\/app$/, ''),
-        },
-      },
-    };
-  });
-}
-
-export let webuiPagePlugins: WebuiPagePlugin[] = [];
-export let pluginRoutes: RouteRecordRaw[] = [];
-export let pluginNavItems: NavItem[] = [];
-export let pluginCapabilitySpecs: Record<string, CapabilitySpec> = {};
-
-/**
- * Reconcile statically bundled contributions with the public Gateway startup
- * manifest. This is an activation filter only: it never downloads code or
- * trusts a client-side flag as an authorization decision.
- */
-export function configureEnabledAppPlugins(enabledAppIds: readonly string[]) {
-  const enabled = new Set(enabledAppIds);
-  const contributions = appContributions.filter((contribution) => enabled.has(contribution.appId));
-  webuiPagePlugins = materializePlugins(contributions);
-  pluginRoutes = webuiPagePlugins.map((plugin) => plugin.routeRecord);
+export function configureAppCatalog(nextCatalog: AppCatalogV1) {
+  catalog = nextCatalog;
+  webuiPagePlugins = nextCatalog.apps.map((entry) => ({
+    appId: entry.app_id,
+    label: entry.display_name,
+    route: `/apps/${encodeURIComponent(entry.app_id)}`,
+    icon: Boxes,
+    entry,
+  }));
   pluginNavItems = webuiPagePlugins.map((plugin) => ({
     id: plugin.appId,
     label: plugin.label,
-    labelKey: plugin.navigation.titleKey,
     route: plugin.route,
     icon: plugin.icon,
-    group: plugin.navigation.group,
+    group: 'Apps',
   }));
   pluginCapabilitySpecs = Object.fromEntries(
-    webuiPagePlugins.map((plugin) => [plugin.appId, capabilityFor(plugin)]),
+    nextCatalog.apps.map((entry) => [entry.app_id, capabilityFor(entry)]),
   ) as Record<string, CapabilitySpec>;
+  appCatalogDiagnostic = { status: 'ready', message: '' };
 }
 
-// Unit mounts import the registry without the production bootstrap. Start
-// with all compiled contributions there; main.ts immediately replaces this
-// set with Gateway-confirmed ids before it creates the real application.
-configureEnabledAppPlugins(appContributions.map((contribution) => contribution.appId));
-
-export function appPluginForRoute(path: string) {
-  return webuiPagePlugins.find((plugin) => path === plugin.route || path.startsWith(`${plugin.route}/`)) || null;
+export function configureAppCatalogFailure(reason: unknown) {
+  catalog = null;
+  webuiPagePlugins = [];
+  pluginNavItems = [];
+  pluginCapabilitySpecs = {};
+  appCatalogDiagnostic = {
+    status: 'unavailable',
+    message: reason instanceof Error && reason.message
+      ? reason.message
+      : 'The Gateway Application Catalog is unavailable.',
+  };
 }
 
 export function appPluginForId(appId: string) {
   return webuiPagePlugins.find((plugin) => plugin.appId === appId) || null;
 }
+
+export function applicationAppIdFromApproval(approval: unknown) {
+  if (!approval || typeof approval !== 'object' || Array.isArray(approval)) return '';
+  const source = (approval as Record<string, unknown>).source;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return '';
+  const application = (source as Record<string, unknown>).application;
+  if (!application || typeof application !== 'object' || Array.isArray(application)) return '';
+  const appId = (application as Record<string, unknown>).app_id;
+  return typeof appId === 'string' ? appId : '';
+}
+
+export function appPluginForRoute(path: string) {
+  const match = /^\/apps\/([^/]+)(?:\/|$)/.exec(path);
+  if (!match) return null;
+  let appId = '';
+  try {
+    appId = decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+  return appPluginForId(appId);
+}
+
+export function appInternalRoute(pathMatch: unknown, query: Record<string, unknown> = {}) {
+  const segments = Array.isArray(pathMatch) ? pathMatch : [pathMatch];
+  const route = segments.filter((segment): segment is string => typeof segment === 'string' && segment.length > 0)
+    .join('/');
+  const search = new URLSearchParams();
+  for (const key of Object.keys(query).sort()) {
+    const values = Array.isArray(query[key]) ? query[key] as unknown[] : [query[key]];
+    for (const value of values) {
+      if (value === null) search.append(key, '');
+      else if (typeof value === 'string') search.append(key, value);
+    }
+  }
+  const suffix = search.size ? `?${search.toString()}` : '';
+  return `${route ? `/${route}` : '/'}${suffix}`;
+}
+
+function surfaceEntry(entry: AppCatalogEntryV1, internalRoute: string): AppCatalogEntryV1 {
+  const entryPath = entry.web_surface.entry_path;
+  if (!entryPath) return entry;
+  const url = new URL(entryPath, 'http://cowd.invalid');
+  url.hash = internalRoute;
+  return {
+    ...entry,
+    web_surface: { ...entry.web_surface, entry_path: `${url.pathname}${url.search}${url.hash}` },
+  };
+}
+
+const AppRoutePage = defineComponent({
+  name: 'CowdCatalogAppRoute',
+  setup() {
+    const route = useRoute();
+    const router = useRouter();
+    const plugin = computed(() => appPluginForId(String(route.params.appId || '')));
+    const internalRoute = computed(() => appInternalRoute(route.params.pathMatch, route.query));
+    const routedEntry = computed(() => plugin.value
+      ? surfaceEntry(plugin.value.entry, internalRoute.value)
+      : null);
+    const navigate = (path: string) => {
+      const current = plugin.value;
+      if (!current) return;
+      void router.push(`${current.route}${path === '/' ? '' : path}`);
+    };
+    return () => {
+      const entry = routedEntry.value;
+      if (!entry || !catalog) {
+        const unavailable = appCatalogDiagnostic.status === 'unavailable';
+        return h('section', { class: 'app-route-diagnostic', role: 'status' }, [
+          h('strong', unavailable ? t('app.catalog.unavailable') : t('app.catalog.notFound')),
+          h('p', unavailable ? appCatalogDiagnostic.message : t('app.catalog.notFoundDetail')),
+        ]);
+      }
+      return h(AppPage, {
+        key: `${entry.app_id}:${entry.generation}`,
+        entry,
+        protocolDigest: catalog.protocol_digest,
+        catalogGeneration: catalog.catalog_generation,
+        onNavigate: navigate,
+      });
+    };
+  },
+});
+
+export const pluginRoutes: RouteRecordRaw[] = [{
+  path: '/apps/:appId/:pathMatch(.*)*',
+  name: 'catalog-app',
+  component: AppRoutePage,
+  meta: { appCatalogRoute: true },
+}];

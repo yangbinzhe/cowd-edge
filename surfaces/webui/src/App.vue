@@ -9,7 +9,7 @@ import {
 import { useAppStore } from './stores/app';
 import type { NavId, NavItem } from './types';
 import { buildCapabilitySpecs } from './data/capabilities';
-import { appPluginForRoute, pluginCapabilitySpecs, pluginNavItems } from './plugins/registry';
+import { appCatalogDiagnostic, appPluginForRoute, pluginNavItems } from './plugins/registry';
 import ApprovalInbox from './components/ApprovalInbox.vue';
 import CapabilitySidebar from './components/CapabilitySidebar.vue';
 import SessionSidebar from './components/SessionSidebar.vue';
@@ -21,7 +21,7 @@ const store = useAppStore();
 const { locale, setLocale } = useI18n();
 const route = useRoute();
 const router = useRouter();
-const capabilitySpecs = { ...buildCapabilitySpecs(), ...pluginCapabilitySpecs };
+const capabilitySpecs = buildCapabilitySpecs();
 
 const nav: NavItem[] = [
   { id: 'chat', label: 'Chat', route: '/chat', icon: MessageSquare, group: 'Core' },
@@ -100,6 +100,9 @@ function defaultSectionFor(page: NavId) {
 }
 
 const currentPage = computed<NavId>(() => pageFromRoute(route.path));
+const currentApp = computed(() => appPluginForRoute(route.path));
+const isAppRoute = computed(() => Boolean(currentApp.value));
+const catalogDiagnostic = computed(() => appCatalogDiagnostic);
 function isMobilePrimary(item: NavItem) {
   return mobilePrimaryIds.has(item.id);
 }
@@ -111,7 +114,7 @@ const authorizationGateRequired = computed(() => (
   && ['required', 'invalidated'].includes(store.authorizationState)
 ));
 const currentCapabilitySpec = computed(() => {
-  if (isChatRoute.value || isSettingsRoute.value) return null;
+  if (isChatRoute.value || isSettingsRoute.value || isAppRoute.value) return null;
   return capabilitySpecs[currentPage.value] || null;
 });
 const currentSections = computed(() => currentCapabilitySpec.value?.sections || []);
@@ -178,13 +181,13 @@ watch([currentPage, activeSection], () => {
 }, { immediate: true });
 
 watch(currentPage, (page) => {
-  if (store.authorizationState === 'ready') {
+  if (store.authorizationState === 'ready' && !isAppRoute.value) {
     void store.loadManagementCapabilities(page);
   }
 }, { immediate: true });
 
 watch(() => store.authorizationState, (state) => {
-  if (state === 'ready') void store.loadManagementCapabilities(currentPage.value);
+  if (state === 'ready' && !isAppRoute.value) void store.loadManagementCapabilities(currentPage.value);
 });
 
 async function selectCapabilitySection(sectionId: string) {
@@ -216,7 +219,7 @@ onMounted(() => {
         :key="item.id"
         class="rail-button"
         :class="{
-          active: route.path === item.route || (item.id === 'chat' && route.path === '/'),
+          active: route.path === item.route || route.path.startsWith(`${item.route}/`) || (item.id === 'chat' && route.path === '/'),
           'mobile-primary': isMobilePrimary(item),
         }"
         :title="navLabel(item)"
@@ -282,6 +285,10 @@ onMounted(() => {
     <CapabilitySidebar v-else-if="!isSettingsRoute" />
 
     <main class="main-surface" :data-page="currentPage" :data-active-section="activeSection">
+      <div v-if="catalogDiagnostic.status === 'unavailable'" class="config-reload-banner" data-tone="warn" role="status">
+        <strong>{{ t('app.catalog.unavailable') }}</strong>
+        <span>{{ t('app.catalog.unavailableDetail') }}</span>
+      </div>
       <div v-if="configReloadNotice" class="config-reload-banner" :data-tone="configReloadTone">
         <strong>{{ store.configReloadInvalid ? t('config.reload.notApplied') : t('config.reload.needRestart') }}</strong>
         <span>{{ configReloadNotice }}</span>

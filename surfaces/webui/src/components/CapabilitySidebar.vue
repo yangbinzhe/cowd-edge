@@ -3,7 +3,7 @@ import { t } from '../i18n';
 import { computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { buildCapabilitySpecs } from '../data/capabilities';
-import { appPluginForRoute, pluginCapabilitySpecs } from '../plugins/registry';
+import { appPluginForRoute } from '../plugins/registry';
 import { useAppStore } from '../stores/app';
 import type { NavId } from '../types';
 
@@ -12,13 +12,12 @@ const router = useRouter();
 const store = useAppStore();
 
 function capabilityPageId(path: string): Exclude<NavId, 'chat' | 'settings'> {
-  const plugin = appPluginForRoute(path);
-  if (plugin) return plugin.appId;
   return path.replace(/^\/+/, '').split('/')[0] as Exclude<NavId, 'chat' | 'settings'>;
 }
 
+const app = computed(() => appPluginForRoute(route.path));
 const pageId = computed(() => capabilityPageId(route.path));
-const spec = computed(() => ({ ...buildCapabilitySpecs(), ...pluginCapabilitySpecs })[pageId.value]);
+const spec = computed(() => app.value ? undefined : buildCapabilitySpecs()[pageId.value]);
 type CapabilitySection = NonNullable<(typeof spec.value)>['sections'][number];
 
 const activeSection = computed(() => store.activeSectionByPage[pageId.value] || String(route.query.section || ''));
@@ -43,6 +42,24 @@ onMounted(() => {
 
 <template>
   <aside class="capability-sidebar">
+    <template v-if="app">
+      <header class="sidebar-head capability-head">
+        <strong>{{ app.entry.display_name }}</strong>
+        <span>{{ app.entry.effective_authorization_profile || t('app.capabilities.noProfile') }}</span>
+      </header>
+      <nav class="secondary-sections" :aria-label="t('app.capabilities.title')">
+        <h2>{{ t('app.capabilities.title') }}</h2>
+        <div
+          v-for="capability in app.entry.effective_capabilities"
+          :key="capability"
+          class="section-row"
+        >
+          <strong>{{ capability }}</strong>
+        </div>
+        <p v-if="!app.entry.effective_capabilities.length">{{ t('app.capabilities.empty') }}</p>
+      </nav>
+    </template>
+    <template v-else>
     <header class="sidebar-head capability-head">
       <strong>{{ spec?.title || t('component.capability.sidebar.inline.9e94b86e99') }}</strong>
       <span>{{ spec?.subtitle || t('component.capability.sidebar.inline.417a632c70') }}</span>
@@ -63,5 +80,6 @@ onMounted(() => {
         <span>{{ section.description }}</span>
       </button>
     </nav>
+    </template>
   </aside>
 </template>

@@ -9,7 +9,7 @@ import {
 } from '../adapters/approvalPresentation';
 import { t } from '../i18n';
 import { useEscapeKey } from '../composables/useEscapeKey';
-import { appPluginForId } from '../plugins/registry';
+import { appPluginForId, applicationAppIdFromApproval } from '../plugins/registry';
 import { useAppStore } from '../stores/app';
 import type { ApprovalPendingItem } from '../types';
 
@@ -55,6 +55,7 @@ const deadlineLabel = computed(() => {
   return t('chat.approval.deadline.minutes', { count: Math.ceil(seconds / 60) });
 });
 const activeSourceKind = computed(() => String(activeApproval.value?.source?.kind || '').toLowerCase());
+const activeSourceAppId = computed(() => applicationAppIdFromApproval(activeApproval.value));
 const approvalSessionLabel = computed(() => {
   const approval = activeApproval.value;
   if (!approval) return '';
@@ -66,11 +67,12 @@ const approvalSessionLabel = computed(() => {
   return title ? `session:${short} · ${title}` : `session:${short}`;
 });
 const typedOwnerRoute = computed(() => {
+  const appId = activeSourceAppId.value;
+  if (appId) return appPluginForId(appId)?.route || '';
   if (activeSourceKind.value === 'evolution') return '/audit?section=evolution';
-  if (activeSourceKind.value !== 'application') return '';
-  const appId = String(activeApproval.value?.source?.application?.app_id || '');
-  return appPluginForId(appId)?.route || '';
+  return '';
 });
+const delegatedOwner = computed(() => Boolean(typedOwnerRoute.value || activeSourceAppId.value));
 const activePosition = computed(() => orderedApprovals.value.length
   ? `${selectedIndex.value + 1} / ${orderedApprovals.value.length}`
   : '0 / 0');
@@ -377,10 +379,10 @@ onBeforeUnmount(() => {
           <div><dt>{{ t('chat.approval.decisionReason') }}</dt><dd>{{ activeApprovalView?.decisionReason || '—' }}</dd></div>
           <div><dt>{{ t('chat.approval.decisionTime') }}</dt><dd>{{ formatTimestamp(activeApprovalView?.decidedAtMs) }}</dd></div>
         </dl>
-        <p v-if="typedOwnerRoute" class="approval-owner-note">
-          {{ t('chat.approval.typedOwner') }}
+        <p v-if="delegatedOwner" class="approval-owner-note">
+          {{ typedOwnerRoute ? t('chat.approval.typedOwner') : t('app.approval.ownerUnavailable') }}
         </p>
-        <fieldset v-if="!typedOwnerRoute && activeApprovalView?.allowedScopes.length" class="approval-scope-options" :disabled="busy">
+        <fieldset v-if="!delegatedOwner && activeApprovalView?.allowedScopes.length" class="approval-scope-options" :disabled="busy">
           <legend>{{ t('chat.approval.scope') }}</legend>
           <button
             v-for="scope in activeApprovalView.allowedScopes"
@@ -392,17 +394,17 @@ onBeforeUnmount(() => {
             {{ approvalScopeLabel(scope) }}
           </button>
         </fieldset>
-        <p v-else-if="!typedOwnerRoute" class="approval-owner-note">{{ t('chat.approval.noAllowedScope') }}</p>
+        <p v-else-if="!delegatedOwner" class="approval-owner-note">{{ t('chat.approval.noAllowedScope') }}</p>
         <p v-if="error" class="file-error" role="alert">{{ error }}</p>
       </div>
       <footer>
-        <button v-if="!typedOwnerRoute && actionableApproval" class="ghost-action" type="button" :disabled="!!busyApprovalId" @click="decide(false)">
+        <button v-if="!delegatedOwner && actionableApproval" class="ghost-action" type="button" :disabled="!!busyApprovalId" @click="decide(false)">
           {{ t('chat.approval.reject') }}
         </button>
-        <button v-if="!typedOwnerRoute && actionableApproval && activeApprovalView?.canSkip" class="ghost-action" type="button" :disabled="!!busyApprovalId" @click="skipApproval()">
+        <button v-if="!delegatedOwner && actionableApproval && activeApprovalView?.canSkip" class="ghost-action" type="button" :disabled="!!busyApprovalId" @click="skipApproval()">
           {{ t('chat.approval.skip') }}
         </button>
-        <button v-if="!typedOwnerRoute && actionableApproval" class="primary-action" type="button" :disabled="!!busyApprovalId || !activeApprovalView?.allowedScopes.length" @click="decide(true)">
+        <button v-if="!delegatedOwner && actionableApproval" class="primary-action" type="button" :disabled="!!busyApprovalId || !activeApprovalView?.allowedScopes.length" @click="decide(true)">
           {{ busy ? t('chat.approval.processing') : t('chat.approval.approve') }}
         </button>
         <button v-else-if="typedOwnerRoute && actionableApproval" class="primary-action" type="button" @click="openTypedOwner">
