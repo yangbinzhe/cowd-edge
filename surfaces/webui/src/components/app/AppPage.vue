@@ -86,7 +86,7 @@ watch(() => props.visible, (value) => bridge?.sendVisibility(value));
       :title="`${entry.display_name} application`"
       :src="entry.web_surface.entry_path || undefined"
       sandbox="allow-scripts allow-forms allow-downloads"
-      referrerpolicy="no-referrer"
+      referrerpolicy="origin"
       @load="connectFrame"
     />
     <section v-else class="app-page__unavailable" role="status">

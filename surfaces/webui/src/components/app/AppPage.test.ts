@@ -15,6 +15,7 @@ describe('AppPage', () => {
     const frame = wrapper.get('iframe');
     expect(frame.attributes('src')).toBe('/apps/reference-app/index.html');
     expect(frame.attributes('sandbox')).toBe('allow-scripts allow-forms allow-downloads');
+    expect(frame.attributes('referrerpolicy')).toBe('origin');
     expect(wrapper.text()).toContain('Granted capabilities');
     expect(wrapper.text()).toContain('reference.read');
     wrapper.unmount();

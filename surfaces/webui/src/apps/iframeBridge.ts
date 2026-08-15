@@ -152,7 +152,7 @@ export class IframeBridgeHost {
   private authorizationValid = true;
 
   constructor(private readonly options: IframeBridgeHostOptions) {
-    this.fetchImpl = options.fetchImpl || fetch;
+    this.fetchImpl = options.fetchImpl || globalThis.fetch.bind(globalThis);
     this.eventTarget = options.eventTarget || window;
     this.now = options.now || Date.now;
     this.channelFactory = options.channelFactory || (() => new MessageChannel());

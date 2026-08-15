@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IframeBridgeHost } from './iframeBridge';
 
 class FakePort {
@@ -11,7 +11,7 @@ class FakePort {
   receive(data: unknown) { this.onmessage?.({ data } as MessageEvent); }
 }
 
-function harness(fetchImpl?: typeof fetch, detailImpl?: typeof fetch) {
+function harness(fetchImpl?: typeof fetch, detailImpl?: typeof fetch, useGlobalFetch = false) {
   let listener: ((event: MessageEvent) => void) | null = null;
   const eventTarget = {
     addEventListener: vi.fn((_type: string, callback: EventListener) => { listener = callback as (event: MessageEvent) => void; }),
@@ -41,7 +41,8 @@ function harness(fetchImpl?: typeof fetch, detailImpl?: typeof fetch) {
   }) as typeof fetch;
   const bridge = new IframeBridgeHost({
     entry: { app_id: 'reference-app', generation: 'generation-1', artifact_version: '1.0.0' }, frameNonce: 'nonce-1', protocolDigest: 'sha256:test',
-    catalogGeneration: 'catalog-1', eventTarget: eventTarget as never, fetchImpl: apiFetch,
+    catalogGeneration: 'catalog-1', eventTarget: eventTarget as never,
+    ...(useGlobalFetch ? {} : { fetchImpl: apiFetch }),
     channelFactory: () => ({ port1: hostPort, port2: appPort }) as unknown as MessageChannel,
     now: () => 1_000, onReady: ready, onNavigate: navigate, onResize: resize, onCoreNavigation: coreNavigation,
   });
@@ -59,6 +60,8 @@ async function flush() {
 }
 
 describe('iframe bridge v1', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it('transfers a dedicated port and accepts only opaque exact-source, exact-identity, unreplayed messages', () => {
     const h = harness();
     expect(h.apiFetch).not.toHaveBeenCalled();
@@ -145,6 +148,29 @@ describe('iframe bridge v1', () => {
     expect(fetchImpl).toHaveBeenCalledWith('/api/apps/reference-app/operations/reference-app.echo/invoke',
       expect.objectContaining({ credentials: 'same-origin' }));
     expect(h.hostPort.sent.filter((message: any) => message.kind === 'host_app_detail')).toHaveLength(2);
+  });
+
+  it('binds the default browser fetch receiver before invoking APP routes', async () => {
+    const detail = {
+      schema_version: 1,
+      entry: { app_id: 'reference-app', generation: 'generation-1', artifact_version: '1.0.0' },
+      manifest: { app_id: 'reference-app', artifact_version: '1.0.0' },
+      operations: [{ operation_id: 'reference-app.echo' }],
+    };
+    const browserFetch = vi.fn(function (this: unknown, input: RequestInfo | URL) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(String(input) === '/api/apps/reference-app'
+        ? Response.json(detail)
+        : new Response('ok'));
+    }) as typeof fetch;
+    vi.stubGlobal('fetch', browserFetch);
+    const h = harness(undefined, undefined, true);
+    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'native-fetch', method: 'POST',
+      path: '/operations/reference-app.echo/invoke', deadline_unix_ms: 10_000, headers: {}, body: {} });
+    h.hostPort.receive({ kind: 'app_api_credit', schema_version: 1, request_id: 'native-fetch', bytes: 1024 });
+    await flush();
+    await flush();
+    expect(browserFetch).toHaveBeenCalledTimes(2);
   });
 
   it('invalidates every active request on a host authorization failure', async () => {
