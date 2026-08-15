@@ -2,6 +2,8 @@
   "schema_version": 2,
   "manifest_id": "webui-mfg-terminal-acceptance-v2",
   "allowed_levels": ["static", "unit-mock", "integration-local", "browser-controlled", "browser-real-gateway", "cross-surface", "performance"],
+  "edge_evidence_owners": ["webui", "webui-runtime", "webui-graph", "webui-evidence", "gateway-webui", "gateway-surfaces", "security", "performance", "runtime-strategy", "runtime-surfaces"],
+  "delegated_evidence_owners": { "mfg": "cowd-app-mfg/I00" },
   "entries": [
     { "id": "UX-01", "requirement": "360x800 and 390x844: every page section is reachable and no unique action is hidden", "owner": "webui", "min_evidence": "browser-controlled", "evidence": ["visual-audit:full", "playwright:all-sections-mobile"] },
     { "id": "UX-02", "requirement": "768x1024: section navigation, tables, graphs and drawers remain operable", "owner": "webui", "min_evidence": "browser-controlled", "evidence": ["visual-audit:full"] },

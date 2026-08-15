@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { projectAppState, type AppCatalogEntryV1 } from '../../apps/catalog';
+import { t } from '../../i18n';
 
 const props = defineProps<{ entry: AppCatalogEntryV1 }>();
 const state = computed(() => projectAppState(props.entry));
@@ -14,7 +15,7 @@ const state = computed(() => projectAppState(props.entry));
     </div>
     <p>{{ entry.lifecycle.reason_code || state.detail }}</p>
     <p v-if="state.retryable" class="app-status__recovery">
-      Recovery is available<span v-if="state.retryAfterMs !== null"> in {{ state.retryAfterMs }} ms</span>.
+      {{ t('app.surface.recovery') }}<span v-if="state.retryAfterMs !== null"> {{ t('app.surface.recoveryAfter', { milliseconds: state.retryAfterMs }) }}</span>.
     </p>
   </section>
 </template>

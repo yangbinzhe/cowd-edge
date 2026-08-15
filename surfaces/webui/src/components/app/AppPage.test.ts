@@ -1,10 +1,12 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import fixture from '../../apps/fixtures/catalog-single.json';
 import { parseAppCatalog } from '../../apps/catalog';
 import AppPage from './AppPage.vue';
+import { setLocale } from '../../i18n';
 
 describe('AppPage', () => {
+  beforeEach(() => setLocale('en-US'));
   it('loads a sandboxed static surface while a lazy worker is idle', () => {
     const entry = parseAppCatalog(fixture).apps[0];
     const wrapper = mount(AppPage, { props: {

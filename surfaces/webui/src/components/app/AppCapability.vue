@@ -1,17 +1,18 @@
 <script setup lang="ts">
+import { t } from '../../i18n';
 defineProps<{ capabilities: readonly string[]; authorizationProfile: string }>();
 </script>
 
 <template>
-  <section class="app-capabilities" aria-label="Application capabilities">
+  <section class="app-capabilities" :aria-label="t('app.surface.capabilitiesAria')">
     <header>
-      <strong>Granted capabilities</strong>
-      <span>{{ authorizationProfile || 'No authorization profile' }}</span>
+      <strong>{{ t('app.surface.capabilities') }}</strong>
+      <span>{{ authorizationProfile || t('app.surface.noAuthorizationProfile') }}</span>
     </header>
     <ul v-if="capabilities.length">
       <li v-for="capability in capabilities" :key="capability">{{ capability }}</li>
     </ul>
-    <p v-else>No capabilities granted.</p>
+    <p v-else>{{ t('app.surface.noCapabilities') }}</p>
   </section>
 </template>
 

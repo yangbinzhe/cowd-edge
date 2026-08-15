@@ -14,24 +14,22 @@ import RuntimePage from './pages/RuntimePage.vue';
 import ContextPage from './pages/ContextPage.vue';
 import GatewayPage from './pages/GatewayPage.vue';
 import MissionControlPage from './pages/MissionControlPage.vue';
-import MfgPage from '@cowd/app-mfg-webui/MfgApp.vue';
-import { mfgApi } from '@cowd/app-mfg-webui/api/mfgApi';
 import SettingsPage from './pages/SettingsPage.vue';
 import SkillsPage from './pages/SkillsPage.vue';
 import SurfacePage from './pages/SurfacePage.vue';
 import ToolsPage from './pages/ToolsPage.vue';
-import { pluginRoutes, webuiPagePlugins } from './plugins/registry';
+import { configureAppCatalog, pluginRoutes, webuiPagePlugins } from './plugins/registry';
+import { parseAppCatalog } from './apps/catalog';
+import emptyAppCatalog from './apps/fixtures/catalog-empty.json';
+import referenceAppCatalog from './apps/fixtures/catalog-single.json';
 import { useAppStore } from './stores/app';
 import { useChatSessionsStore } from './stores/chatSessions';
-import { useMfgCockpitStore } from '@cowd/app-mfg-webui/stores/mfgCockpit';
-import { createMfgMutationIntent } from '@cowd/app-mfg-webui/stores/mutationIntents';
 import { useProjectionRegistryStore } from './stores/projectionRegistry';
 import { resetLiveTransportForTests } from './stores/liveTransport';
 import { cleanAssistantContent, collapseRepeatedText } from './utils/chatContent';
 import { activitySummary, mergeTurnActivity } from './utils/turnSettlement';
 import { createWorkspaceRoot, mergeWorkspaceTreeChildren } from './utils/workspaceTree';
 import { isWorkspaceTextPreview, workspacePreviewKind } from './utils/workspacePreview';
-import { canonicalMfgMutationResponse } from './testing/mfgReceiptMock';
 import { activeCapabilitySectionKey } from './composables/useCapabilitySection';
 
 vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))));
@@ -40,6 +38,7 @@ vi.mock('vue-echarts', () => ({ default: { template: '<div class="chart"></div>'
 afterEach(() => {
   vi.restoreAllMocks();
   resetLiveTransportForTests();
+  configureAppCatalog(parseAppCatalog(emptyAppCatalog));
 });
 
 function mountApp(path = '/chat') {
@@ -59,7 +58,6 @@ function mountApp(path = '/chat') {
       { path: '/gateway', component: GatewayPage },
       { path: '/mission', component: MissionControlPage },
       ...pluginRoutes,
-      { path: '/apps/mfg', component: MfgPage },
       { path: '/audit', component: AuditPage },
       { path: '/settings', component: SettingsPage },
     ],
@@ -210,28 +208,6 @@ function installCanonicalExecutionProjection(
   };
 }
 
-function mfgIntent(action: string, resource: string, payload: unknown = {}) {
-  return createMfgMutationIntent(action, resource, payload);
-}
-
-function expectMfgMutation(
-  fetchMock: ReturnType<typeof vi.fn>,
-  path: string,
-  expectedBody: Record<string, unknown>,
-  expectedKey?: string,
-) {
-  const call = fetchMock.mock.calls.find(([url]) => String(url) === path);
-  expect(call, `missing MFG mutation call ${path}`).toBeTruthy();
-  const init = (call?.[1] || {}) as RequestInit;
-  const body = init.body ? JSON.parse(String(init.body)) : {};
-  expect(body).toMatchObject(expectedBody);
-  const headerKey = new Headers(init.headers).get('Idempotency-Key');
-  expect(headerKey).toBeTruthy();
-  // 幂等键属于传输治理元数据，只能通过规范请求头发送，不能污染严格业务 DTO。
-  expect(body).not.toHaveProperty('idempotency_key');
-  if (expectedKey) expect(headerKey).toBe(expectedKey);
-}
-
 describe('Cowd Vue WebUI shell', () => {
   it('restores the Settings section from the route query', async () => {
     const wrapper = await mountApp('/settings?section=policy');
@@ -264,19 +240,20 @@ describe('Cowd Vue WebUI shell', () => {
     wrapper.unmount();
   });
 
-  it('registers MFG through the generated external APP catalog', async () => {
-    const plugin = webuiPagePlugins.find((item) => item.appId === 'mfg');
+  it('registers a user-visible reference APP through the strict runtime Catalog', async () => {
+    configureAppCatalog(parseAppCatalog(referenceAppCatalog));
+    const plugin = webuiPagePlugins.find((item) => item.appId === 'reference-app');
     expect(plugin).toBeTruthy();
-    expect(plugin?.route).toBe('/apps/mfg');
-    expect(plugin?.readiness.appApi).toBe('/api/apps/mfg/app');
-    expect(plugin?.readiness.requiredCapabilities).toContain('mfg.report.review');
-    expect((await plugin?.page()).default).toBe(MfgPage);
+    expect(plugin?.route).toBe('/apps/reference-app');
+    expect(plugin?.entry.effective_capabilities).toEqual(['reference.read', 'reference.write']);
 
-    const wrapper = await mountApp('/chat');
+    const wrapper = await mountApp('/apps/reference-app/reports/daily');
     const railButtons = wrapper.findAll('.rail-button');
-    expect(railButtons.some((button) => button.attributes('aria-label') === '制造运营工作台')).toBe(true);
-    const legacyLabel = ['IA', 'CC'].join('');
-    expect(railButtons.some((button) => button.attributes('aria-label') === legacyLabel)).toBe(false);
+    expect(railButtons.some((button) => button.attributes('aria-label') === 'Reference Application')).toBe(true);
+    expect(wrapper.get('iframe').attributes('src'))
+      .toBe('/apps/reference-app/index.html#/reports/daily');
+    expect(wrapper.text()).toContain('reference.read');
+    wrapper.unmount();
   });
 
   it('keeps Workspace out of the left rail and inside the right companion panel', async () => {
@@ -3391,86 +3368,12 @@ describe('Cowd Vue WebUI shell', () => {
     }));
   });
 
-  it('calls critical MFG write endpoints with explicit request bodies', async () => {
-    const fetchMock = vi.fn((_request, init?: RequestInit) => Promise.resolve(
-      canonicalMfgMutationResponse(init, { ok: true }),
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-    const sourcePack = {
-      source_pack_id: 'sp-1', source_name: 'MES events', owner: 'operations', access_mode: 'file', refresh_mode: 'incremental',
-      entity_mappings: [], fact_mappings: [{ source_table: 'events', fact_type: 'manufacturing.event', metric_key: 'event_count', dedup_key: 'event_id', delta_signature: 'updated_at' }],
-    };
-    await mfgApi.mfgSourcePackUpsert(sourcePack, mfgIntent('mfg.reality.source_pack.create', 'mfg:source-pack:sp-1', sourcePack));
-    await mfgApi.mfgSourcePackValidate(
-      'sp-1',
-      mfgIntent('mfg.reality.source_pack.validate', 'matrix:source_pack:sp-1'),
-    );
-    await mfgApi.mfgSourcePackDeltaPlan(
-      'sp-1',
-      mfgIntent('mfg.reality.source_pack.delta_plan', 'matrix:source_pack:sp-1'),
-    );
-    const ingestPlan = { source_ref: 'source-pack://sp-1', fact_type: 'manufacturing.event', metric_ids: ['event_count'] };
-    await mfgApi.mfgDataPlaneIngestPlan(
-      ingestPlan,
-      mfgIntent('mfg.reality.data_plane.ingest_plan', 'matrix:data-plane:ingest-plan', ingestPlan),
-    );
-    const connector = { resource_ref: 'file:///tmp/events.json', expected_rows: 10 };
-    await mfgApi.mfgSourcePackConnectorPlan('sp-1', connector, mfgIntent('mfg.reality.connector_run.plan', 'mfg:source-pack:sp-1', connector));
-    await mfgApi.mfgSourcePackConnectorRun('sp-1', connector, mfgIntent('mfg.reality.connector_run.execute', 'mfg:source-pack:sp-1', connector));
-    const attentionPlan = { trigger_fact_type: 'manufacturing.event', entity_scope: 'line:a' };
-    await mfgApi.mfgAttentionPlan(
-      attentionPlan,
-      mfgIntent('mfg.reality.metric.attention_plan', 'matrix:attention-plan', attentionPlan),
-    );
-    const computePlan = { trigger_fact_type: 'manufacturing.event', metric_ids: ['event_count'] };
-    await mfgApi.mfgComputeJobPlan(computePlan, mfgIntent('mfg.reality.compute_job.plan', 'mfg:compute-plan:test', computePlan));
-    await mfgApi.mfgEntityUpsert({ entity_id: 'entity-1' }, mfgIntent('mfg.reality.entity.create', 'mfg:entity:entity-1'));
-    await mfgApi.mfgRelationUpsert({ relation_type: 'feeds' }, mfgIntent('mfg.reality.relation.create', 'mfg:relation:test'));
-    const playbook = { playbook_id: 'playbook-1', domain: 'manufacturing', scenario: 'Recover line', quality_gate_policy: 'required', cross_plane_policy: 'governed', created_at: '2026-07-16T00:00:00Z', updated_at: '2026-07-16T00:00:00Z' };
-    await mfgApi.mfgPlaybookUpsert(playbook, mfgIntent('mfg.playbook.create', 'mfg:playbook:playbook-1', playbook));
-    await mfgApi.mfgEvidenceQualityGate('evidence-1', mfgIntent('mfg.reality.evidence.quality_gate', 'mfg:evidence:evidence-1'));
-    await mfgApi.mfgRecommendPlaybooks(
-      'incident-1',
-      5,
-      mfgIntent('mfg.incident.playbook.recommend', 'mfg:incident:incident-1', { limit: 5 }),
-    );
-    await mfgApi.mfgComputeJobRun('job-1', mfgIntent('mfg.reality.compute_job.execute', 'mfg:compute-job:job-1'));
-    await mfgApi.mfgExecuteAction('analysis-1', 'action-1', { mode: 'dry_run', operator_id: 'forged' }, mfgIntent('mfg.analysis.action.dry_run', 'mfg:analysis:analysis-1'));
-    await mfgApi.mfgExecutionBridge('exec-1', { mode: 'dry_run', actor_principal: 'forged' }, mfgIntent('mfg.execution.cross_plane.dry_run', 'mfg:execution:exec-1'));
-    await mfgApi.mfgExecutionFeedback('exec-1', { outcome: 'resolved', note: 'verified', actor_ref: 'forged' }, mfgIntent('mfg.execution.feedback.create', 'mfg:execution:exec-1'));
-    await mfgApi.mfgRetryReportDelivery('report-1', { mode: 'dry_run' }, mfgIntent('mfg.report.delivery.retry_dry_run', 'mfg:report:report-1'));
-    const facts = [{ fact_type: 'quality', source_ref: 'source-pack://sp-1' }];
-    await mfgApi.mfgIngestFact(facts, mfgIntent('mfg.reality.fact.ingest', 'mfg:fact-batch:test', facts));
-    await mfgApi.mfgSeedDomain(mfgIntent('mfg.domain.server_manufacturing.seed', 'mfg:domain:server-manufacturing'));
-    await mfgApi.mfgSeedOntology(mfgIntent('mfg.ontology.server_manufacturing.seed', 'mfg:ontology:server-manufacturing'));
-    expectMfgMutation(fetchMock, '/api/apps/mfg/reality/source-packs/upsert', { source_pack: sourcePack, session_id: 'webui-mfg' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/sp-1/validate', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/source-packs/sp-1/delta-plan', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/data-plane/ingest-plan', expect.objectContaining({ body: JSON.stringify({ ingest: { source_ref: 'source-pack://sp-1', fact_type: 'manufacturing.event', metric_ids: ['event_count'] }, session_id: 'webui-mfg' }) }));
-    expectMfgMutation(fetchMock, '/api/apps/mfg/reality/source-packs/sp-1/connector-runs/plan', { run: { resource_ref: 'file:///tmp/events.json', expected_rows: 10 }, session_id: 'webui-mfg' });
-    expectMfgMutation(fetchMock, '/api/apps/mfg/reality/source-packs/sp-1/connector-runs/run', { run: { resource_ref: 'file:///tmp/events.json', expected_rows: 10 }, session_id: 'webui-mfg' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/metrics/attention-plan', expect.objectContaining({ body: JSON.stringify({ trigger_fact_type: 'manufacturing.event', entity_scope: 'line:a' }) }));
-    expectMfgMutation(fetchMock, '/api/apps/mfg/reality/compute/jobs/plan', { job: { trigger_fact_type: 'manufacturing.event', metric_ids: ['event_count'] }, session_id: 'webui-mfg' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/entities/upsert', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/relations/upsert', expect.objectContaining({ method: 'POST' }));
-    expectMfgMutation(fetchMock, '/api/apps/mfg/playbooks/upsert', { playbook, session_id: 'webui-mfg' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/evidence/evidence-1/quality-gate', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/incidents/incident-1/playbooks/recommend', expect.objectContaining({ body: JSON.stringify({ limit: 5 }) }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/compute/jobs/job-1/run', expect.objectContaining({ method: 'POST' }));
-    expectMfgMutation(fetchMock, '/api/apps/mfg/analyses/analysis-1/actions/action-1/execute', { mode: 'dry_run' });
-    expectMfgMutation(fetchMock, '/api/apps/mfg/executions/exec-1/cross-plane/execute', { mode: 'dry_run' });
-    expectMfgMutation(fetchMock, '/api/apps/mfg/executions/exec-1/feedback', { outcome: 'resolved', note: 'verified' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/reports/report-1/delivery/retry', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/reality/facts/ingest', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/domain/server-manufacturing/seed', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/ontology/server-manufacturing/seed', expect.objectContaining({ method: 'POST' }));
-  });
-
-  it('does not let compiled APP capabilities override the broker authentication catalogue', async () => {
+  it('does not let runtime Catalog capabilities override the broker authentication request', async () => {
+    configureAppCatalog(parseAppCatalog(referenceAppCatalog));
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
       success: true,
       surface_id: 'webui',
-      entitlement: { granted: ['mfg.read'], denied: ['mfg.data.manage'] },
+      entitlement: { granted: ['reference.read'], denied: ['reference.write'] },
     }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -3480,152 +3383,6 @@ describe('Cowd Vue WebUI shell', () => {
     const body = JSON.parse(String(request.body));
     expect(body).toMatchObject({ token: 'credential', surface_id: 'webui' });
     expect(body.requested_capabilities).toEqual([]);
-  });
-
-  it('calls real MFG incident and cockpit report endpoints', async () => {
-    const fetchMock = vi.fn((_request, init?: RequestInit) => Promise.resolve(
-      canonicalMfgMutationResponse(init),
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-    await mfgApi.mfgCreateIncident({ title: 'Line A deviation' }, mfgIntent('mfg.incident.create', 'mfg:incident-draft:test'));
-    await mfgApi.mfgAnalyzeIncident('incident-1', mfgIntent('mfg.incident.analyze', 'mfg:incident:incident-1'));
-    await mfgApi.mfgSkills();
-    await mfgApi.mfgGenerateReport('profile-1', { cadence: 'daily' }, mfgIntent('mfg.report.generate', 'mfg:cockpit-profile:profile-1'));
-    expectMfgMutation(fetchMock, '/api/apps/mfg/incidents', { title: 'Line A deviation' });
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/incidents/incident-1/analyze', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/skills', expect.any(Object));
-    expectMfgMutation(fetchMock, '/api/apps/mfg/cockpit/profiles/profile-1/reports/generate', { report: { cadence: 'daily' } });
-  });
-
-  it('calls revisioned MFG cockpit, alert, and assignment write endpoints', async () => {
-    const fetchMock = vi.fn((_request, init?: RequestInit) => Promise.resolve(
-      canonicalMfgMutationResponse(init),
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-    const draftIntent = mfgIntent('mfg.cockpit.draft.save', 'mfg:cockpit-profile:profile-1');
-    const publishIntent = mfgIntent('mfg.cockpit.draft.publish', 'mfg:cockpit-profile:profile-1');
-    const deleteIntent = mfgIntent('mfg.cockpit.profile.delete', 'mfg:cockpit-profile:profile-1');
-    const cloneIntent = mfgIntent('mfg.cockpit.profile.clone', 'mfg:cockpit-profile:profile-1');
-    const shareIntent = mfgIntent('mfg.cockpit.profile.share', 'mfg:cockpit-profile:profile-1');
-    await mfgApi.mfgSaveCockpitDraft(
-      'profile-1',
-      { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 },
-      [],
-      undefined,
-      draftIntent,
-    );
-    await mfgApi.mfgPublishCockpitDraft('profile-1', 1, publishIntent);
-    await mfgApi.mfgDeleteCockpitProfile('profile-1', 1, deleteIntent);
-    await mfgApi.mfgCloneCockpitProfile('profile-1', {}, cloneIntent);
-    await mfgApi.mfgShareCockpitProfile('profile-1', {
-      expected_revision: 1,
-      sharing_policy: { visibility: 'team', viewer_refs: ['viewer-1'], editor_refs: [] },
-    }, shareIntent);
-    await mfgApi.mfgCockpitWidgetProjection('profile-1', 'widget-1');
-    await mfgApi.mfgUpsertAlertRule({ rule_id: 'rule-1', name: 'Line A deviation', revision: 1 }, mfgIntent('mfg.alert_rule.update', 'mfg:alert-rule:rule-1'));
-    await mfgApi.mfgAlertCommand('alert-1', { command: 'acknowledge', expected_revision: 1 }, mfgIntent('mfg.alert.acknowledge', 'mfg:alert:alert-1'));
-    await mfgApi.mfgUpsertAlertSubscription({ subscription_id: 'subscription-1', rule_id: 'rule-1', revision: 1 }, mfgIntent('mfg.alert_subscription.update', 'mfg:alert-subscription:subscription-1'));
-    await mfgApi.mfgUpsertAssignment({ assignment_id: 'assignment-1', task_ref: 'task-1', assignee_ref: 'operator-1', revision: 1 }, mfgIntent('mfg.assignment.update', 'mfg:assignment:assignment-1'));
-    await mfgApi.mfgAssignmentCommand('assignment-1', { command: 'claim', expected_revision: 1 }, mfgIntent('mfg.assignment.claim', 'mfg:assignment:assignment-1'));
-    expectMfgMutation(
-      fetchMock,
-      '/api/apps/mfg/cockpit/profiles/profile-1/draft',
-      {
-        profile: { profile_id: 'profile-1', display_name: 'Plant cockpit', revision: 1 },
-        locks: [],
-      },
-      draftIntent.idempotency_key,
-    );
-    expectMfgMutation(
-      fetchMock,
-      '/api/apps/mfg/cockpit/profiles/profile-1/publish',
-      { expected_active_revision: 1 },
-      publishIntent.idempotency_key,
-    );
-    const deleteCall = fetchMock.mock.calls.find(([url]) => (
-      String(url) === '/api/apps/mfg/cockpit/profiles/profile-1?expected_revision=1'
-    ));
-    expect(deleteCall).toBeTruthy();
-    expect((deleteCall?.[1] as RequestInit).method).toBe('DELETE');
-    expect(new Headers((deleteCall?.[1] as RequestInit).headers).get('Idempotency-Key'))
-      .toBe(deleteIntent.idempotency_key);
-    expect(String(deleteCall?.[0])).not.toContain('idempotency_key=');
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/clone', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/share', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles/profile-1/widgets/widget-1/projection', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alert-rules', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alerts/alert-1/command', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/focus/alert-subscriptions', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/assignments', expect.objectContaining({ method: 'POST' }));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/assignments/assignment-1/command', expect.objectContaining({ method: 'POST' }));
-  });
-
-  it('renders the revisioned MFG cockpit workspaces from live projection contracts', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
-      const url = String(path);
-      if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
-      if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
-      if (url === '/api/config') return Promise.resolve(new Response(JSON.stringify({ version: 'test' })));
-      if (url === '/api/runtime/control-plane') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/slash?surface=webui') return Promise.resolve(new Response(JSON.stringify({ commands: [] })));
-      if (url === '/api/config/providers') return Promise.resolve(new Response(JSON.stringify({ providers: [], models: [] })));
-      if (url === '/api/profiles') return Promise.resolve(new Response(JSON.stringify({ profiles: [], active_profile: 'default' })));
-      if (url === '/api/workspace') return Promise.resolve(new Response(JSON.stringify({ workspace_root: '', workspace_canonical: '' })));
-      if (url === '/api/approval/config') return Promise.resolve(new Response(JSON.stringify({})));
-      if (url === '/api/workspace/files') return Promise.resolve(new Response(JSON.stringify({ files: [] })));
-      if (url === '/api/auth/verify') return Promise.resolve(new Response(JSON.stringify({
-        valid: true,
-        auth_required: true,
-        entitlement: {
-          core_profile_id: 'core_operator',
-          app_profiles: { mfg: 'mfg_operator' },
-          profile_revision: 1,
-          credential_epoch: 1,
-          ceiling: ['mfg.read'],
-          granted: ['mfg.read'],
-          denied: [],
-        },
-      })));
-      if (url === '/api/apps/mfg/cockpit/profiles') return Promise.resolve(new Response(JSON.stringify({ items: [{ profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }] })));
-      if (url === '/api/apps/mfg/cockpit/widget-catalog') return Promise.resolve(new Response(JSON.stringify({ items: [] })));
-      if (url === '/api/apps/mfg/focus/alert-rules' || url === '/api/apps/mfg/focus/alerts' || url === '/api/apps/mfg/focus/alert-subscriptions' || url.startsWith('/api/apps/mfg/focus/forecasts')) return Promise.resolve(new Response(JSON.stringify({ items: [] })));
-      if (url === '/api/apps/mfg/assignments') return Promise.resolve(new Response(JSON.stringify({ items: [] })));
-      if (url === '/api/apps/mfg/live/snapshot') return Promise.resolve(new Response(JSON.stringify({
-        kind: 'snapshot',
-        view_epoch: 'epoch-1',
-        cursor: 'cursor-1',
-        generated_at: '2026-07-16T00:00:00Z',
-        contract_version: 'mfg.frontend.v1',
-        state: {
-          cockpit: { profiles: [{ profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }] },
-          alerts: {}, assignments: {}, incidents: {}, executions: {}, reports: {}, reviews: {}, receipts: {}, data_compute: {},
-        },
-      })));
-      if (url === '/api/apps/mfg/live') return Promise.resolve(new Response(
-        'event: mfg_live\ndata: {"kind":"heartbeat","view_epoch":"epoch-1","cursor":"cursor-1","generated_at":"2026-07-16T00:00:01Z"}\n\n',
-        { headers: { 'content-type': 'text/event-stream' } },
-      ));
-      if (url === '/api/apps/mfg/cockpit/profiles/profile-1') return Promise.resolve(new Response(JSON.stringify({ profile: { profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } } })));
-      if (url === '/api/apps/mfg/cockpit/profiles/profile-1/projection') return Promise.resolve(new Response(JSON.stringify({ projection_id: 'projection-1', profile: { profile_id: 'profile-1', owner_ref: 'principal:verified', display_name: 'Plant cockpit', focus_refs: [], focus_metric_ids: [], thresholds: {}, cadence: 'daily', revision: 1, scope: { kind: 'personal' }, layout: { columns: 12, row_height: 72, gap: 12 }, global_filters: {}, widget_instances: [], sharing_policy: { visibility: 'private', viewer_refs: [], editor_refs: [] } }, widgets: [], summary: 'ready', generated_at: '2026-07-16T00:00:00Z' })));
-      return Promise.resolve(new Response(JSON.stringify({})));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const wrapper = await mountApp('/apps/mfg');
-    await settleAsync();
-    await settleAsync();
-    expect(wrapper.get('[data-section="dashboard"]').exists()).toBe(true);
-    expect(wrapper.find('.mfg-cockpit').exists()).toBe(true);
-    expect(wrapper.text()).toContain('制造运营工作台');
-    expect(wrapper.text()).toContain('Plant cockpit');
-    expect(wrapper.text()).toContain('独立的制造应用');
-    const refreshButton = wrapper.get('[data-mfg-workspace-refresh]');
-    expect(refreshButton.attributes('disabled')).toBeUndefined();
-    await refreshButton.trigger('click');
-    await settleAsync();
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/cockpit/profiles', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/live/snapshot', expect.any(Object));
-    expect(fetchMock).toHaveBeenCalledWith('/api/apps/mfg/live', expect.any(Object));
-    useMfgCockpitStore().stopLive();
   });
 
   it('loads audit, usage, and release gate from real governance endpoints', async () => {

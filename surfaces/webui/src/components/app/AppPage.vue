@@ -4,6 +4,7 @@ import { projectAppState, type AppCatalogEntryV1 } from '../../apps/catalog';
 import { IframeBridgeHost } from '../../apps/iframeBridge';
 import AppCapability from './AppCapability.vue';
 import AppStatus from './AppStatus.vue';
+import { t } from '../../i18n';
 
 const props = withDefaults(defineProps<{
   entry: AppCatalogEntryV1;
@@ -66,7 +67,7 @@ watch(() => props.visible, (value) => bridge?.sendVisibility(value));
   <article class="app-page" :data-app-id="entry.app_id">
     <header class="app-page__header">
       <div>
-        <p class="app-page__eyebrow">Application</p>
+        <p class="app-page__eyebrow">{{ t('app.surface.application') }}</p>
         <h1>{{ entry.display_name }}</h1>
         <p class="app-page__version">{{ entry.artifact_version }} · {{ entry.activation }}</p>
       </div>
@@ -89,8 +90,8 @@ watch(() => props.visible, (value) => bridge?.sendVisibility(value));
       @load="connectFrame"
     />
     <section v-else class="app-page__unavailable" role="status">
-      <strong>Web surface unavailable</strong>
-      <p>The application worker and its static interface remain independently observable.</p>
+      <strong>{{ t('app.surface.unavailable') }}</strong>
+      <p>{{ t('app.surface.unavailableDetail') }}</p>
     </section>
   </article>
 </template>
