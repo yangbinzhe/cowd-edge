@@ -17,13 +17,6 @@ const i18nModules = new Set([
 
 export default defineConfig({
   plugins: [vue()],
-  resolve: {
-    alias: [
-      { find: '@cowd/webui-host', replacement: resolve(webuiRoot, 'src/apps/host.ts') },
-      { find: /^@cowd\/app-mfg-webui$/, replacement: resolve(webuiRoot, '.cowd/apps/mfg/webui/src/index.ts') },
-      { find: /^@cowd\/app-mfg-webui\/(.+)$/, replacement: resolve(webuiRoot, '.cowd/apps/mfg/webui/src/$1') },
-    ],
-  },
   define: {
     __COWD_EDGE_VERSION__: JSON.stringify(edgeVersion),
   },
@@ -37,18 +30,6 @@ export default defineConfig({
     // entry independent from closed companion and management surfaces.
     modulePreload: false,
     rollupOptions: {
-      treeshake: {
-        moduleSideEffects(id) {
-          const normalized = id.replaceAll('\\', '/').split('?')[0];
-          // APP route components are declarative Vue modules. Treat unused
-          // synchronous re-exports from an older immutable APP revision as
-          // side-effect free so the canonical dynamic route remains lazy.
-          if (/\/\.cowd\/apps\/[^/]+\/webui\/src\/[^/]+\.vue$/.test(normalized)) {
-            return false;
-          }
-          return true;
-        },
-      },
       input: 'index.dev.html',
       output: {
         entryFileNames: 'assets/app/[name]-[hash].js',
