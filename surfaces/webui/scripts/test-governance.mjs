@@ -22,7 +22,7 @@ for (const [pattern, label] of [
   [/gateway_route_source_architecture/, 'retired backend source-shape test'],
   [/\brequiredSource\b/, 'private source symbol allow-list'],
   [/visualRows\s*!==\s*\d+/, 'fixed visual row count'],
-  [/\(mfg\.steps\s*\|\|\s*\[\]\)\.length\s*[<>]=?\s*\d+/, 'fixed MFG step count'],
+  [/\(application\.steps\s*\|\|\s*\[\]\)\.length\s*[<>]=?\s*\d+/, 'fixed application step count'],
   [/path\.join\(workspaceRoot,\s*'dev-iacc'\)/, 'retired backend checkout fallback'],
   [/crates\/cowd-cli/, 'retired CLI source fallback'],
   [/\bpageRequirements\b/, 'private page implementation inventory'],
@@ -51,10 +51,12 @@ if (new Set(ids).size !== ids.length) failures.push('duplicate acceptance ids');
 if (!ids.length || ids.some((id) => !/^[A-Z]+-\d{2}$/.test(id))) {
   failures.push('invalid or empty acceptance manifest');
 }
-for (const id of ids.filter((id) => /^(MC|MR|TUI|MUX)-/.test(id))) {
-  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (!new RegExp(`['"]${escaped}['"]\\s*:\\s*\\(\\)\\s*=>`).test(source)) {
-    failures.push(`acceptance requirement lacks an exact semantic predicate: ${id}`);
+const edgeOwners = new Set(manifest.edge_evidence_owners || []);
+const delegatedOwners = new Set(Object.keys(manifest.delegated_evidence_owners || {}));
+const delegatedEntries = new Set(manifest.delegated_evidence_entries || []);
+for (const entry of manifest.entries || []) {
+  if (!edgeOwners.has(entry.owner) && !delegatedOwners.has(entry.owner) && !delegatedEntries.has(entry.id)) {
+    failures.push(`acceptance requirement has no evidence owner: ${entry.id}`);
   }
 }
 

@@ -329,11 +329,11 @@ describe('projectionRegistry contract gate', () => {
 
     expect(acquireLongLivedConnection('chat:budget-a', 15, () => undefined)).toBe(true);
     expect(acquireLongLivedConnection('chat:budget-b', 15, () => undefined)).toBe(true);
-    expect(acquireLongLivedConnection('app:mfg:live:test', 20, () => undefined)).toBe(true);
+    expect(acquireLongLivedConnection('app:reference-app:live:test', 20, () => undefined)).toBe(true);
     expect(registry.activeSourceCount).toBe(2);
     expect(Object.values(registry.entries).every((entry) => !entry.degradedReason)).toBe(true);
 
-    releaseLongLivedConnection('app:mfg:live:test');
+    releaseLongLivedConnection('app:reference-app:live:test');
     releaseLongLivedConnection('chat:budget-a');
     releaseLongLivedConnection('chat:budget-b');
     registry.release('consumer-a');

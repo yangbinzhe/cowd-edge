@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { presentationRendererContracts, resolvePresentationRenderer } from './registry';
 describe('presentation renderer registry', () => {
-  it('registers every MFG renderer exactly once', () => {
+  it('registers every core presentation renderer exactly once', () => {
     const contracts = presentationRendererContracts();
     expect(contracts).toHaveLength(12);
     expect(new Set(contracts.map((contract) => contract.id)).size).toBe(12);

@@ -58,7 +58,7 @@ function isAllowedTechnicalChineseValue(value) {
   if (/[\u4e00-\u9fff]/.test(value)) return true;
   if (!/[A-Za-z]/.test(value)) return true;
   return /^[A-Z0-9_./:+# -]+$/.test(value)
-    || /^(Cowd|WebUI|TUI|CLI|MFG|MCP|API|JSON|HTTP|SSE|ID|DLQ|Profile|Provider|Gateway|Runtime|Surface|Slash)$/i.test(value);
+    || /^(Cowd|WebUI|TUI|CLI|APP|MCP|API|JSON|HTTP|SSE|ID|DLQ|Profile|Provider|Gateway|Runtime|Surface|Slash)$/i.test(value);
 }
 
 const zh = parseCatalog(zhFile);

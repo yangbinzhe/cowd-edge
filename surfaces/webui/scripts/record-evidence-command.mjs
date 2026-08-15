@@ -15,9 +15,15 @@ const name = option('--name').trim();
 const cwdOption = option('--cwd', 'webui').trim();
 const dataSource = option('--data-source', name).trim();
 const command = separator >= 0 ? process.argv.slice(separator + 1) : [];
+const optionArgs = process.argv.slice(2, separator >= 0 ? separator : undefined);
+const claims = optionArgs.flatMap((value, index) => value === '--claim' ? [optionArgs[index + 1]] : [])
+  .filter((value) => typeof value === 'string' && value.length > 0);
 
 if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
   throw new Error('--name must be a lowercase evidence identifier');
+}
+if (claims.some((claim) => !/^[a-z0-9][a-z0-9:._-]*$/.test(claim))) {
+  throw new Error('--claim must be a stable lowercase evidence identifier');
 }
 if (!command.length) throw new Error('record-evidence-command requires a command after --');
 
@@ -66,6 +72,7 @@ const metadata = {
   command_text: command.map((part) => JSON.stringify(part)).join(' '),
   cwd,
   data_source: dataSource,
+  claims: Array.from(new Set(claims)).sort(),
   started_at: startedAt,
   finished_at: finishedAt,
   log_path: logPath,

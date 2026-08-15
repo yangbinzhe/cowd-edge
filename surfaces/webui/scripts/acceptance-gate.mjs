@@ -6,13 +6,27 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(resolve(root, 'evaluation/acceptance-manifest.json'), 'utf8'));
 const failures = [];
 const owners = new Set(manifest.edge_evidence_owners || []);
-const entries = manifest.entries.filter((entry) => owners.has(entry.owner));
+const delegatedIds = manifest.delegated_evidence_entries || [];
+const delegated = new Set(delegatedIds);
+const entries = manifest.entries.filter((entry) => owners.has(entry.owner) && !delegated.has(entry.id));
 const ids = new Set();
 
 if (manifest.schema_version !== 2) failures.push('Acceptance manifest schema_version must be 2');
 if (!owners.size) failures.push('Acceptance manifest must declare Edge evidence owners');
 if (!manifest.delegated_evidence_owners || !Object.keys(manifest.delegated_evidence_owners).length) {
   failures.push('Acceptance manifest must declare delegated application evidence ownership');
+}
+if (typeof manifest.delegated_evidence_entry_owner !== 'string' || !manifest.delegated_evidence_entry_owner) {
+  failures.push('Acceptance manifest must identify the delegated entry evidence owner');
+}
+if (delegated.size !== delegatedIds.length) failures.push('Delegated acceptance entry IDs must be unique');
+const allEntries = new Map(manifest.entries.map((entry) => [entry.id, entry]));
+for (const id of delegated) {
+  const entry = allEntries.get(id);
+  if (!entry) failures.push(`Delegated acceptance entry does not exist: ${id}`);
+  else if (!owners.has(entry.owner) && !manifest.delegated_evidence_owners[entry.owner]) {
+    failures.push(`${id} has no delegated owner mapping for ${entry.owner}`);
+  }
 }
 for (const entry of entries) {
   if (!entry.id || ids.has(entry.id)) failures.push(`Duplicate or empty acceptance id: ${entry.id || '<empty>'}`);
@@ -30,5 +44,5 @@ if (process.argv.includes('--final')) {
   }
 }
 
-console.log(JSON.stringify({ gate: 'edge-acceptance-ownership', selected_entries: entries.length, failures }, null, 2));
+console.log(JSON.stringify({ gate: 'edge-acceptance-ownership', selected_entries: entries.length, delegated_entries: delegated.size, delegated_owner: manifest.delegated_evidence_entry_owner, failures }, null, 2));
 if (process.argv.includes('--gate') && failures.length) process.exit(1);

@@ -1,9 +1,20 @@
 {
   "schema_version": 2,
-  "manifest_id": "webui-mfg-terminal-acceptance-v2",
+  "manifest_id": "cowd-edge-app-shell-acceptance-v2",
   "allowed_levels": ["static", "unit-mock", "integration-local", "browser-controlled", "browser-real-gateway", "cross-surface", "performance"],
   "edge_evidence_owners": ["webui", "webui-runtime", "webui-graph", "webui-evidence", "gateway-webui", "gateway-surfaces", "security", "performance", "runtime-strategy", "runtime-surfaces"],
-  "delegated_evidence_owners": { "mfg": "cowd-app-mfg/I00" },
+  "delegated_evidence_owners": {
+    "mfg": "cowd-app-mfg/I00",
+    "mfg-backend": "cowd-app-mfg/I00",
+    "mfg-contract": "cowd-app-mfg/I00",
+    "mfg-live": "cowd-app-mfg/I00",
+    "mfg-review": "cowd-app-mfg/I00",
+    "mfg-surfaces": "cowd-app-mfg/I00",
+    "mfg-webui": "cowd-app-mfg/I00",
+    "tui-mfg": "cowd-app-mfg/I00"
+  },
+  "delegated_evidence_entries": ["G-14", "M-01", "M-02", "M-03", "M-04", "M-05", "M-06", "M-07", "M-08", "M-09", "M-10", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "MC-01", "MC-03", "MC-04", "MC-05", "MC-06", "MR-01", "MR-02", "MR-03", "MR-04", "MR-05", "MR-06", "MR-07", "MR-08", "TUI-01", "TUI-02", "TUI-03", "TUI-04", "TUI-05", "TUI-06", "TUI-07", "TUI-08", "MUX-01", "MUX-02", "MUX-03", "MUX-04", "MUX-05", "MUX-06", "MUX-07", "MUX-08", "MLIVE-01", "MLIVE-02", "MLIVE-03", "MLIVE-04", "MLIVE-05", "MLIVE-06", "MLIVE-07", "MLIVE-08", "MLIVE-09", "S-07", "P-03"],
+  "delegated_evidence_entry_owner": "cowd-app-mfg/I00",
   "entries": [
     { "id": "UX-01", "requirement": "360x800 and 390x844: every page section is reachable and no unique action is hidden", "owner": "webui", "min_evidence": "browser-controlled", "evidence": ["visual-audit:full", "playwright:all-sections-mobile"] },
     { "id": "UX-02", "requirement": "768x1024: section navigation, tables, graphs and drawers remain operable", "owner": "webui", "min_evidence": "browser-controlled", "evidence": ["visual-audit:full"] },

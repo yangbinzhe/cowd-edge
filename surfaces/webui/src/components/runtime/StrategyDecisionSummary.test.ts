@@ -18,12 +18,12 @@ const strategyRoutes = [
   { path: '/reality', component: { template: '<div />' } },
 ];
 
-async function mountSummary(surface: 'runtime' | 'mission' | 'mfg') {
+async function mountSummary(surface: 'runtime' | 'mission' | 'app') {
   const router = createRouter({
     history: createWebHistory(),
     routes: strategyRoutes,
   });
-  await router.push(`/${surface === 'mfg' ? 'runtime' : surface}`);
+  await router.push(`/${surface === 'app' ? 'runtime' : surface}`);
   await router.isReady();
   const strategy = {
     ...fixture,
@@ -90,8 +90,8 @@ async function mountSummary(surface: 'runtime' | 'mission' | 'mfg') {
 }
 
 describe('StrategyDecisionSummary surface wiring', () => {
-  it('renders Runtime, Mission and MFG strategy entrypoints from canonical projections', async () => {
-    for (const surface of ['runtime', 'mission', 'mfg'] as const) {
+  it('renders Runtime, Mission and application strategy entrypoints from canonical projections', async () => {
+    for (const surface of ['runtime', 'mission', 'app'] as const) {
       const wrapper = await mountSummary(surface);
       expect(wrapper.attributes('data-surface')).toBe(surface);
       expect(wrapper.text()).toContain('team');

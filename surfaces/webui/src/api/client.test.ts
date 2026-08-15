@@ -590,7 +590,7 @@ describe('API authorization epoch', () => {
       },
     })));
 
-    await expect(writeWithMetadata('/api/apps/mfg/mutation', {
+    await expect(writeWithMetadata('/api/apps/reference-app/mutation', {
       method: 'POST',
       body: JSON.stringify({ action: 'run' }),
     }, {
@@ -635,7 +635,7 @@ describe('API authorization epoch', () => {
       },
     })));
 
-    const response = await writeWithMetadata('/api/apps/mfg/mutation', {
+    const response = await writeWithMetadata('/api/apps/reference-app/mutation', {
       method: 'POST',
     }, {
       requireReceiptIdentity: true,

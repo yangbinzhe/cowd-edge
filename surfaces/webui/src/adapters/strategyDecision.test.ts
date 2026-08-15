@@ -200,13 +200,13 @@ describe('adaptStrategyDecision', () => {
     expect(view?.graph.nodes.find((node) => node.type === 'agent')?.status).toBe('unknown');
   });
 
-  it('uses only explicit MFG Runtime backlinks and never the MFG execution id', () => {
+  it('uses only explicit application Runtime backlinks and never an application-local execution id', () => {
     expect(resolveAppRuntimeExecutionId({
-      execution: { execution_id: 'mfg-execution' },
+      execution: { execution_id: 'app-execution' },
       cross_plane_execution_receipt: { execution_graph_id: 'runtime-graph-1' },
     }, {})).toBe('runtime-graph-1');
     expect(resolveAppRuntimeExecutionId({
-      execution: { execution_id: 'mfg-only' },
+      execution: { execution_id: 'app-only' },
     }, {})).toBe('');
     expect(resolveAppRuntimeExecutionId({
       skill_run: { runtime_execution_ref: 'runtime-execution://skill-graph-1' },

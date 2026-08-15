@@ -14,7 +14,7 @@ const props = withDefaults(defineProps<{
   agents?: ExecutionProjectionEntity[];
   executionId?: string;
   connectionState?: string;
-  surface?: 'runtime' | 'mission' | 'mfg';
+  surface?: 'runtime' | 'mission' | 'app';
 }>(), {
   executionId: '',
   agents: () => [],

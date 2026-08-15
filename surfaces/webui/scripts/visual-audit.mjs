@@ -12,6 +12,10 @@ const version = provenance.version;
 const full = process.argv.includes('--full');
 const baseUrl = process.env.COWD_VISUAL_BASE_URL || 'http://127.0.0.1:5195';
 const gatewayToken = process.env.COWD_VISUAL_GATEWAY_TOKEN || process.env.COWD_E2E_GATEWAY_TOKEN || '';
+const useReferenceFixture = process.env.COWD_VISUAL_REFERENCE_FIXTURE === '1';
+const referenceCatalog = useReferenceFixture
+  ? JSON.parse(fs.readFileSync(path.join(webuiRoot, 'src/apps/fixtures/catalog-single.json'), 'utf8'))
+  : null;
 const routeFilter = new Set(
   String(process.env.COWD_VISUAL_ROUTE_IDS || '')
     .split(',')
@@ -29,6 +33,15 @@ const pageOptions = (viewport) => ({
 const screenshotDir = path.join(planRoot, 'artifacts', version, 'visual-audit');
 const reportPath = path.join(planRoot, 'reports', version, `${version}-visual-audit.md`);
 
+async function installReferenceFixture(page) {
+  if (!referenceCatalog) return;
+  await page.route('**/api/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  await page.route('**/api/apps', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(referenceCatalog) }));
+  await page.route('**/api/auth/verify', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ valid: true, auth_required: true }) }));
+  await page.route('**/api/approval/pending**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ approvals: [] }) }));
+  await page.route('**/apps/reference-app/index.html', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><main>reference ready</main>' }));
+}
+
 const baseRoutes = [
   { id: 'chat', path: '/#/chat' },
   { id: 'runtime', path: '/#/runtime' },
@@ -41,7 +54,7 @@ const baseRoutes = [
   { id: 'tools', path: '/#/tools' },
   { id: 'surfaces', path: '/#/surfaces' },
   { id: 'gateway', path: '/#/gateway' },
-  { id: 'mfg', path: '/#/apps/mfg' },
+  { id: 'reference-app', path: '/#/apps/reference-app', pageId: 'reference-app' },
   { id: 'audit', path: '/#/audit' },
   { id: 'settings', path: '/#/settings' },
 ];
@@ -194,6 +207,7 @@ let completedChecks = 0;
 try {
   if (full) {
     const discoveryPage = await browser.newPage(pageOptions({ width: 1440, height: 960 }));
+    await installReferenceFixture(discoveryPage);
     const discovered = [];
     for (const route of baseRoutes) {
       try {
@@ -237,6 +251,7 @@ try {
   }
   for (const viewport of viewports) {
     const page = await browser.newPage(pageOptions(viewport));
+    await installReferenceFixture(page);
     page.setDefaultTimeout(15_000);
     for (const route of routes) {
       const url = routeUrl(route);
@@ -260,7 +275,7 @@ try {
             return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
           });
         }, { pageId: route.pageId || route.id, section: route.section || '' });
-        await page.waitForFunction(() => !document.querySelector('.page-header .primary-action:disabled, [data-mfg-workspace-refresh]:disabled'), undefined, { timeout: 3_000 }).catch(() => {});
+        await page.waitForFunction(() => !document.querySelector('.page-header .primary-action:disabled'), undefined, { timeout: 3_000 }).catch(() => {});
         await page.waitForTimeout(120);
         await page.evaluate(() => {
           window.scrollTo(0, 0);
@@ -281,7 +296,7 @@ try {
               '[data-section].management-panel',
               '[data-section].mission-panel',
               '[data-section].settings-section',
-              '[data-section].mfg-page__workspace',
+              '.app-page',
               '[data-section].skills-catalog',
               '.capability-page [data-section]',
               '.settings-content',
@@ -291,7 +306,7 @@ try {
             ].map(visibleTarget).find(Boolean);
             const probe = document.createElement('p');
             probe.className = 'visual-audit-long-content';
-            probe.textContent = '超长制造运营上下文 Long manufacturing operational context '.repeat(35);
+            probe.textContent = '超长应用上下文 Long application context '.repeat(35);
             probe.style.overflowWrap = 'anywhere';
             probe.style.maxWidth = '100%';
             target?.appendChild(probe);
@@ -452,14 +467,8 @@ try {
             '.settings-workbench',
             '.skills-console',
             '.surface-grid',
-            '.mfg-workbench',
-            '.mfg-lanes',
-            '.mfg-layout',
-            '.mfg-page',
-            '.mfg-cockpit',
-            '.mfg-focus',
-            '.mfg-collaboration',
-            '.mfg-domain',
+            '.app-page',
+            '.app-page__surface',
             '.audit-grid',
             '.transcript',
           ].some((selector) => {

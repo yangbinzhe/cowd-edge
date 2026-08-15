@@ -39,7 +39,7 @@ export function evidenceContext(scriptId, { final = process.argv.includes('--fin
   const backendDirty = Boolean(git(backendRoot, 'status', '--porcelain'));
   const planRoot = final
     ? path.resolve(requiredEnv('COWD_PLAN_ROOT'))
-    : path.resolve(process.env.COWD_PLAN_ROOT || path.join(workspaceRoot, 'plan/0716-WebUI全景与MFG终态补救计划'));
+    : path.resolve(process.env.COWD_PLAN_ROOT || path.join(workspaceRoot, 'plan/0815-Cowd-APP统一Supervisor终态解耦'));
   const version = final ? requiredEnv('COWD_VERSION').replace(/^v/, '') : (process.env.COWD_VERSION || detectedVersion).replace(/^v/, '');
   const frontendCommit = final ? requiredEnv('COWD_FRONTEND_COMMIT') : (process.env.COWD_FRONTEND_COMMIT || detectedFrontendCommit);
   const backendCommit = final ? requiredEnv('COWD_BACKEND_COMMIT') : (process.env.COWD_BACKEND_COMMIT || detectedBackendCommit);
