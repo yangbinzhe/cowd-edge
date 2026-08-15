@@ -62,12 +62,20 @@ for (const manifestPath of manifests) {
     findings.push(`${label}: version ${manifest.version || '<missing>'} != ${expectedVersion}`);
   }
 }
+if (manifests.length !== 10) {
+  findings.push(`surface manifest count ${manifests.length} != 10`);
+}
 
-const readme = fs.existsSync(path.join(edgeRoot, 'README.md'))
-  ? fs.readFileSync(path.join(edgeRoot, 'README.md'), 'utf8')
-  : '';
-if (expectedVersion && readme && !readme.includes(`当前版本：\`${expectedVersion}\``)) {
-  findings.push(`README.md: current version line does not mention ${expectedVersion}`);
+const releaseMirrors = [
+  ['docs/manual/index.html', `Edge</strong> ${expectedVersion}`],
+  ['docs/manual/assets/project.js', `version: 'v${expectedVersion}'`],
+  ['docs/manual/operations.html', `--version ${expectedVersion}`],
+];
+for (const [relativePath, expectedText] of releaseMirrors) {
+  const contents = fs.readFileSync(path.join(edgeRoot, relativePath), 'utf8');
+  if (expectedVersion && !contents.includes(expectedText)) {
+    findings.push(`${relativePath}: release mirror does not mention ${expectedVersion}`);
+  }
 }
 
 const report = {
