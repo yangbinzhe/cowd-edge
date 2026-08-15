@@ -31,7 +31,7 @@ let bridge: IframeBridgeHost | null = null;
 function createBridge() {
   bridge?.dispose();
   bridge = new IframeBridgeHost({
-    appId: props.entry.app_id,
+    entry: props.entry,
     frameNonce,
     protocolDigest: props.protocolDigest,
     catalogGeneration: props.catalogGeneration,

@@ -9,8 +9,7 @@ import { claimWebuiObserverId } from './api/client';
 import { applyDocumentLocale } from './i18n';
 import './styles/tokens.css';
 import './styles/base.css';
-
-const APP_PROTOCOL_DIGEST = 'sha256:54030ea4f653de5c1e4ebb4fd5cd236df8e5ea51136dd74f3dcd648beb8ca87d';
+import { APP_PROTOCOL_DIGEST } from './generated/app-protocol-meta';
 
 async function configureGatewayApps() {
   try {

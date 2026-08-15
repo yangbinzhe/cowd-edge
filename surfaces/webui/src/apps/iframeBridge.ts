@@ -14,7 +14,11 @@ export interface AppErrorDetailV1 {
 }
 
 export interface IframeBridgeHostOptions {
-  appId: string;
+  entry: {
+    app_id: string;
+    generation: string;
+    artifact_version: string;
+  };
   frameNonce: string;
   protocolDigest: string;
   catalogGeneration: string;
@@ -37,6 +41,13 @@ interface ActiveRequest {
   controller: AbortController;
   credit: number;
   waiters: Array<() => void>;
+}
+
+export interface SanitizedAppDetailV1 {
+  schema_version: 1;
+  entry: unknown;
+  manifest: unknown;
+  operations: unknown[];
 }
 
 const inboundKeys: Record<string, readonly string[]> = {
@@ -75,14 +86,31 @@ function safeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
-function safeAppRoute(appId: string, path: string) {
-  const prefix = `/api/apps/${encodeURIComponent(appId)}`;
-  if (!(path === prefix || path.startsWith(`${prefix}/`)) || path.includes('\\') || /[\u0000-\u001f]/.test(path)) {
+function canonicalSegment(segment: string) {
+  if (!segment || segment === '.' || segment === '..') return false;
+  try {
+    return encodeURIComponent(decodeURIComponent(segment)) === segment;
+  } catch {
     return false;
   }
-  const resolved = new URL(path, 'http://cowd.invalid');
-  return resolved.origin === 'http://cowd.invalid'
-    && (resolved.pathname === prefix || resolved.pathname.startsWith(`${prefix}/`));
+}
+
+function safeAppRoute(appId: string, method: string, path: string): string | null {
+  if (!path.startsWith('/') || path.startsWith('//') || path.includes('\\')
+    || /[\u0000-\u001f]/.test(path) || path.includes('?') || path.includes('#')) return null;
+  const segments = path.slice(1).split('/');
+  if (!segments.every(canonicalSegment)) return null;
+  const matches = (
+    (method === 'POST' && segments.length === 3 && segments[0] === 'operations'
+      && ['invoke', 'stream'].includes(segments[2]))
+    || (method === 'GET' && segments.length === 2 && segments[0] === 'receipts')
+    || (method === 'DELETE' && segments.length === 2 && segments[0] === 'subscriptions')
+    || (method === 'POST' && segments.length === 3 && segments[0] === 'subscriptions'
+      && segments[2] === 'ack')
+    || (method === 'POST' && segments.length === 4 && segments[0] === 'tui'
+      && segments[1] === 'views' && ['actions', 'open', 'stream'].includes(segments[3]))
+  );
+  return matches ? `/api/apps/${encodeURIComponent(appId)}${path}` : null;
 }
 
 function safeNavigationRoute(route: string) {
@@ -117,6 +145,11 @@ export class IframeBridgeHost {
   private replayOrder: string[] = [];
   private replaySet = new Set<string>();
   private requests = new Map<string, ActiveRequest>();
+  private requestReplayOrder: string[] = [];
+  private requestReplaySet = new Set<string>();
+  private detailPromise: Promise<SanitizedAppDetailV1> | null = null;
+  private detailController: AbortController | null = null;
+  private authorizationValid = true;
 
   constructor(private readonly options: IframeBridgeHostOptions) {
     this.fetchImpl = options.fetchImpl || fetch;
@@ -145,6 +178,12 @@ export class IframeBridgeHost {
     }
     this.replayOrder = [];
     this.replaySet.clear();
+    this.requestReplayOrder = [];
+    this.requestReplaySet.clear();
+    this.detailController?.abort();
+    this.detailController = null;
+    this.detailPromise = null;
+    this.authorizationValid = true;
     this.frameWindow = frameWindow;
     const channel = this.channelFactory();
     this.port = channel.port1;
@@ -170,6 +209,8 @@ export class IframeBridgeHost {
       request.waiters.splice(0).forEach((resolve) => resolve());
     }
     this.requests.clear();
+    this.detailController?.abort();
+    this.detailController = null;
     if (this.port) {
       this.port.onmessage = null;
       this.port.close();
@@ -184,7 +225,7 @@ export class IframeBridgeHost {
     return {
       kind,
       schema_version: IFRAME_BRIDGE_SCHEMA_VERSION,
-      app_id: this.options.appId,
+      app_id: this.options.entry.app_id,
       frame_nonce: this.options.frameNonce,
       message_id: `host-${++this.nextMessage}`,
       ...extra,
@@ -201,7 +242,7 @@ export class IframeBridgeHost {
     if (!message || !nonEmptyString(message.kind) || !inboundKeys[message.kind]
       || !exactShape(message, inboundKeys[message.kind])
       || message.schema_version !== IFRAME_BRIDGE_SCHEMA_VERSION
-      || message.app_id !== this.options.appId || message.frame_nonce !== this.options.frameNonce
+      || message.app_id !== this.options.entry.app_id || message.frame_nonce !== this.options.frameNonce
       || !nonEmptyString(message.message_id) || this.remembered(message.message_id)) return;
     this.remember(message.message_id);
     if (message.kind === 'app_ready') this.options.onReady?.();
@@ -249,20 +290,21 @@ export class IframeBridgeHost {
 
   private async startRequest(message: Record<string, unknown>) {
     const requestId = message.request_id as string;
-    if (this.requests.has(requestId)) return this.postError(requestId, 'INVALID_REQUEST', 'Duplicate request identifier.');
+    if (!this.authorizationValid) return this.postError(requestId, 'UNAUTHENTICATED', 'The APP host authorization is no longer valid.');
+    if (this.requestReplaySet.has(requestId)) return this.postError(requestId, 'INVALID_REQUEST', 'Duplicate or replayed request identifier.');
+    this.rememberRequest(requestId);
     if (this.requests.size >= 16) return this.postError(requestId, 'APP_ACTIVATION_OVERLOADED', 'Too many active APP requests.', true);
     const requestHeaders = plainRecord(message.headers);
-    if (!nonEmptyString(message.method) || !nonEmptyString(message.path) || !safeAppRoute(this.options.appId, message.path)
+    if (!nonEmptyString(message.method) || !nonEmptyString(message.path)
       || !safeInteger(message.deadline_unix_ms) || !requestHeaders) {
       return this.postError(requestId, 'INVALID_REQUEST', 'The APP API request is invalid.');
     }
     const method = message.method.toUpperCase();
-    if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(method)) {
-      return this.postError(requestId, 'INVALID_REQUEST', 'The HTTP method is not allowed.');
-    }
+    const requestPath = safeAppRoute(this.options.entry.app_id, method, message.path);
+    if (!requestPath) return this.postError(requestId, 'INVALID_REQUEST', 'Only this APP’s generic operation routes are allowed.');
     const headers = new Headers();
     for (const [key, value] of Object.entries(requestHeaders)) {
-      if (typeof value !== 'string' || ['authorization', 'cookie'].includes(key.toLowerCase()) || key.toLowerCase().startsWith('x-cowd-')) {
+      if (typeof value !== 'string' || !['accept', 'content-type', 'if-none-match'].includes(key.toLowerCase())) {
         return this.postError(requestId, 'INVALID_REQUEST', 'A request header is not allowed.');
       }
       headers.set(key, value);
@@ -275,14 +317,21 @@ export class IframeBridgeHost {
     if (remaining <= 0) controller.abort();
     const timer = setTimeout(() => controller.abort(), Math.min(2_147_483_647, Math.max(0, remaining)));
     try {
+      const detail = await this.appDetail();
+      if (controller.signal.aborted) throw new DOMException('aborted', 'AbortError');
+      this.post({ kind: 'host_app_detail', schema_version: 1, request_id: requestId, detail });
       const hasBody = !['GET', 'HEAD'].includes(method) && message.body !== null;
       const body = hasBody
         ? (typeof message.body === 'string' ? message.body : JSON.stringify(message.body))
         : undefined;
       if (hasBody && typeof message.body !== 'string' && !headers.has('content-type')) headers.set('content-type', 'application/json');
-      const response = await this.fetchImpl(message.path, {
+      const response = await this.fetchImpl(requestPath, {
         method, headers, body, credentials: 'same-origin', signal: controller.signal,
       });
+      if (response.status === 401 || response.status === 403) {
+        this.invalidateAuthorization(response.status === 401 ? 'UNAUTHENTICATED' : 'OPERATION_NOT_GRANTED');
+        return;
+      }
       this.post({ kind: 'host_api_headers', schema_version: 1, request_id: requestId,
         status: response.status, headers: responseHeaders(response.headers) });
       if (response.body) {
@@ -315,13 +364,87 @@ export class IframeBridgeHost {
         this.post({ kind: 'host_api_end', schema_version: 1, request_id: requestId, sequence: 0 });
       }
     } catch (error) {
-      if (!this.disposed) this.postError(requestId, controller.signal.aborted ? 'DEADLINE_EXCEEDED' : 'DEPENDENCY_UNAVAILABLE',
+      if (!this.disposed && this.authorizationValid) this.postError(requestId, controller.signal.aborted ? 'DEADLINE_EXCEEDED' : 'DEPENDENCY_UNAVAILABLE',
         controller.signal.aborted ? 'The APP API request was cancelled or exceeded its deadline.' : 'The APP API request failed.', true);
     } finally {
       clearTimeout(timer);
       this.requests.delete(requestId);
       active.waiters.splice(0).forEach((resolve) => resolve());
     }
+  }
+
+  private rememberRequest(id: string) {
+    this.requestReplaySet.add(id);
+    this.requestReplayOrder.push(id);
+    if (this.requestReplayOrder.length > 2048) this.requestReplaySet.delete(this.requestReplayOrder.shift()!);
+  }
+
+  private appDetail() {
+    if (!this.detailPromise) {
+      this.detailController = new AbortController();
+      this.detailPromise = this.loadAppDetail().catch((error) => {
+        if (this.authorizationValid) this.detailPromise = null;
+        throw error;
+      });
+    }
+    return this.detailPromise;
+  }
+
+  private async loadAppDetail(): Promise<SanitizedAppDetailV1> {
+    const response = await this.fetchImpl(`/api/apps/${encodeURIComponent(this.options.entry.app_id)}`, {
+      method: 'GET', credentials: 'same-origin', headers: { 'x-cowd-surface-id': 'webui' },
+      signal: this.detailController?.signal,
+    });
+    if (response.status === 401 || response.status === 403) {
+      this.invalidateAuthorization(response.status === 401 ? 'UNAUTHENTICATED' : 'OPERATION_NOT_GRANTED');
+      throw new Error('APP host authorization invalidated');
+    }
+    if (!response.ok) throw new Error(`APP detail failed with ${response.status}`);
+    return this.sanitizeDetail(await response.json());
+  }
+
+  private sanitizeDetail(value: unknown): SanitizedAppDetailV1 {
+    const input = plainRecord(value);
+    const entry = plainRecord(input?.entry);
+    const manifest = plainRecord(input?.manifest);
+    if (!input || !exactShape(input, ['schema_version', 'entry', 'manifest', 'operations'])
+      || input.schema_version !== 1 || !entry || !manifest || !Array.isArray(input.operations)
+      || entry.app_id !== this.options.entry.app_id || entry.generation !== this.options.entry.generation
+      || entry.artifact_version !== this.options.entry.artifact_version
+      || manifest.app_id !== this.options.entry.app_id
+      || manifest.artifact_version !== this.options.entry.artifact_version) {
+      throw new Error('Gateway returned an invalid APP detail identity');
+    }
+    const operations = input.operations.map((operation) => {
+      const descriptor = plainRecord(operation);
+      if (!descriptor || !nonEmptyString(descriptor.operation_id)) throw new Error('Gateway returned an invalid APP operation');
+      return this.jsonClone(descriptor);
+    });
+    if (new Set(operations.map((operation) => (operation as Record<string, unknown>).operation_id)).size !== operations.length) {
+      throw new Error('Gateway returned duplicate APP operations');
+    }
+    return Object.freeze({ schema_version: 1, entry: this.jsonClone(entry), manifest: this.jsonClone(manifest), operations });
+  }
+
+  private jsonClone(value: unknown): unknown {
+    const serialized = JSON.stringify(value, (key, item) => {
+      if (['__proto__', 'prototype', 'constructor'].includes(key)) throw new Error('Unsafe APP detail key');
+      return item;
+    });
+    if (serialized.length > 1024 * 1024) throw new Error('APP detail exceeds 1 MiB');
+    return JSON.parse(serialized);
+  }
+
+  private invalidateAuthorization(code: 'UNAUTHENTICATED' | 'OPERATION_NOT_GRANTED') {
+    if (!this.authorizationValid) return;
+    this.authorizationValid = false;
+    this.detailController?.abort();
+    for (const [requestId, request] of this.requests) {
+      this.postError(requestId, code, 'The APP host authorization was invalidated.');
+      request.controller.abort();
+      request.waiters.splice(0).forEach((resolve) => resolve());
+    }
+    this.sendError({ code, message: 'The APP host authorization was invalidated.', retryable: false });
   }
 
   private async waitForCredit(active: ActiveRequest) {

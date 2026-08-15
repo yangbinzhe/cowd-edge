@@ -11,7 +11,7 @@ class FakePort {
   receive(data: unknown) { this.onmessage?.({ data } as MessageEvent); }
 }
 
-function harness(fetchImpl?: typeof fetch) {
+function harness(fetchImpl?: typeof fetch, detailImpl?: typeof fetch) {
   let listener: ((event: MessageEvent) => void) | null = null;
   const eventTarget = {
     addEventListener: vi.fn((_type: string, callback: EventListener) => { listener = callback as (event: MessageEvent) => void; }),
@@ -26,14 +26,27 @@ function harness(fetchImpl?: typeof fetch) {
   const navigate = vi.fn();
   const resize = vi.fn();
   const coreNavigation = vi.fn();
+  const detail = {
+    schema_version: 1,
+    entry: { app_id: 'reference-app', generation: 'generation-1', artifact_version: '1.0.0' },
+    manifest: { app_id: 'reference-app', artifact_version: '1.0.0' },
+    operations: [{ operation_id: 'reference-app.echo' }],
+  };
+  const apiFetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === '/api/apps/reference-app' && init?.method === 'GET') {
+      if (detailImpl) return detailImpl(input, init);
+      return Promise.resolve(Response.json(detail));
+    }
+    return fetchImpl ? fetchImpl(input, init) : Promise.resolve(new Response(null, { status: 204 }));
+  }) as typeof fetch;
   const bridge = new IframeBridgeHost({
-    appId: 'reference-app', frameNonce: 'nonce-1', protocolDigest: 'sha256:test',
-    catalogGeneration: 'catalog-1', eventTarget: eventTarget as never, fetchImpl,
+    entry: { app_id: 'reference-app', generation: 'generation-1', artifact_version: '1.0.0' }, frameNonce: 'nonce-1', protocolDigest: 'sha256:test',
+    catalogGeneration: 'catalog-1', eventTarget: eventTarget as never, fetchImpl: apiFetch,
     channelFactory: () => ({ port1: hostPort, port2: appPort }) as unknown as MessageChannel,
     now: () => 1_000, onReady: ready, onNavigate: navigate, onResize: resize, onCoreNavigation: coreNavigation,
   });
   bridge.connect(frameWindow);
-  return { bridge, eventTarget, frameWindow, hostPort, appPort, ready, navigate, resize, coreNavigation,
+  return { bridge, eventTarget, frameWindow, hostPort, appPort, ready, navigate, resize, coreNavigation, apiFetch,
     dispatch: (event: Partial<MessageEvent>) => listener?.(event as MessageEvent) };
 }
 
@@ -48,6 +61,7 @@ async function flush() {
 describe('iframe bridge v1', () => {
   it('transfers a dedicated port and accepts only opaque exact-source, exact-identity, unreplayed messages', () => {
     const h = harness();
+    expect(h.apiFetch).not.toHaveBeenCalled();
     expect(h.frameWindow.postMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: 'host_init' }), '*', [h.appPort]);
     const ready = windowMessage('app_ready', 'm-1');
     h.dispatch({ source: {} as Window, origin: 'null', data: ready });
@@ -77,9 +91,11 @@ describe('iframe bridge v1', () => {
     const fetchImpl = vi.fn(async () => new Response(new Uint8Array([1, 2, 3, 4, 5]), { status: 200,
       headers: { 'content-type': 'application/octet-stream' } }));
     const h = harness(fetchImpl);
-    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'q-1', method: 'GET',
-      path: '/api/apps/reference-app/items', deadline_unix_ms: 10_000, headers: {}, body: null });
+    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'q-1', method: 'POST',
+      path: '/operations/reference-app.echo/stream', deadline_unix_ms: 10_000, headers: {}, body: null });
     await flush();
+    expect(h.hostPort.sent).toContainEqual(expect.objectContaining({ kind: 'host_app_detail', request_id: 'q-1',
+      detail: expect.objectContaining({ schema_version: 1, operations: [{ operation_id: 'reference-app.echo' }] }) }));
     expect(h.hostPort.sent).toContainEqual(expect.objectContaining({ kind: 'host_api_headers', request_id: 'q-1' }));
     expect(h.hostPort.sent).not.toContainEqual(expect.objectContaining({ kind: 'host_api_data' }));
     h.hostPort.receive({ kind: 'app_api_credit', schema_version: 1, request_id: 'q-1', bytes: 2 });
@@ -102,8 +118,8 @@ describe('iframe bridge v1', () => {
     h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'bad', method: 'GET',
       path: '/api/apps/foreign-app/items', deadline_unix_ms: 10_000, headers: {}, body: null });
     expect(h.hostPort.sent).toContainEqual(expect.objectContaining({ kind: 'host_api_error', request_id: 'bad' }));
-    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'active', method: 'GET',
-      path: '/api/apps/reference-app/items', deadline_unix_ms: 10_000, headers: {}, body: null });
+    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'active', method: 'POST',
+      path: '/operations/reference-app.echo/invoke', deadline_unix_ms: 10_000, headers: {}, body: null });
     await flush();
     h.hostPort.receive({ kind: 'app_api_cancel', schema_version: 1, request_id: 'active' });
     await flush();
@@ -112,5 +128,51 @@ describe('iframe bridge v1', () => {
     h.bridge.dispose();
     expect(h.hostPort.closed).toBe(true);
     expect(h.eventTarget.removeEventListener).toHaveBeenCalledOnce();
+  });
+
+  it('loads sanitized detail once for concurrent first requests and binds paths to the current APP', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => new Response(String(input), { status: 200 }));
+    const h = harness(fetchImpl);
+    for (const requestId of ['one', 'two']) {
+      h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: requestId, method: 'POST',
+        path: '/operations/reference-app.echo/invoke', deadline_unix_ms: 10_000, headers: {}, body: {} });
+      h.hostPort.receive({ kind: 'app_api_credit', schema_version: 1, request_id: requestId, bytes: 1024 });
+    }
+    await flush();
+    await flush();
+    expect(h.apiFetch.mock.calls.filter(([input]) => String(input) === '/api/apps/reference-app')).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/apps/reference-app/operations/reference-app.echo/invoke',
+      expect.objectContaining({ credentials: 'same-origin' }));
+    expect(h.hostPort.sent.filter((message: any) => message.kind === 'host_app_detail')).toHaveLength(2);
+  });
+
+  it('invalidates every active request on a host authorization failure', async () => {
+    const fetchImpl = vi.fn(async () => new Response(null, { status: 403 }));
+    const h = harness(fetchImpl);
+    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'denied', method: 'POST',
+      path: '/operations/reference-app.echo/invoke', deadline_unix_ms: 10_000, headers: {}, body: {} });
+    await flush();
+    expect(h.hostPort.sent).toContainEqual(expect.objectContaining({ kind: 'host_api_error', request_id: 'denied',
+      error: expect.objectContaining({ code: 'OPERATION_NOT_GRANTED' }) }));
+    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'after', method: 'POST',
+      path: '/operations/reference-app.echo/invoke', deadline_unix_ms: 10_000, headers: {}, body: {} });
+    expect(h.hostPort.sent).toContainEqual(expect.objectContaining({ kind: 'host_api_error', request_id: 'after',
+      error: expect.objectContaining({ code: 'UNAUTHENTICATED' }) }));
+  });
+
+  it('aborts the shared lazy detail activation on unmount', async () => {
+    let detailSignal: AbortSignal | undefined;
+    const detailImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      detailSignal = init?.signal || undefined;
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch;
+    const h = harness(undefined, detailImpl);
+    h.hostPort.receive({ kind: 'app_api_request', schema_version: 1, request_id: 'pending', method: 'POST',
+      path: '/operations/reference-app.echo/invoke', deadline_unix_ms: 10_000, headers: {}, body: {} });
+    await flush();
+    expect(detailSignal?.aborted).toBe(false);
+    h.bridge.dispose();
+    expect(detailSignal?.aborted).toBe(true);
   });
 });

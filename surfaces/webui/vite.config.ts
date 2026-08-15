@@ -63,6 +63,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': gatewayProxyTarget,
+      '/apps': gatewayProxyTarget,
       '/healthz': gatewayProxyTarget,
       '/readyz': gatewayProxyTarget,
     },
@@ -71,6 +72,7 @@ export default defineConfig({
     host: '127.0.0.1',
     proxy: {
       '/api': gatewayProxyTarget,
+      '/apps': gatewayProxyTarget,
       '/healthz': gatewayProxyTarget,
       '/readyz': gatewayProxyTarget,
     },

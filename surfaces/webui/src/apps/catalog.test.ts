@@ -7,7 +7,7 @@ import malformedFixture from './fixtures/catalog-malformed.json';
 import { appCatalogEntry, AppCatalogValidationError, parseAppCatalog, projectAppState } from './catalog';
 import { fetchAppCatalog } from '../services/appCatalogClient';
 
-const digest = 'sha256:54030ea4f653de5c1e4ebb4fd5cd236df8e5ea51136dd74f3dcd648beb8ca87d';
+const digest = 'sha256:072d80864a8addaecfc4f236d077f9a5f6eaeec2e587518da515b2b7e9768769';
 
 describe('APP Catalog v1', () => {
   it('accepts empty, single and many catalogs and makes ordering deterministic', () => {
