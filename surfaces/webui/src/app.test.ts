@@ -4177,14 +4177,14 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('结构化数据核心');
     expect(wrapper.text()).toContain('记忆选中证据');
     expect(wrapper.text()).toContain('3 条待处理 / 2 条失败');
-    expect(fetchMock).not.toHaveBeenCalledWith('/api/memory/recall/explain?q=manufacturing%20quality%20anomaly&limit=12', expect.any(Object));
-    await wrapper.get('.search-field input').setValue('manufacturing quality anomaly');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/memory/recall/explain?q=service%20quality%20anomaly&limit=12', expect.any(Object));
+    await wrapper.get('.search-field input').setValue('service quality anomaly');
     await wrapper.get('.search-field input').trigger('keyup.enter');
     await settleAsync();
     await wrapper.findAll('tbody tr').find((row) => row.text().includes('Line A fact'))?.trigger('click');
     await settleAsync();
     expect(wrapper.text()).toContain('证据下钻载荷');
-    expect(fetchMock).toHaveBeenCalledWith('/api/memory/recall/explain?q=manufacturing%20quality%20anomaly&limit=12', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/memory/recall/explain?q=service%20quality%20anomaly&limit=12', expect.any(Object));
     expect(fetchMock).not.toHaveBeenCalledWith('/api/cowd/structured/sources', expect.any(Object));
     await wrapper.get('[data-section-id="structured-core"]').trigger('click');
     await settleAsync();
