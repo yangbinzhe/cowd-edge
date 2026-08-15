@@ -2,6 +2,8 @@
 
 > Cowd 的浏览器控制面、消息渠道与外部数据接入层
 
+当前版本：`0.9.688`
+
 Cowd Edge 把人、平台与数据接入 Cowd Gateway，同时把前端技术栈、平台 SDK、长连接、邮件协议和数据库驱动隔离在 Core Runtime 之外。它不是另一套 AI Runtime：Gateway 是唯一 EdgeHost，Core 仍然拥有 Session、Task、Mission、模型循环、Memory、Matrix、权限、审计与恢复。
 
 当前仓库包含一个 WebUI Surface、九个逻辑 Connector 和六个可发布 Sidecar artifact。每个逻辑 Connector 都有独立 ID、Manifest、配置、健康、状态与修复策略；同类 Connector 复用发布 artifact，避免复制运行实现。

@@ -177,7 +177,11 @@ async function decide(approved: boolean, skip = false) {
     if (resolved?.approval_id) resolvedApproval.value = resolved;
     await refresh();
     window.dispatchEvent(new CustomEvent('cowd:approval-changed', { detail: { approval_id: approvalId } }));
-    if (!approvals.value.length && !resolvedApproval.value) modalOpen.value = false;
+    // A successful decision is the terminal action for this modal. Keep the
+    // resolved receipt in the canonical approval/activity projections, but do
+    // not force the user to manually dismiss a stale blocking dialog. Any
+    // remaining approvals stay discoverable through the global inbox badge.
+    modalOpen.value = false;
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
   } finally {

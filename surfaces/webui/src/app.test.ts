@@ -869,10 +869,8 @@ describe('Cowd Vue WebUI shell', () => {
 
     expect(respond).toHaveBeenCalledWith('approval-chat-1', true, 'once', 'approved from WebUI', false);
     expect(exact).toHaveBeenCalledWith('approval-chat-1');
-    expect(wrapper.get('.chat-approval-modal').text()).toContain('审批已进入终态：approved');
-    expect(wrapper.get('.chat-approval-modal').text()).toContain('human:operator');
-    expect(wrapper.get('.chat-approval-modal').text()).toContain('approved from WebUI');
-    expect(wrapper.get('.chat-approval-modal').text()).not.toContain('批准并继续');
+    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
+    expect(wrapper.find('.global-approval-button').exists()).toBe(false);
     wrapper.unmount();
     pending.mockRestore();
     respond.mockRestore();
