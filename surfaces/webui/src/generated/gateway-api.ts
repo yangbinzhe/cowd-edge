@@ -289,7 +289,7 @@ export interface paths {
          *
          *     Risk: admin. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_approval_post_api_approval_respond"];
+        post: operations["approval_respond_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -331,7 +331,7 @@ export interface paths {
          *
          *     Risk: read. Side effects: none.
          */
-        get: operations["gateway_approval_get_api_approval_by_id"];
+        get: operations["approval_exact_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9912,6 +9912,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Typed acceptance summary for one activity. */
+        AcceptanceSummaryProjection: {
+            framework_invalid: boolean;
+            /** Format: uint32 */
+            satisfied: number;
+            /** Format: uint32 */
+            unresolved: number;
+            /** Format: uint32 */
+            unsatisfied: number;
+        };
         /**
          * @description Typed acceptance verdict. Runtime derives it from committed effects and
          *     evidence; a verdict never mutates the facts that produced it.
@@ -10272,6 +10282,16 @@ export interface components {
             require_committed_effect: boolean;
             required_fact_kinds: components["schemas"]["TerminalFactKind"][];
         };
+        /** @description Typed committed-effect summary for one activity. */
+        EffectSummaryProjection: {
+            /** Format: uint32 */
+            applied: number;
+            /** Format: uint32 */
+            not_applied: number;
+            paths?: string[];
+            /** Format: uint32 */
+            uncertain: number;
+        };
         Empty: Record<string, never>;
         EvidenceAccessRef: {
             /** Format: uint64 */
@@ -10383,12 +10403,16 @@ export interface components {
         };
         ExecutionActivityKind: ("execution" | "goal" | "team" | "agent" | "skill" | "model" | "tool_batch" | "tool" | "approval" | "verify" | "artifact" | "outcome" | "replan" | "recovery" | "runtime") | "reasoning";
         ExecutionActivityProjection: {
+            /** @description Typed acceptance summary. */
+            acceptance_summary?: components["schemas"]["AcceptanceSummaryProjection"] | null;
             activity_id: string;
             agent_instance_id?: string | null;
             agent_run_id?: string | null;
             approval_id?: string | null;
             /** @default [] */
             artifact_refs: string[];
+            /** @description Exact predecessor activity ids that block this activity. */
+            blocked_by_activity_ids?: string[];
             /** @default [] */
             causal_parent_ids: string[];
             /** Format: uint64 */
@@ -10408,6 +10432,13 @@ export interface components {
             display_label?: string | null;
             /** Format: uint64 */
             duration_ms?: number | null;
+            /** @description Typed effect summary: applied/not_applied/uncertain + bounded paths. */
+            effect_summary?: components["schemas"]["EffectSummaryProjection"] | null;
+            /**
+             * @description Whether durable evidence is ready for review, when Runtime can state
+             *     it without guessing.
+             */
+            evidence_ready?: boolean | null;
             /** @default [] */
             evidence_refs: string[];
             initiator_activity_id?: string | null;
@@ -10448,6 +10479,11 @@ export interface components {
              *     status. Surfaces must not derive this from raw evidence.
              */
             status_reason?: string | null;
+            /**
+             * @description Typed status reason. `None` means Runtime has no typed reason (e.g.
+             *     ordinary running/completed states).
+             */
+            status_reason_kind?: components["schemas"]["ExecutionStatusReasonKind"] | null;
             team_run_id?: string | null;
             tool_call_id?: string | null;
             tool_contract_id?: string | null;
@@ -10959,6 +10995,13 @@ export interface components {
          * @enum {string}
          */
         ExecutionServiceClass: "interactive" | "foreground" | "background" | "maintenance";
+        /**
+         * @description Typed reason for a waiting, blocked, failed or cancelled activity. Free
+         *     text (`status_reason`) remains human-facing only; decision logic and
+         *     surfaces must consume this kind.
+         * @enum {string}
+         */
+        ExecutionStatusReasonKind: "waiting_predecessor" | "predecessor_failed" | "evidence_not_ready" | "acceptance_unsatisfied" | "acceptance_framework_invalid" | "authorization" | "provider_protocol" | "resource" | "deadline" | "cancelled";
         ExecutionUsage: {
             /** Format: uint64 */
             cached_tokens: number;
@@ -13439,7 +13482,7 @@ export interface operations {
             };
         };
     };
-    gateway_approval_post_api_approval_respond: {
+    approval_respond_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -13469,9 +13512,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ApprovalRespondReceipt"];
                 };
             };
             /** @description Bad request */
@@ -13555,7 +13596,7 @@ export interface operations {
             };
         };
     };
-    gateway_approval_get_api_approval_by_id: {
+    approval_exact_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -13572,9 +13613,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ApprovalExactResponse"];
                 };
             };
             /** @description Bad request */

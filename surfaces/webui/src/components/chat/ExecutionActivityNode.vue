@@ -144,6 +144,10 @@ function commandCategory(activity: ActivityView) {
             v-if="activity.status_reason && activityNeedsAttention(activity)"
             class="execution-activity-reason"
           >
+            <template v-if="activity.status_reason_kind">
+              <span class="execution-activity-reason-kind">{{ activity.status_reason_kind }}</span>
+              —
+            </template>
             {{ activity.status_reason }}
           </small>
         </span>
