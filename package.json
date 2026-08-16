@@ -6,6 +6,7 @@
     "build": "npm run build:webui && npm run build:sidecars",
     "build:webui": "npm --prefix surfaces/webui run build",
     "build:sidecars": "cargo build --release --workspace --all-features --bins",
+    "deploy:user": "bash install.sh",
     "check": "npm --prefix surfaces/webui test && cargo check --workspace --bins",
     "dev:webui": "npm --prefix surfaces/webui run dev",
     "test:webui": "npm --prefix surfaces/webui test",

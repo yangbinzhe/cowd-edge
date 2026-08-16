@@ -237,11 +237,22 @@ npm run check
 # WebUI + 六个 Sidecar artifact
 npm run build
 
+# 构建并安装到唯一用户安装根 ~/.cowd/bin
+npm run deploy:user
+
+# 已经完成构建时只执行安装
+./install.sh --no-build
+
 # 仅构建 Sidecar
 npm run build:sidecars
 ```
 
-Gateway 通过 `gateway.webui_dir` 挂载 `surfaces/webui/dist`。Connector 的 `surface.json` 随安装内容进入 Edge 搜索目录，由 Gateway 发现；配置满足 schema 后进入 ready，缺少凭据或外部服务不可达时进入带原因的 degraded 或 failed。SQL artifact 需要构建 `source-db` feature。
+安装后的固定布局是 `~/.cowd/bin/edge`、`~/.cowd/bin/connectors` 和
+`~/.cowd/bin/webui`；可用 `COWD_INSTALL_DIR` 整体覆盖安装根，不能为
+各组件分别指定互相漂移的目录。Gateway 默认挂载
+`~/.cowd/bin/webui/dist`，并从同一根发现 Connector Manifest 与
+Sidecar。配置满足 schema 后进入 ready，缺少凭据或外部服务不可达时进入带原因的
+degraded 或 failed。SQL artifact 需要构建 `source-db` feature。
 
 ## 系统说明书
 
