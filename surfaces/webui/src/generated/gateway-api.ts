@@ -9912,6 +9912,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Typed acceptance verdict. Runtime derives it from committed effects and
+         *     evidence; a verdict never mutates the facts that produced it.
+         * @enum {string}
+         */
+        AcceptanceVerdict: "satisfied" | "unsatisfied" | "framework_invalid" | "unresolved";
         /** @enum {string} */
         ActivityRelationKind: "contains" | "delegated_to" | "invoked" | "depends_on" | "approved_by" | "produced" | "consumed" | "contributes_to" | "replanned_to" | "recovered_from";
         /** @enum {string} */
@@ -9953,6 +9959,18 @@ export interface components {
         };
         /** @enum {string} */
         AnswerValidationStatus: "pending" | "valid" | "invalid";
+        ApprovalExactResponse: {
+            approval: {
+                action: string;
+                approval_id: string;
+                blocks_execution: boolean;
+                deadline_elapsed: boolean;
+                domain: string;
+                risk: string;
+                status: string;
+                summary: string;
+            };
+        };
         ApprovalPendingResponse: {
             approvals: {
                 [key: string]: unknown;
@@ -9963,15 +9981,25 @@ export interface components {
                 domain?: "execution" | "knowledge" | "skill" | "evolution" | "application" | "system" | null;
                 session_id?: string | null;
             };
+            groups: {
+                approval_ids: string[];
+                batch_decision_supported: boolean;
+                batch_token: string;
+                count: number;
+                equivalence_key: {
+                    [key: string]: unknown;
+                };
+            }[];
             /** @constant */
             kind: "gateway.unified_approval_pending";
-            pending: ({
+            pending: {
                 action: string;
                 approval_id: string;
                 blocks_execution: boolean;
                 context: {
                     [key: string]: unknown;
                 };
+                deadline_elapsed: boolean;
                 domain: string;
                 risk: string;
                 source: {
@@ -9979,12 +10007,18 @@ export interface components {
                 };
                 status: string;
                 summary: string;
-            } & {
-                [key: string]: unknown;
-            })[];
+            }[];
+            pending_count: number;
         };
         /** @enum {string} */
         ApprovalProfile: "supervised" | "balanced" | "autonomous" | "trust_all";
+        ApprovalRespondReceipt: {
+            approval_id: string;
+            route_back: {
+                [key: string]: unknown;
+            };
+            status: string;
+        };
         AuthVerifyResponse: {
             auth_required: boolean;
             entitlement?: components["schemas"]["HumanEntitlementProjection"];
@@ -10221,6 +10255,22 @@ export interface components {
             source_execution_id?: string | null;
             summary: string;
             unresolved_id: string;
+        };
+        /**
+         * @description A typed dependency predicate. It consumes only Runtime-attested terminal
+         *     facts; it must not degrade into a presentation boolean or an arbitrary
+         *     evidence count.
+         */
+        DependencyPredicate: {
+            accepted_acceptance_verdicts: components["schemas"]["AcceptanceVerdict"][];
+            accepted_execution_statuses: components["schemas"]["ExecutionNodeStatus"][];
+            /** @constant */
+            kind: "evidence_ready";
+            /** Format: uint16 */
+            minimum: number;
+            /** @default false */
+            require_committed_effect: boolean;
+            required_fact_kinds: components["schemas"]["TerminalFactKind"][];
         };
         Empty: Record<string, never>;
         EvidenceAccessRef: {
@@ -10501,6 +10551,12 @@ export interface components {
             minimum: number;
             /** @constant */
             mode: "quorum";
+        } | {
+            /** @default false */
+            cancel_remaining: boolean;
+            /** @constant */
+            mode: "evidence_ready";
+            predicate: components["schemas"]["DependencyPredicate"];
         } | {
             /** @constant */
             mode: "finally";
@@ -12570,6 +12626,12 @@ export interface components {
             task_id: string;
             turns: components["schemas"]["TaskTurnBinding"][];
         };
+        /**
+         * @description Typed terminal-fact kinds consumed by dependency predicates. They are
+         *     Runtime-attested facts, never presentation booleans.
+         * @enum {string}
+         */
+        TerminalFactKind: "committed_effect" | "observed_evidence" | "artifact" | "acceptance_verdict";
         TerminalPresentation: {
             answer_origin: components["schemas"]["AnswerOrigin"];
             attempt_id: string;
