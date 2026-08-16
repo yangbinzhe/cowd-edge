@@ -43,6 +43,27 @@ async function expectOk(response, label) {
 }
 
 async function installOfflineGatewayContract(page) {
+  const missionProjection = {
+    missions: [{
+      mission_id: 'mission-browser',
+      objective: 'Global mission browser proof',
+      status: 'active',
+      revision: 2,
+    }],
+    mission: { mission_id: 'mission-browser' },
+    mission_graph: {
+      schema_version: 1,
+      mission_id: 'mission-browser',
+      nodes: [{
+        node_id: 'mission:mission-browser',
+        kind: 'mission',
+        label: 'Global mission browser proof',
+        status: 'active',
+        mission_id: 'mission-browser',
+      }],
+      edges: [],
+    },
+  };
   const responses = new Map([
     ['/api/auth/verify', { valid: true, auth_required: false }],
     ['/api/webui/manifest', {
@@ -65,26 +86,20 @@ async function installOfflineGatewayContract(page) {
         cursor: 4,
         revision: 2,
         needs_resync: false,
-        projection: {
-          missions: [{
-            mission_id: 'mission-browser',
-            objective: 'Global mission browser proof',
-            status: 'active',
-            revision: 2,
-          }],
-          mission: { mission_id: 'mission-browser' },
-          mission_graph: {
-            schema_version: 1,
-            mission_id: 'mission-browser',
-            nodes: [{
-              node_id: 'mission:mission-browser',
-              kind: 'mission',
-              label: 'Global mission browser proof',
-              status: 'active',
-              mission_id: 'mission-browser',
-            }],
-            edges: [],
-          },
+        projection: missionProjection,
+      },
+    }],
+    ['/api/mission/control/summary', {
+      ok: true,
+      summary: {
+        cursor: 4,
+        revision: 2,
+        projection: missionProjection,
+        graph: {
+          available: true,
+          node_count: 1,
+          edge_count: 0,
+          hash: 'mission-browser',
         },
       },
     }],
@@ -765,7 +780,8 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
   await expect(transcript).toContainText('session-A-durable-204');
   await expect(transcript).not.toContainText('session-A-durable-0');
   await expect(page.locator('.history-controls')).toContainText('156–205 / 205');
-  await expect(page.locator('.composer-runtime-chip.model')).toContainText('requested-A');
+  await expect(page.locator('.composer-runtime-chip.model'))
+    .toHaveAttribute('title', /requested requested-A · effective effective-A/);
   await page.getByRole('button', { name: 'Open inspector' }).click();
   await expect(page.locator('.composer-runtime-chip.model')).toContainText('effective-A');
   await expect(page.locator('.composer-runtime-summary')).toContainText('0');
@@ -787,12 +803,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
   await expect(transcript).toContainText('session-A-durable-204');
   await page.getByRole('button', { name: 'Load older messages' }).click();
   await expect(transcript).toContainText('session-A-durable-105');
-  await expect(page.locator('.history-controls')).toBeVisible({ timeout: 10_000 });
-  await expect.poll(async () => {
-    const controls = page.locator('.history-controls');
-    if (await controls.count()) return (await controls.textContent())?.replace(/\s+/g, ' ').trim();
-    return await transcript.textContent();
-  }, { timeout: 15_000 }).toMatch(/106\s*–\s*205\s*\/\s*205|session-A-durable-0/);
+  await expect(transcript).toContainText('session-A-durable-204');
 
   await page.locator('.session-row').filter({ hasText: 'Session B' }).click();
   await expect(page.locator('.composer textarea')).toHaveValue('draft belongs only to B');
