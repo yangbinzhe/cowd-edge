@@ -194,6 +194,8 @@ export const enUS: MessageCatalog = {
   "chat.approval.risk": "Risk",
   "chat.approval.operation": "Operation",
   "chat.approval.effect": "Read/write effect",
+  "chat.approval.details": "View complete approval facts",
+  "chat.approval.equivalentCount": "{count} equivalent decisions; each still receives its own receipt",
   "chat.approval.reversibility": "Reversibility",
   "chat.approval.externality": "External effect",
   "chat.approval.dataSensitivity": "Data sensitivity",

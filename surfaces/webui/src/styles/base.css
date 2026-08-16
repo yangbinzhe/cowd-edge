@@ -1116,6 +1116,11 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .chat-approval-content dl > div { min-width: 0; flex: 1 1 0; border: 1px solid var(--border); border-radius: 8px; padding: 8px 9px; }
 .chat-approval-content dt { color: var(--text-faint); font-size: 11px; }
 .chat-approval-content dd { margin: 3px 0 0; color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.approval-detail-disclosure { margin-top: 10px; border-top: 1px solid var(--border); }
+.approval-detail-disclosure > summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; color: var(--text-muted); font-size: 12px; }
+.approval-detail-disclosure[open] > summary { color: var(--text); }
+.approval-equivalence-note { margin: 8px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.chat-approval-content dl.approval-fact-grid-secondary { margin-top: 4px; }
 .chat-approval-content .approval-owner-note { margin-top: 12px; border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border)); border-radius: 7px; background: color-mix(in srgb, var(--warn) 6%, var(--surface)); padding: 8px 9px; color: var(--text-faint); font-size: 12px; }
 .approval-resources { margin-top: 12px; }
 .approval-resources > strong { color: var(--text-faint); font-size: 11px; }
@@ -1365,8 +1370,14 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .composer-runtime-chip.attachments { width: 44px; padding: 0; justify-content: center; }
   .composer-runtime-chip.attachments strong { display: none; }
   .context-ring.compact { width: 20px; height: 20px; }
-  .chat-approval-modal > footer { display: grid; grid-template-columns: 1fr 1fr; }
+  .chat-approval-scrim { place-items: end center; padding: 0; }
+  .chat-approval-modal { width: 100%; max-height: 100dvh; border-width: 1px 0 0; border-radius: 12px 12px 0 0; }
+  .chat-approval-modal > header { padding-top: max(10px, env(safe-area-inset-top)); }
+  .chat-approval-modal > footer { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
   .chat-approval-modal > footer button { width: 100%; }
+  .chat-approval-modal .icon-action,
+  .approval-scope-options button,
+  .chat-approval-modal > footer button { min-height: 44px; }
   .approval-scope-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mission-selector select { max-width: 42vw; }
   .workspace-tree { max-height: none; }

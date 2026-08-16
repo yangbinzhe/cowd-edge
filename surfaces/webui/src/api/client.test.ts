@@ -715,6 +715,41 @@ describe('Session Task and Mission routing contract', () => {
       expected_revision: 8,
     });
   });
+
+  it('starts a Task from the bounded Mission summary without legacy policy fields', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ok: true,
+        summary: {
+          mission_id: 'mission-1',
+          cursor: 7,
+          revision: 3,
+          graph: { available: true, node_count: 2, edge_count: 1, hash: 'abc' },
+          projection: {},
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        task_id: 'task-created',
+        mission_id: 'mission-1',
+        status: 'running',
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(api.startTask('Inspect the runtime', 'session-1')).resolves.toMatchObject({
+      task_id: 'task-created',
+    });
+
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/mission/control/summary');
+    const [path, request] = fetchMock.mock.calls[1];
+    expect(String(path)).toBe('/api/tasks/start');
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      mission_id: 'mission-1',
+      origin_session_id: 'session-1',
+      objective: 'Inspect the runtime',
+      evidence_refs: [],
+    });
+    expect(JSON.parse(String(request.body))).not.toHaveProperty('yolo_mode');
+  });
 });
 
 describe('WebUI authorization catalogue', () => {

@@ -699,6 +699,11 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   function scheduleFlush(sessionId: string) {
     if (flushFrames.has(sessionId)) return;
+    const pending = deltaBuffers.get(sessionId)?.length || 0;
+    if (pending <= 2 * 1024) {
+      flush(sessionId);
+      return;
+    }
     let flushedSynchronously = false;
     const frame = requestAnimationFrame(() => {
       flushedSynchronously = true;
@@ -713,7 +718,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     if (!delta) return;
     const state = stateFor(sessionId);
     const turn = state.turns.find((item) => item.id === state.streamTurnId);
-    const batch = delta.slice(0, 12_000);
+    const batch = delta.slice(0, streamFlushCharsForBacklog(delta.length));
     const remaining = delta.slice(batch.length);
     if (remaining) {
       deltaBuffers.set(sessionId, remaining);
@@ -758,41 +763,50 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
 
   function schedulePresentationFlush(sessionId: string) {
     if (presentationFlushFrames.has(sessionId)) return;
+    const pending = presentationDeltaBuffers.get(sessionId)?.text.length || 0;
+    if (pending <= 2 * 1024) {
+      flushPresentation(sessionId);
+      return;
+    }
     let flushedSynchronously = false;
     const frame = requestAnimationFrame(() => {
       flushedSynchronously = true;
-      presentationFlushFrames.delete(sessionId);
-      const pending = presentationDeltaBuffers.get(sessionId);
-      if (!pending) return;
-      const state = stateFor(sessionId);
-      const active = state.presentation;
-      const activeKey = active
-        ? presentationAttemptKey(sessionId, active.presentation_id, active.attempt_id)
-        : '';
-      if (activeKey !== pending.attemptKey || active?.state !== 'streaming') {
-        presentationDeltaBuffers.delete(sessionId);
-        return;
-      }
-      const turn = state.turns.find((item) => item.id === state.streamTurnId);
-      if (
-        turn?.presentation_id === active.presentation_id
-        && turn.presentation_attempt_id === active.attempt_id
-      ) {
-        const batch = pending.text.slice(0, streamFlushCharsForBacklog(pending.text.length));
-        const remaining = pending.text.slice(batch.length);
-        turn.content += batch;
-        if (remaining) {
-          presentationDeltaBuffers.set(sessionId, {
-            attemptKey: pending.attemptKey,
-            text: remaining,
-          });
-          schedulePresentationFlush(sessionId);
-          return;
-        }
-      }
-      presentationDeltaBuffers.delete(sessionId);
+      flushPresentation(sessionId);
     });
     if (!flushedSynchronously) presentationFlushFrames.set(sessionId, frame);
+  }
+
+  function flushPresentation(sessionId: string) {
+    presentationFlushFrames.delete(sessionId);
+    const pending = presentationDeltaBuffers.get(sessionId);
+    if (!pending) return;
+    const state = stateFor(sessionId);
+    const active = state.presentation;
+    const activeKey = active
+      ? presentationAttemptKey(sessionId, active.presentation_id, active.attempt_id)
+      : '';
+    if (activeKey !== pending.attemptKey || active?.state !== 'streaming') {
+      presentationDeltaBuffers.delete(sessionId);
+      return;
+    }
+    const turn = state.turns.find((item) => item.id === state.streamTurnId);
+    if (
+      turn?.presentation_id === active.presentation_id
+      && turn.presentation_attempt_id === active.attempt_id
+    ) {
+      const batch = pending.text.slice(0, streamFlushCharsForBacklog(pending.text.length));
+      const remaining = pending.text.slice(batch.length);
+      turn.content += batch;
+      if (remaining) {
+        presentationDeltaBuffers.set(sessionId, {
+          attemptKey: pending.attemptKey,
+          text: remaining,
+        });
+        schedulePresentationFlush(sessionId);
+        return;
+      }
+    }
+    presentationDeltaBuffers.delete(sessionId);
   }
 
   function queuePresentationDelta(sessionId: string, attemptKey: string, content: string) {

@@ -2108,10 +2108,14 @@ export const api = {
       { signal },
     );
   },
-  startTask: async (objective: string, yoloMode = false, sessionId = '') => {
+  startTask: async (objective: string, sessionId = '') => {
     if (!sessionId.trim()) throw new Error('Task creation requires an active Session');
-    const control = await read<MissionControlResponse>('/api/mission/control', {} as MissionControlResponse);
-    const missionId = String(control.snapshot?.projection?.selected_mission_id || '').trim();
+    const control = await api.missionControlSummary();
+    const missionId = String(
+      control.summary?.mission_id
+      || control.summary?.projection?.selected_mission_id
+      || '',
+    ).trim();
     if (!missionId) throw new Error('Task creation requires a selected Mission');
     const suffix = globalThis.crypto?.randomUUID?.() || Date.now().toString(36);
     return write('/api/tasks/start', {
@@ -2122,7 +2126,6 @@ export const api = {
         origin_session_id: sessionId,
         origin_turn_id: `manual-${suffix}`,
         objective,
-        yolo_mode: yoloMode,
         evidence_refs: [],
       }),
     });

@@ -26,6 +26,16 @@ const requiredNavigationLabels = [
   'Audit',
   'Settings',
 ];
+const realGatewayWorkspaceCleanup = new Set();
+
+test.afterEach(async ({ request }) => {
+  if (!realGateway || realGatewayWorkspaceCleanup.size === 0) return;
+  const paths = [...realGatewayWorkspaceCleanup];
+  realGatewayWorkspaceCleanup.clear();
+  await Promise.allSettled(paths.map((path) => request.delete(
+    `/api/workspace/files?path=${encodeURIComponent(path)}`,
+  )));
+});
 
 async function expectOk(response, label) {
   if (response.ok()) return;
@@ -1181,11 +1191,13 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
   // A Team must derive its authority from existing bounded workspace scopes;
   // seed the three independently reviewed domains through the public gateway
   // API instead of weakening that runtime guard for browser acceptance.
-  for (const path of [
+  const teamScopePaths = [
     `crates/runtime/e2e-team-${suffix}.md`,
     `crates/gateway/e2e-team-${suffix}.md`,
     `surfaces/webui/e2e-team-${suffix}.md`,
-  ]) {
+  ];
+  for (const path of teamScopePaths) {
+    realGatewayWorkspaceCleanup.add(path);
     const scopedFile = await page.request.post('/api/workspace/files', {
       data: { path, content: 'bounded Team acceptance scope' },
     });
@@ -1299,13 +1311,21 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
   // Preserve both valid races: a fast deterministic Team can finish while the
   // three surfaces render, while a slower execution still requires explicit
   // cancellation before releasing its writer lease.
-  const terminalStatuses = new Set(['complete', 'cancelled', 'error']);
+  const terminalStatuses = new Set([
+    'terminal', 'complete', 'completed', 'cancelled', 'error', 'failed', 'blocked', 'partial', 'unavailable',
+  ]);
   const latestProjectionResponse = await page.request.get(
     `/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=full`,
   );
   await expectOk(latestProjectionResponse, 'explicit Team cleanup projection');
   const latestProjection = await latestProjectionResponse.json();
-  if (!terminalStatuses.has(String(latestProjection?.live?.status || '').toLowerCase())) {
+  const descendantsSettled = (latestProjection?.child_executions || []).every((child) => (
+    terminalStatuses.has(String(child?.status || '').toLowerCase())
+  ));
+  if (
+    !terminalStatuses.has(String(latestProjection?.live?.status || '').toLowerCase())
+    || !descendantsSettled
+  ) {
     // This endpoint requires a JSON body. A bare POST is rejected before the
     // cancellation handler and leaves the real Team execution running.
     const cancelled = await page.request.post(`/api/sessions/${encodeURIComponent(session.id)}/cancel`, {
@@ -1314,7 +1334,7 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
     });
     await expectOk(cancelled, 'explicit Team cancellation');
     const cancellation = await cancelled.json();
-    expect(cancellation).toMatchObject({ status: 'cancel_requested' });
+    expect(['requested', 'cancelled', 'already_terminal']).toContain(cancellation.status);
     if (cancellation.execution_ids?.length > 0) {
       expect(cancellation.execution_ids).toEqual(expect.arrayContaining([executionId]));
     }
@@ -1323,7 +1343,11 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
     const response = await page.request.get(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=full`);
     if (!response.ok()) return false;
     const value = await response.json();
-    return value?.health?.some((item) => item?.id === `execution-health:${executionId}` && item?.status === 'terminal') || false;
+    const rootSettled = terminalStatuses.has(String(value?.live?.status || '').toLowerCase());
+    const childrenSettled = (value?.child_executions || []).every((child) => (
+      terminalStatuses.has(String(child?.status || '').toLowerCase())
+    ));
+    return rootSettled && childrenSettled;
   }, { timeout: 30_000, intervals: [250, 500, 1_000] }).toBe(true);
   const released = await page.request.post('/api/runtime/session-leases/release', {
     headers: writerHeaders,

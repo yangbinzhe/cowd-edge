@@ -30,7 +30,10 @@ let deadlineTimer: ReturnType<typeof setInterval> | null = null;
 const activeSessionId = computed(() => String(store.activeSessionId || ''));
 const orderedApprovals = computed(() => {
   const sessionId = activeSessionId.value;
-  return [...approvals.value].sort((left, right) => {
+  return approvals.value.filter((approval) => {
+    const view = approvalPresentation(approval);
+    return view.status === 'pending' && (!view.expiresAtMs || view.expiresAtMs > nowMs.value);
+  }).sort((left, right) => {
     const leftCurrent = approvalSessionId(left) === sessionId ? 1 : 0;
     const rightCurrent = approvalSessionId(right) === sessionId ? 1 : 0;
     if (leftCurrent !== rightCurrent) return rightCurrent - leftCurrent;
@@ -76,6 +79,16 @@ const delegatedOwner = computed(() => Boolean(typedOwnerRoute.value || activeSou
 const activePosition = computed(() => orderedApprovals.value.length
   ? `${selectedIndex.value + 1} / ${orderedApprovals.value.length}`
   : '0 / 0');
+const activeEquivalenceDigest = computed(() => String(
+  (activeApproval.value as any)?.equivalence_key?.digest || '',
+));
+const activeEquivalentCount = computed(() => {
+  const digest = activeEquivalenceDigest.value;
+  if (!digest) return 1;
+  return orderedApprovals.value.filter(
+    (approval) => String((approval as any)?.equivalence_key?.digest || '') === digest,
+  ).length;
+});
 
 function approvalSessionId(approval: ApprovalPendingItem) {
   return String(approval?.source?.session_id || approval?.session_id || '');
@@ -98,21 +111,27 @@ function approvalRows(payload: any): ApprovalPendingItem[] {
     ? payload
     : payload?.pending || payload?.approvals?.requests || payload?.approvals?.pending || [];
   return Array.isArray(rows)
-    ? rows.filter((item: ApprovalPendingItem) => ['pending', 'timed_out'].includes(String(item?.status || 'pending')))
+    ? rows.filter((item: ApprovalPendingItem) => String(item?.status || 'pending') === 'pending')
     : [];
+}
+
+function blockingExecutionRows(payload: any): ApprovalPendingItem[] {
+  return approvalRows(payload).filter((item: any) => (
+    String(item?.domain || '') === 'execution' && item?.blocks_execution === true
+  ));
 }
 
 async function refresh() {
   try {
     const sessionId = activeSessionId.value;
-    const [all, blocking] = await Promise.all([
-      api.approvalPending(),
+    const [allBlocking, blocking] = await Promise.all([
+      api.approvalPending({ domain: 'execution', blocksExecution: true }),
       sessionId
         ? api.approvalPending({ sessionId, domain: 'execution', blocksExecution: true })
         : Promise.resolve({ pending: [] }),
     ]);
-    const allRows = approvalRows(all);
-    const blockingRows = approvalRows(blocking);
+    const allRows = blockingExecutionRows(allBlocking);
+    const blockingRows = blockingExecutionRows(blocking);
     const known = new Set(allRows.map((item) => String(item?.approval_id || item?.id || '')));
     approvals.value = [
       ...blockingRows.filter((item) => !known.has(String(item?.approval_id || item?.id || ''))),
@@ -175,15 +194,16 @@ async function decide(approved: boolean, skip = false) {
       skip ? 'skipped from WebUI' : approved ? 'approved from WebUI' : 'rejected from WebUI',
       skip,
     );
-    const resolved = await api.approvalExact(approvalId);
-    if (resolved?.approval_id) resolvedApproval.value = resolved;
+    await api.approvalExact(approvalId);
     await refresh();
     window.dispatchEvent(new CustomEvent('cowd:approval-changed', { detail: { approval_id: approvalId } }));
-    // A successful decision is the terminal action for this modal. Keep the
-    // resolved receipt in the canonical approval/activity projections, but do
-    // not force the user to manually dismiss a stale blocking dialog. Any
-    // remaining approvals stay discoverable through the global inbox badge.
-    modalOpen.value = false;
+    resolvedApproval.value = null;
+    if (orderedApprovals.value.length) {
+      selectedIndex.value = Math.min(selectedIndex.value, orderedApprovals.value.length - 1);
+      modalOpen.value = true;
+    } else {
+      modalOpen.value = false;
+    }
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);
   } finally {
@@ -224,6 +244,18 @@ watch(activeApprovalView, (view) => {
   if (!view) return;
   if (!view.allowedScopes.includes(approvalScope.value)) {
     approvalScope.value = view.allowedScopes[0] || 'once';
+  }
+});
+
+watch(orderedApprovals, (pending) => {
+  if (selectedIndex.value >= pending.length) {
+    selectedIndex.value = Math.max(0, pending.length - 1);
+  }
+  // Expired and otherwise terminal approvals remain in the durable activity
+  // record, but they are never kept alive as an action modal.
+  if (!pending.length) {
+    resolvedApproval.value = null;
+    modalOpen.value = false;
   }
 });
 
@@ -269,7 +301,6 @@ onBeforeUnmount(() => {
           <ShieldAlert :size="18" />
           <span>
             <strong>{{ t('chat.approval.title') }}</strong>
-            <small>{{ activeApprovalView?.operation || activeApprovalView?.risk || t('chat.approval.pending') }}</small>
             <small class="approval-session-label">{{ approvalSessionLabel }}</small>
           </span>
         </div>
@@ -300,6 +331,9 @@ onBeforeUnmount(() => {
       </header>
       <div class="chat-approval-content">
         <p>{{ activeApprovalView?.summary || t('chat.approval.fallbackSummary') }}</p>
+        <p v-if="activeEquivalentCount > 1" class="approval-equivalence-note">
+          {{ t('chat.approval.equivalentCount', { count: activeEquivalentCount }) }}
+        </p>
         <p v-if="activeApprovalView?.status === 'timed_out'" class="approval-timeout-note">
           {{ t('chat.approval.timedOut') }}
         </p>
@@ -319,6 +353,14 @@ onBeforeUnmount(() => {
             <dt>{{ t('chat.approval.effect') }}</dt>
             <dd>{{ activeApprovalView?.effectKind || '—' }}</dd>
           </div>
+          <div>
+            <dt>{{ t('chat.approval.deadline.label') }}</dt>
+            <dd>{{ deadlineLabel }}</dd>
+          </div>
+        </dl>
+        <details class="approval-detail-disclosure">
+          <summary>{{ t('chat.approval.details') }}</summary>
+          <dl class="approval-fact-grid approval-fact-grid-secondary">
           <div>
             <dt>{{ t('chat.approval.reversibility') }}</dt>
             <dd>{{ activeApprovalView?.reversibility || '—' }}</dd>
@@ -356,10 +398,6 @@ onBeforeUnmount(() => {
             <dd>{{ formatTimestamp(activeApprovalView?.requestedAtMs) }}</dd>
           </div>
           <div>
-            <dt>{{ t('chat.approval.deadline.label') }}</dt>
-            <dd>{{ deadlineLabel }}</dd>
-          </div>
-          <div>
             <dt>{{ t('chat.approval.requestedPosture') }}</dt>
             <dd>{{ activeApprovalView?.requestedPosture || '—' }}</dd>
           </div>
@@ -367,7 +405,8 @@ onBeforeUnmount(() => {
             <dt>{{ t('chat.approval.effectivePosture') }}</dt>
             <dd>{{ activeApprovalView?.effectivePosture || '—' }}</dd>
           </div>
-        </dl>
+          </dl>
+        </details>
         <div v-if="activeApprovalView?.resources.length" class="approval-resources">
           <strong>{{ t('chat.approval.resources') }}</strong>
           <ul>

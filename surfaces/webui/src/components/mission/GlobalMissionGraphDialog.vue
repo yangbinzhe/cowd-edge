@@ -79,8 +79,15 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const response = await api.missionControl(missionId.value);
-    snapshot.value = response.snapshot;
+    const response = await api.missionControlSummary(missionId.value);
+    snapshot.value = {
+      schema_version: 1,
+      kind: 'mission_control.materialized_snapshot',
+      cursor: Number(response.summary.cursor || 0),
+      revision: Number(response.summary.revision || 1),
+      needs_resync: false,
+      projection: response.summary.projection as MissionControlProjection,
+    };
     attachLiveSource();
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason);

@@ -278,7 +278,7 @@ async function startTask() {
     error.value = t('page.agents.error.objectiveRequired');
     return;
   }
-  actionResult.value = await api.startTask(objective.value, false, store.activeSessionId);
+  actionResult.value = await api.startTask(objective.value, store.activeSessionId);
   selectedTaskId.value = actionResult.value?.task_id || selectedTaskId.value;
   await refresh();
 }

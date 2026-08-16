@@ -194,6 +194,8 @@ export const zhCN: MessageCatalog = {
   "chat.approval.risk": "风险",
   "chat.approval.operation": "操作",
   "chat.approval.effect": "读写影响",
+  "chat.approval.details": "查看完整审批事实",
+  "chat.approval.equivalentCount": "同类决策 {count} 项；为避免扩大授权，仍逐项生成回执",
   "chat.approval.reversibility": "可逆性",
   "chat.approval.externality": "外部影响",
   "chat.approval.dataSensitivity": "数据敏感度",

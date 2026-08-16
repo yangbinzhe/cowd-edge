@@ -300,14 +300,11 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('opens the existing global Mission graph in place from the observer status', async () => {
-    vi.spyOn(api, 'missionControl').mockResolvedValue({
+    vi.spyOn(api, 'missionControlSummary').mockResolvedValue({
       ok: true,
-      snapshot: {
-        schema_version: 1,
-        kind: 'mission_control.materialized_snapshot',
+      summary: {
         cursor: 4,
         revision: 2,
-        needs_resync: false,
         projection: {
           missions: [{
             mission_id: 'mission-global',
@@ -328,6 +325,12 @@ describe('Cowd Vue WebUI shell', () => {
             }],
             edges: [],
           },
+        },
+        graph: {
+          available: true,
+          node_count: 1,
+          edge_count: 0,
+          hash: 'mission-global',
         },
       },
     } as any);
@@ -854,6 +857,75 @@ describe('Cowd Vue WebUI shell', () => {
     exact.mockRestore();
   });
 
+  it('advances to the next pending approval and closes only after the inbox is empty', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    const resolved = new Set<string>();
+    const rows = ['approval-batch-1', 'approval-batch-2'].map((approvalId, index) => ({
+      approval_id: approvalId,
+      status: 'pending',
+      action: `tool.write.${index + 1}`,
+      summary: `Pending write ${index + 1}`,
+      risk: 'medium',
+      domain: 'execution',
+      blocks_execution: true,
+      source: { session_id: 'approval-batch-session' },
+      allowed_scopes: ['once'],
+      effect_assessment: { read_write_class: 'write' },
+      equivalence_key: { digest: 'same-safe-server-group' },
+    }));
+    vi.spyOn(api, 'approvalPending').mockImplementation(async () => ({
+      pending: rows.filter((row) => !resolved.has(row.approval_id)),
+    } as any));
+    vi.spyOn(api, 'approvalRespond').mockImplementation(async (approvalId: string) => {
+      resolved.add(approvalId);
+      return { ok: true } as any;
+    });
+    vi.spyOn(api, 'approvalExact').mockImplementation(async (approvalId: string) => ({
+      approval_id: approvalId,
+      status: 'approved',
+    } as any));
+    const store = useAppStore();
+    store.activeSessionId = 'approval-batch-session';
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
+    await settleAsync();
+
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('Pending write 1');
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('同类决策 2 项');
+    await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
+    await settleAsync();
+    expect(wrapper.get('.chat-approval-modal').text()).toContain('Pending write 2');
+
+    await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
+    await settleAsync();
+    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps timed-out approvals in history rather than the actionable inbox', async () => {
+    const wrapper = await mountApp('/chat');
+    await settleAsync();
+    vi.spyOn(api, 'approvalPending').mockResolvedValue({
+      pending: [{
+        approval_id: 'approval-timeout-1',
+        status: 'timed_out',
+        action: 'tool.write',
+        summary: 'Expired write',
+        domain: 'execution',
+        blocks_execution: true,
+        source: { session_id: 'approval-timeout-session' },
+      }],
+    } as any);
+    const store = useAppStore();
+    store.activeSessionId = 'approval-timeout-session';
+    window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
+    await settleAsync();
+
+    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
+    expect(wrapper.find('.global-approval-button').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('offers only backend-authorized scopes and skip for a typed read approval', async () => {
     const wrapper = await mountApp('/chat');
     await settleAsync();
@@ -959,7 +1031,7 @@ describe('Cowd Vue WebUI shell', () => {
     await settleAsync();
 
     expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
-    expect(wrapper.get('.global-approval-button').text()).toContain('1');
+    expect(wrapper.find('.global-approval-button').exists()).toBe(false);
     wrapper.unmount();
     pending.mockRestore();
   });
@@ -976,6 +1048,8 @@ describe('Cowd Vue WebUI shell', () => {
         summary: 'Release the candidate runtime',
         risk: 'high',
         timeout_policy: 'pending',
+        domain: 'execution',
+        blocks_execution: true,
         source: { session_id: 'another-session' },
       }],
     } as any);
@@ -989,7 +1063,7 @@ describe('Cowd Vue WebUI shell', () => {
     pending.mockRestore();
   });
 
-  it('routes typed evolution approvals to their owning review workspace', async () => {
+  it('keeps typed evolution approvals out of the execution approval inbox', async () => {
     const wrapper = await mountApp('/runtime');
     await settleAsync();
     const pending = vi.spyOn(api, 'approvalPending').mockResolvedValue({
@@ -1001,18 +1075,16 @@ describe('Cowd Vue WebUI shell', () => {
         summary: 'Review the candidate release',
         risk: 'high',
         timeout_policy: 'pending',
+        domain: 'evolution',
+        blocks_execution: false,
         source: { kind: 'Evolution', review_ref: 'release-review-1' },
       }],
     } as any);
     window.dispatchEvent(new CustomEvent('cowd:approval-changed'));
     await settleAsync();
 
-    await wrapper.get('.global-approval-button').trigger('click');
-    expect(wrapper.get('.chat-approval-modal').text()).toContain('打开审批工作台');
-    expect(wrapper.find('.chat-approval-modal .ghost-action').exists()).toBe(false);
-    await wrapper.get('.chat-approval-modal .primary-action').trigger('click');
-    await settleAsync();
-    expect(wrapper.get('.main-surface').attributes('data-page')).toBe('audit');
+    expect(wrapper.find('.global-approval-button').exists()).toBe(false);
+    expect(wrapper.find('.chat-approval-modal').exists()).toBe(false);
     wrapper.unmount();
     pending.mockRestore();
   });

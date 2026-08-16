@@ -2843,7 +2843,10 @@ describe('chatSessions', () => {
       byte_end: 7,
       delta: 'preview',
     });
-    expect(frames.size).toBe(1);
+    expect(frames.size).toBe(0);
+    expect(chat.states['presentation-session'].turns.find(
+      (turn) => turn.id === chat.states['presentation-session'].streamTurnId,
+    )?.content).toBe('preview');
     durableMessages = [{
       id: 'assistant-durable',
       sequence: 2,
@@ -2929,6 +2932,69 @@ describe('chatSessions', () => {
     );
     expect(preview?.content).toBe('new');
     expect(preview?.presentation_attempt_id).toBe('a2');
+  });
+
+  it('renders one thousand contiguous UTF-8 presentation deltas without a frame backlog', async () => {
+    setActivePinia(createPinia());
+    mockWriterAttachment();
+    mockEmptySessionReads();
+    vi.spyOn(api, 'executionProjection').mockResolvedValue({ __state: 'not_found' } as any);
+    vi.spyOn(api, 'sendMessage').mockResolvedValue({
+      execution: { graph_id: 'utf8-burst-execution', turn_id: 'utf8-burst-turn' },
+    } as any);
+    const streams: Array<{ onmessage?: (event: MessageEvent) => void; close: () => void }> = [];
+    class FakeEventSource {
+      onmessage?: (event: MessageEvent) => void;
+      onopen?: () => void;
+      onerror?: () => void;
+      constructor(_url: string) { streams.push(this); }
+      close() {}
+      addEventListener() {}
+    }
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('EventSource', FakeEventSource);
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const id = frames.size + 1;
+      frames.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+    const chat = useChatSessionsStore();
+    await chat.open('utf8-burst-session');
+    await chat.send('utf8-burst-session', 'stream');
+    const emit = (delivery: Record<string, unknown>) => streams[0].onmessage?.({
+      data: JSON.stringify({
+        type: 'TerminalDelivery',
+        session_id: 'utf8-burst-session',
+        execution_id: 'utf8-burst-execution',
+        turn_id: 'utf8-burst-turn',
+        delivery,
+      }),
+    } as MessageEvent);
+    emit({
+      event: 'terminal_presentation_started',
+      presentation_id: 'utf8-burst-presentation',
+      attempt_id: 'utf8-burst-attempt',
+      envelope_id: 'utf8-burst-envelope',
+      envelope_revision: 1,
+    });
+    for (let index = 0; index < 1_000; index += 1) {
+      emit({
+        event: 'text_delta',
+        presentation_id: 'utf8-burst-presentation',
+        attempt_id: 'utf8-burst-attempt',
+        byte_start: index * 3,
+        byte_end: (index + 1) * 3,
+        delta: '你',
+      });
+    }
+
+    const preview = chat.states['utf8-burst-session'].turns.find(
+      (turn) => turn.id === chat.states['utf8-burst-session'].streamTurnId,
+    );
+    expect(preview?.content).toBe('你'.repeat(1_000));
+    expect(new TextEncoder().encode(preview?.content || '').byteLength).toBe(3_000);
+    expect(frames.size).toBe(0);
   });
 
   it('clears a stale root preview when queue-full resync proves no presentation winner', async () => {
