@@ -26,13 +26,14 @@ const approvalScope = ref<ApprovalScope>('once');
 const nowMs = ref(Date.now());
 const presentedInChat = new Set<string>();
 let deadlineTimer: ReturnType<typeof setInterval> | null = null;
+let refreshGeneration = 0;
 
 const activeSessionId = computed(() => String(store.activeSessionId || ''));
 const orderedApprovals = computed(() => {
   const sessionId = activeSessionId.value;
   return approvals.value.filter((approval) => {
     const view = approvalPresentation(approval);
-    return view.status === 'pending' && (!view.expiresAtMs || view.expiresAtMs > nowMs.value);
+    return view.status === 'pending';
   }).sort((left, right) => {
     const leftCurrent = approvalSessionId(left) === sessionId ? 1 : 0;
     const rightCurrent = approvalSessionId(right) === sessionId ? 1 : 0;
@@ -52,7 +53,9 @@ const deadlineLabel = computed(() => {
   const expiresAt = activeApprovalView.value?.expiresAtMs;
   if (!expiresAt) return t('chat.approval.deadline.none');
   const remaining = expiresAt - nowMs.value;
-  if (remaining <= 0) return t('chat.approval.deadline.expired');
+  if (remaining <= 0 || activeApprovalView.value?.deadlineElapsed === true) {
+    return t('chat.approval.deadline.expired');
+  }
   const seconds = Math.ceil(remaining / 1000);
   if (seconds < 60) return t('chat.approval.deadline.seconds', { count: seconds });
   return t('chat.approval.deadline.minutes', { count: Math.ceil(seconds / 60) });
@@ -123,6 +126,7 @@ function blockingExecutionRows(payload: any): ApprovalPendingItem[] {
 
 async function refresh() {
   try {
+    const generation = ++refreshGeneration;
     const sessionId = activeSessionId.value;
     const [allBlocking, blocking] = await Promise.all([
       api.approvalPending({ domain: 'execution', blocksExecution: true }),
@@ -130,6 +134,10 @@ async function refresh() {
         ? api.approvalPending({ sessionId, domain: 'execution', blocksExecution: true })
         : Promise.resolve({ pending: [] }),
     ]);
+    if (generation !== refreshGeneration || sessionId !== activeSessionId.value) {
+      // A slower earlier refresh must never overwrite a newer session view.
+      return;
+    }
     const allRows = blockingExecutionRows(allBlocking);
     const blockingRows = blockingExecutionRows(blocking);
     const known = new Set(allRows.map((item) => String(item?.approval_id || item?.id || '')));

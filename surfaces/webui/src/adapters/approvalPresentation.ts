@@ -21,6 +21,7 @@ export interface ApprovalPresentation {
   approvalRevision: number | null;
   requestedAtMs: number | null;
   expiresAtMs: number | null;
+  deadlineElapsed: boolean;
   requestedPosture: string;
   effectivePosture: string;
   allowedScopes: ApprovalScope[];
@@ -104,6 +105,7 @@ export function approvalPresentation(approval: ApprovalPendingItem): ApprovalPre
     approvalRevision: positiveNumber(root.revision, root.committed_revision),
     requestedAtMs: positiveNumber(root.requested_at_ms, root.created_at_ms),
     expiresAtMs: positiveNumber(root.expires_at_ms),
+    deadlineElapsed: root.deadline_elapsed === true,
     requestedPosture: firstString(context.requested_sandbox_posture),
     effectivePosture: firstString(context.effective_sandbox_posture),
     allowedScopes: [...new Set(allowedScopes)],
