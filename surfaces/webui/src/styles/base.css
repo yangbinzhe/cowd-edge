@@ -961,6 +961,23 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .skills-toolbar-head { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
 .filter-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .skill-create-panel { margin: 10px 0; }
+.skill-install-source { display: grid; gap: 10px; margin: 10px; }
+.skill-install-source header { margin-bottom: 0; }
+.skill-install-review { display: grid; gap: 10px; margin: 10px; }
+.skill-install-review header { margin-bottom: 0; }
+.skill-install-review header p { margin: 2px 0 0; overflow-wrap: anywhere; }
+.skill-install-review .detail-list.compact { margin: 0; }
+.skill-install-review .detail-list.compact dd { min-width: 0; }
+.skill-install-review .detail-list.compact dd small { display: block; margin-top: 2px; color: var(--text-faint); }
+.install-digest { font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; }
+.install-review-warning, .install-review-safe { display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; border-radius: 8px; }
+.install-review-warning { background: color-mix(in srgb, var(--warn) 10%, transparent); color: var(--text); }
+.install-review-warning svg { flex: 0 0 auto; color: var(--warn); }
+.install-review-warning ul { margin: 5px 0 0; padding-left: 18px; color: var(--text-muted); }
+.install-review-safe { background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--text); }
+.install-review-safe svg { flex: 0 0 auto; color: var(--success); }
+.install-warning-consent { display: flex; align-items: flex-start; gap: 8px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.install-warning-consent input { margin-top: 2px; }
 .filter-row select { min-width: 0; min-height: 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); padding: 0 8px; }
 .skill-row { width: 100%; display: grid; gap: 4px; text-align: left; border: 0; border-bottom: 1px solid var(--border); background: transparent; color: var(--text-muted); padding: 10px 12px; }
 .skill-row:hover, .skill-row.active { background: var(--surface-2); color: var(--text); }

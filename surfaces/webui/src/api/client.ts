@@ -2011,11 +2011,26 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  installSkill: (file: File) => {
+  planSkillUpload: (file: File) => {
     const body = new FormData();
     body.append('package', file, file.name);
-    return writeWithReceipt('/api/skills/install', { method: 'POST', body });
+    return writeWithReceipt('/api/skills/install/upload/plan', { method: 'POST', body });
   },
+  commitSkillUpload: (file: File, expectedDigest: string, allowWarnings: boolean) => {
+    const body = new FormData();
+    body.append('package', file, file.name);
+    body.append('expected_digest', expectedDigest);
+    body.append('allow_warnings', String(allowWarnings));
+    return writeWithReceipt('/api/skills/install/upload/commit', { method: 'POST', body });
+  },
+  planSkillInstall: (source: string) => writeWithReceipt('/api/skills/install/plan', {
+    method: 'POST',
+    body: JSON.stringify({ source }),
+  }),
+  commitSkillInstall: (source: string, expectedDigest: string, allowWarnings: boolean) => writeWithReceipt('/api/skills/install/commit', {
+    method: 'POST',
+    body: JSON.stringify({ source, expected_digest: expectedDigest, allow_warnings: allowWarnings }),
+  }),
   skillRuns: (signal?: AbortSignal) => read('/api/skills/runs', {}, { signal }),
   skillRunDetail: (id: string) => read(`/api/skills/runs/${encodeURIComponent(id)}`, {}),
   skillDetail: (id: string, signal?: AbortSignal) => read(`/api/skills/${encodeURIComponent(id)}`, {}, { signal }),

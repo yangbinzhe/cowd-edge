@@ -384,6 +384,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/apps/{app_id}/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * app GET /api/apps/:app_id/logs
+         * @description Query Gateway app capability through `/api/apps/:app_id/logs` handled by `get_app_logs`.
+         *
+         *     Risk: read. Side effects: none.
+         */
+        get: operations["gateway_app_get_api_apps_by_app_id_logs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/apps/{app_id}/operations/{operation_id}/invoke": {
         parameters: {
             query?: never;
@@ -444,6 +466,28 @@ export interface paths {
         get: operations["gateway_app_get_api_apps_by_app_id_receipts_by_receipt_id"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/apps/{app_id}/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * app POST /api/apps/:app_id/restart
+         * @description Invoke or create Gateway app capability through `/api/apps/:app_id/restart` handled by `restart_app`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_app_post_api_apps_by_app_id_restart"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7634,7 +7678,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/skills/install": {
+    "/api/skills/install/commit": {
         parameters: {
             query?: never;
             header?: never;
@@ -7644,12 +7688,78 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * skill POST /api/skills/install
-         * @description Invoke or create Gateway skill capability through `/api/skills/install` handled by `skill_install_handler`.
+         * skill POST /api/skills/install/commit
+         * @description Invoke or create Gateway skill capability through `/api/skills/install/commit` handled by `skill_install_commit_handler`.
          *
          *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
          */
-        post: operations["gateway_skill_post_api_skills_install"];
+        post: operations["gateway_skill_post_api_skills_install_commit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/install/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * skill POST /api/skills/install/plan
+         * @description Invoke or create Gateway skill capability through `/api/skills/install/plan` handled by `skill_install_plan_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state.
+         */
+        post: operations["gateway_skill_post_api_skills_install_plan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/install/upload/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * skill POST /api/skills/install/upload/commit
+         * @description Invoke or create Gateway skill capability through `/api/skills/install/upload/commit` handled by `skill_upload_commit_handler`.
+         *
+         *     Risk: external. Side effects: mutates_gateway_or_runtime_state, may_read_or_write_workspace_files.
+         */
+        post: operations["gateway_skill_post_api_skills_install_upload_commit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/install/upload/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * skill POST /api/skills/install/upload/plan
+         * @description Invoke or create Gateway skill capability through `/api/skills/install/upload/plan` handled by `skill_upload_plan_handler`.
+         *
+         *     Risk: external. Side effects: mutates_gateway_or_runtime_state, may_read_or_write_workspace_files.
+         */
+        post: operations["gateway_skill_post_api_skills_install_upload_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13516,6 +13626,51 @@ export interface operations {
             };
         };
     };
+    gateway_app_get_api_apps_by_app_id_logs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     gateway_app_post_api_apps_by_app_id_operations_by_operation_id_invoke: {
         parameters: {
             query?: never;
@@ -13671,6 +13826,74 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_app_post_api_apps_by_app_id_restart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                app_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `app_id` */
+                        app_id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `app_id` */
+                        app_id: string;
+                    };
+                };
+            };
+        };
         responses: {
             /** @description Successful Gateway response */
             200: {
@@ -31890,7 +32113,181 @@ export interface operations {
             };
         };
     };
-    gateway_skill_post_api_skills_install: {
+    gateway_skill_post_api_skills_install_commit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_post_api_skills_install_plan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_post_api_skills_install_upload_commit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_skill_post_api_skills_install_upload_plan: {
         parameters: {
             query?: never;
             header?: never;

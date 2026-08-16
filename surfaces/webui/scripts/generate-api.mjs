@@ -33,9 +33,14 @@ const document = await response.json();
 if (document?.openapi !== '3.1.0' || typeof document?.paths !== 'object') {
   throw new Error(`Gateway returned an invalid OpenAPI 3.1 document from ${specUrl}`);
 }
+if (document.paths['/api/skills/install']) {
+  throw new Error('Gateway OpenAPI still exposes the unreviewed one-step Skill install route');
+}
 const requiredAppRoutes = new Map([
   ['/api/apps', ['get']],
   ['/api/apps/{app_id}', ['get']],
+  ['/api/apps/{app_id}/logs', ['get']],
+  ['/api/apps/{app_id}/restart', ['post']],
   ['/api/apps/{app_id}/operations/{operation_id}/invoke', ['post']],
   ['/api/apps/{app_id}/operations/{operation_id}/stream', ['post']],
   ['/api/apps/{app_id}/receipts/{receipt_id}', ['get']],

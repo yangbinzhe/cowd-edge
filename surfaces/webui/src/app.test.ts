@@ -3416,6 +3416,11 @@ describe('Cowd Vue WebUI shell', () => {
     await api.deleteMemoryEntry('L2', 'mem-1');
     await api.skillAction('local:test', 'validate', { session_id: 's1' });
     await api.skillTranslate('local:test', '# Skill', 'SKILL.md');
+    const skillPackage = new File(['skill package'], 'reviewed-skill.tar', { type: 'application/x-tar' });
+    await api.planSkillUpload(skillPackage);
+    await api.commitSkillUpload(skillPackage, 'sha256:reviewed', true);
+    await api.planSkillInstall('github://owner/repo/skills/review?ref=commit');
+    await api.commitSkillInstall('github://owner/repo/skills/review?ref=commit', 'sha256:reviewed', false);
     await api.branchSession('s1');
     expect(fetchMock).toHaveBeenCalledWith('/api/memory/L2', expect.objectContaining({
       method: 'POST',
@@ -3433,6 +3438,26 @@ describe('Cowd Vue WebUI shell', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/local%3Atest/translate', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ content: '# Skill', path: 'SKILL.md', locale: 'zh-CN' }),
+    }));
+    const planRequest = fetchMock.mock.calls.find(([path]) => path === '/api/skills/install/upload/plan')?.[1];
+    expect(planRequest?.method).toBe('POST');
+    expect((planRequest?.body as FormData).get('package')).toMatchObject({ name: 'reviewed-skill.tar', size: 13 });
+    const commitRequest = fetchMock.mock.calls.find(([path]) => path === '/api/skills/install/upload/commit')?.[1];
+    expect(commitRequest?.method).toBe('POST');
+    expect((commitRequest?.body as FormData).get('package')).toMatchObject({ name: 'reviewed-skill.tar', size: 13 });
+    expect((commitRequest?.body as FormData).get('expected_digest')).toBe('sha256:reviewed');
+    expect((commitRequest?.body as FormData).get('allow_warnings')).toBe('true');
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/install/plan', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ source: 'github://owner/repo/skills/review?ref=commit' }),
+    }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/install/commit', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        source: 'github://owner/repo/skills/review?ref=commit',
+        expected_digest: 'sha256:reviewed',
+        allow_warnings: false,
+      }),
     }));
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions/s1/branch', expect.objectContaining({
       method: 'POST',
@@ -4151,6 +4176,69 @@ describe('Cowd Vue WebUI shell', () => {
       .map(([path]) => String(path))
       .filter((path) => path.startsWith('/api/skills/'));
     expect(skillRequests).toEqual(['/api/skills/catalog']);
+  });
+
+  it('reviews an uploaded skill digest and requires warning consent before commit', async () => {
+    invalidateApiReadCache();
+    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+      const url = String(path);
+      if (url === '/api/skills/catalog') {
+        return Promise.resolve(new Response(JSON.stringify({ items: [] })));
+      }
+      if (url === '/api/skills/install/upload/plan') {
+        return Promise.resolve(new Response(JSON.stringify({
+          kind: 'skills.upload.plan',
+          schema_version: 1,
+          plan: {
+            skill_id: 'managed:reviewed-skill',
+            name: 'Reviewed skill',
+            package_class: 'workflow',
+            package_digest: 'sha256:reviewed',
+            total_bytes: 13,
+            files: [{ path: 'SKILL.md' }],
+            installable: true,
+            blockers: [],
+            warnings: ['Package contains an inert helper script.'],
+          },
+        })));
+      }
+      if (url === '/api/skills/install/upload/commit') {
+        return Promise.resolve(new Response(JSON.stringify({
+          kind: 'skills.upload.receipt',
+          receipt: { skill_id: 'managed:reviewed-skill', package_digest: 'sha256:reviewed' },
+        }), { status: 201 }));
+      }
+      if (url.startsWith('/api/sessions?')) {
+        return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
+      }
+      return Promise.resolve(new Response(JSON.stringify({})));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const wrapper = await mountApp('/skills');
+    await settleAsync();
+    const file = new File(['skill package'], 'reviewed-skill.tar', { type: 'application/x-tar' });
+    const input = wrapper.get('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] });
+    await input.trigger('change');
+    await settleAsync();
+
+    const review = wrapper.get('.skill-install-review');
+    expect(review.text()).toContain('Reviewed skill');
+    expect(review.text()).toContain('sha256:reviewed');
+    expect(review.text()).toContain('Package contains an inert helper script.');
+    const commitButton = review.get('[data-action="commit-skill-install"]');
+    expect(commitButton.attributes('disabled')).toBeDefined();
+
+    await review.get('.install-warning-consent input').setValue(true);
+    expect(commitButton.attributes('disabled')).toBeUndefined();
+    await commitButton.trigger('click');
+    await settleAsync();
+
+    const commitRequest = fetchMock.mock.calls.find(([path]) => path === '/api/skills/install/upload/commit')?.[1];
+    expect((commitRequest?.body as FormData).get('expected_digest')).toBe('sha256:reviewed');
+    expect((commitRequest?.body as FormData).get('allow_warnings')).toBe('true');
+    expect(wrapper.find('.skill-install-review').exists()).toBe(false);
   });
 
   it('rehydrates skill detail after selecting A, B, then A again', async () => {

@@ -3,7 +3,7 @@ import { useCapabilitySection } from "../composables/useCapabilitySection";
 const { activeSection, isSectionActive } = useCapabilitySection();
 import { formatCount, t } from '../i18n';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { ChevronDown, ChevronRight, FileText, Folder, Languages, PackagePlus, Plus, RefreshCw, Search, Trash2, X } from 'lucide-vue-next';
+import { CheckCircle2, ChevronDown, ChevronRight, FileText, Folder, Languages, PackagePlus, Plus, RefreshCw, Search, ShieldAlert, Trash2, X } from 'lucide-vue-next';
 import MarkdownIt from 'markdown-it';
 import { api } from '../api/client';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
@@ -43,6 +43,12 @@ const selectedDetail = ref<Record<string, unknown> | null>(null);
 const createOpen = ref(false);
 const packageInput = ref<HTMLInputElement | null>(null);
 const installing = ref(false);
+const installOpen = ref(false);
+const installSource = ref('');
+const pendingPackage = ref<File | null>(null);
+const pendingSource = ref('');
+const installPlanReceipt = ref<any>(null);
+const acceptInstallWarnings = ref(false);
 const createName = ref('');
 const createDescription = ref('');
 const createContent = ref('');
@@ -141,6 +147,19 @@ const translatedMarkdown = computed(() => {
   return data.translated_markdown || data.response || data.text || data.content || '';
 });
 const cacheHealth = computed(() => projection.value?.cache || {});
+const installPlan = computed(() => installPlanReceipt.value?.data?.plan || null);
+const installWarnings = computed<string[]>(() => Array.isArray(installPlan.value?.warnings)
+  ? installPlan.value.warnings.map(String)
+  : []);
+const installBlockers = computed<string[]>(() => Array.isArray(installPlan.value?.blockers)
+  ? installPlan.value.blockers.map(String)
+  : []);
+const canCommitInstall = computed(() => Boolean(
+  (pendingPackage.value || pendingSource.value)
+  && installPlan.value?.installable
+  && installPlan.value?.package_digest
+  && (!installWarnings.value.length || acceptInstallWarnings.value),
+));
 const cacheMetrics = computed(() => [
   { label: t('page.skills.cache.resident'), value: formatBytes(cacheHealth.value.resident_bytes) },
   { label: t('page.skills.cache.entries'), value: Number(cacheHealth.value.resident_entries || 0) },
@@ -373,22 +392,103 @@ async function translateSkill() {
   }
 }
 
-async function installSkillPackage(files: FileList | null) {
+async function planSkillPackage(files: FileList | null) {
   const file = files?.[0];
   if (!file) return;
   installing.value = true;
   error.value = '';
+  installPlanReceipt.value = null;
+  acceptInstallWarnings.value = false;
+  installOpen.value = true;
+  pendingSource.value = '';
+  pendingPackage.value = file;
   try {
-    actionResult.value = await api.installSkill(file);
+    const receipt = await api.planSkillUpload(file);
+    actionResult.value = receipt;
+    installPlanReceipt.value = receipt;
+    if (!receipt?.ok) {
+      error.value = receipt?.error || t('page.skills.install.planFailed');
+      pendingPackage.value = null;
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+    pendingPackage.value = null;
+  } finally {
+    installing.value = false;
+    if (packageInput.value) packageInput.value.value = '';
+  }
+}
+
+async function planSkillSource() {
+  const source = installSource.value.trim();
+  if (!source) {
+    error.value = t('page.skills.install.sourceRequired');
+    return;
+  }
+  installing.value = true;
+  error.value = '';
+  installPlanReceipt.value = null;
+  acceptInstallWarnings.value = false;
+  pendingPackage.value = null;
+  pendingSource.value = source;
+  try {
+    const receipt = await api.planSkillInstall(source);
+    actionResult.value = receipt;
+    installPlanReceipt.value = receipt;
+    if (!receipt?.ok) {
+      error.value = receipt?.error || t('page.skills.install.planFailed');
+      pendingSource.value = '';
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err);
+    pendingSource.value = '';
+  } finally {
+    installing.value = false;
+  }
+}
+
+async function commitSkillPackage() {
+  if ((!pendingPackage.value && !pendingSource.value) || !installPlan.value?.package_digest || !canCommitInstall.value) return;
+  installing.value = true;
+  error.value = '';
+  try {
+    const receipt = pendingPackage.value
+      ? await api.commitSkillUpload(
+        pendingPackage.value,
+        String(installPlan.value.package_digest),
+        acceptInstallWarnings.value,
+      )
+      : await api.commitSkillInstall(
+        pendingSource.value,
+        String(installPlan.value.package_digest),
+        acceptInstallWarnings.value,
+      );
+    actionResult.value = receipt;
+    if (!receipt?.ok) {
+      error.value = receipt?.error || t('page.skills.install.commitFailed');
+      return;
+    }
+    const installedSkillId = String(receipt?.data?.receipt?.skill_id || '');
+    discardInstallPlan();
     loadedSections.clear();
     await refreshCatalog();
+    if (installedSkillId) selectedSkillId.value = installedSkillId;
     await hydrateSection(currentSection(), true);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
   } finally {
     installing.value = false;
-    if (packageInput.value) packageInput.value.value = '';
   }
+}
+
+function discardInstallPlan() {
+  installOpen.value = false;
+  installSource.value = '';
+  pendingPackage.value = null;
+  pendingSource.value = '';
+  installPlanReceipt.value = null;
+  acceptInstallWarnings.value = false;
+  if (packageInput.value) packageInput.value.value = '';
 }
 
 function toggleSkillDir(path: string) {
@@ -500,11 +600,11 @@ onUnmounted(() => hydrationController?.abort());
               <X v-if="createOpen" :size="15" />
               <Plus v-else :size="15" />
             </button>
-            <button class="icon-action" type="button" :disabled="installing" :title="t('page.skills.management.install')" :aria-label="t('page.skills.management.install')" @click="packageInput?.click()">
+            <button class="icon-action" type="button" :disabled="installing" :title="t('page.skills.management.install')" :aria-label="t('page.skills.management.install')" @click="installOpen = !installOpen">
               <RefreshCw v-if="installing" :size="15" class="spinning" />
               <PackagePlus v-else :size="15" />
             </button>
-            <input ref="packageInput" class="visually-hidden" type="file" accept=".tar,application/x-tar" @change="installSkillPackage(($event.target as HTMLInputElement).files)" />
+            <input ref="packageInput" class="visually-hidden" type="file" accept=".tar,application/x-tar" @change="planSkillPackage(($event.target as HTMLInputElement).files)" />
           </div>
           <div class="filter-row">
             <select v-model="scope">
@@ -554,6 +654,88 @@ onUnmounted(() => hydrationController?.abort());
             <button class="primary-action" type="button" @click="createSkill">
               <Plus :size="15" />
               {{ t('page.skills.management.create') }}
+            </button>
+          </div>
+        </section>
+
+        <section v-if="installOpen && !installPlan" class="management-panel skill-install-source">
+          <header>
+            <div>
+              <h2>{{ t('page.skills.management.install') }}</h2>
+              <p>{{ t('page.skills.install.sourceHint') }}</p>
+            </div>
+            <button class="icon-action" type="button" :aria-label="t('page.skills.install.cancel')" @click="discardInstallPlan">
+              <X :size="15" />
+            </button>
+          </header>
+          <label class="field-line">
+            {{ t('page.skills.install.source') }}
+            <input v-model="installSource" type="text" :placeholder="t('page.skills.install.sourcePlaceholder')" @keydown.enter.prevent="planSkillSource" />
+          </label>
+          <div class="button-row">
+            <button class="ghost-action" type="button" :disabled="installing" @click="packageInput?.click()">
+              <PackagePlus :size="15" />
+              {{ t('page.skills.install.chooseFile') }}
+            </button>
+            <button class="primary-action" data-action="plan-skill-source" type="button" :disabled="installing || !installSource.trim()" @click="planSkillSource">
+              <RefreshCw v-if="installing" :size="15" class="spinning" />
+              <ShieldAlert v-else :size="15" />
+              {{ t('page.skills.install.reviewSource') }}
+            </button>
+          </div>
+        </section>
+
+        <section v-if="installPlan" class="management-panel skill-install-review" aria-live="polite">
+          <header>
+            <div>
+              <h2>{{ t('page.skills.install.reviewTitle') }}</h2>
+              <p>{{ pendingPackage?.name || pendingSource }}</p>
+            </div>
+            <button class="icon-action" type="button" :aria-label="t('page.skills.install.cancel')" @click="discardInstallPlan">
+              <X :size="15" />
+            </button>
+          </header>
+          <dl class="detail-list compact">
+            <dt>{{ t('page.skills.install.skill') }}</dt>
+            <dd>{{ installPlan.name }} <small>{{ installPlan.skill_id }}</small></dd>
+            <dt>{{ t('page.skills.install.class') }}</dt>
+            <dd>{{ installPlan.package_class }}</dd>
+            <dt>{{ t('page.skills.install.contents') }}</dt>
+            <dd>{{ formatCount('files', installPlan.files?.length || 0) }} · {{ formatBytes(installPlan.total_bytes) }}</dd>
+            <dt>{{ t('page.skills.install.digest') }}</dt>
+            <dd class="install-digest">{{ installPlan.package_digest }}</dd>
+          </dl>
+          <ApiStateBanner
+            v-if="installBlockers.length"
+            status="degraded"
+            :title="t('page.skills.install.blocked')"
+            :detail="installBlockers.join(' · ')"
+          />
+          <div v-else-if="installWarnings.length" class="install-review-warning">
+            <ShieldAlert :size="16" />
+            <div>
+              <strong>{{ t('page.skills.install.warningTitle') }}</strong>
+              <ul>
+                <li v-for="warning in installWarnings" :key="warning">{{ warning }}</li>
+              </ul>
+            </div>
+          </div>
+          <div v-else class="install-review-safe">
+            <CheckCircle2 :size="16" />
+            <span>{{ t('page.skills.install.safe') }}</span>
+          </div>
+          <label v-if="installWarnings.length && !installBlockers.length" class="install-warning-consent">
+            <input v-model="acceptInstallWarnings" type="checkbox" />
+            <span>{{ t('page.skills.install.acceptWarnings') }}</span>
+          </label>
+          <div class="button-row">
+            <button class="ghost-action" type="button" :disabled="installing" @click="discardInstallPlan">
+              {{ t('page.skills.install.cancel') }}
+            </button>
+            <button class="primary-action" data-action="commit-skill-install" type="button" :disabled="installing || !canCommitInstall" @click="commitSkillPackage">
+              <RefreshCw v-if="installing" :size="15" class="spinning" />
+              <PackagePlus v-else :size="15" />
+              {{ installing ? t('page.skills.install.installing') : t('page.skills.install.commit') }}
             </button>
           </div>
         </section>

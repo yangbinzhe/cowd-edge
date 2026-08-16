@@ -109,6 +109,30 @@ async function installOfflineGatewayContract(page) {
     }],
     ['/api/workspace/files', { dir: '', files: [] }],
     ['/api/gateway/capability-contract', { schema_version: 1, capabilities: [] }],
+    ['/api/skills/catalog', { items: [] }],
+    ['/api/skills/install/plan', {
+      kind: 'skills.install.plan',
+      schema_version: 1,
+      plan: {
+        skill_id: 'browser-reviewed-skill',
+        name: 'Browser reviewed skill',
+        package_class: 'workflow',
+        package_digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        total_bytes: 42,
+        files: [{ path: 'SKILL.md' }],
+        installable: true,
+        blockers: [],
+        warnings: ['Review the remote package license before installation.'],
+      },
+    }],
+    ['/api/skills/install/commit', {
+      kind: 'skills.install.receipt',
+      schema_version: 1,
+      receipt: {
+        skill_id: 'browser-reviewed-skill',
+        package_digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      },
+    }],
   ]);
   await page.route(/^https?:\/\/[^/]+\/api\//, async (route) => {
     const url = new URL(route.request().url());
@@ -1119,6 +1143,29 @@ test('skills agents and tools pages expose lifecycle workbenches', async ({ page
   await expect(page.locator('.skills-catalog')).toBeVisible();
   await expect(page.locator('.skills-detail')).toBeVisible();
   await expect(page.locator('.governed-action-panel').first()).toContainText('Validate');
+  if (!realGateway) {
+    await page.getByRole('button', { name: 'Install skill package' }).click();
+    await page.getByLabel('Source').fill('github://owner/repo/skills/review?ref=commit');
+    await page.getByRole('button', { name: 'Resolve and review' }).click();
+    const review = page.locator('.skill-install-review');
+    await expect(review).toContainText('Browser reviewed skill');
+    await expect(review).toContainText('sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+    const commit = review.getByRole('button', { name: 'Install reviewed package' });
+    await expect(commit).toBeDisabled();
+    await review.getByRole('checkbox').check();
+    await expect(commit).toBeEnabled();
+    const commitRequest = page.waitForRequest((request) => (
+      new URL(request.url()).pathname === '/api/skills/install/commit'
+    ));
+    await commit.click();
+    const request = await commitRequest;
+    expect(request.postDataJSON()).toEqual({
+      source: 'github://owner/repo/skills/review?ref=commit',
+      expected_digest: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      allow_warnings: true,
+    });
+    await expect(review).toHaveCount(0);
+  }
   await page.goto('/index.html#/skills?section=runs');
   await expect(page.locator('[data-section="runs"]').first()).toBeVisible();
 
