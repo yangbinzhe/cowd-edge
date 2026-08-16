@@ -12,13 +12,26 @@ const TERMINAL = new Set([
   'completed',
   'completed_with_warnings',
   'succeeded',
+  'partial',
+  'unavailable',
+  'denied',
   'failed',
   'blocked',
   'cancelled',
   'rejected',
   'error',
 ]);
-const ATTENTION = new Set(['failed', 'blocked', 'rejected', 'error', 'waiting_approval']);
+const ATTENTION = new Set([
+  'failed',
+  'blocked',
+  'waiting_dependency',
+  'partial',
+  'unavailable',
+  'denied',
+  'rejected',
+  'error',
+  'waiting_approval',
+]);
 
 export type ActivityView = ActivityEvent & {
   canonical: ExecutionActivityProjection;
