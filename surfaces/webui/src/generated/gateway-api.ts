@@ -11286,6 +11286,11 @@ export interface components {
             detail: {
                 [key: string]: unknown;
             };
+            display_digest?: string | null;
+            display_focus_label?: string | null;
+            display_label?: string | null;
+            display_provenance?: string | null;
+            display_role_label?: string | null;
             execution_id?: string | null;
             mission_id?: string | null;
             session_id?: string | null;
@@ -11321,6 +11326,11 @@ export interface components {
         };
         MissionControlGraphNode: {
             agent_id?: string | null;
+            display_digest?: string | null;
+            display_focus_label?: string | null;
+            display_label?: string | null;
+            display_provenance?: string | null;
+            display_role_label?: string | null;
             execution_id?: string | null;
             kind: string;
             label: string;

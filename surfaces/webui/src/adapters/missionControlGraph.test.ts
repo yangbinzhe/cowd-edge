@@ -503,4 +503,52 @@ describe('adaptMissionControlGraph', () => {
       evidence_refs: ['evidence:handoff'],
     }));
   });
+
+  it('uses the frozen agent display identity instead of role heuristics', () => {
+    const graph = adaptMissionControlGraph({
+      missions: [{
+        mission_id: 'mission-1',
+        objective: 'target',
+        status: 'active',
+        revision: 2,
+      }],
+      mission_graph: {
+        schema_version: 1,
+        mission_id: 'mission-1',
+        nodes: [{
+          node_id: 'mission:mission-1',
+          kind: 'mission',
+          label: 'target',
+          status: 'active',
+          mission_id: 'mission-1',
+        }, {
+          node_id: 'agent:explore-1',
+          kind: 'agent',
+          label: 'agent-id',
+          status: 'completed',
+          mission_id: 'mission-1',
+          agent_id: 'instance:agent:1',
+          display_label: 'Explore',
+          display_role_label: 'Investigate',
+          display_focus_label: 'surfaces-webui',
+          display_provenance: 'runtime.agent-binding:digest',
+          display_digest: 'abc',
+        }],
+        edges: [{
+          edge_id: 'mission-agent',
+          kind: 'delegated_to',
+          from_node_id: 'mission:mission-1',
+          to_node_id: 'agent:explore-1',
+        }],
+      },
+    } as any);
+
+    expect(graph?.nodes.find((node) => node.kind === 'agent_task')).toMatchObject({
+      summary: 'Explore',
+      display_label: 'Explore',
+      display_role_label: 'Investigate',
+      display_focus_label: 'surfaces-webui',
+      display_digest: 'abc',
+    });
+  });
 });

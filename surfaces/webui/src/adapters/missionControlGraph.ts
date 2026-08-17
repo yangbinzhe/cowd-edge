@@ -110,6 +110,11 @@ export function adaptMissionControlGraph(
         kind: node.kind === 'agent' ? 'agent_task' : node.kind,
         executor_kind: node.kind,
         status: node.status,
+        display_label: node.display_label,
+        display_role_label: node.display_role_label,
+        display_focus_label: node.display_focus_label,
+        display_provenance: node.display_provenance,
+        display_digest: node.display_digest,
         summary: node.kind === 'mission'
           ? t('execution.goal')
           : missionNodeLabel(node),
@@ -167,8 +172,12 @@ function resolveStrategicHost(
 }
 
 function missionNodeLabel(node: Record<string, any>) {
-  if (node.kind === 'team') return t('execution.kind.team');
+  if (node.kind === 'team') {
+    return node.display_label || t('execution.kind.team');
+  }
   if (node.kind === 'agent') {
+    const display = node.display_label || node.display_role_label;
+    if (display) return display;
     const identity = String(node.agent_id || node.label || '').toLowerCase();
     const ordinal = identity.match(/:run:[^:]+:(\d+)/)?.[1] || '';
     const role = identity.includes('synth')

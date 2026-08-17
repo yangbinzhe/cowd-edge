@@ -302,11 +302,18 @@ function graphActivitySummary(
 ) {
   if (activity.kind === 'team') return '协作团队';
   if (activity.kind === 'agent') {
+    const display = text(activity.display_label) || text(activity.title);
+    if (display && !isMachineIdentityLabel(display)) return display;
     const role = text(activity.agent_instance_id)
       || text(activity.agent_run_id);
     if (role) return humanizeAgentRole(role);
   }
   return sanitizeInternalIdentifiers(activity.title);
+}
+
+function isMachineIdentityLabel(value: string) {
+  return /^(?:instance|runtime-team|agent|team|role)[:_-]/i.test(value)
+    || value.includes(':run:');
 }
 
 function graphActivityDescription(

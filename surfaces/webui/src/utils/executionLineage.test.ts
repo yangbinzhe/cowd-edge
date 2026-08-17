@@ -521,4 +521,23 @@ describe('execution lineage', () => {
       'agent',
     ]);
   });
+
+  it('prefers the frozen agent display identity in the execution tree', () => {
+    const researcher = {
+      ...activity('researcher', 'agent', 'root', 'team'),
+      agent_instance_id: 'runtime-team:private:1:run:researcher:1',
+      display_label: 'Explore',
+    };
+    const graph = combineExecutionLineage('root', [
+      projection('root', [
+        activity('execution', 'execution', 'root'),
+        activity('team', 'team', 'root', 'execution'),
+        researcher,
+      ]),
+    ]);
+
+    expect(graph?.nodes.find((node) => node.node_id === 'researcher')).toMatchObject({
+      summary: 'Explore',
+    });
+  });
 });
