@@ -6,6 +6,7 @@ import type {
 } from '../types';
 import {
   combineExecutionLineage,
+  entryGraphId,
   executionProjectionLinks,
   selectTurnExecutionEntry,
 } from './executionLineage';
@@ -539,5 +540,16 @@ describe('execution lineage', () => {
     expect(graph?.nodes.find((node) => node.node_id === 'researcher')).toMatchObject({
       summary: 'Explore',
     });
+  });
+
+  it('resolves a queryable graph id from execution_id when graph_id is missing', () => {
+    expect(
+      entryGraphId({ execution_id: 'session-ingress-graph:turn-1', graph_id: null }),
+    ).toBe('session-ingress-graph:turn-1');
+    expect(entryGraphId({ execution_id: 'session-ingress-graph:turn-2' })).toBe(
+      'session-ingress-graph:turn-2',
+    );
+    expect(entryGraphId({ execution_id: 'e', graph_id: 'graph-g' })).toBe('graph-g');
+    expect(entryGraphId(null)).toBe('');
   });
 });

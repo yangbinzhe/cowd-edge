@@ -57,6 +57,7 @@ import { mergeActivityEvent } from '../utils/turnSettlement';
 import { releaseProjection } from '../release';
 import {
   combineExecutionLineage,
+  entryGraphId,
   executionProjectionLinks,
   selectTurnExecutionEntry,
 } from '../utils/executionLineage';
@@ -1409,7 +1410,13 @@ function exchangeExecutionEntry(turns: ChatTurn[], answerIndex: number) {
     || (active ? String(chat.active?.executionTurnId || '').trim() : '');
   const entries = chat.active?.executionIndex?.executions || [];
   const canonical = selectTurnExecutionEntry(entries, turnId, executionId);
-  if (canonical) return canonical;
+  if (canonical) {
+    // Durable discovery entries may not carry graph_id (older runtime
+    // projections); the execution id is the stable ingress graph identity,
+    // so fall back to it instead of hiding the execution-graph action.
+    const resolvedGraphId = entryGraphId(canonical);
+    return resolvedGraphId ? { ...canonical, graph_id: resolvedGraphId } : canonical;
+  }
   if (!executionId) return null;
   return {
     execution_id: executionId,

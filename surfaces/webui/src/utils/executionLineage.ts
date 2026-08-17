@@ -61,6 +61,13 @@ export function selectTurnExecutionEntry<T extends TurnExecutionEntry>(
   ))[0] || null;
 }
 
+export function entryGraphId(
+  entry: { graph_id?: string | null; execution_id: string } | null | undefined,
+): string {
+  const value = entry?.graph_id || entry?.execution_id || '';
+  return String(value).trim();
+}
+
 export function executionProjectionLinks(projection: ExecutionProjection | null) {
   if (!projection) return [];
   const rootId = text(projection.execution_id);
