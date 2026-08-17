@@ -529,7 +529,7 @@ describe('adaptMissionControlGraph', () => {
           mission_id: 'mission-1',
           agent_id: 'instance:agent:1',
           display_label: 'Explore',
-          display_role_label: 'Investigate',
+          display_role_label: '供应链专家',
           display_focus_label: 'surfaces-webui',
           display_provenance: 'runtime.agent-binding:digest',
           display_digest: 'abc',
@@ -544,9 +544,9 @@ describe('adaptMissionControlGraph', () => {
     } as any);
 
     expect(graph?.nodes.find((node) => node.kind === 'agent_task')).toMatchObject({
-      summary: 'Explore',
+      summary: '供应链专家',
       display_label: 'Explore',
-      display_role_label: 'Investigate',
+      display_role_label: '供应链专家',
       display_focus_label: 'surfaces-webui',
       display_digest: 'abc',
     });
