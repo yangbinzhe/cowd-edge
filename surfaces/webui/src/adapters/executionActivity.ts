@@ -618,6 +618,14 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
   }
   if (activity.kind === 'team') return t('execution.kind.team');
   if (activity.kind === 'agent') {
+    // Prefer the descriptive role/team display name resolved by Runtime
+    // (e.g. 供应链专家 / CTO). Role-id heuristics are only a legacy fallback
+    // for machine identities or missing labels, so the tree shows the same
+    // readable names as the execution graph.
+    if (explicit && !internalReference(explicit) && !protocolIdentifier(explicit)) {
+      const readable = humanizeIdentifier(explicit);
+      if (readable.length <= 40 && !isMachineIdentityLabel(readable)) return readable;
+    }
     const role = String(
       activity.role
       || activity.agent_instance_id
@@ -636,7 +644,11 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
       : t('execution.kind.model');
   }
   if (activity.kind === 'tool_batch') return t('execution.kind.toolBatch');
-  if (activity.kind === 'tool') return rawTitle || t('execution.kind.toolCall');
+  if (activity.kind === 'tool') {
+    return String(activity.tool_contract_id || '').trim()
+      || rawTitle
+      || t('execution.kind.toolCall');
+  }
   if (activity.kind === 'think' || activity.kind === 'reasoning') return t('chat.activity.thinking');
   if (activity.kind === 'approval') return t('execution.kind.approval');
   if (activity.kind === 'verify') return t('execution.kind.verify');
@@ -651,6 +663,12 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
   return rawTitle || String(activity.kind).replaceAll('_', ' ');
 }
 
+function isMachineIdentityLabel(value: string) {
+  return /^(?:instance|runtime-team|agent|team|role)[:_-]/i.test(value)
+    || value.includes(':run:')
+    || /^[a-f0-9]{8,}$/i.test(value);
+}
+
 function compactConversationNode(node: ActivityTreeNode): ActivityTreeNode[] {
   const activity = node.activity;
   if (isToolActivity(activity)) return [];
@@ -661,15 +679,28 @@ function compactConversationNode(node: ActivityTreeNode): ActivityTreeNode[] {
     return node.children.flatMap(compactConversationNode);
   }
   if (activity.kind === 'tool_batch') {
+    // Runtime nests business subgraphs (for example a Team mission launched
+    // through the `runtime_orchestrate` tool) under the invoking tool batch.
+    // Those business children must survive compaction so the tree still shows
+    // Team/Agent nodes; the batch's own tools are summarized by the parent via
+    // `conversationOwnedTools`, so returning only non-tool children here
+    // cannot duplicate the group.
     return node.children
       .filter((child) => !isToolActivity(child.activity))
       .flatMap(compactConversationNode);
   }
   const tools = deduplicatedTools(node.children.flatMap(conversationOwnedTools));
   const children = node.children
-    .filter((child) => !isToolActivity(child.activity) && child.activity.kind !== 'tool_batch')
+    .filter((child) => !isToolActivity(child.activity))
     .flatMap(compactConversationNode);
-  if (tools.length) children.push(toolGroupNode(tools, activity.id));
+  if (tools.length) {
+    // Keep the compact live counter, but attach the individual tool calls as
+    // drill-down children so the tree exposes the same tool names/statuses as
+    // the execution graph when the batch node is expanded.
+    const group = toolGroupNode(tools, activity.id);
+    group.children = tools.map((tool) => ({ activity: tool, children: [] }));
+    children.push(group);
+  }
   if (!isBusinessGraphActivity(activity)) return children;
   sortActivityNodes(children);
   return [{ activity, children }];

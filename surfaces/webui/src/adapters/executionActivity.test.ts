@@ -157,6 +157,29 @@ describe('canonical execution activity adapter', () => {
       .toEqual(['tool:1', 'tool:2']);
   });
 
+  it('preserves a Team business subtree nested under a runtime_orchestrate tool batch', () => {
+    const root = activity('session-root', 'execution');
+    const batch = activity('batch:orchestrate', 'tool_batch', root.activity_id);
+    const mission = activity('mission', 'execution', batch.activity_id);
+    const team = activity('team', 'team', mission.activity_id);
+    const agent = activity('agent:cto', 'agent', team.activity_id);
+    const agentTool = {
+      ...activity('tool:read', 'tool', agent.activity_id),
+      tool_call_id: 'call:read',
+    };
+    const tree = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'session-root',
+      activities: [root, batch, mission, team, agent, agentTool],
+    } as unknown as ExecutionProjection]), []);
+    const executionNode = tree.find((node) => node.activity.id === root.activity_id);
+    const teamNode = executionNode?.children.find((node) => node.activity.kind === 'team');
+    const agentNode = teamNode?.children.find((node) => node.activity.id === agent.activity_id);
+
+    expect(teamNode).toBeDefined();
+    expect(agentNode).toBeDefined();
+    expect(agentNode?.children.map((node) => node.activity.kind)).toContain('tool_batch');
+  });
+
   it('restores a missing Tool parent from its canonical Agent runtime identity', () => {
     const root = activity('execution', 'execution');
     const agent = {
