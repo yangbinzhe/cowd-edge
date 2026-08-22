@@ -12940,10 +12940,30 @@ export interface components {
             child_graph_ref?: string | null;
             instance_id: string;
             reason_kind?: string | null;
+            /**
+             * @description Exact technical capacity attributed to this immutable Team binding.
+             *     Keeping the contribution per obligation lets a topology replacement
+             *     release only the retired workstream instead of guessing from a shared
+             *     Program aggregate after restart.
+             * @default {
+             *       "context_reservation_tokens": 0,
+             *       "output_reservation_tokens": 0,
+             *       "parallel_demand": 0
+             *     }
+             */
+            reservation: components["schemas"]["TeamAdmissionResourceReservation"];
             /** Format: uint64 */
             revision: number;
             /** @default pending */
             state: components["schemas"]["TeamAdmissionState"];
+        };
+        TeamAdmissionResourceReservation: {
+            /** Format: uint64 */
+            context_reservation_tokens: number;
+            /** Format: uint64 */
+            output_reservation_tokens: number;
+            /** Format: uint16 */
+            parallel_demand: number;
         };
         /**
          * @description Durable disposition of one required Team instance.  This records an
