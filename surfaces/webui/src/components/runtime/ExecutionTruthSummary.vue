@@ -26,6 +26,22 @@ const outcome = computed(() => latestPayload('outcome') as any);
 const delivery = computed(() => props.projection.delivery_envelope || null);
 const presentation = computed(() => props.projection.terminal_presentation || null);
 const collaborationProgram = computed(() => props.projection.graph.orchestration?.collaboration_program || null);
+const collaborationWorkPriorities = computed<Record<string, number | null>>(() => {
+  const program = collaborationProgram.value;
+  if (!program) return {};
+  const nodePriority = new Map(props.projection.graph.nodes.map((node) => [
+    node.node_id,
+    node.work?.scheduling_priority,
+  ]));
+  return Object.fromEntries(Object.entries(program.semantic_node_instances).map(([semantic, nodeIds]) => {
+    const priorities = nodeIds
+      .map((nodeId) => nodePriority.get(nodeId))
+      .filter((priority): priority is number => typeof priority === 'number');
+    return [semantic, priorities.length && priorities.every((priority) => priority === priorities[0])
+      ? priorities[0]
+      : null];
+  }));
+});
 const coverage = computed(() => delivery.value?.coverage || null);
 const DELIVERY_STATUS_KEYS: Record<DeliveryStatus, string> = {
   satisfied: 'runtime.truth.deliveryStatus.satisfied',
@@ -144,6 +160,7 @@ const lifecycleStatus = computed(() => (
       :program="collaborationProgram"
       :applied-mutation-ids="projection.graph.orchestration?.applied_mutation_ids || []"
       :escalations="projection.graph.orchestration?.collaboration_escalations || []"
+      :work-priorities-by-semantic="collaborationWorkPriorities"
     />
     <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, delivery, presentation, collaboration: collaborationProgram, cancellation: projection.cancellation_receipt, evidence: projection.evidence }" />
   </section>

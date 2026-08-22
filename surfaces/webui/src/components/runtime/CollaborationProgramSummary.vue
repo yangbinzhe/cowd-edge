@@ -12,6 +12,7 @@ const props = defineProps<{
   program: CollaborationProgram;
   appliedMutationIds: string[];
   escalations: CollaborationEscalationReceipt[];
+  workPrioritiesBySemantic: Record<string, number | null>;
 }>();
 
 const resource = computed(() => props.program.control.resource_ledger);
@@ -28,6 +29,7 @@ const teamRows = computed<Record<string, unknown>[]>(() => props.program.team_in
     reason: obligation?.reason_kind || '-',
     child_graph: obligation?.child_graph_ref || '-',
     revision: obligation?.revision ?? '-',
+    soft_priority: props.workPrioritiesBySemantic[team.semantic_node_id] ?? '-',
   };
 }));
 const edgeRows = computed<Record<string, unknown>[]>(() => props.program.edges.map((edge) => ({
@@ -105,7 +107,7 @@ const deadlineLabel = computed(() => resource.value.deadline_at_ms
         copyable
         row-key="instance"
         :rows="teamRows"
-        :columns="['instance', 'semantic', 'required', 'state', 'reason', 'child_graph', 'revision']"
+        :columns="['instance', 'semantic', 'required', 'state', 'reason', 'soft_priority', 'child_graph', 'revision']"
       />
     </div>
     <div class="collaboration-program-table">

@@ -11330,6 +11330,8 @@ export interface components {
             expected_output_tokens: number;
             required: boolean;
             role: components["schemas"]["ExecutionWorkRole"];
+            /** Format: uint8 */
+            scheduling_priority: number;
         };
         /**
          * @description Semantic responsibility inside the canonical execution graph.

@@ -3024,6 +3024,7 @@ export const enUS: MessageCatalog = {
   "column.semantic": "Semantic node",
   "column.required": "Required",
   "column.state": "State",
+  "column.soft.priority": "Soft priority",
   "column.child.graph": "Child graph",
   "column.edge": "Edge",
   "column.from": "From",

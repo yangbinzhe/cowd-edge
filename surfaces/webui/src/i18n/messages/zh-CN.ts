@@ -3024,6 +3024,7 @@ export const zhCN: MessageCatalog = {
   "column.semantic": "语义节点",
   "column.required": "必需",
   "column.state": "状态",
+  "column.soft.priority": "软优先级",
   "column.child.graph": "子图",
   "column.edge": "边",
   "column.from": "来源",

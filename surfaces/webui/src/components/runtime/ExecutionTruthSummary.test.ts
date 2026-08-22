@@ -122,6 +122,19 @@ describe('ExecutionTruthSummary', () => {
         }],
       },
     } as any;
+    projection.graph.nodes[0] = {
+      ...projection.graph.nodes[0],
+      node_id: 'team-1',
+      work: {
+        role: 'evidence_analyze',
+        required: true,
+        dependency: 'all',
+        expected_input_tokens: 0,
+        expected_output_tokens: 0,
+        expected_duration_ms: 0,
+        scheduling_priority: 200,
+      },
+    } as any;
     const wrapper = mount(ExecutionTruthSummary, {
       props: {
         projection,
@@ -142,6 +155,7 @@ describe('ExecutionTruthSummary', () => {
     expect(wrapper.text()).toContain('claim-1');
     expect(wrapper.text()).toContain('已应用升级');
     expect(wrapper.text()).toContain('escalation-1');
+    expect(wrapper.text()).toContain('200');
     expect(wrapper.findAll('.execution-truth-evidence article')).toHaveLength(1);
   });
 });
