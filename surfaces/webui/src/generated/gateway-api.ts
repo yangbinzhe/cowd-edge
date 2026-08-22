@@ -7296,6 +7296,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/finalize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * session POST /api/sessions/:id/finalize
+         * @description Invoke or create Gateway session capability through `/api/sessions/:id/finalize` handled by `finalize_session_turn_handler`.
+         *
+         *     Risk: write. Side effects: mutates_gateway_or_runtime_state, may_change_ai_harness_execution_state.
+         */
+        post: operations["gateway_session_post_api_sessions_by_id_finalize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/history-index": {
         parameters: {
             query?: never;
@@ -9912,6 +9934,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Effect-derived acceptance evaluation with durable digest identity. */
+        AcceptanceEvaluation: {
+            contract_digest: string;
+            derived_obligations: string[];
+            /** Format: uint64 */
+            evaluator_revision: number;
+            receipt_set_digest: string;
+            verdict: components["schemas"]["AcceptanceVerdict"];
+        };
         /** @description Typed acceptance summary for one activity. */
         AcceptanceSummaryProjection: {
             framework_invalid: boolean;
@@ -10115,6 +10146,63 @@ export interface components {
             /** Format: uint64 */
             revision: number;
             status: string;
+        };
+        /**
+         * @description Typed relationship between two Team instances in one collaboration
+         *     program.  It is an immutable planning fact; graph execution status and
+         *     delivery remain the source of lifecycle truth.
+         * @enum {string}
+         */
+        CollaborationEdgeKind: "evidence_feed" | "review_of" | "handoff" | "aggregate" | "dispute";
+        /**
+         * @description Immutable, graph-owned description of the Team obligations for one root
+         *     execution.  It is not a second scheduler: the canonical `ExecutionGraph`
+         *     remains responsible for admission, recovery, effects and terminal state.
+         */
+        CollaborationProgram: {
+            /** @default [] */
+            edges: components["schemas"]["CollaborationProgramEdge"][];
+            program_id: string;
+            /** Format: uint16 */
+            required_team_count: number;
+            /** Format: uint64 */
+            revision: number;
+            /**
+             * @description Durable semantic-to-physical graph mapping. It lets a later program
+             *     patch add a typed handoff to an already admitted Team without parsing
+             *     a generated node id or consulting a mutable in-memory scheduler.
+             * @default {}
+             */
+            semantic_node_instances: {
+                [key: string]: string[];
+            };
+            /** @default [] */
+            team_instances: components["schemas"]["CollaborationTeamInstance"][];
+        };
+        /**
+         * @description Cross-Team relation compiled from the semantic proposal.  `from` and `to`
+         *     are `CollaborationTeamInstance::instance_id` values; execution edges carry
+         *     the physical graph-node relationship separately.
+         */
+        CollaborationProgramEdge: {
+            edge_id: string;
+            from: string;
+            kind: components["schemas"]["CollaborationEdgeKind"];
+            to: string;
+        };
+        /**
+         * @description One stable Team obligation compiled into a root execution graph.
+         *
+         *     `semantic_node_id` deliberately points to the planner's semantic node,
+         *     rather than a presentation label or a mutable child graph id.  A Team can
+         *     therefore be recovered or reprojected without turning its display name
+         *     into an authority key.
+         */
+        CollaborationTeamInstance: {
+            instance_id: string;
+            /** @default true */
+            required: boolean;
+            semantic_node_id: string;
         };
         ContextCompactionResult: {
             compacted_session?: {
@@ -10857,6 +10945,12 @@ export interface components {
         ExecutionOrchestrationMetadata: {
             /** @default [] */
             applied_mutation_ids: string[];
+            /**
+             * @description Present exactly when the graph contains Team obligations. The program
+             *     is immutable planning metadata; its lifecycle is derived from this
+             *     graph's nodes and delivery envelope.
+             */
+            collaboration_program?: components["schemas"]["CollaborationProgram"] | null;
             completion: components["schemas"]["ExecutionCompletionContract"];
             mutation_id: string;
             /** Format: uint64 */
@@ -11003,6 +11097,12 @@ export interface components {
          */
         ExecutionStatusReasonKind: "waiting_predecessor" | "predecessor_failed" | "evidence_not_ready" | "acceptance_unsatisfied" | "acceptance_framework_invalid" | "authorization" | "provider_protocol" | "resource" | "deadline" | "cancelled";
         ExecutionUsage: {
+            /**
+             * @description Immutable acceptance evaluation written by the terminal Runtime
+             *     producer. Dependency, verification, delivery and projection consumers
+             *     read this value; they never re-run a matcher over raw observations.
+             */
+            acceptance_evaluation?: components["schemas"]["AcceptanceEvaluation"] | null;
             /** Format: uint64 */
             cached_tokens: number;
             /**
@@ -31113,6 +31213,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExecutionLiveUpdate"];
+                };
+            };
+            /** @description Bad request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Gateway internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    gateway_session_post_api_sessions_by_id_finalize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+                "multipart/form-data": {
+                    /** @description Request JSON or multipart body. See handler request type in source file. */
+                    body?: {
+                        [key: string]: unknown;
+                    };
+                    path?: {
+                        /** @description Path parameter `id` */
+                        id: string;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Gateway response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Bad request */

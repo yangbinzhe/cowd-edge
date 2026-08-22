@@ -6,7 +6,7 @@
   <section aria-labelledby="build"><h2 id="build" data-zh="构建路径" data-en="Build paths">构建路径</h2><div class="table-wrap"><table><thead><tr><th data-zh="目的" data-en="Goal">目的</th><th data-zh="命令" data-en="Command">命令</th><th data-zh="产物" data-en="Output">产物</th></tr></thead><tbody><tr><td data-zh="完整 Edge" data-en="Full Edge">完整 Edge</td><td><code>npm run build</code></td><td data-zh="WebUI dist 与所有 sidecar binaries" data-en="WebUI dist and all sidecar binaries">WebUI dist 与所有 sidecar binaries</td></tr><tr><td data-zh="只构建 WebUI" data-en="WebUI only">只构建 WebUI</td><td><code>npm run build:webui</code></td><td><code>surfaces/webui/dist</code></td></tr><tr><td data-zh="只构建连接器" data-en="Connectors only">只构建连接器</td><td><code>npm run build:sidecars</code></td><td><code>target/release/cowd-edge-*</code></td></tr><tr><td data-zh="快速合同检查" data-en="Fast contract check">快速合同检查</td><td><code>npm run check</code></td><td data-zh="WebUI 门禁 + Rust workspace check" data-en="WebUI gates + Rust workspace check">WebUI 门禁 + Rust workspace check</td></tr><tr><td data-zh="发布浏览器验收" data-en="Release browser acceptance">发布浏览器验收</td><td><code>npm run test:release</code></td><td data-zh="最终验收与 Chromium 场景证据" data-en="Final acceptance and Chromium scenario evidence">最终验收与 Chromium 场景证据</td></tr></tbody></table></div><pre><code>npm --prefix surfaces/webui install
 npm run check
 npm run build
-node scripts/edge-version-gate.mjs --version 0.9.695 --core ../cowd</code></pre></section>
+node scripts/edge-version-gate.mjs --version 0.9.702 --core ../cowd</code></pre></section>
 
   <section aria-labelledby="layout"><h2 id="layout" data-zh="安装布局" data-en="Installation layout">安装布局</h2><pre><code>edge-root/
 ├── surfaces/webui/dist/
