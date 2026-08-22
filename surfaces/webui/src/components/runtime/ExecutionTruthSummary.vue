@@ -143,6 +143,7 @@ const lifecycleStatus = computed(() => (
       v-if="collaborationProgram"
       :program="collaborationProgram"
       :applied-mutation-ids="projection.graph.orchestration?.applied_mutation_ids || []"
+      :escalations="projection.graph.orchestration?.collaboration_escalations || []"
     />
     <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, delivery, presentation, collaboration: collaborationProgram, cancellation: projection.cancellation_receipt, evidence: projection.evidence }" />
   </section>

@@ -54,6 +54,15 @@ describe('ExecutionTruthSummary', () => {
       semantic_revision: 4,
       source_generation: 2,
       applied_mutation_ids: ['mutation-1', 'escalation-mutation-2'],
+      collaboration_escalations: [{
+        escalation_id: 'escalation-1',
+        source_attempt: 'team-1:attempt:2',
+        base_program_revision: 6,
+        request_kind: 'add_team',
+        reason: 'independent review required',
+        evidence_refs: [],
+        applied_graph_revision: 9,
+      }],
       completion: {
         acceptance_contract_id: 'acceptance-1',
         required_evidence_refs: [],
@@ -131,6 +140,8 @@ describe('ExecutionTruthSummary', () => {
     expect(wrapper.text()).toContain('等待资源');
     expect(wrapper.text()).toContain('delivery-1');
     expect(wrapper.text()).toContain('claim-1');
+    expect(wrapper.text()).toContain('已应用升级');
+    expect(wrapper.text()).toContain('escalation-1');
     expect(wrapper.findAll('.execution-truth-evidence article')).toHaveLength(1);
   });
 });

@@ -10155,6 +10155,23 @@ export interface components {
          */
         CollaborationEdgeKind: "evidence_feed" | "review_of" | "handoff" | "aggregate" | "dispute";
         /**
+         * @description Durable receipt for an escalation that actually expanded its parent
+         *     Program. Rejected requests are deliberately not represented here: this is
+         *     execution truth, not an audit log of arbitrary caller input.
+         */
+        CollaborationEscalationReceipt: {
+            /** Format: uint64 */
+            applied_graph_revision: number;
+            /** Format: uint64 */
+            base_program_revision: number;
+            escalation_id: string;
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceAccessRef"][];
+            reason: string;
+            request_kind: string;
+            source_attempt: string;
+        };
+        /**
          * @description Immutable, graph-owned description of the Team obligations for one root
          *     execution.  It is not a second scheduler: the canonical `ExecutionGraph`
          *     remains responsible for admission, recovery, effects and terminal state.
@@ -11051,6 +11068,13 @@ export interface components {
         ExecutionOrchestrationMetadata: {
             /** @default [] */
             applied_mutation_ids: string[];
+            /**
+             * @description Applied managed-Agent escalations. Entries are appended in the same
+             *     graph transaction as their semantic expansion, so projection/recovery
+             *     never infer an escalation from a mutation-id string.
+             * @default []
+             */
+            collaboration_escalations: components["schemas"]["CollaborationEscalationReceipt"][];
             /**
              * @description Present exactly when the graph contains Team obligations. The program
              *     is immutable planning metadata; its lifecycle is derived from this

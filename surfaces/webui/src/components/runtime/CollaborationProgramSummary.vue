@@ -6,10 +6,12 @@ import DataTable from '../workbench/DataTable.vue';
 import StatusPill from '../workbench/StatusPill.vue';
 
 type CollaborationProgram = GatewayComponents['schemas']['CollaborationProgram'];
+type CollaborationEscalationReceipt = GatewayComponents['schemas']['CollaborationEscalationReceipt'];
 
 const props = defineProps<{
   program: CollaborationProgram;
   appliedMutationIds: string[];
+  escalations: CollaborationEscalationReceipt[];
 }>();
 
 const resource = computed(() => props.program.control.resource_ledger);
@@ -36,6 +38,15 @@ const edgeRows = computed<Record<string, unknown>[]>(() => props.program.edges.m
   state: edge.state,
   delivery_receipt: edge.delivery_receipt?.receipt_ref || '-',
   claim_receipt: edge.claim_receipt?.claim_ref || '-',
+})));
+const escalationRows = computed<Record<string, unknown>[]>(() => props.escalations.map((escalation) => ({
+  escalation: escalation.escalation_id,
+  source_attempt: escalation.source_attempt,
+  base_revision: escalation.base_program_revision,
+  applied_revision: escalation.applied_graph_revision,
+  request_kind: escalation.request_kind,
+  reason: escalation.reason,
+  evidence: escalation.evidence_refs.length,
 })));
 const deadlineLabel = computed(() => resource.value.deadline_at_ms
   ? `${resource.value.deadline_at_ms} ms`
@@ -105,6 +116,16 @@ const deadlineLabel = computed(() => resource.value.deadline_at_ms
         row-key="edge"
         :rows="edgeRows"
         :columns="['edge', 'from', 'to', 'kind', 'state', 'delivery_receipt', 'claim_receipt']"
+      />
+    </div>
+    <div v-if="escalationRows.length" class="collaboration-program-table">
+      <h4>{{ t('runtime.collaboration.escalations') }}</h4>
+      <DataTable
+        compact
+        copyable
+        row-key="escalation"
+        :rows="escalationRows"
+        :columns="['escalation', 'source_attempt', 'base_revision', 'applied_revision', 'request_kind', 'reason', 'evidence']"
       />
     </div>
   </section>
