@@ -49,6 +49,70 @@ describe('ExecutionTruthSummary', () => {
       generated_at_ms: 11,
       committed_at_ms: 12,
     };
+    projection.graph.orchestration = {
+      mutation_id: 'mutation-1',
+      semantic_revision: 4,
+      source_generation: 2,
+      applied_mutation_ids: ['mutation-1', 'escalation-mutation-2'],
+      completion: {
+        acceptance_contract_id: 'acceptance-1',
+        required_evidence_refs: [],
+        required_obligation_ids: [],
+      },
+      collaboration_program: {
+        program_id: 'program-1',
+        revision: 7,
+        required_team_count: 1,
+        semantic_node_instances: { research: ['team-1'] },
+        team_instances: [{ instance_id: 'team-1', semantic_node_id: 'research', required: true }],
+        control: {
+          lifecycle: 'awaiting_resource',
+          obligations: [{
+            instance_id: 'team-1',
+            binding_ref: 'binding-1',
+            state: 'awaiting_resource',
+            reason_kind: 'resource',
+            revision: 7,
+          }],
+          resource_ledger: {
+            context_reservation_tokens: 1_000,
+            output_reservation_tokens: 500,
+            parallel_demand: 2,
+            deadline_at_ms: 123,
+            confidence_basis_points: 9_500,
+            revision: 7,
+          },
+          waiting_relation: 'resource-pool-1',
+          blocker_ref: 'resource-admission-1',
+          next_action: 'await_resource',
+        },
+        edges: [{
+          edge_id: 'edge-1',
+          from: 'team-1',
+          to: 'team-2',
+          kind: 'handoff',
+          state: 'claimed',
+          input_contract: {
+            required_artifact_kinds: [],
+            required_fact_kinds: [],
+            require_committed_effect: false,
+            require_satisfied_acceptance: false,
+          },
+          delivery_receipt: {
+            receipt_ref: 'delivery-1',
+            producer_node_id: 'node-1',
+            producer_attempt: 1,
+            producer_result_ref: 'result-1',
+            evidence_refs: [],
+          },
+          claim_receipt: {
+            claim_ref: 'claim-1',
+            consumer_node_id: 'node-2',
+            consumer_attempt: 1,
+          },
+        }],
+      },
+    } as any;
     const wrapper = mount(ExecutionTruthSummary, {
       props: {
         projection,
@@ -62,6 +126,11 @@ describe('ExecutionTruthSummary', () => {
     expect(wrapper.text()).toContain('1');
     expect(wrapper.text()).toContain('50%');
     expect(wrapper.text()).toContain('终态总结模型');
+    expect(wrapper.text()).toContain('协同编排');
+    expect(wrapper.text()).toContain('program-1');
+    expect(wrapper.text()).toContain('等待资源');
+    expect(wrapper.text()).toContain('delivery-1');
+    expect(wrapper.text()).toContain('claim-1');
     expect(wrapper.findAll('.execution-truth-evidence article')).toHaveLength(1);
   });
 });

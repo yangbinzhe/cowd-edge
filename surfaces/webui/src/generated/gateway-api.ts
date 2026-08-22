@@ -10160,6 +10160,21 @@ export interface components {
          *     remains responsible for admission, recovery, effects and terminal state.
          */
         CollaborationProgram: {
+            /**
+             * @default {
+             *       "lifecycle": "planning",
+             *       "obligations": [],
+             *       "resource_ledger": {
+             *         "confidence_basis_points": 0,
+             *         "context_reservation_tokens": 0,
+             *         "deadline_at_ms": 0,
+             *         "output_reservation_tokens": 0,
+             *         "parallel_demand": 0,
+             *         "revision": 0
+             *       }
+             *     }
+             */
+            control: components["schemas"]["CollaborationProgramControlState"];
             /** @default [] */
             edges: components["schemas"]["CollaborationProgramEdge"][];
             program_id: string;
@@ -10180,16 +10195,61 @@ export interface components {
             team_instances: components["schemas"]["CollaborationTeamInstance"][];
         };
         /**
+         * @description Durable control-plane state.  Existing pre-0821 graph metadata decodes as
+         *     `Planning`; P1 is responsible for moving any new admitted program through
+         *     a non-planning state together with exact obligations.
+         */
+        CollaborationProgramControlState: {
+            blocker_ref?: string | null;
+            /** @default planning */
+            lifecycle: components["schemas"]["CollaborationProgramLifecycle"];
+            next_action?: string | null;
+            /** @default [] */
+            obligations: components["schemas"]["TeamAdmissionObligation"][];
+            /**
+             * @default {
+             *       "confidence_basis_points": 0,
+             *       "context_reservation_tokens": 0,
+             *       "deadline_at_ms": 0,
+             *       "output_reservation_tokens": 0,
+             *       "parallel_demand": 0,
+             *       "revision": 0
+             *     }
+             */
+            resource_ledger: components["schemas"]["ProgramResourceLedger"];
+            waiting_relation?: string | null;
+        };
+        /**
          * @description Cross-Team relation compiled from the semantic proposal.  `from` and `to`
          *     are `CollaborationTeamInstance::instance_id` values; execution edges carry
          *     the physical graph-node relationship separately.
          */
         CollaborationProgramEdge: {
+            claim_receipt?: components["schemas"]["CrossTeamEdgeClaimReceipt"] | null;
+            delivery_receipt?: components["schemas"]["CrossTeamEdgeDeliveryReceipt"] | null;
             edge_id: string;
             from: string;
+            /**
+             * @default {
+             *       "require_committed_effect": false,
+             *       "require_satisfied_acceptance": false,
+             *       "required_artifact_kinds": [],
+             *       "required_fact_kinds": []
+             *     }
+             */
+            input_contract: components["schemas"]["CrossTeamInputContract"];
             kind: components["schemas"]["CollaborationEdgeKind"];
+            /** @default pending */
+            state: components["schemas"]["CrossTeamEdgeState"];
             to: string;
         };
+        /**
+         * @description Program lifecycle is coordination truth, deliberately separate from node
+         *     execution state and from acceptance/effect verdicts.  A program may be
+         *     waiting for a resource while every already-admitted node remains healthy.
+         * @enum {string}
+         */
+        CollaborationProgramLifecycle: "planning" | "awaiting_approval" | "awaiting_resource" | "admitting" | "running" | "reconciling" | "completed" | "partial" | "blocked" | "failed" | "cancelled";
         /**
          * @description One stable Team obligation compiled into a root execution graph.
          *
@@ -10258,6 +10318,53 @@ export interface components {
             };
             surface_instance: string;
             ttl_seconds?: number;
+        };
+        /**
+         * @description Runtime-derived consumer acknowledgement for a delivered cross-Team edge.
+         *     A claim is fenced by the consumer node attempt so a stale Team retry cannot
+         *     overwrite the delivery state selected by the current graph revision.
+         */
+        CrossTeamEdgeClaimReceipt: {
+            claim_ref: string;
+            /** Format: uint32 */
+            consumer_attempt: number;
+            consumer_node_id: string;
+        };
+        /**
+         * @description Runtime-derived producer receipt for one cross-Team delivery.  The
+         *     Coordinator stores only stable graph/node/attempt identity, the terminal
+         *     result locator, and already-authorized evidence references.  It never
+         *     copies a prompt, tool input, or private model reasoning into another Team.
+         */
+        CrossTeamEdgeDeliveryReceipt: {
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceAccessRef"][];
+            /** Format: uint32 */
+            producer_attempt: number;
+            producer_node_id: string;
+            producer_result_ref: string;
+            receipt_ref: string;
+        };
+        /**
+         * @description State of a cross-Team delivery edge.  It is append-only receipt driven:
+         *     neither a model summary nor a consumer display state can mark an edge
+         *     delivered.
+         * @enum {string}
+         */
+        CrossTeamEdgeState: "pending" | "awaiting_producer" | "delivered" | "claimed" | "blocked" | "cancelled";
+        /**
+         * @description Bounded input contract for a cross-Team edge.  Raw prompts, arbitrary tool
+         *     inputs and private model reasoning cannot cross this boundary.
+         */
+        CrossTeamInputContract: {
+            /** @default false */
+            require_committed_effect: boolean;
+            /** @default false */
+            require_satisfied_acceptance: boolean;
+            /** @default [] */
+            required_artifact_kinds: string[];
+            /** @default [] */
+            required_fact_kinds: components["schemas"]["TerminalFactKind"][];
         };
         /** @enum {string} */
         DeliveryBranchStatus: "completed" | "failed" | "cancelled" | "blocked";
@@ -10685,8 +10792,7 @@ export interface components {
             /** @constant */
             mode: "finally";
         };
-        /** @enum {string} */
-        ExecutionEdgeKind: "depends_on" | "verifies" | "produces";
+        ExecutionEdgeKind: ("depends_on" | "verifies" | "produces") | "cross_team_handoff";
         /**
          * @description Read-only graph relation safe for surfaces. Execution payloads and private
          *     prompts stay in Runtime; consumers only need stable topology to render and
@@ -10901,9 +11007,9 @@ export interface components {
             kind: components["schemas"]["ExecutionNodeKind"];
             node_id: string;
             /**
-             * @description Safe input identity for surfaces. The referenced payload and private
-             *     prompt remain Runtime-owned and must be resolved through governed
-             *     evidence or activity projections.
+             * @description Safe opaque input identity for surfaces. The referenced payload and
+             *     private prompt remain Runtime-owned and must be resolved through
+             *     governed evidence or activity projections.
              * @default
              */
             payload_ref: string;
@@ -11784,6 +11890,25 @@ export interface components {
             failure?: string | null;
             model: string;
             provider: string;
+        };
+        /**
+         * @description Technical (not monetary) resource snapshot owned by the program revision.
+         *     It is changed only on admission/revision/terminal boundaries; token streaming
+         *     does not write a database ledger per chunk.
+         */
+        ProgramResourceLedger: {
+            /** Format: uint16 */
+            confidence_basis_points: number;
+            /** Format: uint64 */
+            context_reservation_tokens: number;
+            /** Format: uint64 */
+            deadline_at_ms: number;
+            /** Format: uint64 */
+            output_reservation_tokens: number;
+            /** Format: uint16 */
+            parallel_demand: number;
+            /** Format: uint64 */
+            revision: number;
         };
         ProjectionCommandAvailability: {
             available: boolean;
@@ -12779,6 +12904,28 @@ export interface components {
             task_id: string;
             turns: components["schemas"]["TaskTurnBinding"][];
         };
+        /**
+         * @description One exact Team admission obligation compiled from an accepted collaboration
+         *     intent.  `binding_ref` is a frozen TeamBinding digest/ref; labels and role
+         *     display names never participate in this authority identity.
+         */
+        TeamAdmissionObligation: {
+            binding_ref: string;
+            child_graph_ref?: string | null;
+            instance_id: string;
+            reason_kind?: string | null;
+            /** Format: uint64 */
+            revision: number;
+            /** @default pending */
+            state: components["schemas"]["TeamAdmissionState"];
+        };
+        /**
+         * @description Durable disposition of one required Team instance.  This records an
+         *     obligation, not a scheduler lease: the graph Supervisor remains the only
+         *     executor and permit owner.
+         * @enum {string}
+         */
+        TeamAdmissionState: "pending" | "awaiting_approval" | "awaiting_resource" | "admitting" | "admitted" | "blocked_policy" | "cancelled";
         /**
          * @description Typed terminal-fact kinds consumed by dependency predicates. They are
          *     Runtime-attested facts, never presentation booleans.

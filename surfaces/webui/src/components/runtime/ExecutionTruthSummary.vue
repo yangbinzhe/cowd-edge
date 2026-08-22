@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { t } from '../../i18n';
 import { displayStatus } from '../../i18n/domain/status';
 import type { AnswerOrigin, DeliveryStatus, ExecutionProjection } from '../../types';
+import CollaborationProgramSummary from './CollaborationProgramSummary.vue';
 import RawPayload from '../workbench/RawPayload.vue';
 import StatusPill from '../workbench/StatusPill.vue';
 
@@ -24,6 +25,7 @@ const admission = computed(() => latestPayload('admission') as any);
 const outcome = computed(() => latestPayload('outcome') as any);
 const delivery = computed(() => props.projection.delivery_envelope || null);
 const presentation = computed(() => props.projection.terminal_presentation || null);
+const collaborationProgram = computed(() => props.projection.graph.orchestration?.collaboration_program || null);
 const coverage = computed(() => delivery.value?.coverage || null);
 const DELIVERY_STATUS_KEYS: Record<DeliveryStatus, string> = {
   satisfied: 'runtime.truth.deliveryStatus.satisfied',
@@ -137,7 +139,12 @@ const lifecycleStatus = computed(() => (
         <small>{{ displayStatus(evidence.completeness) }} · {{ evidence.freshness }}</small>
       </article>
     </div>
-    <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, delivery, presentation, cancellation: projection.cancellation_receipt, evidence: projection.evidence }" />
+    <CollaborationProgramSummary
+      v-if="collaborationProgram"
+      :program="collaborationProgram"
+      :applied-mutation-ids="projection.graph.orchestration?.applied_mutation_ids || []"
+    />
+    <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, delivery, presentation, collaboration: collaborationProgram, cancellation: projection.cancellation_receipt, evidence: projection.evidence }" />
   </section>
 </template>
 
