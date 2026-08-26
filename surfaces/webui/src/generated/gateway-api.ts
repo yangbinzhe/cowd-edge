@@ -12956,6 +12956,13 @@ export interface components {
             revision: number;
             /** @default pending */
             state: components["schemas"]["TeamAdmissionState"];
+            /**
+             * @description Durable terminal truth for this exact Team instance. Admission state
+             *     answers whether Runtime could create the child graph; this field
+             *     answers how that admitted graph actually ended. Keeping both prevents
+             *     a failed child from collapsing into an opaque missing parent node.
+             */
+            terminal?: components["schemas"]["TeamExecutionTerminal"] | null;
         };
         TeamAdmissionResourceReservation: {
             /** Format: uint64 */
@@ -12972,6 +12979,23 @@ export interface components {
          * @enum {string}
          */
         TeamAdmissionState: "pending" | "awaiting_approval" | "awaiting_resource" | "admitting" | "admitted" | "blocked_policy" | "cancelled";
+        /**
+         * @description Compact, durable terminal diagnostic for one Team obligation. Detailed
+         *     role receipts remain in the child graph/evidence store addressed by
+         *     `child_graph_ref`; this carrier gives parent recovery and Surface a stable
+         *     failure class without reparsing model tool text.
+         */
+        TeamExecutionTerminal: {
+            /** @default [] */
+            evidence_refs: components["schemas"]["EvidenceAccessRef"][];
+            failure_kind?: string | null;
+            failure_message?: string | null;
+            /** Format: uint64 */
+            finished_at_ms: number;
+            node_status: components["schemas"]["ExecutionNodeStatus"];
+            /** @default false */
+            retryable: boolean;
+        };
         /**
          * @description Typed terminal-fact kinds consumed by dependency predicates. They are
          *     Runtime-attested facts, never presentation booleans.
