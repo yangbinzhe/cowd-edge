@@ -53,7 +53,7 @@ function projection(
   childExecutions: any[] = [],
 ): ExecutionProjection {
   return {
-    schema_version: 2,
+    schema_version: 3,
     execution_id: executionId,
     revision: 1,
     cursor: 2,

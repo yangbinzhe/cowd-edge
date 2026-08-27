@@ -129,7 +129,7 @@ describe('StrategyDecisionSummary surface wiring', () => {
     await router.isReady();
     vi.spyOn(api, 'executionProjection')
       .mockResolvedValueOnce({
-        schema_version: 2,
+        schema_version: 3,
         execution_id: 'execution-sensitive',
         revision: 4,
         cursor: 4,

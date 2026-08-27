@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ExecutionProjection, ExecutionProjectionDelta } from '../types';
-import { PROJECTION_V2_GOLDEN } from '../generated/projection-v2-golden';
+import { PROJECTION_V3_GOLDEN } from '../generated/projection-v3-golden';
 import {
   ProjectionDeltaError,
   reduceExecutionProjectionDelta,
 } from './executionProjection';
 
 function corpus() {
-  return structuredClone(PROJECTION_V2_GOLDEN) as unknown as {
+  return structuredClone(PROJECTION_V3_GOLDEN) as unknown as {
     initial: ExecutionProjection;
     delta: ExecutionProjectionDelta;
     expected: ExecutionProjection;
@@ -65,5 +65,32 @@ describe('execution projection canonical reducer', () => {
     const reduced = reduceExecutionProjectionDelta(fixture.initial, cursorOnly);
     expect(reduced.cursor).toBe(cursorOnly.target_cursor);
     expect(reduced.graph.commit_cursor).toBe(fixture.initial.graph.commit_cursor);
+  });
+
+  it('replaces delivery, presentation, and cancellation truth in one v3 operation', () => {
+    const fixture = corpus();
+    const delta = structuredClone(fixture.delta);
+    delta.operations.splice(-1, 0, {
+      op: 'set_delivery_truth',
+      delivery_envelope: { envelope_id: 'envelope-v3', revision: 3, objective_id: 'objective-v3' },
+      terminal_presentation: {
+        presentation_id: 'presentation-v3',
+        attempt_id: 'attempt-v3',
+        envelope_id: 'envelope-v3',
+        envelope_revision: 3,
+        state: 'committed',
+      },
+      cancellation_receipt: {
+        cancellation_id: 'cancel-v3',
+        execution_id: fixture.initial.execution_id,
+        status: 'cancelled',
+      },
+    } as any);
+
+    const reduced = reduceExecutionProjectionDelta(fixture.initial, delta);
+
+    expect(reduced.delivery_envelope?.envelope_id).toBe('envelope-v3');
+    expect(reduced.terminal_presentation?.presentation_id).toBe('presentation-v3');
+    expect(reduced.cancellation_receipt?.cancellation_id).toBe('cancel-v3');
   });
 });

@@ -196,7 +196,7 @@ describe('chatSessions', () => {
     } as any);
     const live = vi.spyOn(api, 'sessionExecutionLive').mockResolvedValue({ __state: 'not_found' } as any);
     const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'session-ingress-graph:root',
       revision: 13,
       cursor: 97,
@@ -273,7 +273,7 @@ describe('chatSessions', () => {
       live: { revision: 2, status: 'calling_model', last_progress_at_ms: 30, metrics: {} },
     } as any);
     const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'execution-graph:new',
       revision: 2,
       cursor: 2,
@@ -1758,7 +1758,7 @@ describe('chatSessions', () => {
       },
     } as any);
     const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'execution-graph:turn-1',
       revision: 1,
       cursor: 1,
@@ -1817,7 +1817,7 @@ describe('chatSessions', () => {
       },
     } as any);
     const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'execution-without-graph',
       revision: 2,
       cursor: 2,
@@ -1864,7 +1864,7 @@ describe('chatSessions', () => {
       turn_id: 'turn-current',
     }) as any);
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'execution-current',
       revision: 1,
       cursor: 1,
@@ -1933,7 +1933,7 @@ describe('chatSessions', () => {
       turn_id: 'turn-final',
     } as any);
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'execution-final',
       revision: 8,
       cursor: 8,
@@ -3024,7 +3024,7 @@ describe('chatSessions', () => {
       live,
     } as any);
     const projection = vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'drop-abort-execution',
       revision: 9,
       cursor: 9,
@@ -3354,7 +3354,7 @@ describe('chatSessions', () => {
       projection_revision: 11,
     };
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'cancel-recovery-execution',
       revision: 11,
       cursor: 11,
@@ -3412,7 +3412,7 @@ describe('chatSessions', () => {
       execution: { graph_id: 'cancel-live-execution', turn_id: 'cancel-live-turn' },
     } as any);
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 2,
+      schema_version: 3,
       execution_id: 'cancel-live-execution',
       revision: 12,
       cursor: 12,

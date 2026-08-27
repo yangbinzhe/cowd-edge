@@ -70,7 +70,7 @@ describe('projectionRegistry contract gate', () => {
 
   it('fails fast and retains no incompatible companion projection', async () => {
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 3,
+      schema_version: 4,
       execution_id: 'execution-mismatch',
       revision: 1,
       cursor: 1,
@@ -82,7 +82,7 @@ describe('projectionRegistry contract gate', () => {
     expect(projection).toBeNull();
     expect(registry.projectionFor('execution-mismatch')).toBeNull();
     expect(registry.stateFor('execution-mismatch')).toBe('error');
-    expect(registry.entries['execution-mismatch']?.lastError).toContain('unsupported execution projection schema_version 3');
+    expect(registry.entries['execution-mismatch']?.lastError).toContain('unsupported execution projection schema_version 4');
   });
 
   it('fails closed when a snapshot carries another execution identity', async () => {
@@ -108,7 +108,7 @@ describe('projectionRegistry contract gate', () => {
     await registry.load('execution-live', 'full');
 
     registry.applyDelta({
-      schema_version: 3,
+      schema_version: 4,
       reducer_version: 1,
       execution_id: 'execution-live',
       from_revision: 1,
@@ -123,7 +123,7 @@ describe('projectionRegistry contract gate', () => {
     } as any);
 
     expect(registry.stateFor('execution-live')).toBe('stale');
-    expect(registry.entries['execution-live']?.lastError).toContain('unsupported execution projection delta schema_version 3');
+    expect(registry.entries['execution-live']?.lastError).toContain('unsupported execution projection delta schema_version 4');
   });
 
   it('rejects a newer nested strategy contract without treating it as legacy', async () => {
@@ -427,7 +427,7 @@ describe('projectionRegistry contract gate', () => {
     registry.acquire('execution-owned', 'runtime-page', 'full');
     await vi.waitFor(() => expect(streams).toHaveLength(1));
     streams[0].emit('projection_delta', JSON.stringify({
-      schema_version: 2,
+      schema_version: 3,
       reducer_version: 1,
       execution_id: 'execution-foreign',
       from_revision: 1,
@@ -606,7 +606,7 @@ class FakeProjectionEventSource {
 
 function readyProjection(executionId: string, cursor = 1) {
   return {
-    schema_version: 2,
+    schema_version: 3,
     execution_id: executionId,
     revision: 1,
     cursor,

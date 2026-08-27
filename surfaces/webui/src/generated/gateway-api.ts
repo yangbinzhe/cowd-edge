@@ -10171,6 +10171,15 @@ export interface components {
             request_kind: string;
             source_attempt: string;
         };
+        /** @enum {string} */
+        CollaborationIntentLifecycle: "turn_scoped" | "publish_candidate" | "catalog_revision";
+        /**
+         * @description Trusted Runtime provenance for a semantic collaboration admission.  It is
+         *     presentation/audit data only: execution remains pinned to the immutable
+         *     Team snapshots and exact Agent bindings below it.
+         * @enum {string}
+         */
+        CollaborationIntentOrigin: "user_directed_turn_scoped" | "explicit_catalog" | "runtime_replan";
         /**
          * @description Immutable, graph-owned description of the Team obligations for one root
          *     execution.  It is not a second scheduler: the canonical `ExecutionGraph`
@@ -10182,11 +10191,13 @@ export interface components {
              *       "lifecycle": "planning",
              *       "obligations": [],
              *       "resource_ledger": {
+             *         "capacity_profile_revision": 0,
              *         "confidence_basis_points": 0,
              *         "context_reservation_tokens": 0,
              *         "deadline_at_ms": 0,
              *         "output_reservation_tokens": 0,
              *         "parallel_demand": 0,
+             *         "resolved_parallel_ceiling": 0,
              *         "revision": 0
              *       }
              *     }
@@ -10199,6 +10210,11 @@ export interface components {
             required_team_count: number;
             /** Format: uint64 */
             revision: number;
+            /**
+             * @description Additive, surface-safe semantic provenance for a turn-scoped custom
+             *     Team. Historical Programs decode without it and remain executable.
+             */
+            semantic_intent?: components["schemas"]["CollaborationSemanticIntentSnapshot"] | null;
             /**
              * @description Durable semantic-to-physical graph mapping. It lets a later program
              *     patch add a typed handoff to an already admitted Team without parsing
@@ -10225,11 +10241,13 @@ export interface components {
             obligations: components["schemas"]["TeamAdmissionObligation"][];
             /**
              * @default {
+             *       "capacity_profile_revision": 0,
              *       "confidence_basis_points": 0,
              *       "context_reservation_tokens": 0,
              *       "deadline_at_ms": 0,
              *       "output_reservation_tokens": 0,
              *       "parallel_demand": 0,
+             *       "resolved_parallel_ceiling": 0,
              *       "revision": 0
              *     }
              */
@@ -10267,6 +10285,46 @@ export interface components {
          * @enum {string}
          */
         CollaborationProgramLifecycle: "planning" | "awaiting_approval" | "awaiting_resource" | "admitting" | "running" | "reconciling" | "completed" | "partial" | "blocked" | "failed" | "cancelled";
+        CollaborationSemanticIntentSnapshot: {
+            /** @default false */
+            ai_composed: boolean;
+            binding_digest: string;
+            compiler_revision: string;
+            decision_id: string;
+            intent_digest: string;
+            lifecycle: components["schemas"]["CollaborationIntentLifecycle"];
+            origin: components["schemas"]["CollaborationIntentOrigin"];
+            published_template_ref?: string | null;
+            /** Format: uint16 */
+            schema_version: number;
+            source_session_ref: string;
+            source_turn_ref: string;
+            /** @default [] */
+            teams: components["schemas"]["CollaborationSemanticTeamSnapshot"][];
+        };
+        CollaborationSemanticRoleSnapshot: {
+            display_name?: string | null;
+            /** @default [] */
+            input_artifacts: string[];
+            /** @default [] */
+            output_artifacts: string[];
+            /** @default [] */
+            required_capabilities: string[];
+            /** @default [] */
+            required_skills: string[];
+            /** @default [] */
+            required_tools: string[];
+            responsibility: string;
+            role_id: string;
+        };
+        CollaborationSemanticTeamSnapshot: {
+            /** @default [] */
+            dependencies: string[];
+            display_name?: string | null;
+            roles: components["schemas"]["CollaborationSemanticRoleSnapshot"][];
+            team_key: string;
+            workstream_id: string;
+        };
         /**
          * @description One stable Team obligation compiled into a root execution graph.
          *
@@ -11923,6 +11981,17 @@ export interface components {
          *     does not write a database ledger per chunk.
          */
         ProgramResourceLedger: {
+            capacity_profile_digest?: string;
+            /**
+             * @description Immutable profile identity captured at collaboration admission. Empty
+             *     values denote a historical pre-v0.9.706 Program only.
+             */
+            capacity_profile_id?: string;
+            /**
+             * Format: uint64
+             * @default 0
+             */
+            capacity_profile_revision: number;
             /** Format: uint16 */
             confidence_basis_points: number;
             /** Format: uint64 */
@@ -11933,6 +12002,11 @@ export interface components {
             output_reservation_tokens: number;
             /** Format: uint16 */
             parallel_demand: number;
+            /**
+             * Format: uint16
+             * @default 0
+             */
+            resolved_parallel_ceiling: number;
             /** Format: uint64 */
             revision: number;
         };
@@ -12014,6 +12088,10 @@ export interface components {
             revision: number;
             service_class: components["schemas"]["ExecutionServiceClass"];
         } | {
+            /** @constant */
+            op: "replace_graph_orchestration";
+            orchestration?: components["schemas"]["ExecutionOrchestrationMetadata"] | null;
+        } | {
             edges: components["schemas"]["ExecutionEdgeProjection"][];
             node_ids: string[];
             /** @constant */
@@ -12070,6 +12148,12 @@ export interface components {
             /** @constant */
             op: "set_terminal";
             terminal_result_ref?: string | null;
+        } | {
+            cancellation_receipt?: components["schemas"]["CancellationReceipt"] | null;
+            delivery_envelope?: components["schemas"]["DeliveryEnvelope"] | null;
+            /** @constant */
+            op: "set_delivery_truth";
+            terminal_presentation?: components["schemas"]["TerminalPresentation"] | null;
         } | {
             /** Format: uint64 */
             cursor: number;

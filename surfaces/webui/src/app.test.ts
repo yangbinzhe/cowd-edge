@@ -151,7 +151,7 @@ function installCanonicalExecutionProjection(
   registry.entries[executionId] = {
     executionId,
     projection: {
-      schema_version: 2,
+      schema_version: 3,
       execution_id: executionId,
       revision: 1,
       cursor: activities.length,
@@ -1102,7 +1102,7 @@ describe('Cowd Vue WebUI shell', () => {
     projections.entries['execution-graph-1'] = {
       executionId: 'execution-graph-1',
       projection: {
-        schema_version: 2,
+        schema_version: 3,
         kind: 'runtime.execution_projection',
         execution_id: 'execution-graph-1',
         revision: 1,
@@ -2928,7 +2928,7 @@ describe('Cowd Vue WebUI shell', () => {
       }
       const executionId = path.match(/\/executions\/([^/?]+)/)?.[1] || '';
       return Promise.resolve(new Response(JSON.stringify({
-        schema_version: 2,
+        schema_version: 3,
         execution_id: decodeURIComponent(executionId),
         revision: 1,
         cursor: 0,

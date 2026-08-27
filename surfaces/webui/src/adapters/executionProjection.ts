@@ -165,6 +165,11 @@ function applyOperation(
       projection.graph.terminal_result_ref = operation.terminal_result_ref;
       if (operation.live) projection.live = operation.live;
       break;
+    case 'set_delivery_truth':
+      projection.delivery_envelope = operation.delivery_envelope ?? null;
+      projection.terminal_presentation = operation.terminal_presentation ?? null;
+      projection.cancellation_receipt = operation.cancellation_receipt ?? null;
+      break;
     case 'advance_cursor':
       if (Number(operation.cursor) < Number(projection.cursor)) {
         throw new ProjectionDeltaError('projection cursor regressed');

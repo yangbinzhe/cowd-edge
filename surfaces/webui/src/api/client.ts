@@ -1310,7 +1310,7 @@ export const api = {
     detailScope: 'summary' | 'full' = 'summary',
     authorizationSessionId = '',
   ) => read<ExecutionProjection>(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=${detailScope}`, {
-    schema_version: 2,
+    schema_version: 3,
     execution_id: executionId,
     revision: 0,
     cursor: 0,

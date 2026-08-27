@@ -1,13 +1,13 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
-import { PROJECTION_V2_GOLDEN } from '../../generated/projection-v2-golden';
+import { PROJECTION_V3_GOLDEN } from '../../generated/projection-v3-golden';
 import type { ExecutionProjection } from '../../types';
 import ExecutionTruthSummary from './ExecutionTruthSummary.vue';
 
 describe('ExecutionTruthSummary', () => {
   it('renders canonical admission, outcome, and evidence payloads', () => {
     const projection = structuredClone(
-      PROJECTION_V2_GOLDEN.expected,
+      PROJECTION_V3_GOLDEN.expected,
     ) as unknown as ExecutionProjection;
     projection.delivery_envelope = {
       envelope_id: 'envelope-1',

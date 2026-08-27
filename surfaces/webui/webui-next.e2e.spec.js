@@ -493,7 +493,7 @@ test('latest turn renders inline while historical execution trees hydrate on dem
       const rootActivityId = `activity:${executionId}:root`;
       const toolActivityId = `activity:${executionId}:tool`;
       return json(route, {
-        schema_version: 2,
+        schema_version: 3,
         kind: 'runtime.execution_projection',
         execution_id: executionId,
         revision: 3,
@@ -734,7 +734,7 @@ test('chat DOM keeps newest history, errors, drafts, scroll and effective teleme
       const sessionId = executionMatch[1].replace('execution-', '');
       const metrics = sessionId === 'session-A' ? { tool_calls: 0, memory_recalls: 0, memory_evidence: 0 } : {};
       return json(route, {
-        schema_version: 2,
+        schema_version: 3,
         execution_id: executionMatch[1],
         revision: 1,
         cursor: 1,
@@ -987,7 +987,7 @@ test('session authorization revocation clears that view, fences reconnects, and 
     if (executionMatch) {
       const sessionId = executionMatch[1];
       return json(route, {
-        schema_version: 2,
+        schema_version: 3,
         execution_id: `execution-${sessionId}`,
         revision: 1,
         cursor: 1,
@@ -1318,7 +1318,7 @@ test('explicit Team cost warning renders through real Gateway on all strategy su
         return id === teamId || id === teamExecutionId || graphId === teamExecutionId;
       });
       topologyReady = Boolean(
-        projection?.schema_version === 2
+        projection?.schema_version === 3
         && projection?.execution_id === executionId
         && strategy?.schema_version === 1
         && effectiveDurationMs(teamEstimate) > fastestAlternativeMs
@@ -1622,7 +1622,7 @@ test('all shell controls remain interactive while a conversation is running', as
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        schema_version: 2,
+        schema_version: 3,
         execution_id: 'interaction-execution',
         revision: 1,
         cursor: 0,

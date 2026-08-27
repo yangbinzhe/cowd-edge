@@ -1,5 +1,5 @@
 // Generated from Gateway OpenAPI. Do not edit manually.
-export const PROJECTION_V2_GOLDEN = {
+export const PROJECTION_V3_GOLDEN = {
   "delta": {
     "authorization_revision": 7,
     "base_cursor": 1,
@@ -333,9 +333,9 @@ export const PROJECTION_V2_GOLDEN = {
       }
     ],
     "redaction_revision": "sha256:golden",
-    "reducer_version": 2,
+    "reducer_version": 3,
     "resync_reason": null,
-    "schema_version": 2,
+    "schema_version": 3,
     "source_health": "fresh",
     "target_cursor": 2,
     "target_revision": 2
@@ -620,7 +620,7 @@ export const PROJECTION_V2_GOLDEN = {
     "redaction_revision": "sha256:golden",
     "relations": [],
     "revision": 2,
-    "schema_version": 2,
+    "schema_version": 3,
     "session_id": "session-golden",
     "strategy": null,
     "task_id": "task-golden",
@@ -733,7 +733,7 @@ export const PROJECTION_V2_GOLDEN = {
     "redaction_revision": "sha256:golden",
     "relations": [],
     "revision": 1,
-    "schema_version": 2,
+    "schema_version": 3,
     "session_id": "session-golden",
     "strategy": null,
     "task_id": "task-golden",
