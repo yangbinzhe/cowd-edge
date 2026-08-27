@@ -73,6 +73,7 @@ const evolutionMissions = computed(() => items(state.value.evolutionMissions, 'm
 const evolutionProposals = computed(() => items(state.value.evolutionProposals, 'proposals'));
 const evolutionCandidates = computed(() => items(state.value.evolutionCandidates, 'candidates'));
 const evolutionReviews = computed(() => items(state.value.evolutionReviews, 'reviews'));
+const evolutionPatterns = computed(() => items(state.value.evolutionPatterns, 'patterns'));
 const evolutionProjector = computed(() => state.value.evolutionSignals?.projector || {});
 const evaluationPolicy = computed(() => state.value.evaluationPolicy || {});
 const evaluationPolicyReviews = computed(() => items(state.value.evaluationPolicyReviews, 'reviews'));
@@ -83,6 +84,7 @@ const evolutionGraph = computed(() => adaptEvolutionGraph({
   proposals: evolutionProposals.value,
   candidates: evolutionCandidates.value,
   reviews: evolutionReviews.value,
+  patterns: evolutionPatterns.value,
 }, t('page.audit.evolution.title')));
 const harnessEvalGraph = computed(() => adaptHarnessEvalGraph({
   reports: harnessEvalReports.value,
@@ -416,6 +418,7 @@ async function refresh() {
       harnessEvalRunsData,
       harnessEvalScenariosData,
       evolutionSignalsData,
+      evolutionPatternsData,
       evolutionDiagnosesData,
       evolutionMissionsData,
       evolutionProposalsData,
@@ -438,6 +441,7 @@ async function refresh() {
       api.harnessEvalRuns(),
       api.harnessEvalScenarios(),
       api.evolutionSignals(),
+      api.evolutionCollaborationPatterns(),
       api.evolutionDiagnoses(),
       api.evolutionMissionsSummary(),
       api.evolutionProposals(),
@@ -461,6 +465,7 @@ async function refresh() {
       harnessEvalRuns: harnessEvalRunsData,
       harnessEvalScenarios: harnessEvalScenariosData,
       evolutionSignals: evolutionSignalsData,
+      evolutionPatterns: evolutionPatternsData,
       evolutionDiagnoses: evolutionDiagnosesData,
       evolutionMissions: evolutionMissionsData,
       evolutionProposals: evolutionProposalsData,
@@ -999,6 +1004,11 @@ onMounted(refresh);
             <span>{{ t('page.audit.evolution.projector') }}</span>
             <strong>{{ evolutionProjector.lag_commits ?? 0 }}</strong>
             <small>{{ t('page.audit.evolution.projectorDetail', { dead: evolutionProjector.dead_letter_count ?? 0, running: evolutionProjector.worker_running ? t('page.audit.evolution.running') : t('page.audit.evolution.stopped') }) }}</small>
+          </article>
+          <article class="metric-card" data-tone="info">
+            <span>{{ t('page.audit.evolution.advisoryPatterns') }}</span>
+            <strong>{{ evolutionPatterns.length }}</strong>
+            <small>{{ t('page.audit.evolution.advisoryPatternsDetail') }}</small>
           </article>
         </div>
         <GraphSurface

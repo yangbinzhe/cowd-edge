@@ -2426,6 +2426,7 @@ export const api = {
     }),
   }),
   evolutionSignals: () => read('/api/evolution/signals', { signals: [] }),
+  evolutionCollaborationPatterns: () => read('/api/evolution/collaboration-patterns', { patterns: [], advisory_only: true }),
   evolutionCreateSignal: (body: Record<string, unknown>) => writeWithReceipt('/api/evolution/signals', {
     method: 'POST',
     body: JSON.stringify(body),

@@ -342,6 +342,8 @@ export const enUS: MessageCatalog = {
   "page.audit.evolution.archive": "Archive",
   "page.audit.evolution.adoptCandidate": "Approve candidate",
   "page.audit.evolution.adoptionGate": "Adoption gates",
+  "page.audit.evolution.advisoryPatterns": "Advisory patterns",
+  "page.audit.evolution.advisoryPatternsDetail": "Evidence-backed only; never an active Definition.",
   "page.audit.evolution.activeCapabilities": "Active capabilities",
   "page.audit.evolution.candidates": "Candidates",
   "page.audit.evolution.createCandidate": "Create candidate",

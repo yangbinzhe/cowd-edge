@@ -32,6 +32,7 @@ export function adaptEvolutionGraph(input: Record<string, any>, title = ''): Gra
   const proposals = Array.isArray(input.proposals) ? input.proposals : [];
   const candidates = Array.isArray(input.candidates) ? input.candidates : [];
   const reviews = Array.isArray(input.reviews) ? input.reviews : [];
+  const patterns = Array.isArray(input.patterns) ? input.patterns : [];
 
   signals.forEach((item: any) => addNode(String(item.signal_id || item.id || ''), 'evolution-signal', String(item.signal_type || item.signal_id || ''), String(item.severity || 'observed'), item, String(item.summary || '')));
   diagnoses.forEach((item: any) => addNode(String(item.diagnosis_id || item.id || ''), 'evolution-diagnosis', String(item.root_cause_kind || item.diagnosis_id || ''), 'diagnosed', item, String(item.impact || '')));
@@ -39,11 +40,20 @@ export function adaptEvolutionGraph(input: Record<string, any>, title = ''): Gra
   proposals.forEach((item: any) => addNode(String(item.proposal_id || item.id || ''), 'evolution-proposal', String(item.kind || item.proposal_id || ''), String(item.status || 'proposed'), item, String(item.expected_benefit || '')));
   candidates.forEach((item: any) => addNode(String(item.candidate_id || item.id || ''), 'evolution-candidate', String(item.subject?.kind || item.candidate_id || ''), String(item.lifecycle || 'candidate'), item, String(item.comparison_report_ref || '')));
   reviews.forEach((item: any) => addNode(String(item.review_id || item.id || ''), 'evolution-review', String(item.class || item.action || item.review_id || ''), String(item.status || 'pending'), item, String(item.observation_report_ref || '')));
+  patterns.forEach((item: any) => addNode(String(item.pattern_id || item.id || ''), 'collaboration-pattern', String(item.signature_digest || item.pattern_id || ''), String(item.lifecycle || 'advisory'), item, `advisory • ${Number(item.support_count || 0)} eligible episodes`));
 
   diagnoses.forEach((item: any) => refs(item.source_signal_ids || item.signal_ids || item.signal_refs).forEach((id) => addEdge(id, String(item.diagnosis_id || item.id || ''), 'diagnoses', item)));
   proposals.forEach((item: any) => addEdge(String(item.diagnosis_id || ''), String(item.proposal_id || item.id || ''), 'proposes', item));
   proposals.forEach((item: any) => refs(item.source_signal_ids).forEach((id) => addEdge(id, String(item.proposal_id || item.id || ''), 'supports', item)));
   candidates.forEach((item: any) => addEdge(String(item.proposal_id || item.source_proposal_id || item.intent?.proposal_id || ''), String(item.candidate_id || item.id || ''), 'evaluates', item));
+  patterns.forEach((item: any) => {
+    const patternId = String(item.pattern_id || item.id || '');
+    (Array.isArray(item.qualifying_episode_ids) ? item.qualifying_episode_ids : []).forEach((episodeId: any) => {
+      const episodeNode = `episode:${String(episodeId)}`;
+      addNode(episodeNode, 'collaboration-experience', String(episodeId), 'eligible', { ref: episodeId }, 'terminal experience');
+      addEdge(episodeNode, patternId, 'supports_advisory', item);
+    });
+  });
   candidates.forEach((item: any) => {
     const candidateId = String(item.candidate_id || item.id || '');
     const reportRef = String(item.comparison_report_ref || '');

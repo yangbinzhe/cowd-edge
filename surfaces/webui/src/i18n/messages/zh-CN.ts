@@ -342,6 +342,8 @@ export const zhCN: MessageCatalog = {
   "page.audit.evolution.archive": "归档",
   "page.audit.evolution.adoptCandidate": "批准候选",
   "page.audit.evolution.adoptionGate": "采纳门禁",
+  "page.audit.evolution.advisoryPatterns": "建议模式",
+  "page.audit.evolution.advisoryPatternsDetail": "仅基于证据；绝不作为生效中的定义。",
   "page.audit.evolution.activeCapabilities": "活跃能力",
   "page.audit.evolution.candidates": "候选",
   "page.audit.evolution.createCandidate": "生成候选",
