@@ -347,6 +347,7 @@ try {
             '.clean-counts',
           ].map((selector) => rectOf(selector)).filter((rect) => rect.visible && rect.top < window.innerHeight);
           const visibleControls = Array.from(document.querySelectorAll('button, a, input, select, textarea'))
+            .filter((element) => !element.matches('.visually-hidden, .sr-only'))
             .filter((element) => visible(element) && element.getBoundingClientRect().top < window.innerHeight);
           const touchTargetRect = (element) => {
             if (element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) {

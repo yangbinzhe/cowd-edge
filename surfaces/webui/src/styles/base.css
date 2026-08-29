@@ -747,6 +747,7 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
 .execution-graph-controls { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--surface) 92%, transparent); }
 .execution-graph-controls button { width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--text); cursor: pointer; font: inherit; }
 .execution-graph-controls button:hover { border-color: var(--accent); }
+.execution-graph-controls button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; }
 .execution-node-detail { min-width: 0; display: grid; gap: 10px; background: var(--surface); padding: 12px; }
 .execution-node-detail > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .execution-node-detail > header > div { min-width: 0; display: grid; gap: 2px; }
@@ -1389,7 +1390,7 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .composer { padding: 10px 12px; }
   .composer textarea { min-height: 76px; max-height: 124px; }
   .composer-input-actions .composer-icon-action { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
-  .composer-runtime-summary { display: grid; grid-template-columns: minmax(60px, 1fr) repeat(7, auto); gap: 4px; margin-left: -2px; margin-right: -2px; overflow: visible; }
+  .composer-runtime-summary { display: grid; grid-template-columns: minmax(60px, 1fr) repeat(7, minmax(44px, auto)); gap: 4px; margin-left: -2px; margin-right: -2px; overflow-x: auto; overflow-y: hidden; }
   .composer-runtime-chip { min-width: 0; width: auto; min-height: 32px; overflow: hidden; gap: 4px; padding: 0 6px; font-size: 11px; }
   .composer-runtime-chip.model { grid-column: auto; max-width: none; }
   .composer-runtime-chip > span:not(.context-ring), .composer-runtime-chip > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1400,7 +1401,7 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .execution-policy-options { grid-template-columns: 1fr; }
   .chat-approval-content dl.approval-fact-grid,
   .chat-approval-content dl.approval-decision { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  button.composer-runtime-chip { min-height: 44px; }
+  button.composer-runtime-chip { min-width: 44px; min-height: 44px; }
   .composer-runtime-chip.workspace { width: 44px; max-width: 44px; margin-left: 0; padding: 0; justify-content: center; }
   .composer-runtime-chip.workspace strong { display: none; }
   .composer-runtime-chip.attachments { width: 44px; padding: 0; justify-content: center; }
@@ -1423,6 +1424,7 @@ button.composer-runtime-chip:hover { color: var(--text); border-color: var(--bor
   .workspace-inline-action { grid-template-columns: minmax(0, 1fr); }
   .workspace-context-menu button { min-height: 44px; }
   .graph-icon-action, .graph-icon-select { flex-basis: 44px; width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  .execution-graph-controls button { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
 }
 
 @media (max-width: 420px) {
