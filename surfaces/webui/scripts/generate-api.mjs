@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
@@ -65,6 +66,11 @@ if (missingAppRoutes.length || unexpectedAppRoutes.length) {
   throw new Error(`Gateway APP route contract mismatch: missing=${JSON.stringify(missingAppRoutes.map(([path]) => path))} unexpected=${JSON.stringify(unexpectedAppRoutes.map(([path]) => path))}`);
 }
 const serializedDocument = JSON.stringify(document);
+const routeCatalogDigest = document?.['x-cowd-route-catalog-digest'];
+if (typeof routeCatalogDigest !== 'string' || !/^[a-f0-9]{64}$/.test(routeCatalogDigest)) {
+  throw new Error('Gateway OpenAPI is missing the canonical Surface route catalog digest');
+}
+const openapiDigest = createHash('sha256').update(serializedDocument).digest('hex');
 if (/\/api\/apps\/mfg(?:\/|\")/i.test(serializedDocument)) {
   throw new Error('Gateway OpenAPI still contains a legacy MFG APP path');
 }
@@ -164,6 +170,15 @@ try {
       throw new Error(`Generated Gateway API is missing ${path}`);
     }
   }
+  await writeFile(
+    temporaryOutput,
+    [
+      '// Generated from the live Gateway OpenAPI. Do not edit manually.',
+      `// x-cowd-openapi-sha256: ${openapiDigest}`,
+      `// x-cowd-route-catalog-sha256: ${routeCatalogDigest}`,
+      generated,
+    ].join('\n'),
+  );
   await rename(temporaryOutput, output);
   await rename(temporaryLiveContract, liveContractOutput);
   await rename(temporaryProjectionGolden, projectionGoldenOutput);

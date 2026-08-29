@@ -13,6 +13,12 @@ const failures = [];
 const requireText = (source, token, label) => { if (!source.includes(token)) failures.push(label); };
 
 requireText(catalog, "'/api/apps'", 'Catalog client must use the canonical /api/apps endpoint');
+if (!/^\/\/ x-cowd-openapi-sha256: [a-f0-9]{64}$/m.test(generated)) {
+  failures.push('Generated Gateway API is missing its source OpenAPI digest');
+}
+if (!/^\/\/ x-cowd-route-catalog-sha256: [a-f0-9]{64}$/m.test(generated)) {
+  failures.push('Generated Gateway API is missing its Surface route catalog digest');
+}
 requireText(catalog, "credentials: 'same-origin'", 'Catalog requests must preserve same-origin credentials');
 requireText(bridge, '/api/apps/${encodeURIComponent(appId)}${path}', 'Bridge must bind relative requests to the selected application API prefix');
 for (const kind of ['app_api_request', 'app_api_cancel', 'app_api_credit', 'host_api_headers', 'host_api_data', 'host_api_end']) {
