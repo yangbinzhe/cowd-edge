@@ -10,6 +10,6 @@
     "check": "npm --prefix surfaces/webui test && cargo check --workspace --bins",
     "dev:webui": "npm --prefix surfaces/webui run dev",
     "test:webui": "npm --prefix surfaces/webui test",
-    "test:release": "npm --prefix surfaces/webui run test:acceptance:final && npm --prefix surfaces/webui run test:e2e:release"
+    "test:release": "npm run build:webui && npm --prefix surfaces/webui run test:acceptance:assemble && npm --prefix surfaces/webui run test:acceptance:final && npm --prefix surfaces/webui run test:e2e:release"
   }
 }

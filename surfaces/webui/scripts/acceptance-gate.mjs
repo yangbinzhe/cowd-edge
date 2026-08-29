@@ -1,6 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { evidenceContext } from './evidence-context.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const manifest = JSON.parse(readFileSync(resolve(root, 'evaluation/acceptance-manifest.json'), 'utf8'));
@@ -37,10 +38,32 @@ for (const entry of entries) {
 if (!entries.length) failures.push('No Edge-owned acceptance entries are selected');
 
 if (process.argv.includes('--final')) {
-  const results = JSON.parse(readFileSync(resolve(root, 'evaluation/acceptance-results.json'), 'utf8'));
-  for (const entry of entries) {
-    const result = results.entries?.find((item) => item.id === entry.id);
-    if (!result || result.status !== 'pass') failures.push(`${entry.id} lacks passing final evidence`);
+  const context = evidenceContext('acceptance-gate', { final: true });
+  const resultsPath = resolve(
+    context.plan_root,
+    'reports',
+    context.version,
+    `${context.version}-acceptance-results.json`,
+  );
+  if (!existsSync(resultsPath)) {
+    failures.push(`Final acceptance results are missing: ${resultsPath}; run test:acceptance:assemble first`);
+  } else {
+    const results = JSON.parse(readFileSync(resultsPath, 'utf8'));
+    const provenanceMatches = results.provenance?.final === true
+      && results.provenance?.version === context.version
+      && results.provenance?.frontend?.commit === context.frontend.commit
+      && results.provenance?.backend?.commit === context.backend.commit
+      && results.provenance?.frontend?.dirty === false
+      && results.provenance?.backend?.dirty === false;
+    if (results.schema_version !== 2) failures.push('Final acceptance results schema_version must be 2');
+    if (results.status !== 'pass' || (results.failures || []).length) {
+      failures.push('Final acceptance results did not pass');
+    }
+    if (!provenanceMatches) failures.push('Final acceptance results do not bind the current clean release commits');
+    for (const entry of entries) {
+      const result = results.entries?.find((item) => item.id === entry.id);
+      if (!result || result.status !== 'pass') failures.push(`${entry.id} lacks passing final evidence`);
+    }
   }
 }
 

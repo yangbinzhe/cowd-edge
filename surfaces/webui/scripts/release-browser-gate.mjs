@@ -1,12 +1,52 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const catalog = JSON.parse(readFileSync(resolve(root, 'src/apps/fixtures/catalog-single.json'), 'utf8'));
-const baseUrl = (process.env.COWD_WEBUI_URL || 'http://127.0.0.1:8642').replace(/\/$/, '');
+const distRoot = resolve(root, 'dist');
+const contentTypes = new Map([
+  ['.css', 'text/css; charset=utf-8'],
+  ['.html', 'text/html; charset=utf-8'],
+  ['.js', 'text/javascript; charset=utf-8'],
+  ['.json', 'application/json; charset=utf-8'],
+  ['.svg', 'image/svg+xml'],
+  ['.woff2', 'font/woff2'],
+]);
+let releaseServer;
+let baseUrl = process.env.COWD_WEBUI_URL?.replace(/\/$/, '');
+if (!baseUrl) {
+  const indexPath = resolve(distRoot, 'index.html');
+  if (!existsSync(indexPath)) throw new Error(`Release WebUI is not built: ${indexPath}`);
+  releaseServer = createServer((request, response) => {
+    try {
+      const pathname = decodeURIComponent(new URL(request.url || '/', 'http://127.0.0.1').pathname);
+      const candidate = resolve(distRoot, `.${pathname}`);
+      const withinDist = candidate === distRoot || candidate.startsWith(`${distRoot}${sep}`);
+      const filePath = withinDist && existsSync(candidate) && statSync(candidate).isFile()
+        ? candidate
+        : indexPath;
+      response.writeHead(200, {
+        'Content-Type': contentTypes.get(extname(filePath)) || 'application/octet-stream',
+        'Cache-Control': 'no-store',
+      });
+      response.end(readFileSync(filePath));
+    } catch (error) {
+      response.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+      response.end(error instanceof Error ? error.message : String(error));
+    }
+  });
+  await new Promise((resolveListen, rejectListen) => {
+    releaseServer.once('error', rejectListen);
+    releaseServer.listen(0, '127.0.0.1', resolveListen);
+  });
+  const address = releaseServer.address();
+  if (!address || typeof address === 'string') throw new Error('Release WebUI server did not expose a TCP address');
+  baseUrl = `http://127.0.0.1:${address.port}`;
+}
 const systemBrowser = [process.env.COWD_CHROMIUM_PATH, '/snap/bin/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome']
   .find((candidate) => candidate && existsSync(candidate));
 const browser = await chromium.launch({ headless: true, ...(systemBrowser ? { executablePath: systemBrowser } : {}) });
@@ -44,6 +84,9 @@ try {
   failures.push(error instanceof Error ? error.message : String(error));
 } finally {
   await browser.close();
+  if (releaseServer) await new Promise((resolveClose, rejectClose) => {
+    releaseServer.close((error) => (error ? rejectClose(error) : resolveClose()));
+  });
 }
 
 console.log(JSON.stringify({ gate: 'generic-application-release-browser', base_url: baseUrl, failures }, null, 2));

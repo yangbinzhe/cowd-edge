@@ -10611,10 +10611,20 @@ export interface components {
         EvidenceObligation: {
             kind: components["schemas"]["EvidenceObligationKind"];
             obligation_id: string;
+            /** @default runtime_acquisition */
+            observation_requirement: components["schemas"]["EvidenceObservationRequirement"];
             target: components["schemas"]["EvidenceTargetIdentity"];
         };
         /** @enum {string} */
         EvidenceObligationKind: "content_read" | "directory_listing" | "recursive_scan" | "glob_discovery" | "write_effect" | "verify_after_write" | "verify_upstream_change" | "network_evidence";
+        /**
+         * @description Which Runtime authority must have observed evidence before it may satisfy
+         *     an obligation. ToolHost acquisition is sufficient for deterministic
+         *     mechanical checks. Semantic Agent reads additionally require proof that
+         *     the complete receipt entered a successful Provider-model continuation.
+         * @enum {string}
+         */
+        EvidenceObservationRequirement: "runtime_acquisition" | "provider_model";
         EvidenceProjection: {
             completeness: components["schemas"]["EvidenceCompleteness"];
             evidence_ref: components["schemas"]["EvidenceRef"];
@@ -11893,6 +11903,12 @@ export interface components {
         };
         ObservedEvidence: {
             evidence_ref?: components["schemas"]["EvidenceAccessRef"] | null;
+            /**
+             * @description Runtime-owned proof that this exact tool result was present in a
+             *     concrete Provider request whose valid response was committed. Raw
+             *     ToolHost acquisition deliberately leaves this absent.
+             */
+            model_observation?: components["schemas"]["ProviderModelObservationAttestation"] | null;
             obligation_id: string;
             /**
              * Format: uint64
@@ -12186,6 +12202,31 @@ export interface components {
         ProjectionResyncReason: "cursor_gap" | "schema_mismatch" | "authorization_changed" | "redaction_changed" | "detail_scope_changed" | "retention_gap" | "unsafe_materialization" | "explicit";
         /** @enum {string} */
         ProjectionSourceHealth: "fresh" | "lagged";
+        /**
+         * @description Invocation-level proof of semantic delivery to a Provider model.
+         *
+         *     The Provider invocation id is the correlation key. Digests are integrity
+         *     checks inside that identity and are never used to cross-join independently
+         *     owned ToolHost and Conversation evidence namespaces.
+         */
+        ProviderModelObservationAttestation: {
+            complete: boolean;
+            model: string;
+            model_receipt_sha256: string;
+            obligation_ids: string[];
+            /** Format: uint64 */
+            omitted_tokens: number;
+            /** Format: uint32 */
+            provider_attempt: number;
+            provider_invocation_id: string;
+            /** Format: uint64 */
+            provider_request_sequence: number;
+            raw_ref: components["schemas"]["EvidenceRef"];
+            /** Format: uint64 */
+            raw_tokens: number;
+            /** Format: uint64 */
+            receipt_tokens: number;
+        };
         /**
          * @description Boundary assigned to a fact, memory, or recall candidate before it can be
          *     used as authoritative reality context.

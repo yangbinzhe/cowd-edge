@@ -8,12 +8,14 @@ const files = [
   'scripts/assemble-acceptance-results.mjs',
   'scripts/capability-parity.mjs',
   'scripts/raw-payload-audit.mjs',
+  'scripts/release-browser-gate.mjs',
   'evaluation/acceptance-manifest.json',
   'webui-next.e2e.spec.js',
   'package.json',
 ];
 const source = files.map((file) => `${file}\n${fs.readFileSync(path.join(root, file), 'utf8')}`).join('\n');
 const failures = [];
+const releaseScripts = JSON.parse(fs.readFileSync(path.resolve(root, '../..', 'package.json'), 'utf8')).scripts || {};
 
 for (const [pattern, label] of [
   [/\b0\.9\.529\b/, 'historical release fixture'],
@@ -34,8 +36,21 @@ for (const [pattern, label] of [
   [/\.section-row[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed capability section count'],
   [/\.filter-row select[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed filter control count'],
   [/\.metric-card[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed metric card count'],
+  [/evaluation\/acceptance-results\.json/, 'repository-local final acceptance result'],
 ]) {
   if (pattern.test(source)) failures.push(label);
+}
+
+const releaseCommand = releaseScripts['test:release'] || '';
+const buildIndex = releaseCommand.indexOf('build:webui');
+const assembleIndex = releaseCommand.indexOf('test:acceptance:assemble');
+const finalIndex = releaseCommand.indexOf('test:acceptance:final');
+const browserIndex = releaseCommand.indexOf('test:e2e:release');
+if (!(buildIndex >= 0 && assembleIndex > buildIndex && finalIndex > assembleIndex && browserIndex > finalIndex)) {
+  failures.push('release command must build, assemble, validate, then browser-test final evidence');
+}
+if (!source.includes("releaseServer.listen(0, '127.0.0.1'")) {
+  failures.push('release browser gate must self-host the built WebUI on an ephemeral loopback port');
 }
 
 for (const retired of [
