@@ -13,6 +13,7 @@ const unitKeys: Record<string, string> = {
   events: 'unit.events',
   executions: 'unit.executions',
   graphs: 'unit.graphs',
+  grants: 'unit.grants',
   identities: 'unit.identities',
   items: 'unit.items',
   lanes: 'unit.lanes',

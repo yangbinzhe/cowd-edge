@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright';
 import { evidenceContext } from './evidence-context.mjs';
+import { layoutViewport } from './visual-audit-contract.mjs';
 
 const webuiRoot = path.resolve(new URL('../', import.meta.url).pathname);
 const provenance = evidenceContext('visual-audit');
@@ -22,9 +23,6 @@ const routeFilter = new Set(
     .map((value) => value.trim())
     .filter(Boolean),
 );
-const layoutViewport = (viewport) => viewport.scenario === 'zoom-200'
-  ? { width: Math.max(1, Math.floor(viewport.width / 2)), height: Math.max(1, Math.floor(viewport.height / 2)) }
-  : { width: viewport.width, height: viewport.height };
 const pageOptions = (viewport) => ({
   viewport: layoutViewport(viewport),
   ...(viewport.scenario === 'zoom-200' ? { deviceScaleFactor: 2 } : {}),
@@ -209,7 +207,7 @@ try {
     const discoveryPage = await browser.newPage(pageOptions({ width: 1440, height: 960 }));
     await installReferenceFixture(discoveryPage);
     const discovered = [];
-    for (const route of baseRoutes) {
+    for (const route of selectedBaseRoutes) {
       try {
         await discoveryPage.goto(routeUrl(route), { waitUntil: 'domcontentloaded' });
         await discoveryPage.locator('.app-shell').waitFor({ state: 'visible' });
@@ -355,6 +353,10 @@ try {
               const label = element.closest('label') || document.querySelector(`label[for="${element.id}"]`);
               if (label && visible(label)) return label.getBoundingClientRect();
             }
+            if (element instanceof HTMLSelectElement) {
+              const iconSelect = element.closest('.graph-icon-select');
+              if (iconSelect && visible(iconSelect)) return iconSelect.getBoundingClientRect();
+            }
             return element.getBoundingClientRect();
           };
           const touchControls = visibleControls.filter((element) => {
@@ -418,7 +420,7 @@ try {
             };
           });
           const croppedCriticalControls = croppedCriticalControlElements.length;
-          const fixedControls = Array.from(document.querySelectorAll('.global-locale-switch, .companion-toggle')).filter(visible);
+          const fixedControls = Array.from(document.querySelectorAll('.global-locale-switch, .global-approval-button, .companion-toggle')).filter(visible);
           const fixedControlOverlapDetails = [];
           const overlaps = (left, right) => {
             const a = left.getBoundingClientRect();

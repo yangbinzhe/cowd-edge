@@ -39,7 +39,7 @@ const nav: NavItem[] = [
   { id: 'audit', label: 'Audit', route: '/audit', icon: ClipboardCheck, group: 'System' },
   { id: 'settings', label: 'Settings', route: '/settings', icon: Settings, group: 'System' },
 ];
-const mobilePrimaryIds = new Set<NavId>(['chat', 'mission', 'runtime', 'reality']);
+const mobilePrimaryIds = new Set<NavId>(['chat', 'mission', 'runtime']);
 const mobileNavOpen = ref(false);
 const mobileSessionsOpen = ref(false);
 const nextLocale = computed(() => locale.value === 'zh-CN' ? 'en-US' : 'zh-CN');

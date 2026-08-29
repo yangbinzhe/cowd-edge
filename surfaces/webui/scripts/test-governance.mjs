@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { layoutViewport, minimumReflowWidth } from './visual-audit-contract.mjs';
 
 const root = path.resolve(new URL('../', import.meta.url).pathname);
 const files = [
@@ -9,6 +10,7 @@ const files = [
   'scripts/capability-parity.mjs',
   'scripts/raw-payload-audit.mjs',
   'scripts/release-browser-gate.mjs',
+  'scripts/visual-audit.mjs',
   'evaluation/acceptance-manifest.json',
   'webui-next.e2e.spec.js',
   'package.json',
@@ -37,6 +39,7 @@ for (const [pattern, label] of [
   [/\.filter-row select[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed filter control count'],
   [/\.metric-card[^;\n]*toHaveCount\([1-9]\d*\)/, 'fixed metric card count'],
   [/evaluation\/acceptance-results\.json/, 'repository-local final acceptance result'],
+  [/for \(const route of baseRoutes\)/, 'visual audit route filter bypass'],
 ]) {
   if (pattern.test(source)) failures.push(label);
 }
@@ -51,6 +54,15 @@ if (!(buildIndex >= 0 && assembleIndex > buildIndex && finalIndex > assembleInde
 }
 if (!source.includes("releaseServer.listen(0, '127.0.0.1'")) {
   failures.push('release browser gate must self-host the built WebUI on an ephemeral loopback port');
+}
+if (!source.includes(".global-locale-switch, .global-approval-button, .companion-toggle")) {
+  failures.push('visual audit must check every fixed global action for control overlap');
+}
+if (layoutViewport({ width: 360, height: 800, scenario: 'zoom-200' }).width !== minimumReflowWidth
+  || layoutViewport({ width: 390, height: 844, scenario: 'zoom-200' }).width !== minimumReflowWidth
+  || layoutViewport({ width: 768, height: 1024, scenario: 'zoom-200' }).width !== 384
+  || layoutViewport({ width: 360, height: 800, scenario: 'normal' }).width !== 360) {
+  failures.push('visual zoom contract must preserve the 320 CSS px reflow floor and halve wider layouts');
 }
 
 for (const retired of [

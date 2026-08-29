@@ -625,7 +625,7 @@ onUnmounted(() => {
         <EmptyState v-if="!approvalItems.length" :title="t('page.runtime.page.title.362da6a741')" :detail="t('page.runtime.page.detail.e69affe6a7')" />
         <header>
           <h3>{{ t('chat.approval.grants') }}</h3>
-          <span>{{ formatCount('active', activeApprovalGrants.length) }}</span>
+          <span>{{ formatCount('grants', activeApprovalGrants.length) }}</span>
         </header>
         <div class="runtime-approval-list">
           <article v-for="grant in activeApprovalGrants" :key="grant.grant_id">

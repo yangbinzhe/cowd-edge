@@ -24,6 +24,7 @@ describe('WebUI i18n', () => {
     expect(formatCount('events', 12)).toBe('12 事件');
     expect(formatCount('tools', 3)).toBe('3 工具');
     expect(formatCount('agents', 2)).toBe('2 Agent');
+    expect(formatCount('grants', 4)).toBe('4 授权');
     expect(formatCount('tokens', 128)).toBe('128 Token');
     expect(displayStatus('running')).toBe('运行中');
     expect(displayStatus('materializing')).toBe('同步执行数据');

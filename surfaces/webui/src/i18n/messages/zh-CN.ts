@@ -1636,6 +1636,7 @@ export const zhCN: MessageCatalog = {
   "unit.entries": "条目",
   "unit.executions": "执行",
   "unit.graphs": "图",
+  "unit.grants": "授权",
   "unit.identities": "身份",
   "unit.lanes": "通道",
   "unit.leases": "租约",

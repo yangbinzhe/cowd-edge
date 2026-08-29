@@ -1636,6 +1636,7 @@ export const enUS: MessageCatalog = {
   "unit.entries": "entries",
   "unit.executions": "executions",
   "unit.graphs": "graphs",
+  "unit.grants": "grants",
   "unit.identities": "identities",
   "unit.lanes": "lanes",
   "unit.leases": "leases",
