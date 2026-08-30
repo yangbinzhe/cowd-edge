@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "feishu-bitable",
   "name": "Feishu Bitable Source Connector",
-  "version": "0.9.710",
+  "version": "0.9.711",
   "kind": "source-connector",
   "runtime": {
     "kind": "managed",
