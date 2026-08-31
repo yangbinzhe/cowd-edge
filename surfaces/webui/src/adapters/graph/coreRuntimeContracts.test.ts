@@ -74,6 +74,40 @@ describe('Mission, Agent, Team, and Runtime graph contracts', () => {
     expect(model.nodes[0].badges).toContain('1 s');
   });
 
+  it('shows canonical work claims, artifact blockers, and Team grouping', () => {
+    const model = adaptExecutionGraph({
+      graph_id: 'exec-marketplace',
+      nodes: [{
+        node_id: 'experiment',
+        kind: 'agent_task',
+        display_label: 'Experiment reviewer',
+        team_run_id: 'team-experiment',
+        status: 'waiting_external',
+        status_reason: 'waiting for verified baseline',
+        blocked_by_activity_ids: ['theory'],
+        work: {
+          status: 'claimed',
+          claimant_role_id: 'reviewer',
+          input_artifact_refs: ['artifact://theory/baseline'],
+        },
+      }],
+      edges: [{ from: 'theory', to: 'experiment', kind: 'artifact_requires' }],
+    });
+
+    expect(model.nodes[0]).toMatchObject({
+      label: 'Experiment reviewer',
+      group: 'team-experiment',
+      description: 'waiting for verified baseline',
+    });
+    expect(model.nodes[0].badges).toEqual(expect.arrayContaining([
+      'claimed',
+      '领取者 reviewer',
+      '1 个阻塞项',
+      '1 项输入产物',
+    ]));
+    expect(model.edges[0].label).toBe('需要产物');
+  });
+
   it('combines a revisioned Team template with canonical live working state', () => {
     const model = adaptTeamTopology({
       revision_ref: { template_id: 'template-1', revision: 7 },

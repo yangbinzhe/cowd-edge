@@ -115,7 +115,7 @@ export interface ChatTurn {
 
 export interface ActivityEvent {
   id: string;
-  kind: 'execution' | 'goal' | 'team' | 'agent' | 'skill' | 'model' | 'reasoning' | 'tool_batch' | 'tool'
+  kind: 'execution' | 'goal' | 'team' | 'agent' | 'discussion' | 'skill' | 'model' | 'reasoning' | 'tool_batch' | 'tool'
     | 'think' | 'runtime' | 'context' | 'approval' | 'verify' | 'artifact' | 'outcome'
     | 'replan' | 'recovery' | 'error';
   title: string;
@@ -180,6 +180,13 @@ export interface ActivityEvent {
   visibility?: Array<'narrative' | 'operational' | 'audit'>;
   completed_at_ms?: number;
   detail_capability?: string;
+  work_status?: string;
+  work_revision?: number;
+  claimant_instance_id?: string;
+  claimant_role_id?: string;
+  claim_lease_expires_at_ms?: number;
+  input_artifact_refs?: string[];
+  output_artifact_kinds?: string[];
 }
 
 export type ExecutionScopeProjection = GatewayComponents['schemas']['ExecutionScopeProjection'];
@@ -189,6 +196,13 @@ export type ExecutionActivityProjection = GatewayComponents['schemas']['Executio
   result_summary?: string | null;
   status_reason?: string | null;
   required?: boolean;
+  work_status?: string | null;
+  work_revision?: number | null;
+  claimant_instance_id?: string | null;
+  claimant_role_id?: string | null;
+  claim_lease_expires_at_ms?: number | null;
+  input_artifact_refs?: string[];
+  output_artifact_kinds?: string[];
 };
 export type ExecutionActivityRelation = GatewayComponents['schemas']['ExecutionActivityRelation'];
 export type ExecutionActivityContentProjection = GatewayComponents['schemas']['ExecutionActivityContentProjection'];

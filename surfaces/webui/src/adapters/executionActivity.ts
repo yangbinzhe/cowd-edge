@@ -332,6 +332,13 @@ export function activityEventViews(
       evidence_ready: event.evidence_ready ?? undefined,
       effect_summary: event.effect_summary || undefined,
       acceptance_summary: event.acceptance_summary || undefined,
+      work_status: event.work_status || undefined,
+      work_revision: event.work_revision || undefined,
+      claimant_instance_id: event.claimant_instance_id || undefined,
+      claimant_role_id: event.claimant_role_id || undefined,
+      claim_lease_expires_at_ms: event.claim_lease_expires_at_ms || undefined,
+      input_artifact_refs: event.input_artifact_refs || [],
+      output_artifact_kinds: event.output_artifact_kinds || [],
       status_reason: event.status_reason || undefined,
       required: event.required !== false,
       started_at_ms: startedAt,
@@ -537,6 +544,13 @@ function activityView(activity: ExecutionActivityProjection): ActivityView {
     commit_cursor: activity.commit_cursor,
     sequence: activity.sequence,
     detail_capability: activity.detail_capability || undefined,
+    work_status: activity.work_status || undefined,
+    work_revision: activity.work_revision || undefined,
+    claimant_instance_id: activity.claimant_instance_id || undefined,
+    claimant_role_id: activity.claimant_role_id || undefined,
+    claim_lease_expires_at_ms: activity.claim_lease_expires_at_ms || undefined,
+    input_artifact_refs: activity.input_artifact_refs || [],
+    output_artifact_kinds: activity.output_artifact_kinds || [],
     raw: {
       activity_id: activity.activity_id,
       scope: activity.scope,
@@ -566,6 +580,15 @@ function activityView(activity: ExecutionActivityProjection): ActivityView {
       result_summary: activity.result_summary,
       status_reason: activity.status_reason,
       required: activity.required,
+      work: {
+        status: activity.work_status,
+        revision: activity.work_revision,
+        claimant_instance_id: activity.claimant_instance_id,
+        claimant_role_id: activity.claimant_role_id,
+        claim_lease_expires_at_ms: activity.claim_lease_expires_at_ms,
+        input_artifact_refs: activity.input_artifact_refs,
+        output_artifact_kinds: activity.output_artifact_kinds,
+      },
       detail_capability: activity.detail_capability,
     },
     canonical: activity,
@@ -617,6 +640,11 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
       : t('execution.goal');
   }
   if (activity.kind === 'team') return t('execution.kind.team');
+  if (activity.kind === 'discussion') {
+    return explicit && !protocolIdentifier(explicit)
+      ? explicit
+      : t('execution.kind.discussion');
+  }
   if (activity.kind === 'agent') {
     // Prefer the descriptive role/team display name resolved by Runtime
     // (e.g. 供应链专家 / CTO). Role-id heuristics are only a legacy fallback

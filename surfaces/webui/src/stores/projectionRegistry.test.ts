@@ -516,6 +516,8 @@ describe('projectionRegistry contract gate', () => {
       });
     });
     expect(registry.projectionFor('execution-resync')?.revision).toBe(3);
+    expect(JSON.stringify(registry.projectionFor('execution-resync')))
+      .toBe(JSON.stringify(recovered));
     expect(registry.entries['execution-resync']?.resyncCount).toBe(1);
     registry.release('runtime-page');
   });

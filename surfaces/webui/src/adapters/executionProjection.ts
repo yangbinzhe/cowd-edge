@@ -128,6 +128,9 @@ function applyOperation(
       projection.activities = operation.activities;
       projection.activity_relations = operation.relations;
       break;
+    case 'replace_concurrency':
+      projection.concurrency = operation.concurrency;
+      break;
     case 'upsert_activity':
       projection.activities = upsert(
         projection.activities || [],

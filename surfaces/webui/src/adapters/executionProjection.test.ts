@@ -93,4 +93,36 @@ describe('execution projection canonical reducer', () => {
     expect(reduced.terminal_presentation?.presentation_id).toBe('presentation-v3');
     expect(reduced.cancellation_receipt?.cancellation_id).toBe('cancel-v3');
   });
+
+  it('replaces root, inclusive, and capacity counts atomically', () => {
+    const fixture = corpus();
+    const delta = structuredClone(fixture.delta);
+    const concurrency = {
+      root: {
+        total: 2, planned: 0, ready: 1, running: 1,
+        waiting_input: 0, waiting_approval: 0, waiting_external: 0,
+        paused: 0, blocked: 0, terminal: 0,
+      },
+      inclusive: {
+        total: 18, planned: 2, ready: 4, running: 12,
+        waiting_input: 0, waiting_approval: 0, waiting_external: 0,
+        paused: 0, blocked: 0, terminal: 0,
+      },
+      resources: [{
+        kind: 'provider',
+        effective_limit: 16,
+        active_leases: 12,
+        queued_waiters: 4,
+        utilization_basis_points: 7_500,
+        scope: 'process_global',
+      }],
+    };
+    delta.operations.splice(-1, 0, {
+      op: 'replace_concurrency',
+      concurrency,
+    });
+
+    const reduced = reduceExecutionProjectionDelta(fixture.initial, delta);
+    expect(reduced.concurrency).toEqual(concurrency);
+  });
 });

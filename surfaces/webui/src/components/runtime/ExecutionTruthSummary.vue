@@ -161,6 +161,8 @@ const lifecycleStatus = computed(() => (
       :applied-mutation-ids="projection.graph.orchestration?.applied_mutation_ids || []"
       :escalations="projection.graph.orchestration?.collaboration_escalations || []"
       :work-priorities-by-semantic="collaborationWorkPriorities"
+      :activities="projection.activities || []"
+      :concurrency="projection.concurrency"
     />
     <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, delivery, presentation, collaboration: collaborationProgram, cancellation: projection.cancellation_receipt, evidence: projection.evidence }" />
   </section>

@@ -67,13 +67,23 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
       const kindLabel = executionNodeKindLabel(kind);
       const parallelGroup = String(node.parallel_group_id || '').trim();
       const workRole = String(node.work?.role || '').trim().replaceAll('_', ' ');
+      const workStatus = String(node.work?.status || '').trim().replaceAll('_', ' ');
+      const claimant = String(
+        node.work?.claimant_role_id || node.work?.claimant_instance_id || '',
+      ).trim();
+      const blockers = Array.isArray(node.blocked_by_activity_ids)
+        ? node.blocked_by_activity_ids.length
+        : 0;
+      const inputArtifacts = Array.isArray(node.work?.input_artifact_refs)
+        ? node.work.input_artifact_refs.length
+        : 0;
       return {
         id: nodeId,
         type: kind,
-        label: String(node.label || node.summary || workRole || kindLabel || nodeId),
-        group: parallelGroup || String(node.team_id || '').trim() || undefined,
+        label: String(node.display_label || node.label || node.summary || workRole || kindLabel || nodeId),
+        group: parallelGroup || String(node.team_run_id || node.team_id || '').trim() || undefined,
         status: String(node.status || 'planned'),
-        description: String(node.description || ''),
+        description: String(node.status_reason || node.description || ''),
         summary: String(node.summary || nodeId),
         outputSummary: String(node.output_summary || ''),
         metrics: metricLabels(node),
@@ -98,6 +108,10 @@ export function adaptExecutionGraph(graph: Record<string, any> | null): GraphVie
         badges: [
           kindLabel,
           workRole,
+          workStatus,
+          claimant ? `${t('execution.claimedBy')} ${claimant}` : '',
+          blockers ? t('execution.blockerCount', { count: blockers }) : '',
+          inputArtifacts ? t('execution.inputArtifactCount', { count: inputArtifacts }) : '',
           parallelGroup ? t('execution.parallelGroup') : '',
           ...metricLabels(node),
         ].filter(Boolean).map(String),
@@ -124,6 +138,9 @@ function edgeLabel(kind: string) {
   if (kind === 'consumed') return t('execution.edge.consumed');
   if (kind === 'contributes_to') return t('execution.edge.contributesTo');
   if (kind === 'produced') return t('execution.edge.produced');
+  if (kind === 'produces') return t('execution.edge.produced');
+  if (kind === 'artifact_requires') return t('execution.edge.artifactRequires');
+  if (kind === 'cross_team_handoff') return t('execution.edge.crossTeamHandoff');
   return kind.replaceAll('_', ' ');
 }
 

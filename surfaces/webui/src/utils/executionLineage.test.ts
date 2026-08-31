@@ -107,6 +107,48 @@ function projection(
 }
 
 describe('execution lineage', () => {
+  it('renders every admitted descendant Team on the first frame with its blocker', () => {
+    const root = activity('execution-root', 'execution', 'root');
+    const child = {
+      ...activity('execution-program', 'execution', 'program', 'execution-root'),
+      scope: {
+        ...activity('execution-program', 'execution', 'program').scope,
+        parent_execution_id: 'root',
+      },
+    };
+    const theory = {
+      ...activity('team-theory', 'team', 'program', 'execution-program'),
+      team_run_id: 'team-theory',
+      display_label: 'Theory team',
+    };
+    const experiment = {
+      ...activity('team-experiment', 'team', 'program', 'execution-program'),
+      team_run_id: 'team-experiment',
+      display_label: 'Experiment team',
+      status: 'waiting_external',
+      status_reason: 'waiting for verified baseline',
+      blocked_by_activity_ids: ['team-theory'],
+      work_status: 'offered',
+      input_artifact_refs: ['artifact://theory/baseline'],
+    };
+    const graph = combineExecutionLineage('root', [
+      projection('root', [root, child, theory, experiment]),
+    ]);
+
+    expect(executionTopologyCounts(graph)).toMatchObject({ teams: 2 });
+    expect(graph?.nodes.find((node) => node.node_id === 'team-experiment')).toMatchObject({
+      status: 'waiting_external',
+      status_reason: 'waiting for verified baseline',
+      blocked_by_activity_ids: ['team-theory'],
+      team_run_id: 'team-experiment',
+    });
+    expect(graph?.nodes.find((node) => node.node_id === 'team-experiment')?.work)
+      .toMatchObject({
+        status: 'offered',
+        input_artifact_refs: ['artifact://theory/baseline'],
+      });
+  });
+
   it('selects the Session root when Agent child executions precede it', () => {
     const entries = [{
       execution_id: 'runtime-team:run:researcher:1',
