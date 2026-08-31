@@ -31,6 +31,28 @@ export interface TurnExecutionEntry {
   updated_at_ms?: number;
 }
 
+export interface ExecutionTopologyCounts {
+  nodes: number;
+  teams: number;
+  agents: number;
+  tools: number;
+}
+
+export function executionTopologyCounts(
+  graph: { nodes?: Array<{ executor_kind?: string; kind?: string }> } | null | undefined,
+): ExecutionTopologyCounts {
+  const nodes = graph?.nodes || [];
+  const count = (kind: string) => nodes.filter((node) => (
+    text(node.executor_kind || node.kind) === kind
+  )).length;
+  return {
+    nodes: nodes.length,
+    teams: count('team'),
+    agents: count('agent'),
+    tools: count('tool'),
+  };
+}
+
 export function selectTurnExecutionEntry<T extends TurnExecutionEntry>(
   entries: T[],
   turnId: string,

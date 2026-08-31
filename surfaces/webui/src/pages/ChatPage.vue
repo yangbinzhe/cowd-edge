@@ -59,6 +59,7 @@ import {
   combineExecutionLineage,
   entryGraphId,
   executionProjectionLinks,
+  executionTopologyCounts,
   selectTurnExecutionEntry,
 } from '../utils/executionLineage';
 import {
@@ -159,6 +160,7 @@ const executionGraph = computed(() => combineExecutionLineage(
   requestedExecutionGraphId.value,
   lineageProjections.value,
 ));
+const executionTopology = computed(() => executionTopologyCounts(executionGraph.value));
 const executionConnectionState = computed(() => {
   const states = [requestedExecutionGraphId.value]
     .filter(Boolean)
@@ -1643,9 +1645,12 @@ function chooseFirstCommand() {
           <header>
             <div>
               <Workflow :size="15" />
-              <strong>{{ linkedExecutionProjectionIds.length ? t('chat.execution.teamGraph') : t('chat.execution.graph') }}</strong>
+              <strong>{{ executionTopology.teams ? t('chat.execution.teamGraph') : t('chat.execution.graph') }}</strong>
               <span v-if="selectedExecutionEntry?.turn_id">{{ t('chat.execution.turn', { turn: selectedExecutionEntry.turn_id }) }}</span>
               <span>{{ displayStatus(String(activeProjection?.live?.status || executionGraph?.status || executionStatus)) }}</span>
+              <span v-if="executionTopology.teams">{{ t('execution.teamCount', { count: executionTopology.teams }) }}</span>
+              <span v-if="executionTopology.agents">{{ t('execution.agentCount', { count: executionTopology.agents }) }}</span>
+              <span v-if="executionTopology.tools">{{ t('execution.toolCalls', { count: executionTopology.tools }) }}</span>
             </div>
             <button
               class="icon-action"

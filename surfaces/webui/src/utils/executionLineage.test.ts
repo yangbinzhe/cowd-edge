@@ -7,9 +7,27 @@ import type {
 import {
   combineExecutionLineage,
   entryGraphId,
+  executionTopologyCounts,
   executionProjectionLinks,
   selectTurnExecutionEntry,
 } from './executionLineage';
+
+describe('executionTopologyCounts', () => {
+  it('reports only topology that actually exists in the rendered graph', () => {
+    expect(executionTopologyCounts({
+      nodes: [
+        { executor_kind: 'execution' },
+        { executor_kind: 'team' },
+        { executor_kind: 'agent' },
+        { executor_kind: 'tool' },
+        { executor_kind: 'tool' },
+      ],
+    })).toEqual({ nodes: 5, teams: 1, agents: 1, tools: 2 });
+    expect(executionTopologyCounts({
+      nodes: [{ executor_kind: 'execution' }, { executor_kind: 'tool' }],
+    })).toEqual({ nodes: 2, teams: 0, agents: 0, tools: 1 });
+  });
+});
 
 function activity(
   id: string,
