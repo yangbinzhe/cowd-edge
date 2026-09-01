@@ -2440,7 +2440,12 @@ describe('Cowd Vue WebUI shell', () => {
           workspace: { active_session_id: 'session-1' },
           team_projection: {
             runs: [{
-              team: { team_id: 'team-1', status: 'running' },
+              team: {
+                team_id: 'team-1',
+                display_label: 'Team A 理论研究',
+                status: 'running',
+                agent_count: 4,
+              },
               agent_runs: [],
             }],
           },
@@ -2498,6 +2503,8 @@ describe('Cowd Vue WebUI shell', () => {
 
     const teamWrapper = await mountApp('/mission?section=teams');
     await settleAsync();
+    expect(teamWrapper.text()).toContain('Team A 理论研究');
+    expect(teamWrapper.text()).toContain('agents 4');
     expect(teamRun).toHaveBeenCalledWith('team-1');
     expect(teamPlan).toHaveBeenCalledWith('team-1');
     expect(teamEvidence).toHaveBeenCalledWith('team-1');

@@ -340,10 +340,21 @@ const organizationRows = computed(() => organizationDecisions.value.map((decisio
 })));
 const teamRunRows = computed(() => collaborationRuns.value.slice(0, 8).map((run: any) => {
   const team = run.team || run;
+  const agentRuns = Array.isArray(run.agent_runs)
+    ? run.agent_runs
+    : (Array.isArray(team.agents) ? team.agents : []);
+  const projectedAgentCount = Number(
+    run.agent_count
+    ?? team.agent_count
+    ?? run.execution_summary?.agent_count
+    ?? team.execution_summary?.agent_count
+    ?? 0,
+  );
   return {
     id: team.team_id || team.id || '-',
+    label: team.display_label || team.label || team.name || team.team_id || team.id || '-',
     status: team.status || '-',
-    agents: Array.isArray(run.agent_runs) ? run.agent_runs.length : Array.isArray(team.agents) ? team.agents.length : 0,
+    agents: agentRuns.length || projectedAgentCount,
     synthesis: run.execution_summary?.synthesis_status || team.execution_summary?.synthesis_status || '-',
   };
 }));
@@ -1091,7 +1102,7 @@ onUnmounted(() => {
             type="button"
             @click="loadTeamRun(team.id, true)"
           >
-            <strong>{{ team.id }}</strong>
+            <strong :title="team.id">{{ team.label }}</strong>
             <span>{{ displayStatus(team.status) }} · agents {{ team.agents }} · synthesis {{ displayStatus(team.synthesis) }}</span>
           </button>
           <p v-if="!teamRunRows.length" class="empty-note">{{ t('page.mission.control.page.text.f0c708899b') }}</p>

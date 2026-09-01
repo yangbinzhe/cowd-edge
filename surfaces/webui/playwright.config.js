@@ -27,7 +27,9 @@ export default defineConfig({
       ? {
         ...(gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {}),
         'x-cowd-surface-id': 'webui',
-        'x-cowd-observer-id': gatewayObserverId,
+        // Do not install a context-wide observer header. Live transport binds
+        // each subscription to `observer:tab:nonce` and must be able to send
+        // that exact identity without Playwright overwriting it.
         'x-cowd-requested-capabilities': gatewayRequestedCapabilities,
       }
       : undefined,
