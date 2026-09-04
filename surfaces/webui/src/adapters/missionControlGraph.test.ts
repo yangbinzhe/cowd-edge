@@ -551,4 +551,28 @@ describe('adaptMissionControlGraph', () => {
       display_digest: 'abc',
     });
   });
+
+  it('keeps long canonical role labels intact for layout-level wrapping', () => {
+    const longRole = '供应链风险分析与跨区域履约协调专家（北美、欧洲及亚太市场）';
+    const graph = adaptMissionControlGraph({
+      missions: [{ mission_id: 'mission-long', objective: 'target', status: 'active', revision: 1 }],
+      mission_graph: {
+        schema_version: 1,
+        mission_id: 'mission-long',
+        nodes: [{
+          node_id: 'mission:mission-long', kind: 'mission', label: 'target', status: 'active', mission_id: 'mission-long',
+        }, {
+          node_id: 'agent:long', kind: 'agent', label: 'agent-id', status: 'running', mission_id: 'mission-long',
+          display_label: 'Explore', display_role_label: longRole,
+        }],
+        edges: [{ edge_id: 'mission-agent', kind: 'delegated_to', from_node_id: 'mission:mission-long', to_node_id: 'agent:long' }],
+      },
+    } as any);
+
+    expect(graph?.nodes.find((node) => node.kind === 'agent_task')).toMatchObject({
+      summary: longRole,
+      display_label: 'Explore',
+      display_role_label: longRole,
+    });
+  });
 });

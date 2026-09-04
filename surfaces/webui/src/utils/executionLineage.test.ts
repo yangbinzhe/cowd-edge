@@ -602,6 +602,26 @@ describe('execution lineage', () => {
     });
   });
 
+  it('does not discard long canonical agent labels', () => {
+    const label = '跨区域供应链风险分析与履约协调专家（北美、欧洲及亚太市场）';
+    const researcher = {
+      ...activity('researcher-long', 'agent', 'root', 'team'),
+      agent_instance_id: 'runtime-team:private:1:run:researcher:1',
+      display_label: label,
+    };
+    const graph = combineExecutionLineage('root', [
+      projection('root', [
+        activity('execution', 'execution', 'root'),
+        activity('team', 'team', 'root', 'execution'),
+        researcher,
+      ]),
+    ]);
+
+    expect(graph?.nodes.find((node) => node.node_id === 'researcher-long')).toMatchObject({
+      summary: label,
+    });
+  });
+
   it('resolves a queryable graph id from execution_id when graph_id is missing', () => {
     expect(
       entryGraphId({ execution_id: 'session-ingress-graph:turn-1', graph_id: null }),

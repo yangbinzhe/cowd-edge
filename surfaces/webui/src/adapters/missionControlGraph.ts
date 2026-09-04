@@ -177,7 +177,7 @@ function missionNodeLabel(node: Record<string, any>) {
   }
   if (node.kind === 'agent') {
     const display = node.display_role_label || node.display_label;
-    if (display && display.length <= 40 && !/^(?:instance|runtime-team|agent|team|role)[:_-]/i.test(display) && !display.includes(':run:')) {
+    if (display && !/^(?:instance|runtime-team|agent|team|role)[:_-]/i.test(display) && !display.includes(':run:')) {
       return display;
     }
     const identity = String(node.agent_id || node.label || '').toLowerCase();

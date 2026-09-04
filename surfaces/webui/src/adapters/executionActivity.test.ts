@@ -91,6 +91,22 @@ describe('canonical execution activity adapter', () => {
     expect(events[0].status).toBe('failed');
   });
 
+  it('prefers the human-facing agent role over a generic definition label', () => {
+    const agent = {
+      ...activity('agent:summer', 'agent'),
+      display_label: 'Direct',
+      display_role_label: '求和员',
+    } satisfies ExecutionActivityProjection;
+    const [view] = conversationActivityTree(canonicalActivityEvents([{
+      execution_id: 'execution',
+      activities: [agent],
+    } as unknown as ExecutionProjection]), []).flatMap((node) => [node.activity]);
+
+    expect(view.title).toBe('求和员');
+    expect(view.display_label).toBe('Direct');
+    expect(view.display_role_label).toBe('求和员');
+  });
+
   it('folds Runtime tool waves into one Agent-owned conversation summary', () => {
     const root = activity('execution', 'execution');
     const agent = activity('agent:research', 'agent', root.activity_id);

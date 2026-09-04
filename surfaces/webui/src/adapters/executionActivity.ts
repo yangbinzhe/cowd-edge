@@ -310,6 +310,8 @@ export function activityEventViews(
       },
       kind: canonicalKind(event),
       display_label: event.display_label || event.title || undefined,
+      display_role_label: event.display_role_label || undefined,
+      display_focus_label: event.display_focus_label || undefined,
       phase: event.phase || undefined,
       visibility: event.visibility || ['narrative', 'operational', 'audit'],
       parent_activity_id: event.parent_activity_id || undefined,
@@ -507,6 +509,8 @@ function activityView(activity: ExecutionActivityProjection): ActivityView {
     kind: activity.kind,
     title: activity.display_label || activity.public_summary || activity.kind.replaceAll('_', ' '),
     display_label: activity.display_label || undefined,
+    display_role_label: activity.display_role_label || undefined,
+    display_focus_label: activity.display_focus_label || undefined,
     detail: activity.public_summary || '',
     result_summary: activity.result_summary || undefined,
     status_reason: activity.status_reason || undefined,
@@ -634,6 +638,7 @@ function humanizeActivityDetail(activity: ActivityView, detail: string) {
 function businessTitle(activity: ActivityView, rawTitle: string) {
   const lowered = `${activity.id} ${rawTitle}`.toLowerCase();
   const explicit = String(activity.canonical.display_label || '').trim();
+  const roleLabel = String(activity.canonical.display_role_label || '').trim();
   if (activity.kind === 'execution' || activity.kind === 'goal') {
     return containsCjk(rawTitle) && !internalReference(rawTitle)
       ? rawTitle
@@ -646,13 +651,14 @@ function businessTitle(activity: ActivityView, rawTitle: string) {
       : t('execution.kind.discussion');
   }
   if (activity.kind === 'agent') {
-    // Prefer the descriptive role/team display name resolved by Runtime
-    // (e.g. 供应链专家 / CTO). Role-id heuristics are only a legacy fallback
-    // for machine identities or missing labels, so the tree shows the same
-    // readable names as the execution graph.
-    if (explicit && !internalReference(explicit) && !protocolIdentifier(explicit)) {
-      const readable = humanizeIdentifier(explicit);
-      if (readable.length <= 40 && !isMachineIdentityLabel(readable)) return readable;
+    // Runtime keeps the Agent Definition name (`display_label`) separate from
+    // the human-facing Team role (`display_role_label`). The role is the most
+    // useful identity in the collaboration tree and must win over generic
+    // definition labels such as `Direct`.
+    for (const candidate of [roleLabel, explicit]) {
+      if (!candidate || internalReference(candidate) || protocolIdentifier(candidate)) continue;
+      const readable = humanizeIdentifier(candidate);
+      if (!isMachineIdentityLabel(readable) && !/^direct$/i.test(readable)) return readable;
     }
     const role = String(
       activity.role

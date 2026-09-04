@@ -120,6 +120,8 @@ export interface ActivityEvent {
     | 'replan' | 'recovery' | 'error';
   title: string;
   display_label?: string;
+  display_role_label?: string;
+  display_focus_label?: string;
   detail?: string;
   result_summary?: string;
   status_reason?: string;
