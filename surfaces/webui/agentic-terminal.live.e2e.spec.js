@@ -14,7 +14,26 @@ test.beforeEach(async ({ page }) => {
   }, observer);
 });
 
-test('natural-language UI ingress reaches a truthful terminal collaboration projection', async ({ page }) => {
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  // Keep the attached browser's writer identity for cancellation; an API
+  // observer without the Surface lease cannot cancel this admitted turn.
+  const stop = page.locator('.composer-stop-action');
+  if (await stop.isVisible().catch(() => false)) {
+    const receipt = page.waitForResponse((response) => (
+      response.request().method() === 'POST'
+        && /\/api\/sessions\/[^/]+\/cancel$/.test(new URL(response.url()).pathname)
+    ), { timeout: 15_000 });
+    await stop.click();
+    const response = await receipt;
+    await testInfo.attach('failure-cancellation.json', {
+      body: await response.body(), contentType: 'application/json',
+    });
+    expect(response.ok(), 'failed test must not orphan its paid execution').toBe(true);
+  }
+});
+
+test('natural-language UI ingress reaches a truthful terminal collaboration projection', async ({ page }, testInfo) => {
   const health = await page.request.get('/healthz');
   expect(health.status()).toBe(200);
   await page.goto('/index.html#/chat');
@@ -36,6 +55,10 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
   const sessionId = new URL(response.url()).pathname.split('/')[3] || '';
   expect(executionId).not.toBe('');
   expect(sessionId).not.toBe('');
+  console.log(JSON.stringify({ sessionId, executionId }));
+  await testInfo.attach('admission.json', {
+    body: JSON.stringify({ sessionId, executionId, receipt }), contentType: 'application/json',
+  });
 
   let projection;
   await expect.poll(async () => {
@@ -45,9 +68,16 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
     if (!current.ok()) return `http:${current.status()}`;
     projection = await current.json();
     return String(projection?.live?.status || '').toLowerCase();
-  }, { timeout: Number(process.env.COWD_AGENTIC_E2E_TIMEOUT_MS || 600_000) }).toMatch(
-    /^(complete|completed)$/,
+  }, {
+    timeout: Number(process.env.COWD_AGENTIC_E2E_TIMEOUT_MS || 600_000) - 30_000,
+    intervals: [2_000, 5_000, 10_000],
+  }).toMatch(
+    /^(complete|completed|failed|error|cancelled|blocked)$/,
   );
+  await testInfo.attach('terminal-projection.json', {
+    body: JSON.stringify(projection), contentType: 'application/json',
+  });
+  expect(String(projection?.live?.status || '').toLowerCase()).toMatch(/^(complete|completed)$/);
 
   expect(projection?.schema_version).toBe(EXECUTION_PROJECTION_SCHEMA_VERSION);
   if (projection?.agentic_collaboration) {
@@ -72,8 +102,11 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
   const agents = programAgents.length > 0
     ? programAgents
     : (Array.isArray(projection?.agents) ? projection.agents : []);
-  expect(teams.length).toBeGreaterThanOrEqual(expectedTeams);
-  expect(agents.length).toBeGreaterThanOrEqual(expectedAgents);
+  expect(teams.length).toBe(expectedTeams);
+  expect(agents.length).toBe(expectedAgents);
+  for (const program of programs) {
+    expect(String(program.status).toLowerCase()).toBe('verified');
+  }
   for (const team of teams) expect(String(team?.name || '').trim()).not.toBe('');
   for (const agent of agents) {
     expect(String(agent?.name || agent?.display_name || agent?.role || '').trim()).not.toBe('');
