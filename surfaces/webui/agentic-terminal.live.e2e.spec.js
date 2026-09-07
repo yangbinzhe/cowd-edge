@@ -46,7 +46,7 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
     projection = await current.json();
     return String(projection?.live?.status || '').toLowerCase();
   }, { timeout: Number(process.env.COWD_AGENTIC_E2E_TIMEOUT_MS || 600_000) }).toMatch(
-    /^(complete|completed|terminal|partial|blocked|failed|cancelled|error|unavailable)$/,
+    /^(complete|completed)$/,
   );
 
   expect(projection?.schema_version).toBe(EXECUTION_PROJECTION_SCHEMA_VERSION);
@@ -69,5 +69,7 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
   await expect(page.locator('.vue-flow__node')).not.toHaveCount(0);
   await page.goto(`/index.html#/chat?session_id=${encodeURIComponent(sessionId)}`);
   await expect(page.locator('.transcript')).toBeVisible();
-  await expect(page.locator('.turn-role')).not.toHaveCount(0);
+  await expect(page.locator('.transcript article[data-role="user"]')).not.toHaveCount(0);
+  await expect(page.locator('.transcript')).toContainText(prompt);
+  await expect(page.locator('.transcript article[data-role="assistant"]')).not.toHaveCount(0);
 });
