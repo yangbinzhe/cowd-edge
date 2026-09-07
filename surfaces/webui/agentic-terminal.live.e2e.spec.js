@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { EXECUTION_PROJECTION_SCHEMA_VERSION } from './src/generated/projection-contract-meta.ts';
 
 const prompt = process.env.COWD_AGENTIC_E2E_PROMPT;
 const expectedTeams = Number(process.env.COWD_AGENTIC_E2E_EXPECT_TEAMS || 0);
@@ -17,8 +18,10 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
   const health = await page.request.get('/healthz');
   expect(health.status()).toBe(200);
   await page.goto('/index.html#/chat');
+  await page.getByRole('button', { name: 'New session' }).click();
   const composer = page.locator('.composer textarea');
   await expect(composer).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send' })).toBeVisible();
 
   const admission = page.waitForResponse((response) => (
     response.request().method() === 'POST'
@@ -46,7 +49,10 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
     /^(complete|completed|terminal|partial|blocked|failed|cancelled|error|unavailable)$/,
   );
 
-  expect(projection?.schema_version).toBe(5);
+  expect(projection?.schema_version).toBe(EXECUTION_PROJECTION_SCHEMA_VERSION);
+  if (projection?.agentic_collaboration) {
+    expect(projection.agentic_collaboration.schema_version).toBe(5);
+  }
   expect(projection?.execution_id).toBe(executionId);
   const teams = Array.isArray(projection?.teams) ? projection.teams : [];
   const agents = Array.isArray(projection?.agents) ? projection.agents : [];
