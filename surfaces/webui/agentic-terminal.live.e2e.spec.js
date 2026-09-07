@@ -4,6 +4,7 @@ import { EXECUTION_PROJECTION_SCHEMA_VERSION } from './src/generated/projection-
 const prompt = process.env.COWD_AGENTIC_E2E_PROMPT;
 const expectedTeams = Number(process.env.COWD_AGENTIC_E2E_EXPECT_TEAMS || 0);
 const expectedAgents = Number(process.env.COWD_AGENTIC_E2E_EXPECT_AGENTS || 0);
+const resumeSessionId = process.env.COWD_AGENTIC_E2E_SESSION_ID || '';
 const observer = `webui:agentic-live:${Date.now()}:${Math.random().toString(16).slice(2)}`;
 
 test.beforeEach(async ({ page }) => {
@@ -36,8 +37,10 @@ test.afterEach(async ({ page }, testInfo) => {
 test('natural-language UI ingress reaches a truthful terminal collaboration projection', async ({ page }, testInfo) => {
   const health = await page.request.get('/healthz');
   expect(health.status()).toBe(200);
-  await page.goto('/index.html#/chat');
-  await page.getByRole('button', { name: 'New session' }).click();
+  await page.goto(resumeSessionId
+    ? `/index.html#/chat?session_id=${encodeURIComponent(resumeSessionId)}`
+    : '/index.html#/chat');
+  if (!resumeSessionId) await page.getByRole('button', { name: 'New session' }).click();
   const composer = page.locator('.composer textarea');
   await expect(composer).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send' })).toBeVisible();
@@ -55,6 +58,7 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
   const sessionId = new URL(response.url()).pathname.split('/')[3] || '';
   expect(executionId).not.toBe('');
   expect(sessionId).not.toBe('');
+  if (resumeSessionId) expect(sessionId).toBe(resumeSessionId);
   console.log(JSON.stringify({ sessionId, executionId }));
   await testInfo.attach('admission.json', {
     body: JSON.stringify({ sessionId, executionId, receipt }), contentType: 'application/json',
