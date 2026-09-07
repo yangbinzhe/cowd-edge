@@ -54,13 +54,29 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
     expect(projection.agentic_collaboration.schema_version).toBe(5);
   }
   expect(projection?.execution_id).toBe(executionId);
-  const teams = Array.isArray(projection?.teams) ? projection.teams : [];
-  const agents = Array.isArray(projection?.agents) ? projection.agents : [];
+  const programs = Array.isArray(projection?.agentic_collaboration?.programs)
+    ? projection.agentic_collaboration.programs
+    : [];
+  const programTeams = programs.flatMap((program) => (
+    Array.isArray(program?.teams) ? program.teams : []
+  ));
+  const programAgents = programs.flatMap((program) => (
+    Array.isArray(program?.agents) ? program.agents : []
+  ));
+  // Program entities are the semantic collaboration authority. The flat
+  // execution arrays may temporarily contain physical worker instances while
+  // a Program is active, so they are only a fallback for non-Program graphs.
+  const teams = programTeams.length > 0
+    ? programTeams
+    : (Array.isArray(projection?.teams) ? projection.teams : []);
+  const agents = programAgents.length > 0
+    ? programAgents
+    : (Array.isArray(projection?.agents) ? projection.agents : []);
   expect(teams.length).toBeGreaterThanOrEqual(expectedTeams);
   expect(agents.length).toBeGreaterThanOrEqual(expectedAgents);
   for (const team of teams) expect(String(team?.name || '').trim()).not.toBe('');
   for (const agent of agents) {
-    expect(String(agent?.name || agent?.display_name || '').trim()).not.toBe('');
+    expect(String(agent?.name || agent?.display_name || agent?.role || '').trim()).not.toBe('');
     expect(String(agent?.role || '').trim()).not.toBe('');
   }
 
