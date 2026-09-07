@@ -97,7 +97,7 @@ describe('Companion projection contract visibility', () => {
     };
     chat.activeSessionId = 'companion-contract-session';
     vi.spyOn(api, 'executionProjection').mockResolvedValue({
-      schema_version: 3,
+      schema_version: 4,
       execution_id: 'companion-contract-execution',
       revision: 2,
       cursor: 2,

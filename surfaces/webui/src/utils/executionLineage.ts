@@ -125,6 +125,14 @@ export function combineExecutionLineage(
   const requestedRootId = text(rootExecutionId);
   const root = available.find((projection) => projection.execution_id === requestedRootId)
     || available[0];
+  // `agentic_collaboration` is the sole Runtime-owned business aggregate for
+  // a Program. Prefer it whenever it is present: transport/activity traces
+  // are useful drill-down evidence, but they are not an alternate owner of
+  // Team, Agent, Task, dependency, or Artifact topology. In particular, a
+  // Session root can contain only model/tool activities while a fully live
+  // Program is running beneath it.
+  const collaborationGraph = agenticCollaborationGraph(root);
+  if (collaborationGraph) return collaborationGraph;
   // The root projection is the canonical business-topology boundary. It
   // already materializes Team, Agent and delegated tool activity. Linked
   // child projections remain drill-down resources and must not duplicate the
@@ -297,6 +305,197 @@ export function combineExecutionLineage(
       ...executionProjectionLinks(root),
     ],
   };
+}
+
+function agenticCollaborationGraph(root: ExecutionProjection) {
+  const collaboration = (root as any).agentic_collaboration;
+  const programs = Array.isArray(collaboration?.programs) ? collaboration.programs : [];
+  if (!programs.length) return null;
+
+  const program = programs.find((candidate: any) => (
+    text(candidate?.root_execution_id) === root.execution_id
+  )) || programs.find((candidate: any) => (
+    text(candidate?.session_id) === text(root.session_id)
+    && text(candidate?.turn_id) === text(root.turn_id)
+  )) || (programs.length === 1 ? programs[0] : null);
+  if (!program || !Array.isArray(program.teams) || !program.teams.length) return null;
+
+  const programId = text(program.program_id);
+  if (!programId) return null;
+  const teams = program.teams.filter((team: any) => text(team?.team_id));
+  const teamIds = new Set(teams.map((team: any) => text(team.team_id)));
+  if (!teamIds.size) return null;
+  const agents = Array.isArray(program.agents) ? program.agents : [];
+  const memberships = Array.isArray(program.memberships) ? program.memberships : [];
+  const tasks = Array.isArray(program.tasks) ? program.tasks : [];
+  const artifacts = Array.isArray(program.artifacts) ? program.artifacts : [];
+  const objective = text(root.graph?.objective) || text(program.objective_summary) || programId;
+  const programNodeId = `program:${programId}`;
+  const nodes: any[] = [{
+    node_id: programNodeId,
+    semantic_view: true,
+    kind: 'mission',
+    executor_kind: 'execution',
+    status: text(program.status) || 'open',
+    display_label: conciseLabel(program.objective_summary, programId),
+    summary: text(program.objective_summary),
+    description: objective,
+    program_id: programId,
+    execution_id: root.execution_id,
+    session_id: root.session_id,
+    turn_id: root.turn_id,
+    evidence_refs: unique(program.unresolved || []),
+    artifact_refs: unique(program.semantic_refs?.artifact_refs || []),
+  }];
+  const edges: any[] = [];
+  const addEdge = (from: string, to: string, kind: string, suffix: string) => {
+    if (!from || !to || from === to) return;
+    edges.push({
+      canonical_relation_id: `agentic:${programId}:${kind}:${suffix}`,
+      from,
+      to,
+      kind,
+    });
+  };
+
+  for (const team of teams) {
+    const teamId = text(team.team_id);
+    nodes.push({
+      node_id: teamId,
+      semantic_view: true,
+      kind: 'team',
+      executor_kind: 'team',
+      status: text(team.lifecycle) || 'active',
+      display_label: conciseLabel(team.name, teamId),
+      summary: text(team.mission),
+      description: text(team.objective) || text(team.mission),
+      team_id: teamId,
+      program_id: programId,
+      execution_id: root.execution_id,
+      session_id: root.session_id,
+      turn_id: root.turn_id,
+      evidence_refs: [],
+      artifact_refs: [],
+    });
+    addEdge(programNodeId, teamId, 'delegates', `program:${teamId}`);
+  }
+
+  const membershipsByAgent = new Map<string, string[]>();
+  for (const membership of memberships) {
+    const agentId = text(membership?.agent_id);
+    const teamId = text(membership?.team_id);
+    if (!agentId || !teamIds.has(teamId) || text(membership?.lifecycle) === 'retired') continue;
+    membershipsByAgent.set(agentId, unique([...(membershipsByAgent.get(agentId) || []), teamId]));
+  }
+  const agentIds = new Set<string>();
+  for (const agent of agents) {
+    const agentId = text(agent?.agent_id);
+    if (!agentId) continue;
+    const membershipsForAgent = unique(membershipsByAgent.get(agentId) || []);
+    if (!membershipsForAgent.length) continue;
+    agentIds.add(agentId);
+    nodes.push({
+      node_id: agentId,
+      semantic_view: true,
+      kind: 'agent',
+      executor_kind: 'agent',
+      status: text(agent.status),
+      display_label: conciseLabel(agent.display_name || agent.role, agentId),
+      summary: text(agent.mission),
+      description: text(agent.mission),
+      team_id: membershipsForAgent[0],
+      membership_ids: membershipsForAgent,
+      agent_id: agentId,
+      program_id: programId,
+      execution_id: root.execution_id,
+      session_id: root.session_id,
+      turn_id: root.turn_id,
+      evidence_refs: [],
+      artifact_refs: [],
+    });
+    for (const teamId of membershipsForAgent) {
+      addEdge(teamId, agentId, 'delegates', `membership:${teamId}:${agentId}`);
+    }
+  }
+
+  const taskIds = new Set<string>();
+  for (const task of tasks) {
+    const taskId = text(task?.task_id);
+    const teamId = text(task?.team_id);
+    if (!taskId) continue;
+    taskIds.add(taskId);
+    nodes.push({
+      node_id: taskId,
+      semantic_view: true,
+      kind: 'task',
+      executor_kind: 'task',
+      status: text(task.status) || 'published',
+      display_label: conciseLabel(task.title, taskId),
+      summary: text(task.objective),
+      description: text(task.acceptance) || text(task.objective),
+      team_id: teamId,
+      claimant: text(task.claimant),
+      dependency_resolution: task.dependency_resolution || [],
+      program_id: programId,
+      execution_id: root.execution_id,
+      session_id: root.session_id,
+      turn_id: root.turn_id,
+      evidence_refs: unique(task.evidence_refs || []),
+      artifact_refs: unique(task.artifact_refs || []),
+    });
+    const claimant = text(task.claimant);
+    if (agentIds.has(claimant)) addEdge(claimant, taskId, 'delegates', `claim:${claimant}:${taskId}`);
+    else addEdge(teamIds.has(teamId) ? teamId : programNodeId, taskId, 'delegates', `task:${taskId}`);
+  }
+  for (const task of tasks) {
+    const taskId = text(task?.task_id);
+    if (!taskIds.has(taskId)) continue;
+    for (const dependencyId of task.depends_on || []) {
+      const dependency = text(dependencyId);
+      if (taskIds.has(dependency)) addEdge(dependency, taskId, 'depends_on', `dependency:${dependency}:${taskId}`);
+    }
+  }
+  for (const artifact of artifacts) {
+    const artifactId = text(artifact?.artifact_ref);
+    if (!artifactId) continue;
+    nodes.push({
+      node_id: artifactId,
+      semantic_view: true,
+      kind: 'evidence',
+      executor_kind: 'artifact',
+      status: artifactId === text(program.completion?.final_artifact_ref) ? 'verified' : 'completed',
+      display_label: conciseLabel(artifact.title, artifactId),
+      summary: text(artifact.kind),
+      description: text(artifact.content_ref),
+      program_id: programId,
+      execution_id: root.execution_id,
+      session_id: root.session_id,
+      turn_id: root.turn_id,
+      artifact_refs: [artifactId],
+      evidence_refs: [],
+    });
+    for (const related of artifact.relates_to || []) {
+      const taskId = text(related);
+      if (taskIds.has(taskId)) addEdge(taskId, artifactId, 'produced', `artifact:${taskId}:${artifactId}`);
+    }
+  }
+  return {
+    graph_id: `agentic-collaboration:${root.execution_id}:${programId}`,
+    objective,
+    status: text(program.status) || 'open',
+    revision: Number(program.revision || root.revision || 0),
+    nodes,
+    edges,
+    work: root.graph?.work,
+    semantic_view: true,
+    canonical_graph_id: text(root.graph?.graph_id || root.execution_id),
+    lineage_execution_ids: [root.execution_id],
+  };
+}
+
+function conciseLabel(value: unknown, fallback: string, maximum = 96) {
+  const label = text(value) || fallback;
+  return label.length > maximum ? `${label.slice(0, maximum - 1)}…` : label;
 }
 
 function flattenActivityTree(nodes: ActivityTreeNode[]) {

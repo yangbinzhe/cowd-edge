@@ -13,7 +13,7 @@ const liveContractOutput = process.env.COWD_GENERATED_LIVE_CONTRACT_OUTPUT
   : resolve(dirname(output), 'live-contract-meta.ts');
 const projectionGoldenOutput = process.env.COWD_GENERATED_PROJECTION_GOLDEN_OUTPUT
   ? resolve(process.env.COWD_GENERATED_PROJECTION_GOLDEN_OUTPUT)
-  : resolve(dirname(output), 'projection-v3-golden.ts');
+  : resolve(dirname(output), 'projection-golden.ts');
 const projectionContractOutput = process.env.COWD_GENERATED_PROJECTION_CONTRACT_OUTPUT
   ? resolve(process.env.COWD_GENERATED_PROJECTION_CONTRACT_OUTPUT)
   : resolve(dirname(output), 'projection-contract-meta.ts');
@@ -85,7 +85,7 @@ if (catalog?.schema_version !== 1 || catalog?.protocol_revision !== 1
 const liveEnvelopeSchema = document?.components?.schemas?.LiveEnvelope;
 const liveContractHash = liveEnvelopeSchema?.['x-cowd-schema-hash'];
 const liveContractFixture = liveEnvelopeSchema?.example;
-const projectionGolden = document?.['x-cowd-projection-v3-golden'];
+const projectionGolden = document?.['x-cowd-execution-projection-golden'];
 if (
   typeof liveContractHash !== 'string'
   || !/^[a-f0-9]{64}$/.test(liveContractHash)
@@ -94,13 +94,17 @@ if (
 ) {
   throw new Error('Gateway OpenAPI is missing the canonical LiveEnvelope schema hash or fixture');
 }
+const projectionSchemaVersion = Number(projectionGolden?.initial?.schema_version);
+const projectionReducerVersion = Number(projectionGolden?.delta?.reducer_version);
 if (
-  projectionGolden?.initial?.schema_version !== 3
-  || projectionGolden?.delta?.schema_version !== 3
-  || projectionGolden?.delta?.reducer_version !== 3
-  || projectionGolden?.expected?.schema_version !== 3
+  !Number.isSafeInteger(projectionSchemaVersion)
+  || projectionSchemaVersion < 1
+  || projectionGolden?.delta?.schema_version !== projectionSchemaVersion
+  || projectionGolden?.expected?.schema_version !== projectionSchemaVersion
+  || !Number.isSafeInteger(projectionReducerVersion)
+  || projectionReducerVersion < 1
 ) {
-  throw new Error('Gateway OpenAPI is missing the canonical projection v3 golden corpus');
+  throw new Error('Gateway is missing a self-consistent execution projection golden corpus');
 }
 
 await mkdir(dirname(output), { recursive: true });
@@ -112,7 +116,7 @@ const temporaryOutput = resolve(dirname(output), '.gateway-api.generated.ts');
 const temporaryLiveContract = resolve(dirname(liveContractOutput), '.live-contract-meta.generated.ts');
 const temporaryProjectionGolden = resolve(
   dirname(projectionGoldenOutput),
-  '.projection-v3-golden.generated.ts',
+  '.projection-golden.generated.ts',
 );
 const temporaryProjectionContract = resolve(
   dirname(projectionContractOutput),
@@ -144,7 +148,7 @@ await writeFile(
   temporaryProjectionGolden,
   [
     '// Generated from Gateway OpenAPI. Do not edit manually.',
-    `export const PROJECTION_V3_GOLDEN = ${JSON.stringify(projectionGolden, null, 2)} as const;`,
+    `export const PROJECTION_GOLDEN = ${JSON.stringify(projectionGolden, null, 2)} as const;`,
     '',
   ].join('\n'),
 );
@@ -152,8 +156,8 @@ await writeFile(
   temporaryProjectionContract,
   [
     '// Generated from Gateway OpenAPI. Do not edit manually.',
-    `export const EXECUTION_PROJECTION_SCHEMA_VERSION = ${projectionGolden.delta.schema_version} as const;`,
-    `export const EXECUTION_PROJECTION_REDUCER_VERSION = ${projectionGolden.delta.reducer_version} as const;`,
+    `export const EXECUTION_PROJECTION_SCHEMA_VERSION = ${projectionSchemaVersion} as const;`,
+    `export const EXECUTION_PROJECTION_REDUCER_VERSION = ${projectionReducerVersion} as const;`,
     '',
   ].join('\n'),
 );

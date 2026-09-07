@@ -131,6 +131,12 @@ function applyOperation(
     case 'replace_concurrency':
       projection.concurrency = operation.concurrency;
       break;
+    case 'replace_agentic_collaboration':
+      // Collaboration is an atomic Runtime aggregate. Do not merge it with
+      // entity/activity projections: they have different ownership and can
+      // legitimately advance on a different semantic revision.
+      (projection as any).agentic_collaboration = operation.collaboration;
+      break;
     case 'upsert_activity':
       projection.activities = upsert(
         projection.activities || [],

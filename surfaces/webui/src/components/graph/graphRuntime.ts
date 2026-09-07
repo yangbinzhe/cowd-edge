@@ -171,6 +171,7 @@ export function semanticHierarchyLayoutEdges(
 ) {
   if (
     !modelId.startsWith('activity-lineage:')
+    && !modelId.startsWith('agentic-collaboration:')
     && !modelId.startsWith('mission:')
   ) return edges;
   return edges.filter((edge) => HIERARCHY_EDGE_TYPES.has(edge.type));

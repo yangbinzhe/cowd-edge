@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ExecutionProjection, ExecutionProjectionDelta } from '../types';
-import { PROJECTION_V3_GOLDEN } from '../generated/projection-v3-golden';
+import { PROJECTION_GOLDEN } from '../generated/projection-golden';
 import {
   ProjectionDeltaError,
   reduceExecutionProjectionDelta,
 } from './executionProjection';
 
 function corpus() {
-  return structuredClone(PROJECTION_V3_GOLDEN) as unknown as {
+  return structuredClone(PROJECTION_GOLDEN) as unknown as {
     initial: ExecutionProjection;
     delta: ExecutionProjectionDelta;
     expected: ExecutionProjection;
@@ -67,7 +67,7 @@ describe('execution projection canonical reducer', () => {
     expect(reduced.graph.commit_cursor).toBe(fixture.initial.graph.commit_cursor);
   });
 
-  it('replaces delivery, presentation, and cancellation truth in one v3 operation', () => {
+  it('replaces delivery, presentation, and cancellation truth atomically', () => {
     const fixture = corpus();
     const delta = structuredClone(fixture.delta);
     delta.operations.splice(-1, 0, {
@@ -92,6 +92,31 @@ describe('execution projection canonical reducer', () => {
     expect(reduced.delivery_envelope?.envelope_id).toBe('envelope-v3');
     expect(reduced.terminal_presentation?.presentation_id).toBe('presentation-v3');
     expect(reduced.cancellation_receipt?.cancellation_id).toBe('cancel-v3');
+  });
+
+  it('replaces the Runtime-owned collaboration aggregate atomically', () => {
+    const fixture = corpus();
+    const delta = structuredClone(fixture.delta);
+    delta.operations.splice(-1, 0, {
+      op: 'replace_agentic_collaboration',
+      collaboration: {
+        schema_version: 4,
+        programs: [{
+          program_id: 'program:one',
+          revision: 4,
+          status: 'verified',
+          teams: [], agents: [], memberships: [], tasks: [], topics: [], artifacts: [],
+          completion: {}, semantic_refs: {}, unresolved: [],
+        }],
+      },
+    } as any);
+
+    const reduced = reduceExecutionProjectionDelta(fixture.initial, delta) as any;
+
+    expect(reduced.agentic_collaboration).toMatchObject({
+      schema_version: 4,
+      programs: [expect.objectContaining({ program_id: 'program:one', status: 'verified' })],
+    });
   });
 
   it('replaces root, inclusive, and capacity counts atomically', () => {

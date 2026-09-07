@@ -27,6 +27,7 @@ import type {
   WorkspaceFile,
 } from '../types';
 import { apiReadPolicy, type ApiReadClass } from './readPolicy';
+import { EXECUTION_PROJECTION_SCHEMA_VERSION } from '../generated/projection-contract-meta';
 
 export interface ApiReceipt<T = any> {
   ok: boolean;
@@ -1310,7 +1311,7 @@ export const api = {
     detailScope: 'summary' | 'full' = 'summary',
     authorizationSessionId = '',
   ) => read<ExecutionProjection>(`/api/runtime/executions/${encodeURIComponent(executionId)}?detail_scope=${detailScope}`, {
-    schema_version: 3,
+    schema_version: EXECUTION_PROJECTION_SCHEMA_VERSION,
     execution_id: executionId,
     revision: 0,
     cursor: 0,

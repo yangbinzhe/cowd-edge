@@ -71,7 +71,7 @@ function projection(
   childExecutions: any[] = [],
 ): ExecutionProjection {
   return {
-    schema_version: 3,
+    schema_version: 4,
     execution_id: executionId,
     revision: 1,
     cursor: 2,
@@ -107,6 +107,65 @@ function projection(
 }
 
 describe('execution lineage', () => {
+  it('renders the Runtime-owned collaboration aggregate instead of inferring teams from transport activity', () => {
+    const root = projection('root', [activity('execution-root', 'execution', 'root')]);
+    (root as any).agentic_collaboration = {
+      schema_version: 5,
+      programs: [{
+        program_id: 'program:research',
+        revision: 7,
+        status: 'verified',
+        objective_summary: 'Compare two independent research approaches',
+        root_execution_id: 'root',
+        teams: [
+          { team_id: 'team:a', name: 'Theory', mission: 'derive the result', lifecycle: 'active' },
+          { team_id: 'team:b', name: 'Validation', mission: 'verify independently', lifecycle: 'active' },
+        ],
+        agents: [
+          { agent_id: 'agent:a', membership_ids: ['membership:a'], role: 'Theory lead', mission: 'derive', status: 'idle', active_task_refs: [], history_task_refs: ['task:a'], active_run_refs: [] },
+          { agent_id: 'agent:b', membership_ids: ['membership:b'], role: 'Validation lead', mission: 'verify', status: 'idle', active_task_refs: [], history_task_refs: ['task:b'], active_run_refs: [] },
+        ],
+        memberships: [
+          { membership_id: 'membership:a', agent_id: 'agent:a', team_id: 'team:a', lifecycle: 'active' },
+          { membership_id: 'membership:b', agent_id: 'agent:b', team_id: 'team:b', lifecycle: 'active' },
+        ],
+        tasks: [
+          {
+            task_id: 'task:a', team_id: 'team:a', title: 'Derive', objective: 'derive', acceptance: 'proof',
+            status: 'accepted', claimant: 'agent:a', artifact_refs: ['artifact:a'], evidence_refs: [], depends_on: [],
+          },
+          {
+            task_id: 'task:b', team_id: 'team:b', title: 'Synthesize', objective: 'combine', acceptance: 'report',
+            status: 'accepted', claimant: 'agent:b', artifact_refs: ['artifact:b'], evidence_refs: [], depends_on: ['task:a'],
+          },
+        ],
+        artifacts: [
+          { artifact_ref: 'artifact:a', title: 'Proof', kind: 'report', content_ref: 'artifact://a', relates_to: ['task:a'] },
+          { artifact_ref: 'artifact:b', title: 'Final report', kind: 'report', content_ref: 'artifact://b', relates_to: ['task:b'] },
+        ],
+        completion: { final_artifact_ref: 'artifact:b' },
+        semantic_refs: { artifact_refs: ['artifact:a', 'artifact:b'] },
+        unresolved: [],
+      }],
+    };
+
+    const graph = combineExecutionLineage('root', [root]);
+
+    expect(graph?.graph_id).toBe('agentic-collaboration:root:program:research');
+    expect(executionTopologyCounts(graph)).toMatchObject({ teams: 2, agents: 2 });
+    expect(graph?.nodes.find((node) => node.node_id === 'team:a')).toMatchObject({
+      display_label: 'Theory',
+      summary: 'derive the result',
+    });
+    expect(graph?.nodes.find((node) => node.node_id === 'agent:b')).toMatchObject({
+      display_label: 'Validation lead',
+    });
+    expect(graph?.edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'task:a', to: 'task:b', kind: 'depends_on' }),
+      expect.objectContaining({ from: 'task:b', to: 'artifact:b', kind: 'produced' }),
+    ]));
+  });
+
   it('renders every admitted descendant Team on the first frame with its blocker', () => {
     const root = activity('execution-root', 'execution', 'root');
     const child = {
