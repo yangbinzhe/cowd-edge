@@ -2431,35 +2431,22 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.text()).toContain('审计选中证据');
   });
 
-  it('loads Mission schedule and Team evidence only when their owning section is opened', async () => {
+  it('loads schedules on demand and derives every Team detail from the canonical Mission projection', async () => {
     const missionControl = vi.spyOn(api, 'missionControl').mockResolvedValue({
       snapshot: {
         projection: {
           mission: { mission_id: 'mission-1' },
           sessions: [{ session_id: 'session-1' }],
           workspace: { active_session_id: 'session-1' },
-          team_projection: {
-            runs: [{
-              team: {
-                team_id: 'team-1',
-                display_label: 'Team A 理论研究',
+          teams: Array.from({ length: 12 }, (_, index) => ({
+                team_id: `team-${index + 1}`,
+                display_label: index === 0 ? 'Team A 理论研究' : `Research team ${index + 1}`,
                 status: 'running',
                 agent_count: 4,
-              },
-              agent_runs: [],
-            }],
-          },
+                detail: { program_id: 'program-1', program_revision: 3, program_status: 'open', team: { team_id: `team-${index + 1}` } },
+          })),
         },
       },
-    } as any);
-    const teamRun = vi.spyOn(api, 'collaborationRun').mockResolvedValue({
-      run: { team_id: 'team-1' },
-    } as any);
-    const teamPlan = vi.spyOn(api, 'teamExecutionPlan').mockResolvedValue({
-      plan_id: 'plan-1',
-    } as any);
-    const teamEvidence = vi.spyOn(api, 'teamMissionEvidence').mockResolvedValue({
-      evidence: [{ id: 'evidence-1' }],
     } as any);
     const schedules = vi.spyOn(api, 'missionSchedules').mockResolvedValue({
       schedules: {
@@ -2481,9 +2468,6 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/mission?section=schedules');
     await settleAsync();
 
-    expect(teamRun).not.toHaveBeenCalled();
-    expect(teamPlan).not.toHaveBeenCalled();
-    expect(teamEvidence).not.toHaveBeenCalled();
     await wrapper.get('button[aria-label="编辑计划"]').trigger('click');
     await settle();
     await wrapper.get('[data-section="schedules"] textarea').setValue('Updated objective');
@@ -2504,16 +2488,16 @@ describe('Cowd Vue WebUI shell', () => {
     const teamWrapper = await mountApp('/mission?section=teams');
     await settleAsync();
     expect(teamWrapper.text()).toContain('Team A 理论研究');
-    expect(teamWrapper.text()).toContain('agents 4');
-    expect(teamRun).toHaveBeenCalledWith('team-1');
-    expect(teamPlan).toHaveBeenCalledWith('team-1');
-    expect(teamEvidence).toHaveBeenCalledWith('team-1');
+    const teamButtons = teamWrapper.findAll('[data-section="teams"] .section-row');
+    expect(teamButtons).toHaveLength(12);
+    await teamButtons[11].trigger('click');
+    await settleAsync();
+    expect(teamButtons[11].classes()).toContain('active');
+    expect(teamButtons[11].text()).toContain('Research team 12');
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes('/api/mission/control/teams'))).toBe(false);
     teamWrapper.unmount();
 
     missionControl.mockRestore();
-    teamRun.mockRestore();
-    teamPlan.mockRestore();
-    teamEvidence.mockRestore();
     schedules.mockRestore();
     updateSchedule.mockRestore();
   });

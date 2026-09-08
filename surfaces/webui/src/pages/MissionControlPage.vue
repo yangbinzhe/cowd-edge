@@ -56,11 +56,6 @@ const timeline = ref<any>({});
 const realityFlow = ref<any>({});
 const actionResult = ref<any>(null);
 const recoveryReport = ref<any>(null);
-const teamRunDetail = ref<any>({});
-const teamExecutionPlan = ref<any>({});
-const teamEvidence = ref<any>({});
-const teamDetailLoading = ref(false);
-const teamDetailError = ref('');
 const scheduleResponse = ref<any>({});
 const scheduleTriggerKind = ref<'interval' | 'at' | 'cron'>('interval');
 const scheduleObjective = ref('');
@@ -158,12 +153,11 @@ const approvalItems = computed(() => {
 const pendingApprovals = computed(() => approvalItems.value.filter((item: any) => String(item.status || 'pending') === 'pending'));
 const teams = computed(() => Array.isArray(controlProjection.value?.teams) ? controlProjection.value.teams : (Array.isArray(mission.value?.team_projections) ? mission.value.team_projections : []));
 const agents = computed(() => Array.isArray(controlProjection.value?.agents) ? controlProjection.value.agents : (Array.isArray(mission.value?.agent_projections) ? mission.value.agent_projections : []));
-const collaborationRuns = computed(() => {
-  const teamProjection = mission.value?.team_projection || controlProjection.value?.team_projection || {};
-  const directRuns = teamProjection?.collaboration_runs?.runs || teamProjection?.runs || controlProjection.value?.collaboration_runs?.runs || [];
-  if (Array.isArray(directRuns) && directRuns.length) return directRuns;
-  return teams.value.map((team: any) => ({ team, agent_runs: team.agents || [] }));
-});
+// Mission projection already carries the canonical Team and Program revision.
+// Derive details from it instead of querying retired Team lifecycle endpoints.
+const teamRunDetail = computed(() => teams.value.find((team: any) => (
+  String(team.team_id || team.id || '') === selectedTeamId.value
+)) || null);
 const events = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest)
   ? controlProjection.value.event_digest.latest
   : []);
@@ -338,24 +332,12 @@ const organizationRows = computed(() => organizationDecisions.value.map((decisio
   elapsed: `${Number(decision.elapsed_ms || 0)} ms`,
   reason: decision.reason || decision.rejected_reason || '-',
 })));
-const teamRunRows = computed(() => collaborationRuns.value.slice(0, 8).map((run: any) => {
-  const team = run.team || run;
-  const agentRuns = Array.isArray(run.agent_runs)
-    ? run.agent_runs
-    : (Array.isArray(team.agents) ? team.agents : []);
-  const projectedAgentCount = Number(
-    run.agent_count
-    ?? team.agent_count
-    ?? run.execution_summary?.agent_count
-    ?? team.execution_summary?.agent_count
-    ?? 0,
-  );
+const teamRunRows = computed(() => teams.value.map((team: any) => {
   return {
     id: team.team_id || team.id || '-',
     label: team.display_label || team.label || team.name || team.team_id || team.id || '-',
     status: team.status || '-',
-    agents: agentRuns.length || projectedAgentCount,
-    synthesis: run.execution_summary?.synthesis_status || team.execution_summary?.synthesis_status || '-',
+    agents: Number(team.agent_count || 0),
   };
 }));
 const requestedAgentId = computed(() => typeof route.query.agent_id === 'string'
@@ -602,23 +584,6 @@ async function startTeam() {
 async function loadTeamRun(teamId = selectedTeamId.value, userSelected = false) {
   if (!teamId) return;
   selectedTeamId.value = teamId;
-  teamDetailLoading.value = true;
-  teamDetailError.value = '';
-  try {
-    [teamRunDetail.value, teamExecutionPlan.value, teamEvidence.value] = await Promise.all([
-      api.collaborationRun(teamId),
-      api.teamExecutionPlan(teamId),
-      api.teamMissionEvidence(teamId),
-    ]);
-  } catch (reason) {
-    teamDetailError.value = reason instanceof Error ? reason.message : String(reason);
-    teamRunDetail.value = {};
-    teamExecutionPlan.value = {};
-    teamEvidence.value = {};
-    return;
-  } finally {
-    teamDetailLoading.value = false;
-  }
   const executionId = teamRunDetail.value?.execution_graph_id
     || teamRunDetail.value?.graph_id
     || teamRunDetail.value?.run?.execution_graph_id
@@ -1103,20 +1068,15 @@ onUnmounted(() => {
             @click="loadTeamRun(team.id, true)"
           >
             <strong :title="team.id">{{ team.label }}</strong>
-            <span>{{ displayStatus(team.status) }} · agents {{ team.agents }} · synthesis {{ displayStatus(team.synthesis) }}</span>
+            <span>{{ displayStatus(team.status) }} · {{ formatCount('agents', team.agents) }}</span>
           </button>
           <p v-if="!teamRunRows.length" class="empty-note">{{ t('page.mission.control.page.text.f0c708899b') }}</p>
         </div>
         <div class="button-row">
           <button class="danger-action" type="button" :disabled="!selectedTeamId" @click="cancelSelectedTeam">{{ t('page.mission.control.page.text.ed848a3a21') }}</button>
         </div>
-        <p v-if="teamDetailLoading" class="empty-note">{{ t('common.loading') }}</p>
-        <p v-else-if="teamDetailError" class="settings-alert">{{ teamDetailError }}</p>
-        <template v-else>
-          <ObjectInspectorDrawer v-if="teamRunDetail?.run || teamRunDetail?.summary" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
-          <ObjectInspectorDrawer v-if="Object.keys(teamExecutionPlan).length" :title="t('page.mission.team.executionPlan')" :data="teamExecutionPlan" />
-          <ObjectInspectorDrawer v-if="Object.keys(teamEvidence).length" :title="t('page.mission.team.evidence')" :data="teamEvidence" />
-        </template>
+        <ObjectInspectorDrawer v-if="teamRunDetail" :title="t('page.mission.control.page.title.026a2c3405')" :data="teamRunDetail" />
+        <p v-else class="empty-note">{{ t('page.mission.control.page.text.f0c708899b') }}</p>
       </section>
 
       <section class="mission-panel wide" v-show="isSectionActive('agents')" data-section="agents">

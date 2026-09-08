@@ -48,6 +48,30 @@ describe('GraphSurface', () => {
     runGraphLayout.mockClear();
   });
 
+  it('retains a graph beyond 220 nodes and can search its last node', async () => {
+    const wrapper = mount(GraphSurface, {
+      props: {
+        model: {
+          id: 'large-graph',
+          nodes: Array.from({ length: 501 }, (_, index) => ({
+            id: `node-${index}`, type: 'agent', label: `Agent ${index}`, status: 'running',
+          })),
+          edges: [],
+        },
+      },
+      global: { stubs: graphStubs },
+    });
+    await vi.waitFor(() => {
+      expect(wrapper.findAll('.graph-node-content')).toHaveLength(501);
+    });
+    expect(wrapper.find('[data-test="flow"]').exists()).toBe(true);
+    expect(wrapper.findComponent(VueFlowStub).attributes('only-render-visible-elements')).toBe('true');
+    await wrapper.setProps({ searchQuery: 'Agent 500' });
+    await vi.waitFor(() => expect(wrapper.findAll('.graph-node-content')).toHaveLength(1));
+    expect(wrapper.get('.graph-node-content strong').text()).toBe('Agent 500');
+    wrapper.unmount();
+  });
+
   it('keeps icon controls visible and gives every node a short localized description', async () => {
     const wrapper = mount(GraphSurface, {
       props: {

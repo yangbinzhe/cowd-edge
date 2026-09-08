@@ -61,6 +61,8 @@ function activity(
     public_summary: id,
     artifact_refs: kind === 'tool' ? ['artifact'] : [],
     evidence_refs: kind === 'tool' ? ['evidence'] : [],
+    definition_refs: [],
+    required: false,
   };
 }
 
@@ -107,6 +109,30 @@ function projection(
 }
 
 describe('execution lineage', () => {
+  it('keeps all linked execution identities beyond 64 and deduplicates projections', () => {
+    const root = projection('root', [activity('root-node', 'execution', 'root')], [],
+      Array.from({ length: 130 }, (_, index) => ({ execution_id: `child-${index}` })));
+    expect(executionProjectionLinks(root)).toHaveLength(130);
+    const preceding = Array.from({ length: 70 }, (_, index) => projection(`other-${index}`, []));
+    const graph = combineExecutionLineage('root', [...preceding, root, root]);
+    expect(graph?.canonical_graph_id).toBe('root');
+    expect(graph?.lineage_execution_ids).toHaveLength(131);
+    expect(graph?.nodes.filter((node) => node.node_id === 'root-node')).toHaveLength(1);
+  });
+
+  it('never treats an unrelated lone Program as the requested execution', () => {
+    const root = projection('root', [activity('root-node', 'execution', 'root')]);
+    (root as any).agentic_collaboration = {
+      programs: [{
+        program_id: 'old', root_execution_id: 'old-root',
+        teams: [{ team_id: 'old-team', name: 'Unrelated' }],
+      }],
+    };
+    const graph = combineExecutionLineage('root', [root]);
+    expect(graph?.graph_id).toBe('activity-lineage:root');
+    expect(executionTopologyCounts(graph).teams).toBe(0);
+  });
+
   it('renders the Runtime-owned collaboration aggregate instead of inferring teams from transport activity', () => {
     const root = projection('root', [activity('execution-root', 'execution', 'root')]);
     (root as any).agentic_collaboration = {
@@ -255,7 +281,7 @@ describe('execution lineage', () => {
     const team = activity('team', 'team', 'root', 'execution');
     const agent = activity('agent', 'agent', 'root', 'team');
     const tool = activity('tool', 'tool', 'root', 'agent');
-    const context = activity('context', 'context', 'root', 'execution');
+    const context = activity('context', 'runtime', 'root', 'execution');
     const relations: ExecutionActivityRelation[] = [
       {
         relation_id: 'r1',
@@ -314,9 +340,9 @@ describe('execution lineage', () => {
 
   it('discovers nested execution scopes declared only by canonical activities', () => {
     const team = {
-      ...activity('team', 'team'),
+      ...activity('team', 'team', 'mission-execution'),
       scope: {
-        ...activity('team', 'team').scope,
+        ...activity('team', 'team', 'mission-execution').scope,
         execution_id: 'mission-execution',
         parent_execution_id: 'session-root',
       },

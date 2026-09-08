@@ -1796,9 +1796,6 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  teamExecutionPlan: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/execution`, {}),
-  collaborationRuns: () => read('/api/mission/control/teams', { projection: { runs: [] } }),
-  collaborationRun: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/run`, {}),
   cancelTeamRuntime: (teamId: string) => {
     const commandId = `mission-team-cancel-${globalThis.crypto?.randomUUID?.() || Date.now().toString(36)}`;
     return writeWithReceipt<MissionCommandResponse>('/api/mission/control', {
@@ -1814,7 +1811,6 @@ export const api = {
       } satisfies MissionCommand),
     });
   },
-  teamMissionEvidence: (teamId: string) => read(`/api/mission/control/teams/${encodeURIComponent(teamId)}/evidence`, { events: [], tasks: [], evidence: [] }),
   agentMissionEvents: (agentId: string) => read(`/api/mission/control/agents/${encodeURIComponent(agentId)}/events`, { events: [], tasks: [] }),
   runtimeRecoveryReport: () => read('/api/runtime/events/replay-report', {}),
   applyRuntimeRecovery: () => writeWithReceipt('/api/runtime/events/recover', { method: 'POST' }),

@@ -1,4 +1,4 @@
-import type { ExecutionProjection } from '../types';
+import type { ExecutionActivityRelation, ExecutionProjection } from '../types';
 import {
   activityTree,
   businessGraphActivities,
@@ -8,7 +8,6 @@ import {
   type ActivityTreeNode,
 } from '../adapters/executionActivity';
 
-const MAX_LINEAGE_PROJECTIONS = 64;
 const BUSINESS_ACTIVITY_KINDS = new Set([
   'execution',
   'team',
@@ -107,19 +106,20 @@ export function executionProjectionLinks(projection: ExecutionProjection | null)
       if (id && id !== rootId) links.add(id);
     }
   }
-  return [...links].sort().slice(0, MAX_LINEAGE_PROJECTIONS);
+  return [...links].sort();
 }
 
 export function combineExecutionLineage(
   rootExecutionId: string,
   projections: Array<ExecutionProjection | null>,
 ) {
-  const available = projections
-    .filter((projection): projection is ExecutionProjection => !!projection?.execution_id)
-    .filter((projection, index, rows) => (
-      rows.findIndex((candidate) => candidate.execution_id === projection.execution_id) === index
-    ))
-    .slice(0, MAX_LINEAGE_PROJECTIONS);
+  const byExecution = new Map<string, ExecutionProjection>();
+  for (const projection of projections) {
+    if (projection?.execution_id && !byExecution.has(projection.execution_id)) {
+      byExecution.set(projection.execution_id, projection);
+    }
+  }
+  const available = [...byExecution.values()];
   if (!available.length) return null;
 
   const requestedRootId = text(rootExecutionId);
@@ -315,9 +315,10 @@ function agenticCollaborationGraph(root: ExecutionProjection) {
   const program = programs.find((candidate: any) => (
     text(candidate?.root_execution_id) === root.execution_id
   )) || programs.find((candidate: any) => (
-    text(candidate?.session_id) === text(root.session_id)
+    !!text(root.session_id) && !!text(root.turn_id)
+    && text(candidate?.session_id) === text(root.session_id)
     && text(candidate?.turn_id) === text(root.turn_id)
-  )) || (programs.length === 1 ? programs[0] : null);
+  ));
   if (!program || !Array.isArray(program.teams) || !program.teams.length) return null;
 
   const programId = text(program.program_id);
@@ -498,11 +499,17 @@ function conciseLabel(value: unknown, fallback: string, maximum = 96) {
   return label.length > maximum ? `${label.slice(0, maximum - 1)}…` : label;
 }
 
-function flattenActivityTree(nodes: ActivityTreeNode[]) {
-  return nodes.flatMap((node) => [
-    node.activity,
-    ...flattenActivityTree(node.children),
-  ]);
+function flattenActivityTree(nodes: ActivityTreeNode[]): ActivityTreeNode['activity'][] {
+  const result: ActivityTreeNode['activity'][] = [];
+  const pending = [...nodes].reverse();
+  while (pending.length) {
+    const node = pending.pop()!;
+    result.push(node.activity);
+    for (let index = node.children.length - 1; index >= 0; index -= 1) {
+      pending.push(node.children[index]);
+    }
+  }
+  return result;
 }
 
 function isTerminalStatus(status: string) {
@@ -598,7 +605,7 @@ function concisePublicText(value: unknown): string {
   return sanitized.length > 180 ? `${sanitized.slice(0, 177)}...` : sanitized;
 }
 
-function conciseJsonRecord(record: Record<string, unknown>) {
+function conciseJsonRecord(record: Record<string, unknown>): string {
   for (const key of [
     'summary',
     'result_summary',

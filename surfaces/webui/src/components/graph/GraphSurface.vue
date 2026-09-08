@@ -96,7 +96,6 @@ const inspectorOpen = ref(false);
 const internalSelectedNodeId = ref('');
 const laidOutNodes = ref<any[]>([]);
 let layoutEpoch = 0;
-const graphNodeLimit = 220;
 const layoutCache = new Map<string, Array<{ id: string; x: number; y: number }>>();
 const savedViewports = new Map<string, SavedGraphViewport>();
 let lastLayoutIdentity = '';
@@ -184,14 +183,13 @@ const visibleEdges = computed(() => aggregateGraphEdges(
     && visibleNodeIds.value.has(edge.target)
   )),
 ));
-const graphIsAggregated = computed(() => visibleNodes.value.length > graphNodeLimit);
 const minimumZoom = computed(() => (
   props.compact || visibleNodes.value.length > 28 ? 0.12 : 0.32
 ));
-const canvasNodes = computed(() => graphIsAggregated.value ? [] : visibleNodes.value);
+const canvasNodes = computed(() => visibleNodes.value);
 const canvasNodeIds = computed(() => new Set(canvasNodes.value.map((node) => node.id)));
 const canvasEdges = computed(() => visibleEdges.value.filter((edge) => canvasNodeIds.value.has(edge.source) && canvasNodeIds.value.has(edge.target)));
-const showList = computed(() => listMode.value || graphIsAggregated.value);
+const showList = computed(() => listMode.value);
 const topologySignature = computed(() => [
   showList.value ? 'list' : 'graph',
   graphLayoutSignature(props.model.id, direction.value, canvasNodes.value, canvasEdges.value),
@@ -692,7 +690,6 @@ onBeforeUnmount(() => {
       </label>
     </div>
     <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
-    <p v-if="graphIsAggregated" class="empty-note">{{ t('graph.state.aggregated', { limit: graphNodeLimit, total: visibleNodes.length }) }}</p>
     <p v-if="loading" class="empty-note">{{ t('graph.state.loading') }}</p>
     <p v-else-if="!visibleNodes.length" class="empty-note">{{ t('graph.state.empty') }}</p>
     <DataTable v-else-if="showList" :rows="listRows" :columns="['id', 'type', 'status', 'group', 'evidence', 'summary']" row-key="id" searchable copyable @row-click="selectListRow" />
@@ -701,6 +698,7 @@ onBeforeUnmount(() => {
       class="graph-flow"
       :nodes="flowNodes"
       :edges="flowEdges"
+      :only-render-visible-elements="true"
       :nodes-draggable="false"
       :nodes-connectable="false"
       :elements-selectable="true"
