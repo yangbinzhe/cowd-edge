@@ -4,7 +4,7 @@ import type {
   MissionProjectionDelta,
 } from '../types';
 
-export const MISSION_CONTROL_SCHEMA_VERSION = 3;
+export const MISSION_CONTROL_SCHEMA_VERSION = 5;
 
 export function organizationDecisionTaskCount(decision: {
   root_task_id?: unknown;

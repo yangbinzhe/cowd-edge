@@ -4,13 +4,13 @@ import type { MissionMaterializedSnapshot, MissionProjectionDelta } from '../typ
 
 function snapshot(): MissionMaterializedSnapshot {
   return {
-    schema_version: 3,
+    schema_version: 5,
     kind: 'mission_control.materialized_snapshot',
     cursor: 10,
     revision: 4,
     needs_resync: false,
     projection: {
-      schema_version: 3,
+      schema_version: 5,
       kind: 'mission_control.projection',
       missions: [], organization_decisions: [], selected_mission_id: '',
       workspace: {
@@ -72,7 +72,7 @@ function snapshot(): MissionMaterializedSnapshot {
 
 function delta(): MissionProjectionDelta {
   return {
-    schema_version: 3,
+    schema_version: 5,
     kind: 'mission_control.projection_delta',
     from_cursor: 10,
     from_revision: 4,
