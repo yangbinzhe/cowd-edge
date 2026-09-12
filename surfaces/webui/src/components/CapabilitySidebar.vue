@@ -2,7 +2,7 @@
 import { t } from '../i18n';
 import { computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { buildCapabilitySpecs } from '../data/capabilities';
+import { buildCapabilitySpecs, capabilitySpecFor } from '../data/capabilities';
 import { appPluginForRoute } from '../plugins/registry';
 import { useAppStore } from '../stores/app';
 import type { NavId } from '../types';
@@ -17,7 +17,7 @@ function capabilityPageId(path: string): Exclude<NavId, 'chat' | 'settings'> {
 
 const app = computed(() => appPluginForRoute(route.path));
 const pageId = computed(() => capabilityPageId(route.path));
-const spec = computed(() => app.value ? undefined : buildCapabilitySpecs()[pageId.value]);
+const spec = computed(() => app.value ? undefined : capabilitySpecFor(buildCapabilitySpecs(), pageId.value));
 type CapabilitySection = NonNullable<(typeof spec.value)>['sections'][number];
 
 const activeSection = computed(() => store.activeSectionByPage[pageId.value] || String(route.query.section || ''));

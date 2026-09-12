@@ -143,7 +143,7 @@ describe('iframe bridge v1', () => {
     }
     await flush();
     await flush();
-    expect(h.apiFetch.mock.calls.filter(([input]) => String(input) === '/api/apps/reference-app')).toHaveLength(1);
+    expect(vi.mocked(h.apiFetch).mock.calls.filter(([input]) => String(input) === '/api/apps/reference-app')).toHaveLength(1);
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(fetchImpl).toHaveBeenCalledWith('/api/apps/reference-app/operations/reference-app.echo/invoke',
       expect.objectContaining({ credentials: 'same-origin' }));

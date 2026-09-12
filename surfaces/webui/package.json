@@ -25,18 +25,26 @@
     "test:e2e": "node scripts/run-e2e.mjs test --browser=chromium",
     "test:e2e:release": "node scripts/release-browser-gate.mjs",
     "test:e2e:app-live": "COWD_E2E_APP_LIVE=1 node scripts/run-e2e.mjs test --browser=chromium",
-    "test:smoke": "node scripts/webui-smoke.mjs"
+    "test:smoke": "node scripts/webui-smoke.mjs",
+    "typecheck": "vue-tsc --noEmit",
+    "postinstall": "node scripts/patch-elk-types.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-transition": "^3.0.9",
+    "@types/d3-zoom": "^3.0.8",
     "@types/qrcode": "^1.5.6",
+    "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/test-utils": "^2.4.11",
     "jsdom": "^25.0.0",
     "openapi-typescript": "7.13.0",
     "typescript": "^5.9.3",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.3.11"
   },
   "dependencies": {
     "@vue-flow/core": "^1.48.2",

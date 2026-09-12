@@ -26,7 +26,9 @@ describe('Companion projection contract visibility', () => {
     const app = useAppStore();
     const chat = useChatSessionsStore();
     app.companionTab = 'activity';
+    chat.activeSessionId = 'live-graph-session';
     chat.states['live-graph-session'] = {
+      ...chat.active!,
       sessionId: 'live-graph-session',
       turns: [],
       executionId: 'live-execution',
@@ -35,9 +37,7 @@ describe('Companion projection contract visibility', () => {
         status: 'calling_model',
         status_detail: 'waiting for the first graph projection',
       },
-      evidence: null,
       streamState: 'connected',
-      requestEpoch: 0,
       pending: true,
       lastError: '',
       unread: 0,
@@ -78,15 +78,15 @@ describe('Companion projection contract visibility', () => {
     const chat = useChatSessionsStore();
     const projections = useProjectionRegistryStore();
     app.companionTab = 'activity';
+    chat.activeSessionId = 'companion-contract-session';
     chat.states['companion-contract-session'] = {
+      ...chat.active!,
       sessionId: 'companion-contract-session',
       turns: [],
       executionId: 'companion-contract-execution',
       executionGraphId: 'companion-contract-execution',
       live: null,
-      evidence: null,
       streamState: 'offline',
-      requestEpoch: 0,
       pending: false,
       lastError: '',
       unread: 0,

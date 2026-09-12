@@ -200,7 +200,7 @@ async function dropOnNode(event: DragEvent, node: WorkspaceTreeNode) {
         :class="{ selected: store.selectedFile === node.path || store.workspaceDir === node.path, loading: node.loading, 'drop-target': dropTargetPath === node.path }"
         :style="{ '--tree-depth': Math.min(node.depth, 8) }"
         role="treeitem"
-        :aria-expanded="node.kind === 'dir' ? String(node.expanded) : undefined"
+        :aria-expanded="node.kind === 'dir' ? Boolean(node.expanded) : undefined"
         tabindex="0"
         @keydown="keyAction($event, node)"
         @contextmenu.prevent="openContext($event, targetFromNode(node))"

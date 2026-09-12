@@ -490,7 +490,7 @@ export function isBusinessGraphActivity(activity: ActivityView) {
   return !internalReference([
     activity.title,
     activity.detail,
-    activity.canonical.detail,
+    'detail' in activity.canonical ? activity.canonical.detail : '',
     activity.canonical.public_summary,
   ].join(' '));
 }
@@ -896,6 +896,7 @@ function internalArtifact(activity: ActivityView) {
   const value = [
     activity.title,
     activity.detail,
+    'detail' in activity.canonical ? activity.canonical.detail : '',
     activity.canonical.public_summary,
     ...(activity.artifact_refs || []),
   ].join(' ').toLowerCase();
@@ -915,7 +916,7 @@ function internalOperationalActivity(activity: ActivityView) {
     activity.id,
     activity.title,
     activity.detail,
-    activity.canonical.detail,
+    'detail' in activity.canonical ? activity.canonical.detail : '',
     activity.canonical.public_summary,
   ].join(' ').toLowerCase();
   return [

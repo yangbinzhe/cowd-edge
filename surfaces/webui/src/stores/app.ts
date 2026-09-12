@@ -114,7 +114,7 @@ function sanitizeActivityEvent(event: ActivityEvent): ActivityEvent {
   return {
     ...event,
     title: cleanRuntimeSummary(event.title),
-    detail: cleanRuntimeSummary(event.detail),
+    detail: cleanRuntimeSummary(event.detail || ''),
   };
 }
 
@@ -222,7 +222,7 @@ function visibleSessionRows(rows: unknown): SessionSummary[] {
 export const useAppStore = defineStore('app', () => {
   const chatSessions = useChatSessionsStore();
   const projectionRegistry = useProjectionRegistryStore();
-  let configReloadTimer: ReturnType<typeof setInterval> | null = null;
+  let configReloadTimer: number | null = null;
   let bootPromise: Promise<void> | null = null;
   let sessionCreateFlight: Promise<SessionSummary> | null = null;
   let activeSessionLoadGeneration = 0;
@@ -698,7 +698,7 @@ export const useAppStore = defineStore('app', () => {
           } catch {
             return null;
           }
-        }))).filter((session): session is SessionSummary => Boolean(session))
+        }))).filter((session): session is NonNullable<typeof session> => session !== null)
       : [];
     if (generation !== authorizationGeneration) return data;
     const nextSessions = [...directSessions, ...matchedSessions]

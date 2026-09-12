@@ -4,7 +4,7 @@ export function adaptTeamTopology(template: Record<string, any> | null, workingS
   const roles = Array.isArray(template?.roles) ? template.roles : [];
   const dependencies = Array.isArray(template?.dependencies) ? template.dependencies : [];
   const entries = Array.isArray(workingState?.working_state?.entries) ? workingState.working_state.entries : [];
-  const entryByNode = new Map(entries.map((entry: any) => [String(entry.node_id || entry.role_id || ''), entry]));
+  const entryByNode = new Map<string, Record<string, unknown>>(entries.map((entry: Record<string, unknown>) => [String(entry.node_id || entry.role_id || ''), entry]));
   const teamId = String(workingState?.team_id || workingState?.working_state?.team_id || template?.revision_ref?.template_id || 'team-topology');
   return {
     id: teamId,

@@ -8,7 +8,7 @@ import {
   AlertTriangle, CalendarClock, CheckCircle2, Database, Pause, Pencil, Play, RefreshCw, Route,
   ShieldCheck, Square, Trash2, Users, Workflow, X,
 } from 'lucide-vue-next';
-import { api } from '../api/client';
+import { jsonRecord, api } from '../api/client';
 import RequestReceipt from '../components/workbench/RequestReceipt.vue';
 import DetailDrawer from '../components/workbench/DetailDrawer.vue';
 import ObjectInspectorDrawer from '../components/workbench/ObjectInspectorDrawer.vue';
@@ -80,6 +80,7 @@ const controlProjection = computed<MissionControlProjection | Record<string, nev
 );
 const missionGraphDetail = ref<any>(null);
 const missionGraphDetailLoading = ref(false);
+let missionGraphRequest = 0;
 const missionAggregateGraph = computed(() => adaptMissionControlGraph(
   {
     ...controlProjection.value,
@@ -91,21 +92,29 @@ const missionAggregateGraph = computed(() => adaptMissionControlGraph(
 async function loadMissionGraphDetail() {
   const missionId = String(mission.value?.mission_id || selectedMissionId.value || '').trim();
   if (!missionId || missionGraphDetailLoading.value || missionGraphDetail.value) return;
+  const request = ++missionGraphRequest;
   missionGraphDetailLoading.value = true;
   try {
     const response = await api.missionControl(missionId, 'graph');
-    missionGraphDetail.value = response.snapshot?.projection?.mission_graph || null;
+    if (request === missionGraphRequest && missionId === String(mission.value?.mission_id || selectedMissionId.value || '').trim()) {
+      missionGraphDetail.value = response.snapshot?.projection?.mission_graph || null;
+    }
   } catch {
     // Summary facts remain available; the graph rehydrates on next refresh.
   } finally {
-    missionGraphDetailLoading.value = false;
+    if (request === missionGraphRequest) missionGraphDetailLoading.value = false;
   }
 }
 
 watch(
   () => missionSnapshot.value?.projection?.mission_graph,
-  (graph) => {
-    if (graph?.available === true) void loadMissionGraphDetail();
+  (graph, previous) => {
+    if (graph?.mission_id !== previous?.mission_id) {
+      missionGraphRequest++;
+      missionGraphDetailLoading.value = false;
+      missionGraphDetail.value = null;
+    }
+    if (graph?.mission_id && !graph.nodes.length) void loadMissionGraphDetail();
   },
   { deep: false },
 );
@@ -140,12 +149,12 @@ const activeSession = computed(() => {
   if (declaredActiveSessionId.value && missionSessionIds.value.has(declaredActiveSessionId.value)) return declaredActiveSessionId.value;
   return '';
 });
-const selectedSession = computed(() => sessions.value.find((session: any) => (session.session_id || session.id) === activeSession.value) || {});
+const selectedSession = computed(() => sessions.value.find((session: any) => (session.session_id || session.id) === activeSession.value) || { title: '' });
 const approvalProjection = computed(() => controlProjection.value?.approvals || mission.value?.approval_projection || approvals.value?.approvals || approvals.value || {});
 const approvalItems = computed(() => {
   const projection = approvalProjection.value;
   if (Array.isArray(projection)) return projection;
-  if (Array.isArray(projection?.requests)) return projection.requests;
+  if (Array.isArray(jsonRecord(projection).requests)) return jsonRecord(projection).requests;
   if (Array.isArray(approvals.value?.pending)) return approvals.value.pending;
   if (Array.isArray(approvals.value)) return approvals.value;
   return [];
@@ -162,7 +171,7 @@ const events = computed(() => Array.isArray(controlProjection.value?.event_diges
   ? controlProjection.value.event_digest.latest
   : []);
 const runtimeDigestEvents = computed(() => Array.isArray(controlProjection.value?.event_digest?.latest) ? controlProjection.value.event_digest.latest : []);
-const relationCount = computed(() => controlProjection.value?.relations?.relation_count || relations.value?.relations?.relation_count || mission.value?.relation_projection?.relation_count || 0);
+const relationCount = computed(() => jsonRecord(controlProjection.value?.relations).relation_count || relations.value?.relations?.relation_count || mission.value?.relation_projection?.relation_count || 0);
 const relationRows = computed(() => {
   const source = controlProjection.value?.relations || relations.value?.relations || mission.value?.relation_projection || {};
   const rows = source?.relations || [];
@@ -219,7 +228,7 @@ const actionContractRows = computed(() => {
     projection: Array.isArray(row.expected_projection) ? row.expected_projection.join(', ') : '-',
   })) : [];
 });
-const missionHealth = computed(() => controlProjection.value?.health?.mission || mission.value?.health_projection || {});
+const missionHealth = computed(() => jsonRecord(controlProjection.value?.health).mission || mission.value?.health_projection || {});
 const scheduleProjection = computed(() => scheduleResponse.value?.schedules || {});
 const schedules = computed<any[]>(() => Array.isArray(scheduleProjection.value?.schedules)
   ? scheduleProjection.value.schedules

@@ -38,7 +38,7 @@ const orderedApprovals = computed(() => {
     const leftCurrent = approvalSessionId(left) === sessionId ? 1 : 0;
     const rightCurrent = approvalSessionId(right) === sessionId ? 1 : 0;
     if (leftCurrent !== rightCurrent) return rightCurrent - leftCurrent;
-    return Number(left?.created_at_ms || 0) - Number(right?.created_at_ms || 0);
+    return Number(left?.source?.created_at_ms || 0) - Number(right?.source?.created_at_ms || 0);
   });
 });
 const activeApproval = computed(() => (
@@ -65,7 +65,7 @@ const activeSourceAppId = computed(() => applicationAppIdFromApproval(activeAppr
 const approvalSessionLabel = computed(() => {
   const approval = activeApproval.value;
   if (!approval) return '';
-  const sessionId = String(approval?.source?.session_id || approval?.session_id || '');
+  const sessionId = String(approval?.source?.session_id || '');
   if (!sessionId) return t('chat.approval.noSession');
   const short = sessionId.length > 8 ? `${sessionId.slice(0, 8)}…` : sessionId;
   const known = store.sessions.find((session: any) => String(session.id || session.session_id || '') === sessionId);
@@ -94,7 +94,7 @@ const activeEquivalentCount = computed(() => {
 });
 
 function approvalSessionId(approval: ApprovalPendingItem) {
-  return String(approval?.source?.session_id || approval?.session_id || '');
+  return String(approval?.source?.session_id || '');
 }
 
 function approvalScopeLabel(scope: ApprovalScope) {
@@ -140,9 +140,9 @@ async function refresh() {
     }
     const allRows = blockingExecutionRows(allBlocking);
     const blockingRows = blockingExecutionRows(blocking);
-    const known = new Set(allRows.map((item) => String(item?.approval_id || item?.id || '')));
+    const known = new Set(allRows.map((item) => String(item?.approval_id || '')));
     approvals.value = [
-      ...blockingRows.filter((item) => !known.has(String(item?.approval_id || item?.id || ''))),
+      ...blockingRows.filter((item) => !known.has(String(item?.approval_id || ''))),
       ...allRows,
     ];
     blockingCurrentApprovals.value = blockingRows;
@@ -236,11 +236,11 @@ watch(
   () => {
     if (!activeSessionId.value) return;
     const approval = blockingCurrentApprovals.value[0];
-    const approvalId = String(approval?.approval_id || approval?.id || '');
+    const approvalId = String(approval?.approval_id || '');
     if (!approvalId || presentedInChat.has(approvalId)) return;
     presentedInChat.add(approvalId);
     selectedIndex.value = Math.max(0, orderedApprovals.value.findIndex(
-      (candidate) => String(candidate?.approval_id || candidate?.id || '') === approvalId,
+      (candidate) => String(candidate?.approval_id || '') === approvalId,
     ));
     error.value = '';
     modalOpen.value = true;

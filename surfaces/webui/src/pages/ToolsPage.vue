@@ -59,7 +59,7 @@ const timelineEvents = computed(() => Array.isArray(state.value.timeline?.events
 const toolLedger = computed(() => adaptRuntimeTimeline(timelineEvents.value).filter((event) => event.domain === 'tool'));
 const toolOperationsGraph = computed(() => adaptToolOperationsGraph(result.value, checkpoints.value, toolLedger.value.map((event) => event.raw), t('page.tools.page.text.86c5ed2cc8')));
 
-const toolRows = computed(() => tools.value.map((tool: any) => ({
+const toolRows = computed<Record<string, unknown>[]>(() => tools.value.map((tool: any) => ({
   name: tool.name,
   enabled: tool.enabled !== false,
   safety: tool.safety_category || '-',
@@ -127,7 +127,7 @@ const ledgerRows = computed(() => toolLedger.value.slice(0, 16).map((event) => (
   seq: event.sequence,
   tool: event.tool_name || '-',
 })));
-const activeSessionId = computed(() => store.currentSessionId || 'api-context');
+const activeSessionId = computed(() => store.activeSessionId || 'api-context');
 const toolContext = computed(() => [
   { label: t('script.pages.toolspage.label.f7f1997c6c'), value: activeSessionId.value },
   { label: t('script.pages.toolspage.label.4fa8cc860c'), value: tools.value.length, tone: tools.value.length ? 'success' : 'warn' },

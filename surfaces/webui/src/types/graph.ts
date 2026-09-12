@@ -1,6 +1,6 @@
 export type GraphDirection = 'RIGHT' | 'DOWN';
 
-export interface GraphNodeView {
+export type GraphNodeView = {
   id: string;
   type: string;
   label: string;
@@ -17,7 +17,7 @@ export interface GraphNodeView {
   raw?: Record<string, unknown>;
 }
 
-export interface GraphEdgeView {
+export type GraphEdgeView = {
   id: string;
   source: string;
   target: string;

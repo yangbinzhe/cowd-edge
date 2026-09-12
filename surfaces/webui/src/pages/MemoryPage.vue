@@ -834,7 +834,7 @@ watch(
             copyable
             :rows="knowledgeCandidateRows"
             :columns="['candidate_id', 'title', 'scope', 'novelty', 'state', 'approval_id', 'reason']"
-            @row-click="selectedKnowledgeCandidate = $event; selectedDetail = $event.raw || $event"
+            @row-click="selectedKnowledgeCandidate = $event; selectedDetail = $event.raw && typeof $event.raw === 'object' ? { ...$event.raw } : $event"
           />
           <EmptyState
             v-else
@@ -887,7 +887,7 @@ watch(
             :connection-state="entities.enabled === false ? 'offline' : 'ready'"
             @view-state-change="updateKnowledgeView"
             @select-node="selectKnowledgeNode"
-            @select-edge="selectedDetail = $event.raw || $event"
+            @select-edge="selectedDetail = $event.raw && typeof $event.raw === 'object' ? { ...$event.raw } : $event"
           />
           <div class="button-row">
             <button class="ghost-action" type="button" :disabled="graphCursor === 0" @click="loadKnowledgeGraph(Math.max(0, graphCursor - 80))">{{ t('memory.graph.previous') }}</button>

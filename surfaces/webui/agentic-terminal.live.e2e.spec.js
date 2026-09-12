@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 import { EXECUTION_PROJECTION_SCHEMA_VERSION } from './src/generated/projection-contract-meta.ts';
+import { mayCancelFailedOwnedRun } from './agentic-live-test-policy.ts';
 
 const prompt = process.env.COWD_AGENTIC_E2E_PROMPT;
 const expectedTeams = Number(process.env.COWD_AGENTIC_E2E_EXPECT_TEAMS || 0);
 const expectedAgents = Number(process.env.COWD_AGENTIC_E2E_EXPECT_AGENTS || 0);
 const resumeSessionId = process.env.COWD_AGENTIC_E2E_SESSION_ID || '';
 const observer = `webui:agentic-live:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+const runs = new WeakMap();
 
 test.beforeEach(async ({ page }) => {
   if (!prompt) throw new Error('COWD_AGENTIC_E2E_PROMPT is required');
@@ -17,6 +19,14 @@ test.beforeEach(async ({ page }) => {
 
 test.afterEach(async ({ page }, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
+  const run = runs.get(testInfo);
+  if (!mayCancelFailedOwnedRun({ resumeSessionId, ...run })) {
+    await testInfo.attach('observation-stopped-without-business-cancellation.json', {
+      body: JSON.stringify({ resumeSessionId, ...run, testStatus: testInfo.status }),
+      contentType: 'application/json',
+    });
+    return;
+  }
   // Keep the attached browser's writer identity for cancellation; an API
   // observer without the Surface lease cannot cancel this admitted turn.
   const stop = page.locator('.composer-stop-action');
@@ -59,6 +69,7 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
   expect(executionId).not.toBe('');
   expect(sessionId).not.toBe('');
   if (resumeSessionId) expect(sessionId).toBe(resumeSessionId);
+  runs.set(testInfo, { admission: { sessionId, executionId }, observedStatus: '' });
   console.log(JSON.stringify({ sessionId, executionId }));
   await testInfo.attach('admission.json', {
     body: JSON.stringify({ sessionId, executionId, receipt }), contentType: 'application/json',
@@ -71,6 +82,7 @@ test('natural-language UI ingress reaches a truthful terminal collaboration proj
     );
     if (!current.ok()) return `http:${current.status()}`;
     projection = await current.json();
+    runs.get(testInfo).observedStatus = String(projection?.live?.status || '').toLowerCase();
     return String(projection?.live?.status || '').toLowerCase();
   }, {
     timeout: Number(process.env.COWD_AGENTIC_E2E_TIMEOUT_MS || 600_000) - 30_000,

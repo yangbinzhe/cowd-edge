@@ -85,7 +85,7 @@ const facets = computed(() => {
     tags: Array.from(new Set(items.value.flatMap((item: any) => item.tags || []))),
   };
 });
-const sourceFacet = computed(() => Array.from(new Set(items.value.map((skill: any) => skill.source).filter(Boolean))));
+const sourceFacet = computed(() => Array.from(new Set<string>(items.value.map((skill: any) => String(skill.source || '')).filter(Boolean))));
 const skill = computed(() => detail.value?.skill || filteredItems.value.find((item: any) => item.id === selectedSkillId.value) || {});
 const skillManagement = computed(() => detail.value?.management || {});
 const fileItems = computed(() => Array.isArray(files.value?.files) ? files.value.files : []);
@@ -103,10 +103,10 @@ const filteredRunItems = computed(() => runItems.value.filter((run: any) => {
   return (runStatusFilter.value === 'all' || runStatus === runStatusFilter.value)
     && (runSkillFilter.value === 'all' || runSkill === runSkillFilter.value);
 }));
-const runStatuses = computed(() => Array.from(new Set(
+const runStatuses = computed(() => Array.from(new Set<string>(
   runItems.value.map((run: any) => String(run.status || run.outcome || 'unknown')),
 )));
-const runSkills = computed(() => Array.from(new Set(
+const runSkills = computed(() => Array.from(new Set<string>(
   runItems.value.map((run: any) => String(run.skill_id || run.skill_name || '')).filter(Boolean),
 )));
 const skillFileTree = computed(() => {

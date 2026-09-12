@@ -51,9 +51,9 @@ const accessModeLabels = {
   external: 'settings.access.external',
   sameOrigin: 'settings.access.sameOrigin',
 } as const;
-const accessModeCode = computed(() => {
+const accessModeCode = computed<keyof typeof accessModeLabels>(() => {
   if (authResult.value?.valid || authResult.value?.auth_required === false) return 'internal';
-  if (authResult.value?.__state && authResult.value.__state !== 'ready') return authResult.value.__state;
+  if (authResult.value?.__state && authResult.value.__state !== 'ready') return 'offline';
   if (authResult.value?.error || authResult.value?.__error) return 'external';
   return 'sameOrigin';
 });
@@ -72,7 +72,7 @@ const gatewayAuthenticationRequired = computed(() => (
   )
 ));
 const providerModels = computed(() => store.providers?.models || []);
-const providerRows = computed(() => store.providers?.providers || []);
+const providerRows = computed<Record<string, unknown>[]>(() => store.providers?.providers || []);
 const providerControl = computed(() => store.controlPlane?.components?.provider || {});
 const configuredModel = computed(() => store.providers?.configured_model || providerControl.value.configured_model || store.settings?.model || '');
 const settingsContext = computed(() => [
@@ -631,10 +631,10 @@ function selectSettingsSection(id: string) {
           @live="saveDefaultModelGoverned"
         />
         <div class="profile-list">
-          <article v-for="provider in providerRows" :key="provider.name" class="profile-row" role="button" tabindex="0" @click="selectedDetail = provider" @keydown.enter.prevent="selectedDetail = provider">
+          <article v-for="provider in providerRows" :key="String(provider.name)" class="profile-row" role="button" tabindex="0" @click="selectedDetail = provider" @keydown.enter.prevent="selectedDetail = provider">
             <div>
               <strong>{{ provider.name }}</strong>
-              <span>{{ providerProtocolSummary(provider) }} · {{ formatCount('models', provider.model_count) }} · {{ t('settings.providers.credential') }} {{ provider.credential_present ? t('page.settings.page.inline.aaa6a21074') : t('page.settings.page.inline.c96aea5cbb') }}</span>
+              <span>{{ providerProtocolSummary(provider) }} · {{ formatCount('models', Number(provider.model_count || 0)) }} · {{ t('settings.providers.credential') }} {{ provider.credential_present ? t('page.settings.page.inline.aaa6a21074') : t('page.settings.page.inline.c96aea5cbb') }}</span>
             </div>
           </article>
         </div>

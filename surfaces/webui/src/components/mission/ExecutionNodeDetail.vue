@@ -48,6 +48,8 @@ const toolBatches = computed(() => {
   const batches = Array.isArray(toolExecution.value.batches) ? toolExecution.value.batches : [];
   return batches.map((batch: Record<string, any>) => ({
     ...batch,
+    node_id: String(batch.node_id || ''),
+    status: String(batch.status || 'unknown'),
     calls: calls.filter((call: Record<string, any>) => (
       String(call.batch_node_id || '') === String(batch.node_id || '')
     )),

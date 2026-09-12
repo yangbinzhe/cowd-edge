@@ -25,23 +25,10 @@ const admission = computed(() => latestPayload('admission') as any);
 const outcome = computed(() => latestPayload('outcome') as any);
 const delivery = computed(() => props.projection.delivery_envelope || null);
 const presentation = computed(() => props.projection.terminal_presentation || null);
-const collaborationProgram = computed(() => props.projection.graph.orchestration?.collaboration_program || null);
-const collaborationWorkPriorities = computed<Record<string, number | null>>(() => {
-  const program = collaborationProgram.value;
-  if (!program) return {};
-  const nodePriority = new Map(props.projection.graph.nodes.map((node) => [
-    node.node_id,
-    node.work?.scheduling_priority,
-  ]));
-  return Object.fromEntries(Object.entries(program.semantic_node_instances).map(([semantic, nodeIds]) => {
-    const priorities = nodeIds
-      .map((nodeId) => nodePriority.get(nodeId))
-      .filter((priority): priority is number => typeof priority === 'number');
-    return [semantic, priorities.length && priorities.every((priority) => priority === priorities[0])
-      ? priorities[0]
-      : null];
-  }));
-});
+const collaborationProgram = computed(() => props.projection.agentic_collaboration.programs.find(program =>
+  Boolean(props.projection.session_id) && program.session_id === props.projection.session_id
+  && (program.root_execution_id === props.projection.execution_id
+    || (Boolean(props.projection.turn_id) && program.turn_id === props.projection.turn_id))) || null);
 const coverage = computed(() => delivery.value?.coverage || null);
 const DELIVERY_STATUS_KEYS: Record<DeliveryStatus, string> = {
   satisfied: 'runtime.truth.deliveryStatus.satisfied',
@@ -50,6 +37,7 @@ const DELIVERY_STATUS_KEYS: Record<DeliveryStatus, string> = {
   unavailable: 'runtime.truth.deliveryStatus.unavailable',
 };
 const ANSWER_ORIGIN_KEYS: Record<AnswerOrigin, string> = {
+  runtime_verified_fallback: 'runtime.truth.answerOriginValue.runtime_verified_fallback',
   model_direct: 'runtime.truth.answerOriginValue.model_direct',
   terminal_delegate: 'runtime.truth.answerOriginValue.terminal_delegate',
   team_synthesizer: 'runtime.truth.answerOriginValue.team_synthesizer',
@@ -158,10 +146,6 @@ const lifecycleStatus = computed(() => (
     <CollaborationProgramSummary
       v-if="collaborationProgram"
       :program="collaborationProgram"
-      :applied-mutation-ids="projection.graph.orchestration?.applied_mutation_ids || []"
-      :escalations="projection.graph.orchestration?.collaboration_escalations || []"
-      :work-priorities-by-semantic="collaborationWorkPriorities"
-      :activities="projection.activities || []"
       :concurrency="projection.concurrency"
     />
     <RawPayload :title="t('runtime.truth.raw')" :data="{ admission, outcome, delivery, presentation, collaboration: collaborationProgram, cancellation: projection.cancellation_receipt, evidence: projection.evidence }" />

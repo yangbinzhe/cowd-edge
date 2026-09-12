@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { api } from '../api/client';
 import { formatCount, t } from '../i18n';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Brain, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleAlert, CircleDashed, Clipboard, Clock3, Code2, Coins, Download, Edit3, ExternalLink, FileCheck2, FileText, Folder, Info, Link2, LoaderCircle, Maximize2, MemoryStick, Minimize2, RotateCcw, Save, Search, ShieldCheck, Upload, Workflow, Wrench, X, ZoomIn, ZoomOut } from 'lucide-vue-next';
@@ -587,7 +588,7 @@ async function openActivityDetail(item: Record<string, unknown>) {
     const detail = await api.executionActivity(
       executionId,
       activityId,
-      String(item.session_id || chat.active?.id || ''),
+      String(item.session_id || chat.active?.sessionId || ''),
     );
     if (request !== activityDetailRequest) return;
     activityEvidenceOverride.value = Array.from(new Set([
@@ -617,7 +618,7 @@ function openGraphNodeDetail(node: Record<string, unknown>) {
 }
 
 function openTurnEvidenceDetail(group: any) {
-  activityEvidenceOverride.value = Array.from(new Set(group.evidenceRefs || [])).slice(0, 100);
+  activityEvidenceOverride.value = Array.from(new Set<string>((Array.isArray(group.evidenceRefs) ? group.evidenceRefs : []).map(String))).slice(0, 100);
   store.selectedActivity = {
     id: `turn-input:${group.turnId}`,
     kind: 'input',

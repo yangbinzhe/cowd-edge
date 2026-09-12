@@ -14,6 +14,8 @@ function activity(
 ): ExecutionActivityProjection {
   return {
     schema_version: 1,
+    definition_refs: [],
+    required: false,
     activity_id: id,
     scope: {
       workspace_id: 'workspace',

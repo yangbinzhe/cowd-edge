@@ -99,7 +99,11 @@ if (fs.existsSync(path.join(srcRoot, 'i18n/catalog.ts'))) {
 
 for (const file of files) {
   const text = fs.readFileSync(file, 'utf8');
-  if (/zhText|translatePattern|installDomI18n|MutationObserver|translateText\(|translateStatus\(/.test(text)) {
+  // DOM measurement observers are unrelated to translation. Reject observers
+  // that rewrite DOM content as well as every retired translation entry point.
+  const rewritesObservedContent = /MutationObserver/.test(text)
+    && /\.(?:textContent|innerText|innerHTML|nodeValue|data)\s*=|\.(?:replaceData|appendData|insertData|deleteData|replaceChildren)\s*\(/.test(text);
+  if (/zhText|translatePattern|installDomI18n|translateText\(|translateStatus\(/.test(text) || rewritesObservedContent) {
     failures.push(`${path.relative(webuiRoot, file)} contains legacy DOM/string translation path`);
   }
   if (/[\u4e00-\u9fff]/.test(text)) {

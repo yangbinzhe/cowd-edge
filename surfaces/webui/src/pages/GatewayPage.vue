@@ -274,13 +274,13 @@ const capabilityRows = computed(() => capabilities.value.slice(0, 14).map((item:
   risk: item.risk || item.risk_level || '-',
   mode: item.mode || item.access || '-',
 })));
-const resourceRows = computed(() => resources.value.slice(0, 14).map((item: any) => ({
+const resourceRows = computed<Record<string, unknown>[]>(() => resources.value.slice(0, 14).map((item: any) => ({
   reference: item.reference || item.resource_ref || item.id,
   title: item.title || item.name || '-',
   kind: item.kind || item.mime || '-',
   status: item.status || '-',
 })));
-const executionRows = computed(() => executions.value.slice(0, 12).map((item: any) => ({
+const executionRows = computed<Record<string, unknown>[]>(() => executions.value.slice(0, 12).map((item: any) => ({
   id: item.execution_id || item.id,
   status: item.status || item.decision || '-',
   capability: item.requested_capability || item.capability || '-',

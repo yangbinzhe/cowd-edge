@@ -34,10 +34,11 @@ import '@vue-flow/core/dist/theme-default.css';
 import type { GraphDirection, GraphEdgeView, GraphNodeView, GraphViewModel } from '../../types/graph';
 import { t } from '../../i18n';
 import { displayStatus } from '../../i18n/domain/status';
-import DataTable from '../workbench/DataTable.vue';
+import GraphOutline from './GraphOutline.vue';
 import StatusPill from '../workbench/StatusPill.vue';
 import EvidenceInspector from '../evidence/EvidenceInspector.vue';
 import { runGraphLayout } from './graphLayout';
+import { graphHierarchy, graphVisibility, loadGraphBranches, saveGraphBranches } from './graphVisibility';
 import {
   aggregateGraphEdges,
   graphEdgeVisualKind,
@@ -51,6 +52,7 @@ import {
   restorableGraphViewport,
   saveGraphViewport,
   type SavedGraphViewport,
+  loadGraphPositions, saveGraphPositions, validGraphPosition,
 } from './graphViewport';
 
 const props = withDefaults(defineProps<{
@@ -95,9 +97,59 @@ const compactSearchOpen = ref(false);
 const inspectorOpen = ref(false);
 const internalSelectedNodeId = ref('');
 const laidOutNodes = ref<any[]>([]);
+const layoutEngine = ref('pending');
+const layoutPending = ref(false);
+let pendingFocusId = '';
+async function applyRequestedFocus() {
+  if (!pendingFocusId || !laidOutNodes.value.some(node => node.id === pendingFocusId) || !flow.value) return;
+  const id = pendingFocusId;
+  onUserViewport();
+  // VueFlow measures new nodes after Vue's DOM update. Keep the request until
+  // nodes-initialized retries it; fitView returns false before dimensions exist.
+  const fitted = await flow.value.fitView?.({ nodes: [id], padding: 0.4, minZoom: 0.5, maxZoom: 1, duration: 0 });
+  if (fitted && pendingFocusId === id) pendingFocusId = '';
+}
+function nodesInitialized() {
+  if (pendingFocusId) void applyRequestedFocus();
+  else scheduleFit();
+}
+function focusCurrent() {
+  const id = props.activeNodeId || props.selectedNodeId || internalSelectedNodeId.value || props.model.nodes.find(node => ['running', 'blocked'].includes(node.status))?.id;
+  if (!id || !hierarchy.value.nodes.has(id)) return;
+  pendingFocusId = id;
+  const next = { ...branchPreferences.value };
+  let parent = hierarchy.value.parent.get(id);
+  while (parent) { next[parent] = true; parent = hierarchy.value.parent.get(parent); }
+  branchPreferences.value = next;
+  saveGraphBranches(props.model.id, next);
+  if (laidOutNodes.value.some(node => node.id === id)) void nextTick(applyRequestedFocus);
+}
+watch(search, query => {
+  if (query.trim()) pendingFocusId = visibility.value.matches.values().next().value || '';
+});
+const renderedCount = ref(0);
+let renderObserver: MutationObserver | null = null;
+let renderFrame = 0;
 let layoutEpoch = 0;
 const layoutCache = new Map<string, Array<{ id: string; x: number; y: number }>>();
 const savedViewports = new Map<string, SavedGraphViewport>();
+const pinnedPositions = ref(loadGraphPositions(props.model.id));
+function pinNode(event: { node?: { id: string; position: { x: number; y: number } } }) {
+  const node = event.node;
+  if (!node || !hierarchy.value.nodes.has(node.id) || !validGraphPosition(node.position)) return;
+  onUserViewport();
+  pinnedPositions.value = { ...pinnedPositions.value, [node.id]: { ...node.position } };
+  laidOutNodes.value = laidOutNodes.value.map(row => row.id === node.id ? { ...row, position: { ...node.position } } : row);
+  saveGraphPositions(props.model.id, pinnedPositions.value);
+}
+function unpinNode(id?: string) {
+  const remaining = { ...pinnedPositions.value };
+  if (id) delete remaining[id];
+  pinnedPositions.value = id ? remaining : {};
+  saveGraphPositions(props.model.id, pinnedPositions.value);
+  scheduleLayout();
+}
+watch(() => props.model.id, id => { pinnedPositions.value = loadGraphPositions(id); });
 let lastLayoutIdentity = '';
 let fitFrame = 0;
 let fitTimer = 0;
@@ -108,6 +160,8 @@ const userViewportChanged = ref(false);
 let directionChanged = false;
 
 function onUserViewport() {
+  cancelAnimationFrame(fitFrame);
+  window.clearTimeout(fitTimer);
   userViewportChanged.value = true;
   persistCurrentViewport();
 }
@@ -168,13 +222,61 @@ function nodeDescription(node: GraphNodeView) {
 }
 
 const statuses = computed(() => Array.from(new Set(props.model.nodes.map((node) => node.status))).filter(Boolean));
-const visibleNodes = computed(() => {
-  const query = search.value.trim().toLowerCase();
-  return props.model.nodes.filter((node) => {
-    const statusMatch = statusFilter.value === 'all' || node.status === statusFilter.value;
-    const textMatch = !query || `${node.id} ${node.label} ${node.type} ${node.summary || ''}`.toLowerCase().includes(query);
-    return statusMatch && textMatch;
-  });
+const branchPreferences = ref(loadGraphBranches(props.model.id));
+const hierarchy = computed(() => graphHierarchy(props.model));
+const visibility = computed(() => graphVisibility(hierarchy.value, branchPreferences.value, search.value, statusFilter.value));
+const visibleNodes = computed(() => visibility.value.visible);
+function toggleBranch(id: string) {
+  stopExpansion();
+  branchPreferences.value = { ...branchPreferences.value, [id]: visibility.value.collapsed.has(id) };
+  saveGraphBranches(props.model.id, branchPreferences.value);
+}
+const expanding = ref(false);
+let expansionFrame = 0;
+function stopExpansion() {
+  cancelAnimationFrame(expansionFrame);
+  expanding.value = false;
+  saveGraphBranches(props.model.id, branchPreferences.value);
+}
+function expandAll() {
+  stopExpansion();
+  const ids = [...hierarchy.value.children.keys()];
+  let index = 0;
+  expanding.value = true;
+  const step = () => {
+    const next = { ...branchPreferences.value };
+    const end = Math.min(ids.length, index + 128);
+    for (; index < end; index++) next[ids[index]!] = true;
+    branchPreferences.value = next;
+    if (index < ids.length) expansionFrame = requestAnimationFrame(step);
+    else stopExpansion();
+  };
+  expansionFrame = requestAnimationFrame(step);
+}
+function expandLevel() {
+  stopExpansion();
+  const next = { ...branchPreferences.value };
+  for (const node of visibleNodes.value) if (hierarchy.value.children.has(node.id)) next[node.id] = true;
+  branchPreferences.value = next;
+  saveGraphBranches(props.model.id, next);
+}
+watch([search, statusFilter], stopExpansion);
+function selectOutlineNode(node: GraphNodeView) {
+  internalSelectedNodeId.value = node.id;
+  inspectorOpen.value = props.embeddedInspector;
+  emit('selectNode', node);
+}
+function resetBranches() {
+  stopExpansion();
+  branchPreferences.value = {};
+  saveGraphBranches(props.model.id, {});
+}
+watch(() => props.model.id, (id, oldId) => {
+  cancelAnimationFrame(expansionFrame);
+  expanding.value = false;
+  saveGraphBranches(oldId, branchPreferences.value);
+  branchPreferences.value = loadGraphBranches(id);
+  internalSelectedNodeId.value = '';
 });
 const visibleNodeIds = computed(() => new Set(visibleNodes.value.map((node) => node.id)));
 const visibleEdges = computed(() => aggregateGraphEdges(
@@ -203,14 +305,6 @@ const diagnosticCount = computed(() => diagnostics.value.duplicateNodeIds.length
 const summaryId = computed(() => `graph-summary-${String(props.model.id || 'default').replace(/[^a-z0-9_-]/gi, '-')}`);
 const selectedNode = computed(() => props.model.nodes.find((node) => node.id === (props.selectedNodeId || internalSelectedNodeId.value)) || null);
 const selectedEvidenceRefs = computed(() => selectedNode.value?.evidenceRefs || []);
-const listRows = computed(() => visibleNodes.value.map((node) => ({
-  id: node.id,
-  type: node.badges?.[0] || node.type,
-  status: displayStatus(node.status),
-  group: node.group || '-',
-  evidence: node.evidenceRefs?.length || 0,
-  summary: node.summary || node.label,
-})));
 const flowNodes = computed(() => {
   const currentById = new Map(canvasNodes.value.map((node) => [node.id, node]));
   return laidOutNodes.value.flatMap((layoutNode) => {
@@ -285,7 +379,7 @@ const minimapBounds = computed(() => {
 const minimapNodes = computed(() => {
   const bounds = minimapBounds.value;
   if (!bounds) return [];
-  return laidOutNodes.value.map((node) => ({
+  const dots = laidOutNodes.value.map((node) => ({
     id: node.id,
     x: 4 + ((Number(node.position.x || 0) - bounds.minX) / bounds.width) * 152,
     y: 4 + ((Number(node.position.y || 0) - bounds.minY) / bounds.height) * 92,
@@ -293,9 +387,31 @@ const minimapNodes = computed(() => {
     height: Math.max(3, (76 / bounds.height) * 92),
     selected: node.id === (props.selectedNodeId || internalSelectedNodeId.value),
   }));
+  if (dots.length <= 640) return dots;
+  // A density overview has bounded pixels; the full graph index remains intact.
+  const cells = new Map<string, typeof dots[number]>();
+  for (const dot of dots) {
+    const key = `${Math.floor(dot.x / 5)}:${Math.floor(dot.y / 5)}`;
+    const previous = cells.get(key);
+    if (!previous || dot.selected) cells.set(key, { ...dot, id: key, width: 4, height: 4 });
+  }
+  return [...cells.values()];
 });
 
+let layoutRunning = false;
+let layoutQueued = false;
 async function layout() {
+  if (layoutRunning) { layoutEpoch++; layoutQueued = true; return; }
+  layoutRunning = true;
+  layoutPending.value = true;
+  try { await performLayout(); }
+  finally {
+    layoutRunning = false;
+    layoutPending.value = false;
+    if (layoutQueued) { layoutQueued = false; scheduleLayout(); }
+  }
+}
+async function performLayout() {
   const epoch = ++layoutEpoch;
   if (!canvasNodes.value.length || showList.value) {
     laidOutNodes.value = [];
@@ -338,8 +454,9 @@ async function layout() {
       })),
     });
   if (epoch !== layoutEpoch) return;
+  layoutEngine.value = cached ? 'cached' : String(graph?.layoutEngine || 'unknown');
   const currentNodes = [...canvasNodes.value];
-  const positions = cached || (graph?.children || []).map((position) => ({ id: position.id, x: position.x || 0, y: position.y || 0 }));
+  const positions: Array<{ id: string; x: number; y: number }> = cached || (graph?.children || []).map((position: { id: string; x?: number; y?: number }) => ({ id: position.id, x: position.x || 0, y: position.y || 0 }));
   if (!cached) {
     layoutCache.set(signature, positions);
     if (layoutCache.size > 24) layoutCache.delete(layoutCache.keys().next().value as string);
@@ -347,7 +464,7 @@ async function layout() {
   const positionById = new Map(positions.map((position) => [String(position.id), position]));
   const previousViewport = flow.value?.getViewport?.();
   laidOutNodes.value = currentNodes.map((node, index) => {
-    const position = positionById.get(node.id) || (
+    const position = pinnedPositions.value[node.id] || positionById.get(node.id) || (
       direction.value === 'DOWN'
         ? { x: (index % 6) * 238, y: Math.floor(index / 6) * 158 }
         : { x: Math.floor(index / 6) * 278, y: (index % 6) * 118 }
@@ -373,7 +490,7 @@ async function layout() {
         icon: graphNodeIcon(node),
       },
       class: `graph-node graph-node-${node.type} graph-node-visual-${graphNodeVisualKind(node)} status-${node.status}${(props.selectedNodeId || internalSelectedNodeId.value) === node.id ? ' selected' : ''}${props.activeNodeId === node.id ? ' active-runtime-node' : ''}`,
-      draggable: false,
+      draggable: true,
       connectable: false,
     };
   });
@@ -403,9 +520,11 @@ async function layout() {
     }
   }
   lastLayoutIdentity = layoutIdentity;
+  applyRequestedFocus();
 }
 
 function scheduleLayout() {
+  layoutEpoch++;
   window.clearTimeout(layoutTimer);
   layoutTimer = window.setTimeout(layout, 80);
 }
@@ -489,8 +608,8 @@ function graphNodeSize(node: GraphNodeView) {
     height: visualKind === 'mission' && node.description
       ? 104
       : semantic
-        ? (node.outputSummary || node.metrics?.length ? 94 : 76)
-      : 70,
+        ? (node.outputSummary || node.metrics?.length ? 118 : 100)
+      : 94,
   };
 }
 
@@ -528,15 +647,6 @@ function edgeColor(visualKind: ReturnType<typeof graphEdgeVisualKind>, type: str
   if (['delegates', 'delegated_to'].includes(type)) return 'var(--graph-edge-delegates)';
   if (type === 'invokes') return 'var(--graph-edge-invokes)';
   return 'var(--graph-edge-hierarchy)';
-}
-
-function selectListRow(row: Record<string, unknown>) {
-  const node = props.model.nodes.find((item) => item.id === row.id);
-  if (node) {
-    internalSelectedNodeId.value = node.id;
-    inspectorOpen.value = props.embeddedInspector;
-    emit('selectNode', node);
-  }
 }
 
 async function toggleFullscreen() {
@@ -586,6 +696,17 @@ watch(() => props.searchQuery, (value) => { if (value !== search.value) search.v
 watch(() => props.statusQuery, (value) => { if (value !== statusFilter.value) statusFilter.value = value || 'all'; });
 
 onMounted(() => {
+  if (root.value && typeof MutationObserver !== 'undefined') {
+    const measure = () => {
+      cancelAnimationFrame(renderFrame);
+      renderFrame = requestAnimationFrame(() => {
+        renderedCount.value = root.value?.querySelectorAll('.vue-flow__node, [role="treeitem"]').length || 0;
+      });
+    };
+    renderObserver = new MutationObserver(measure);
+    renderObserver.observe(root.value, { childList: true, subtree: true });
+    measure();
+  }
   if (!root.value || typeof ResizeObserver === 'undefined') return;
   resizeObserver = new ResizeObserver(([entry]) => {
     const width = Math.round(entry?.contentRect.width || 0);
@@ -600,6 +721,11 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  renderObserver?.disconnect();
+  cancelAnimationFrame(renderFrame);
+  stopExpansion();
+  layoutQueued = false;
+  layoutEpoch++;
   resizeObserver?.disconnect();
   resizeObserver = null;
   window.clearTimeout(layoutTimer);
@@ -609,11 +735,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section ref="root" class="graph-surface" :data-density="compact ? 'compact' : 'full'" role="region" tabindex="0" :aria-describedby="summaryId" @keydown="onKeydown">
+  <section ref="root" class="graph-surface" :data-layout-engine="layoutEngine" :data-density="compact ? 'compact' : 'full'" role="region" tabindex="0" :aria-describedby="summaryId" @keydown="onKeydown">
     <header class="graph-surface-header" :data-density="compact ? 'compact' : 'full'">
       <div class="graph-title">
         <h3>{{ model.title || t('graph.title.default') }}</h3>
         <small :id="summaryId">{{ t('graph.summary', { nodes: visibleNodes.length, edges: visibleEdges.length }) }}</small>
+        <small>{{ t('graph.coverage', { total: model.truncated ? t('graph.coverage.unknown') : model.nodes.length, loaded: model.nodes.length, expanded: visibleNodes.length, rendered: renderedCount }) }}</small>
         <small v-if="!compact && model.truncated" class="graph-truncated">{{ t('graph.state.truncated') }}</small>
         <small v-if="!compact && diagnosticCount" class="graph-diagnostic">{{ t('graph.state.diagnostics', { count: diagnosticCount, dangling: diagnostics.danglingEdgeIds.length }) }}</small>
         <small v-if="!compact && model.work" class="graph-work-summary">
@@ -673,6 +800,11 @@ onBeforeUnmount(() => {
           <button class="graph-icon-action" type="button" :title="t('graph.action.list')" :aria-label="t('graph.action.list')" :aria-pressed="listMode" @click="listMode = !listMode">
             <List :size="15" />
           </button>
+          <button class="graph-icon-action" type="button" :title="t('graph.action.focusCurrent')" :aria-label="t('graph.action.focusCurrent')" @click="focusCurrent"><Target :size="15" /></button>
+          <button v-if="hierarchy.children.size" class="graph-icon-action" type="button" :disabled="visibility.filtering || expanding" :title="t('graph.action.expandLevel')" :aria-label="t('graph.action.expandLevel')" @click="expandLevel"><ArrowDown :size="15" /></button>
+          <button v-if="hierarchy.children.size" class="graph-icon-action" type="button" :disabled="visibility.filtering" :title="t(expanding ? 'graph.action.stopExpansion' : 'graph.action.expandAll')" :aria-label="t(expanding ? 'graph.action.stopExpansion' : 'graph.action.expandAll')" @click="expanding ? stopExpansion() : expandAll()"><Boxes :size="15" /></button>
+          <button v-if="Object.keys(pinnedPositions).length" class="graph-icon-action" type="button" :title="t('graph.action.resetPositions')" :aria-label="t('graph.action.resetPositions')" @click="unpinNode()"><Scan :size="15" /></button>
+          <button v-if="Object.keys(branchPreferences).length" class="graph-icon-action" type="button" :title="t('graph.action.resetBranches')" :aria-label="t('graph.action.resetBranches')" @click="resetBranches"><Boxes :size="15" /></button>
           <button class="graph-icon-action" type="button" :title="t('graph.action.export')" :aria-label="t('graph.action.export')" @click="exportGraph">
             <Download :size="15" />
           </button>
@@ -690,16 +822,18 @@ onBeforeUnmount(() => {
       </label>
     </div>
     <p class="sr-only" aria-live="polite">{{ t('graph.a11y.summary', { nodes: visibleNodes.length, edges: visibleEdges.length, status: connectionState || model.status || 'ready' }) }}</p>
+    <p v-if="layoutPending && !showList" class="graph-layout-progress" role="status">{{ t('graph.state.layingOut') }}</p>
     <p v-if="loading" class="empty-note">{{ t('graph.state.loading') }}</p>
     <p v-else-if="!visibleNodes.length" class="empty-note">{{ t('graph.state.empty') }}</p>
-    <DataTable v-else-if="showList" :rows="listRows" :columns="['id', 'type', 'status', 'group', 'evidence', 'summary']" row-key="id" searchable copyable @row-click="selectListRow" />
+    <GraphOutline v-else-if="showList" :nodes="visibleNodes" :parents="hierarchy.parent" :children="hierarchy.children" :depths="hierarchy.depths" :collapsed="visibility.collapsed" :filtering="visibility.filtering" :selected-id="selectedNode?.id || ''" @select="selectOutlineNode" @toggle="toggleBranch" />
     <VueFlow
       v-else
       class="graph-flow"
       :nodes="flowNodes"
       :edges="flowEdges"
       :only-render-visible-elements="true"
-      :nodes-draggable="false"
+      :nodes-draggable="true"
+      @node-drag-stop="pinNode"
       :nodes-connectable="false"
       :elements-selectable="true"
       :nodes-focusable="true"
@@ -708,7 +842,7 @@ onBeforeUnmount(() => {
       @move="onUserViewport"
       @zoom="onUserViewport"
       @pane-ready="paneReady"
-      @nodes-initialized="scheduleFit()"
+      @nodes-initialized="nodesInitialized"
       @node-click="selectNode"
       @edge-click="selectEdge"
     >
@@ -721,8 +855,17 @@ onBeforeUnmount(() => {
               </span>
               <strong>{{ data.label }}</strong>
             </span>
+            <button v-if="hierarchy.children.has(data.node.id)" class="graph-icon-action nodrag nopan" type="button"
+              :disabled="visibility.filtering"
+              :aria-expanded="visibility.filtering || !visibility.collapsed.has(data.node.id)"
+              :aria-label="t(visibility.collapsed.has(data.node.id) ? 'graph.action.expandBranch' : 'graph.action.collapseBranch', { label: data.label })"
+              @click.stop="toggleBranch(data.node.id)">
+              <ArrowRight v-if="!visibility.filtering && visibility.collapsed.has(data.node.id)" :size="13" /><ArrowDown v-else :size="13" />
+            </button>
+            <button v-if="pinnedPositions[data.node.id]" class="graph-icon-action nodrag nopan" type="button" :aria-label="t('graph.action.unpin', { label: data.label })" :title="t('graph.action.unpin', { label: data.label })" @click.stop="unpinNode(data.node.id)"><Scan :size="13" /></button>
             <span class="graph-node-status">{{ displayStatus(data.status) }}</span>
           </div>
+          <small v-if="!visibility.filtering && visibility.collapsed.has(data.node.id)">{{ t('graph.branch.hidden', { count: hierarchy.descendants.get(data.node.id) || 0, blocked: hierarchy.blocked.get(data.node.id) || 0 }) }}</small>
           <small v-if="data.node.raw?.semantic_view && data.task" class="graph-node-task">{{ data.task }}</small>
           <small v-else>{{ data.description }}</small>
           <small v-if="data.node.raw?.semantic_view && data.outputSummary" class="graph-node-output">
@@ -773,6 +916,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.graph-layout-progress { margin: 0; padding: 6px 12px; color: var(--text-muted); }
+.graph-title small { display: block; margin-top: 3px; color: var(--text-muted); }
+.graph-node-heading { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+.graph-node-identity { flex: 1 0 100%; }
+.graph-node-heading .graph-icon-action { width: 24px; height: 24px; min-width: 24px; min-height: 24px; flex-basis: 24px; }
+.graph-node-status { margin-inline-start: auto; font-size: 11px; color: var(--text-muted); }
+.graph-node-content small { font-size: 11px; color: var(--text-muted); }
+
 @media (prefers-reduced-motion: reduce) {
   .graph-surface :deep(.vue-flow__edge-path), .graph-surface :deep(.vue-flow__node) { transition: none !important; animation: none !important; }
 }

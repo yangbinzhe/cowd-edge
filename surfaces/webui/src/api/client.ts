@@ -1,3 +1,4 @@
+import type { components as GatewayComponents } from '../generated/gateway-api';
 import type {
   ApiReadState,
   ApiReadStatus,
@@ -28,6 +29,11 @@ import type {
 } from '../types';
 import { apiReadPolicy, type ApiReadClass } from './readPolicy';
 import { EXECUTION_PROJECTION_SCHEMA_VERSION } from '../generated/projection-contract-meta';
+
+/** Narrow an untyped JSON object before reading optional extension fields. */
+export function jsonRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
 
 export interface ApiReceipt<T = any> {
   ok: boolean;
@@ -695,9 +701,9 @@ function readStatusFor(response: Response): ApiReadStatus {
 }
 
 function withReadState<T>(data: T, state: ApiReadState): T & ApiReadState {
-  if (Array.isArray(data)) return Object.assign([...data], state) as T & ApiReadState;
+  if (Array.isArray(data)) return Object.assign([...data], state) as unknown as T & ApiReadState;
   if (data && typeof data === 'object') return { ...(data as object), ...state } as T & ApiReadState;
-  return { value: data, ...state } as T & ApiReadState;
+  return { value: data, ...state } as unknown as T & ApiReadState;
 }
 
 function positiveReadTtlMs(path: string) {
@@ -1329,6 +1335,8 @@ export const api = {
       terminal_result_ref: null,
     },
     child_executions: [],
+    activities: [], activity_relations: [], agentic_collaboration: { schema_version: 1, programs: [] },
+    concurrency: { root: { total: 0, planned: 0, ready: 0, running: 0, waiting_input: 0, waiting_approval: 0, waiting_external: 0, paused: 0, blocked: 0, terminal: 0 }, inclusive: { total: 0, planned: 0, ready: 0, running: 0, waiting_input: 0, waiting_approval: 0, waiting_external: 0, paused: 0, blocked: 0, terminal: 0 }, resources: [] },
     goals: [],
     agents: [],
     teams: [],
@@ -1365,7 +1373,7 @@ export const api = {
     executionId: string,
     request: Record<string, unknown>,
     authorizationSessionId = '',
-  ) => write(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
+  ) => write<GatewayComponents['schemas']['ExecutionCommandReceipt']>(`/api/runtime/executions/${encodeURIComponent(executionId)}/commands`, {
     method: 'POST', body: JSON.stringify(request),
   }, {
     authorizationSessionId,
@@ -1374,7 +1382,7 @@ export const api = {
       : ['domain:runtime'],
   }),
   writeReceipt: writeWithReceipt,
-  health: (signal?: AbortSignal) => read('/api/webui/manifest', {
+  health: (signal?: AbortSignal) => read<{ kind: string; status: string; static_webui: string; revision?: number }>('/api/webui/manifest', {
     kind: 'cowd.webui.manifest',
     status: 'offline',
     static_webui: 'local vite fallback',
@@ -1478,6 +1486,7 @@ export const api = {
       policy: {
         autonomy_profile: 'supervised',
         permission_mode: 'workspace-write',
+        sandbox_posture: 'workspace_write_sandbox',
         approval_profile: 'balanced',
         interruption_policy: 'pause_on_risk',
         revision: 0,
@@ -1618,11 +1627,11 @@ export const api = {
     `/api/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/inbox`,
     {},
   ),
-  cancelSessionInput: (sessionId: string, inputId: string, reason = '') => write(`/api/sessions/${encodeURIComponent(sessionId)}/inputs/${encodeURIComponent(inputId)}/cancel`, {
+  cancelSessionInput: (sessionId: string, inputId: string, reason = '') => write<GatewayComponents['schemas']['SessionInputMutationReceipt']>(`/api/sessions/${encodeURIComponent(sessionId)}/inputs/${encodeURIComponent(inputId)}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason }),
   }),
-  reclassifySessionInput: (sessionId: string, inputId: string, decision: string, reason = '') => write(`/api/sessions/${encodeURIComponent(sessionId)}/inputs/${encodeURIComponent(inputId)}/reclassify`, {
+  reclassifySessionInput: (sessionId: string, inputId: string, decision: string, reason = '') => write<GatewayComponents['schemas']['SessionInputMutationReceipt']>(`/api/sessions/${encodeURIComponent(sessionId)}/inputs/${encodeURIComponent(inputId)}/reclassify`, {
     method: 'POST',
     body: JSON.stringify({ decision, reason }),
   }),
@@ -1690,8 +1699,8 @@ export const api = {
     { events: [] },
     { signal },
   ),
-  runtimeControlPlane: (signal?: AbortSignal) => read('/api/runtime/control-plane', {}, { signal }),
-  runtimeStatus: (signal?: AbortSignal) => read('/api/runtime/status', {}, { signal }),
+  runtimeControlPlane: (signal?: AbortSignal) => read<Record<string, unknown>>('/api/runtime/control-plane', {}, { signal }),
+  runtimeStatus: (signal?: AbortSignal) => read<Record<string, unknown>>('/api/runtime/status', {}, { signal }),
   runtimeSnapshot: (signal?: AbortSignal) => read('/api/runtime/snapshot', {}, { signal }),
   runtimeSourceAudit: (signal?: AbortSignal) => read('/api/runtime/source-audit', {}, { signal }),
   runtimeSourceRepairPlan: (signal?: AbortSignal) => read('/api/runtime/source-repair-plan', {}, { signal }),
@@ -1718,9 +1727,9 @@ export const api = {
       projection: {
         schema_version: 5,
         kind: 'mission_control.projection',
-        workspace: {},
-        summary: {},
-        control_readiness: {},
+        workspace: { workspace_id: '', title: '', session_count: 0, running_agent_count: 0, pending_approval_count: 0, recovery_required_count: 0 },
+        summary: { session_count: 0, agent_count: 0, task_count: 0, team_count: 0, background_session_count: 0, closed_session_count: 0, paused_session_count: 0, pending_approval_count: 0, pending_organization_count: 0, recovery_required_count: 0 },
+        control_readiness: { actions: [], blocked_count: 0, kind: 'mission_control.readiness', ready_count: 0 },
         selected_mission_id: '',
         missions: [],
         mission: {},
@@ -1751,7 +1760,7 @@ export const api = {
         health: {},
       },
     },
-    } as MissionControlResponse);
+    });
   },
   missionControlDelta: (cursor: number, revision?: number, missionId = '') => {
     const params = new URLSearchParams({ cursor: String(Math.max(0, cursor)) });
@@ -1858,12 +1867,12 @@ export const api = {
     return read(`/api/reality/promotions?${params.toString()}`, { promotions: [] });
   },
   realityBoundaries: () => read('/api/reality/boundaries', { boundaries: [] }),
-  growthStatus: (signal?: AbortSignal) => read('/api/growth/status', {}, { signal }),
+  growthStatus: (signal?: AbortSignal) => read<Record<string, unknown>>('/api/growth/status', {}, { signal }),
   growthEvents: (signal?: AbortSignal) => read('/api/growth/events', { events: [], promotions: [] }, { signal }),
   providers: () => read('/api/config/providers', { providers: [], models: [], catalog: { providers: [], models: [], profiles: [], sources: [], warnings: [] } }),
   providerCatalog: () => read('/api/config/provider-catalog', { catalog: { providers: [], models: [], profiles: [], sources: [], warnings: [] } }),
   effectiveConfig: (signal?: AbortSignal) => read('/api/runtime/config/effective', {}, { signal }),
-  configReloadStatus: () => read('/api/runtime/config/reload/status', {}),
+  configReloadStatus: () => read<Record<string, unknown>>('/api/runtime/config/reload/status', {}),
   approvalConfig: () => read('/api/approval/config', {}),
   updateApprovalConfig: (config: Record<string, unknown>) => write('/api/approval/config', {
     method: 'PUT',
@@ -1879,6 +1888,7 @@ export const api = {
     const query = params.size ? `?${params.toString()}` : '';
     return read<ApprovalPendingResponse>(`/api/approval/pending${query}`, {
       kind: 'gateway.unified_approval_pending',
+      groups: [], pending_count: 0,
       filter: {},
       pending: [],
       approvals: null,
@@ -1893,7 +1903,7 @@ export const api = {
     `/api/approval/${encodeURIComponent(id)}`,
     null,
   ),
-  approvalPrune: (olderThanDays: number, reason = '') => write('/api/approval/prune', {
+  approvalPrune: (olderThanDays: number, reason = '') => write<{ pruned: number; failed: number }>('/api/approval/prune', {
     method: 'POST',
     body: JSON.stringify({ older_than_days: olderThanDays, reason }),
   }),
@@ -1912,7 +1922,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ session_id: sessionId }),
   }),
-  contextCurrent: (sessionId: string, q = '', profile = 'main_turn', signal?: AbortSignal) => read(
+  contextCurrent: (sessionId: string, q = '', profile = 'main_turn', signal?: AbortSignal) => read<Record<string, unknown>>(
     `/api/context/current?session_id=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(q)}&profile=${encodeURIComponent(profile)}`,
     {},
     { signal },
@@ -1924,10 +1934,10 @@ export const api = {
     body: JSON.stringify({ envelope_id: envelopeId, recommendation, action }),
   }),
   resolveEvidence: (ref: string) => read(`/api/evidence/resolve?ref=${encodeURIComponent(ref)}`, {}),
-  resolveEvidenceBatch: (refs: string[], sessionId?: string) => write('/api/evidence/resolve/batch', {
+  resolveEvidenceBatch: (refs: string[], sessionId?: string) => write<{ items: Record<string, unknown>[] }>('/api/evidence/resolve/batch', {
     method: 'POST', body: JSON.stringify({ refs, session_id: sessionId || undefined }),
   }),
-  memoryStatus: () => read('/api/memory/status', {}),
+  memoryStatus: () => read<Record<string, unknown>>('/api/memory/status', {}),
   memoryContextEnvelope: (sessionId = '', limit = 20) => {
     const suffix = sessionId ? `/${encodeURIComponent(sessionId)}` : '';
     return read(`/api/memory/context-envelope${suffix}?limit=${limit}`, {});
@@ -2003,7 +2013,7 @@ export const api = {
     body: JSON.stringify(body),
   }),
   skillCatalog: (signal?: AbortSignal) => read('/api/skills/catalog', {}, { signal }),
-  skillProjection: (signal?: AbortSignal) => read('/api/skills/projection?surface=webui', {}, { signal }),
+  skillProjection: (signal?: AbortSignal) => read<Record<string, unknown>>('/api/skills/projection?surface=webui', {}, { signal }),
   createSkill: (body: Record<string, unknown>) => writeWithReceipt('/api/skills', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -2018,13 +2028,13 @@ export const api = {
     body.append('package', file, file.name);
     body.append('expected_digest', expectedDigest);
     body.append('allow_warnings', String(allowWarnings));
-    return writeWithReceipt('/api/skills/install/upload/commit', { method: 'POST', body });
+    return writeWithReceipt<{ receipt?: { skill_id?: string } }>('/api/skills/install/upload/commit', { method: 'POST', body });
   },
   planSkillInstall: (source: string) => writeWithReceipt('/api/skills/install/plan', {
     method: 'POST',
     body: JSON.stringify({ source }),
   }),
-  commitSkillInstall: (source: string, expectedDigest: string, allowWarnings: boolean) => writeWithReceipt('/api/skills/install/commit', {
+  commitSkillInstall: (source: string, expectedDigest: string, allowWarnings: boolean) => writeWithReceipt<{ receipt?: { skill_id?: string } }>('/api/skills/install/commit', {
     method: 'POST',
     body: JSON.stringify({ source, expected_digest: expectedDigest, allow_warnings: allowWarnings }),
   }),
@@ -2034,7 +2044,7 @@ export const api = {
   deleteSkill: (id: string) => writeWithReceipt(`/api/skills/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   }),
-  skillFiles: (id: string, signal?: AbortSignal) => read(`/api/skills/${encodeURIComponent(id)}/files`, {}, { signal }),
+  skillFiles: (id: string, signal?: AbortSignal) => read<{ primary?: string; files?: Record<string, unknown>[] }>(`/api/skills/${encodeURIComponent(id)}/files`, {}, { signal }),
   skillFileRaw: (id: string, path = 'SKILL.md', signal?: AbortSignal) => read(`/api/skills/${encodeURIComponent(id)}/files/raw?path=${encodeURIComponent(path)}`, {}, { signal }),
   skillTranslate: (id: string, content: string, path = 'SKILL.md', locale = 'zh-CN') => write(`/api/skills/${encodeURIComponent(id)}/translate`, {
     method: 'POST',
@@ -2044,7 +2054,7 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(body),
   }),
-  tasks: (signal?: AbortSignal) => read('/api/tasks', {}, { signal }),
+  tasks: (signal?: AbortSignal) => read<GatewayComponents['schemas']['TaskListResponse']>('/api/tasks', { tasks: [] }, { signal }),
   taskDetail: (id: string, signal?: AbortSignal) => read<TaskDetailProjection>(
     `/api/tasks/${encodeURIComponent(id)}`,
     { task: null, turns: [] } as unknown as TaskDetailProjection,
@@ -2057,7 +2067,7 @@ export const api = {
   ),
   taskFocus: (sessionId: string, signal?: AbortSignal) => read<TaskFocusProjection>(
     `/api/sessions/${encodeURIComponent(sessionId)}/task-focus`,
-    { revision: 0, task_focus: null },
+    { revision: 0, session_id: sessionId, task_focus: null },
     { signal },
   ),
   setTaskFocus: (sessionId: string, taskId: string, expectedRevision: number) => write(
@@ -2076,7 +2086,7 @@ export const api = {
   ),
   missionFocus: (sessionId: string, signal?: AbortSignal) => read<MissionFocusProjection>(
     `/api/sessions/${encodeURIComponent(sessionId)}/mission-focus`,
-    { revision: 0, mission_focus: null },
+    { revision: 0, session_id: sessionId, mission_focus: null },
     { signal },
   ),
   setMissionFocus: (sessionId: string, missionId: string, expectedRevision: number) => write(
@@ -2167,7 +2177,7 @@ export const api = {
     body: JSON.stringify({ expected_revision: expectedRevision, result, completed, evidence_refs: [] }),
   }),
   agentCatalog: () => read('/api/agents/catalog', { agents: [], summary: {} }),
-  agentDirectory: () => read('/api/agents/directory', { agents: [], summary: {} }),
+  agentDirectory: () => read<{ agents: { definition_ref?: { definition_id?: string }; source?: { id?: string } }[]; summary: Record<string, unknown> }>('/api/agents/directory', { agents: [], summary: {} }),
   agentDiscover: (task: string) => read(`/api/agents/discover?task=${encodeURIComponent(task)}`, { agents: [], team: null }),
   agentAssemble: (task: string) => write('/api/agents/assemble', {
     method: 'POST',
@@ -2181,7 +2191,7 @@ export const api = {
       runs: Array.isArray(response) ? response : (response.runs || response.graphs || []),
     };
   },
-  teamTemplates: () => read('/api/team-templates', { templates: [] }),
+  teamTemplates: () => read<{ templates: { revision_ref?: { template_id?: string } }[] }>('/api/team-templates', { templates: [] }),
   instantiateTeamTemplate: (body: Record<string, unknown>) => write('/api/team-templates/instantiate', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -2226,7 +2236,7 @@ export const api = {
   surfaceDetail: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}`, {}),
   surfaceRoutes: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/routes`, { routes: [] }),
   surfaceResources: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/resources`, { resources: [] }),
-  surfaceStatus: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/status`, {}),
+  surfaceStatus: (id: string) => read<Record<string, unknown>>(`/api/surfaces/${encodeURIComponent(id)}/status`, {}),
   surfaceHealth: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/health`, {}),
   surfaceHealthCheck: (id: string) => writeWithReceipt(`/api/surfaces/${encodeURIComponent(id)}/health-check`, { method: 'POST' }),
   surfaceEvents: (id: string) => read(`/api/surfaces/${encodeURIComponent(id)}/events`, { events: [] }),
@@ -2285,11 +2295,11 @@ export const api = {
   }),
   matrixSourceSnapshots: (id: string) => read(`/api/matrix/source-packs/${encodeURIComponent(id)}/snapshots`, { snapshots: [] }),
   matrixHealth: () => read('/api/matrix/health', {}),
-  matrixEntities: () => read('/api/matrix/entities', { entities: [] }),
+  matrixEntities: () => read<{ entities: Record<string, unknown>[] }>('/api/matrix/entities', { entities: [] }),
   matrixEntity: (id: string) => read(`/api/matrix/entities/${encodeURIComponent(id)}`, {}),
   matrixEntityRelations: (id: string) => read(`/api/matrix/entities/${encodeURIComponent(id)}/relations`, { relations: [] }),
   matrixEntityImpact: (id: string) => read(`/api/matrix/entities/${encodeURIComponent(id)}/impact-path`, {}),
-  matrixMetrics: () => read('/api/matrix/metrics', { metrics: [] }),
+  matrixMetrics: () => read<{ metrics: Record<string, unknown>[] }>('/api/matrix/metrics', { metrics: [] }),
   matrixMetric: (id: string) => read(`/api/matrix/metrics/${encodeURIComponent(id)}`, {}),
   matrixMetricLineage: (id: string) => read(`/api/matrix/metrics/${encodeURIComponent(id)}/lineage`, {}),
   connectorSources: () => read('/api/connectors/sources', { kind: 'connector.source_adapters', adapters: [] }),
@@ -2333,8 +2343,8 @@ export const api = {
   connectorCapabilities: () => read('/api/connectors/capabilities', {}),
   connectorResources: () => read('/api/connectors/resources', {}),
   connectorMcpServers: () => read('/api/connectors/mcp/servers', {}),
-  connectorServices: () => read('/api/connectors/services', { services: [] }),
-  connectorServiceTools: (serviceId: string) => read(`/api/connectors/services/${encodeURIComponent(serviceId)}/tools`, { tools: [] }),
+  connectorServices: () => read<{ services: { id: string }[] }>('/api/connectors/services', { services: [] }),
+  connectorServiceTools: (serviceId: string) => read<{ tools: { capability_id: string }[] }>(`/api/connectors/services/${encodeURIComponent(serviceId)}/tools`, { tools: [] }),
   connectorServiceExecute: (serviceId: string, body: Record<string, unknown>) => writeWithReceipt(`/api/connectors/services/${encodeURIComponent(serviceId)}/execute`, {
     method: 'POST',
     body: JSON.stringify(withoutServerActor(body)),

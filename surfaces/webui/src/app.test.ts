@@ -273,30 +273,30 @@ describe('Cowd Vue WebUI shell', () => {
   it('renders compact Chat facts and keeps display mode on the companion toggle', async () => {
     const wrapper = await mountApp('/chat');
     await settle();
-    expect(wrapper.get('.transcript').exists()).toBe(true);
-    expect(wrapper.get('.composer textarea').exists()).toBe(true);
-    expect(wrapper.get('.context-ring').exists()).toBe(true);
+    expect(wrapper.find('.transcript').exists()).toBe(true);
+    expect(wrapper.find('.composer textarea').exists()).toBe(true);
+    expect(wrapper.find('.context-ring').exists()).toBe(true);
     expect(wrapper.find('.mode-switch').exists()).toBe(false);
     expect(wrapper.find('.chat-top-actions').exists()).toBe(false);
     expect(wrapper.find('.run-panorama').exists()).toBe(false);
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
-    expect(wrapper.get('.companion-toggle').exists()).toBe(true);
-    expect(wrapper.get('.chat-session-facts').exists()).toBe(true);
+    expect(wrapper.find('.companion-toggle').exists()).toBe(true);
+    expect(wrapper.find('.chat-session-facts').exists()).toBe(true);
     expect(wrapper.find('.chat-fact.model').exists()).toBe(false);
     expect(wrapper.find('.chat-fact.context').exists()).toBe(false);
-    expect(wrapper.get('.chat-fact.observer').exists()).toBe(true);
-    expect(wrapper.get('.session-evidence-head').exists()).toBe(true);
-    expect(wrapper.get('.composer-runtime-summary').exists()).toBe(true);
-    expect(wrapper.get('.composer-runtime-chip.model').exists()).toBe(true);
+    expect(wrapper.find('.chat-fact.observer').exists()).toBe(true);
+    expect(wrapper.find('.session-evidence-head').exists()).toBe(true);
+    expect(wrapper.find('.composer-runtime-summary').exists()).toBe(true);
+    expect(wrapper.find('.composer-runtime-chip.model').exists()).toBe(true);
     expect(wrapper.get('.composer-runtime-chip.context').text()).toContain('—');
     expect(wrapper.find('.composer-actions').exists()).toBe(false);
     expect(wrapper.find('[aria-label="命令"]').exists()).toBe(false);
-    expect(wrapper.get('.composer-runtime-summary .workspace').exists()).toBe(true);
-    expect(wrapper.get('.composer-input-shell [aria-label="添加文件"]').exists()).toBe(true);
+    expect(wrapper.find('.composer-runtime-summary .workspace').exists()).toBe(true);
+    expect(wrapper.find('.composer-input-shell [aria-label="添加文件"]').exists()).toBe(true);
     const sendButton = wrapper.get('.composer-input-actions').findAll('button')
       .find((button) => button.attributes('aria-label') === '发送');
     expect(sendButton?.text()).toBe('');
-    expect(wrapper.get('.chat-page').exists()).toBe(true);
+    expect(wrapper.find('.chat-page').exists()).toBe(true);
   });
 
   it('opens the existing global Mission graph in place from the observer status', async () => {
@@ -345,7 +345,7 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.vm.$route.path).toBe('/chat');
     expect(wrapper.get('.global-mission-graph-dialog').text())
       .toContain('Coordinate all active work');
-    expect(wrapper.get('.global-mission-graph-dialog .execution-graph-canvas').exists())
+    expect(wrapper.find('.global-mission-graph-dialog .execution-graph-canvas').exists())
       .toBe(true);
   });
 
@@ -389,6 +389,7 @@ describe('Cowd Vue WebUI shell', () => {
       ok: true,
       data: {
         permission_mode: 'danger-full-access',
+        sandbox_posture: 'host_full_access',
         persisted: true,
       },
     } as any);
@@ -439,6 +440,7 @@ describe('Cowd Vue WebUI shell', () => {
       policy: {
         autonomy_profile: 'yolo',
         permission_mode: 'danger-full-access',
+        sandbox_posture: 'host_full_access',
         approval_profile: 'autonomous',
         interruption_policy: 'continue_until_blocked',
         revision: 8,
@@ -563,6 +565,7 @@ describe('Cowd Vue WebUI shell', () => {
       policy: {
         autonomy_profile: 'yolo',
         permission_mode: 'danger-full-access',
+        sandbox_posture: 'host_full_access',
         approval_profile: 'supervised',
         interruption_policy: 'continue_until_blocked',
         revision: 4,
@@ -598,6 +601,7 @@ describe('Cowd Vue WebUI shell', () => {
       policy: {
         autonomy_profile: 'supervised',
         permission_mode: 'workspace-write',
+        sandbox_posture: 'workspace_write_sandbox',
         approval_profile: 'balanced',
         interruption_policy: 'pause_on_risk',
         revision: 0,
@@ -640,7 +644,7 @@ describe('Cowd Vue WebUI shell', () => {
     await trigger.trigger('click');
     await nextTick();
     expect(wrapper.get('.session-sidebar').classes()).toContain('mobile-open');
-    expect(wrapper.get('.mobile-session-backdrop').exists()).toBe(true);
+    expect(wrapper.find('.mobile-session-backdrop').exists()).toBe(true);
 
     await wrapper.get('.mobile-session-backdrop').trigger('click');
     await nextTick();
@@ -1219,7 +1223,7 @@ describe('Cowd Vue WebUI shell', () => {
       .trigger('click');
     await nextTick();
     const toolRow = wrapper
-      .findAll('.chat-execution-overlay .data-table tbody tr')
+      .findAll('.chat-execution-overlay [role=treeitem]')
       .find((row) => row.text().includes('WebSearch'));
     expect(toolRow).toBeTruthy();
     await toolRow!.trigger('click');
@@ -1237,12 +1241,12 @@ describe('Cowd Vue WebUI shell', () => {
 
     store.openCompanion('activity');
     await settleAsync();
-    expect(wrapper.get('.companion-execution-graph').exists()).toBe(true);
+    expect(wrapper.find('.companion-execution-graph').exists()).toBe(true);
     await wrapper
       .get('.companion-execution-graph .graph-toolbar [aria-label="全屏"]')
       .trigger('click');
     await settle();
-    expect(wrapper.get('.chat-execution-overlay').exists()).toBe(true);
+    expect(wrapper.find('.chat-execution-overlay').exists()).toBe(true);
     await wrapper.get('.chat-execution-overlay > header .icon-action').trigger('click');
     expect(store.chatExecutionGraphExpanded).toBe(false);
     wrapper.unmount();
@@ -1258,7 +1262,7 @@ describe('Cowd Vue WebUI shell', () => {
     chat.active!.pending = true;
     await nextTick();
 
-    expect(wrapper.get('.composer-input-actions [aria-label="停止"]').exists()).toBe(true);
+    expect(wrapper.find('.composer-input-actions [aria-label="停止"]').exists()).toBe(true);
     expect(wrapper.find('.composer-input-actions [aria-label="补充当前执行"]').exists()).toBe(false);
 
     chat.active!.draft = '补充一条约束';
@@ -1267,7 +1271,7 @@ describe('Cowd Vue WebUI shell', () => {
     const send = wrapper.get('.composer-input-actions [aria-label="补充当前执行"]');
     expect(send.attributes('disabled')).toBeUndefined();
     expect(send.attributes('title')).toBe('补充当前执行');
-    expect(wrapper.get('.composer-input-actions [aria-label="停止"]').exists()).toBe(true);
+    expect(wrapper.find('.composer-input-actions [aria-label="停止"]').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -1617,12 +1621,12 @@ describe('Cowd Vue WebUI shell', () => {
       active_execution_ids: ['execution-live-now'],
       latest_execution_id: 'execution-live-now',
       latest_graph_id: 'execution-live-now',
-      latest_status: 'running',
+      latest_status: 'preparing_context',
       executions: [{
         execution_id: 'execution-live-now',
         graph_id: 'execution-live-now',
         turn_id: 'turn-live-now',
-        status: 'running',
+        status: 'preparing_context',
         updated_at_ms: Date.now(),
       }],
     };
@@ -1863,8 +1867,8 @@ describe('Cowd Vue WebUI shell', () => {
     await nextTick();
 
     const row = wrapper.get('.session-row');
-    expect(row.get('[aria-label="分支会话"]').exists()).toBe(true);
-    expect(row.get('[aria-label="删除会话"]').exists()).toBe(true);
+    expect(row.find('[aria-label="分支会话"]').exists()).toBe(true);
+    expect(row.find('[aria-label="删除会话"]').exists()).toBe(true);
     expect(row.get('.session-title').text()).toContain('这是第一次发出的完整需求');
     expect(store.sessions[0].title?.endsWith('…')).toBe(true);
     expect(update).toHaveBeenCalledWith('abcdefgh-session', expect.objectContaining({
@@ -1879,7 +1883,7 @@ describe('Cowd Vue WebUI shell', () => {
     const wrapper = await mountApp('/chat');
     const store = useAppStore();
     await settle();
-    expect(wrapper.get('.chat-page').exists()).toBe(true);
+    expect(wrapper.find('.chat-page').exists()).toBe(true);
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
     expect(wrapper.find('.companion-toggle').exists()).toBe(true);
     await wrapper.get('.companion-toggle').trigger('click');
@@ -1935,8 +1939,8 @@ describe('Cowd Vue WebUI shell', () => {
     expect(wrapper.find('.run-panorama').exists()).toBe(false);
     expect(wrapper.find('.companion-panel').exists()).toBe(false);
     expect(wrapper.find('.clean-counts').exists()).toBe(false);
-    expect(wrapper.get('.composer-runtime-summary').exists()).toBe(true);
-    expect(wrapper.get('.chat-session-facts').exists()).toBe(true);
+    expect(wrapper.find('.composer-runtime-summary').exists()).toBe(true);
+    expect(wrapper.find('.chat-session-facts').exists()).toBe(true);
   });
 
   it('renders Surface operations without the obsolete generic workflow strip', async () => {
@@ -1981,6 +1985,7 @@ describe('Cowd Vue WebUI shell', () => {
       status: 'active',
       execution: {
         session_id: `session-${index}`,
+        executions: [],
         active_execution_ids: index === 0 ? ['execution-0'] : [],
         latest_status: index === 0 ? 'calling_model' : 'complete',
       },
@@ -2054,7 +2059,7 @@ describe('Cowd Vue WebUI shell', () => {
       total: 1,
       results: [{
         session_id: 'message-match',
-        message_id: 'message-1',
+        sequence: 1, role: 'user', blocks: [],
         content_preview: 'needle in durable history',
         created_at_ms: 42,
       }],
@@ -2344,7 +2349,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('renders adaptive context coverage, conflicts, omissions, and source governance as structured data', async () => {
-    const fetchMock = vi.fn((request: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((request: RequestInfo | URL) => {
       const path = String(request);
       if (path.includes('/api/context/current')) {
         return Promise.resolve(new Response(JSON.stringify({
@@ -2502,6 +2507,41 @@ describe('Cowd Vue WebUI shell', () => {
     updateSchedule.mockRestore();
   });
 
+  it('loads the new Mission graph while an old scope read is pending and ignores its late result', async () => {
+    const replies = new Map<string, (value: Awaited<ReturnType<typeof api.missionControl>>) => void>();
+    const empty = await api.missionControl();
+    const response = (id: string, detail = false): Awaited<ReturnType<typeof api.missionControl>> => ({
+      ...empty, snapshot: { ...empty.snapshot, projection: { ...empty.snapshot.projection,
+        selected_mission_id: id,
+        mission: { mission_id: id },
+        missions: ['mission-a', 'mission-b'].map(mission_id => ({ mission_id, objective: mission_id, status: 'active', revision: 1, agent_count: 0, created_at_ms: 0, graph_count: 0, session_count: 0, task_count: 0, team_count: 0, updated_at_ms: 0 })),
+        mission_graph: { schema_version: 1, mission_id: id, edges: [], nodes: detail ? [{
+          node_id: `mission:${id}`, kind: 'mission', label: `${id} detail`, status: 'active', mission_id: id,
+        }] : [] },
+      } },
+    });
+    const control = vi.spyOn(api, 'missionControl').mockImplementation((id = '', section) => {
+      if (section === 'graph') return new Promise(resolve => replies.set(id, resolve));
+      return Promise.resolve(response(id || 'mission-a'));
+    });
+    const wrapper = await mountApp('/mission');
+    try {
+      await settleAsync();
+      expect(replies.has('mission-a')).toBe(true);
+      await wrapper.get('.mission-selector select').setValue('mission-b');
+      await settleAsync();
+      expect(control).toHaveBeenCalledWith('mission-b', 'graph');
+      replies.get('mission-b')!(response('mission-b', true));
+      await settleAsync();
+      const graph = () => wrapper.findComponent({ name: 'ExecutionGraphCanvas' }).props('graph');
+      expect(graph().nodes.some((node: { node_id: string }) => node.node_id === 'mission:mission-b')).toBe(true);
+      replies.get('mission-a')!(response('mission-a', true));
+      await settleAsync();
+      expect(graph().nodes.some((node: { node_id: string }) => node.node_id === 'mission:mission-b')).toBe(true);
+      expect(graph().nodes.some((node: { node_id: string }) => node.node_id === 'mission:mission-a')).toBe(false);
+    } finally { wrapper.unmount(); }
+  });
+
   it('loads Harness Eval and Evolution drilldowns from their owning workbench', async () => {
     const reports = vi.spyOn(api, 'harnessEvalReports').mockResolvedValue({
       reports: [{ id: 'report-live', status: 'passed' }],
@@ -2600,7 +2640,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls harness eval report and smoke run endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, reports: [], runs: [], scenarios: [] }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ ok: true, reports: [], runs: [], scenarios: [] }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
     await api.harnessEvalLatestReport();
@@ -2631,7 +2671,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('uses Runtime-owned evolution candidates and typed release review endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, signals: [], diagnoses: [], proposals: [], candidates: [], reviews: [] }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ ok: true, signals: [], diagnoses: [], proposals: [], candidates: [], reviews: [] }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
     await api.evolutionSignals();
@@ -2690,7 +2730,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('uses Runtime-owned Managed Agent intent and projection endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({
       definitions: [], invocations: [], health: [], effects: [],
     }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
@@ -2722,7 +2762,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('renders the Managed Agent control plane as structured Runtime intent and projections', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/agents/catalog') return Promise.resolve(new Response(JSON.stringify({ summary: {}, agents: [] })));
       if (url === '/api/agents/directory') return Promise.resolve(new Response(JSON.stringify({ agents: [{ definition_ref: { definition_id: 'workspace/cowd/researcher' } }] })));
@@ -2765,7 +2805,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('submits Audit review decisions through typed release and policy endpoints', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL, init?: RequestInit) => {
       const url = String(path);
       if (url === '/api/evolution/reviews') return Promise.resolve(new Response(JSON.stringify({ reviews: [{ review_id: 'release-review-1', class: 'release', action: 'promote', status: 'pending', approval_id: 'approval-1' }] })));
       if (url === '/api/evolution/evaluation-policy') return Promise.resolve(new Response(JSON.stringify({ policy_id: 'default-floor', revision: 3 })));
@@ -2815,7 +2855,7 @@ describe('Cowd Vue WebUI shell', () => {
 
 
   it('calls real tool operation endpoints through the backend', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, checkpoints: [] }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ ok: true, checkpoints: [] }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.toolExecute('tool_cache_stats');
     await api.toolBatchReadonly([{ name: 'tool_cache_stats', input: {} }], 2);
@@ -2840,7 +2880,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('marks HTML API fallback as an invalid response instead of successful data', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response('<!doctype html><html></html>', {
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response('<!doctype html><html></html>', {
       status: 200,
       headers: { 'content-type': 'text/html' },
     })));
@@ -2851,7 +2891,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('keeps authorization, missing-resource, and server failures distinct', async () => {
-    const fetchMock = vi.fn()
+    const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response('denied', { status: 403 }))
       .mockResolvedValueOnce(new Response('missing', { status: 404 }))
       .mockResolvedValueOnce(new Response('unavailable', { status: 503 }));
@@ -2862,7 +2902,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('keeps the last successful projection as explicitly stale only for transient read failures', async () => {
-    const fetchMock = vi.fn()
+    const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ready', revision: 7 }), { status: 200 }))
       .mockRejectedValueOnce(new Error('network unavailable'));
     vi.stubGlobal('fetch', fetchMock);
@@ -2973,7 +3013,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('uploads files as multipart form data without fake success', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ uploaded: true, path: 'uploads/sample.md' }), { status: 201 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ uploaded: true, path: 'uploads/sample.md' }), { status: 201 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.uploadFile(new File(['# sample'], 'sample.md', { type: 'text/markdown' }), 'uploads');
     expect(fetchMock).toHaveBeenCalledWith('/api/upload', expect.objectContaining({ method: 'POST' }));
@@ -2999,7 +3039,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('uploads chat resources through the resource endpoint', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({
       resource: {
         id: 'res-1',
         uri: 'resource://res-1',
@@ -3166,7 +3206,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('sends resource ids separately from message content', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ queued: true }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ queued: true }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.sendMessage('session-1', '请分析附件', ['res-1']);
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/messages', expect.objectContaining({
@@ -3176,7 +3216,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('adds session attachments through the backend endpoint', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ attachment: { ref_id: 'att-1', path: 'docs/a.md' } }), { status: 201 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ attachment: { ref_id: 'att-1', path: 'docs/a.md' } }), { status: 201 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.addSessionAttachment('session-1', 'docs/a.md', 'A doc');
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/attachments', expect.objectContaining({
@@ -3187,7 +3227,7 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('requests current session cancellation through a write receipt endpoint', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(123_456);
-    const fetchMock = vi.fn((_path: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn<typeof fetch>((_path: RequestInfo | URL, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body || '{}'));
       return Promise.resolve(new Response(JSON.stringify({
         cancellation_id: request.cancellation_id,
@@ -3222,7 +3262,7 @@ describe('Cowd Vue WebUI shell', () => {
   it('reuses cancellation identity and request time after an ambiguous lost response', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(456_789);
     const requests: Array<Record<string, unknown>> = [];
-    const fetchMock = vi.fn((_path: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn<typeof fetch>((_path: RequestInfo | URL, init?: RequestInit) => {
       const request = JSON.parse(String(init?.body || '{}'));
       requests.push(request);
       if (requests.length === 1) return Promise.reject(new Error('response lost'));
@@ -3281,7 +3321,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('reads Mission Control projections through gateway endpoints', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => Promise.resolve(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => Promise.resolve(new Response(JSON.stringify({
       ok: true,
       snapshot: {
         schema_version: 1,
@@ -3307,7 +3347,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('writes Mission Control operations through canonical control contracts', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
 
     await api.missionControlCommand({
@@ -3365,7 +3405,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('wraps write failures with endpoint method payload and retry metadata', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response('write failed', { status: 503, statusText: 'Unavailable' })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response('write failed', { status: 503, statusText: 'Unavailable' })));
     vi.stubGlobal('fetch', fetchMock);
     await expect(api.saveFile('docs/a.md', 'content')).rejects.toMatchObject({
       endpoint: '/api/workspace/files',
@@ -3383,7 +3423,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls critical Workspace write endpoints through the backend', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, to: 'docs/b.md' }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ ok: true, to: 'docs/b.md' }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.saveFile('docs/a.md', 'hello');
     await api.renameWorkspacePath('docs/a.md', 'docs/b.md');
@@ -3400,7 +3440,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls critical Memory and Skills write endpoints through the backend', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.createMemoryEntry('L2', { title: 'fact' });
     await api.updateMemoryEntry('mem-1', { title: 'updated' });
@@ -3458,7 +3498,7 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('does not let runtime Catalog capabilities override the broker authentication request', async () => {
     configureAppCatalog(parseAppCatalog(referenceAppCatalog));
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({
       success: true,
       surface_id: 'webui',
       entitlement: { granted: ['reference.read'], denied: ['reference.write'] },
@@ -3468,13 +3508,13 @@ describe('Cowd Vue WebUI shell', () => {
     await api.authLogin('credential');
 
     const [, request] = fetchMock.mock.calls[0];
-    const body = JSON.parse(String(request.body));
+    const body = JSON.parse(String(request?.body));
     expect(body).toMatchObject({ token: 'credential', surface_id: 'webui' });
     expect(body.requested_capabilities).toEqual([]);
   });
 
   it('loads audit, usage, and release gate from real governance endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: 'governance.test' }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ kind: 'governance.test' }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.auditExport('approval', 25, 5);
     await api.usageSummary();
@@ -3485,7 +3525,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('verifies same-origin gateway access through the backend instead of managing browser tokens', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/auth/verify') return Promise.resolve(new Response(JSON.stringify({ valid: true, auth_required: true }), { status: 200 }));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -3520,7 +3560,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('renders runtime growth loop from gateway growth endpoints', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -3600,7 +3640,9 @@ describe('Cowd Vue WebUI shell', () => {
     const chat = useChatSessionsStore();
     const attach = vi.spyOn(chat, 'attachSurface').mockImplementation(
       async (sessionId, mode) => {
+        chat.activeSessionId = sessionId;
         chat.states[sessionId] = {
+          ...chat.active!,
           sessionId,
           turns: [],
           executionId: '',
@@ -3610,7 +3652,6 @@ describe('Cowd Vue WebUI shell', () => {
           streamTurnId: '',
           terminalId: '',
           live: null,
-          evidence: null,
           streamState: 'offline',
           loadEpoch: 0,
           submissionEpoch: 0,
@@ -3630,6 +3671,7 @@ describe('Cowd Vue WebUI shell', () => {
     const detach = vi.spyOn(chat, 'detachSurface').mockImplementation(async (sessionId) => {
       chat.states[sessionId].attachmentRole = 'detached';
       chat.states[sessionId].writable = false;
+      return true;
     });
     const router = createRouter({
       history: createWebHashHistory(),
@@ -3709,7 +3751,7 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('loads a truthful five-request Runtime overview projection', async () => {
     invalidateApiReadCache();
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/runtime/control-plane') {
         return Promise.resolve(new Response(JSON.stringify({
@@ -3774,7 +3816,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('renders Reality Core evidence object detail from flow rows', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -3812,7 +3854,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('renders Mission Control recovery and canonical relation controls', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL, init?: RequestInit) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL, init?: RequestInit) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -3874,7 +3916,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls real cross-plane identity grant and action endpoints', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: 'cross-plane.test' }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ kind: 'cross-plane.test' }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     const action = {
       actor_principal: 'webui-operator',
@@ -3912,7 +3954,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('calls slash and surface host endpoints through the current gateway contracts', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ ok: true, commands: [], history: [] }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ ok: true, commands: [], history: [] }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.commands();
     await api.commandHistory();
@@ -4012,7 +4054,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('renders SurfaceHost registry, health, routes, resources, events, and dispatch controls', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -4105,7 +4147,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('loads skill detail and files from real skill management endpoints', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -4144,7 +4186,7 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('loads only the skill catalog on the catalog section', async () => {
     invalidateApiReadCache();
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/skills/catalog') {
         return Promise.resolve(new Response(JSON.stringify({
@@ -4171,7 +4213,7 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('reviews an uploaded skill digest and requires warning consent before commit', async () => {
     invalidateApiReadCache();
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/skills/catalog') {
         return Promise.resolve(new Response(JSON.stringify({ items: [] })));
@@ -4234,7 +4276,7 @@ describe('Cowd Vue WebUI shell', () => {
 
   it('rehydrates skill detail after selecting A, B, then A again', async () => {
     invalidateApiReadCache();
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/skills/catalog') {
         return Promise.resolve(new Response(JSON.stringify({
@@ -4277,7 +4319,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('loads the active memory section without eagerly loading unrelated sections', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -4343,7 +4385,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('keeps manual memory governance disabled while a nightly run is active', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/memory/status') {
         return Promise.resolve(new Response(JSON.stringify({
@@ -4396,7 +4438,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('loads agents workbench from real agent and task endpoints', async () => {
-    const fetchMock = vi.fn((path: RequestInfo | URL) => {
+    const fetchMock = vi.fn<typeof fetch>((path: RequestInfo | URL) => {
       const url = String(path);
       if (url === '/api/webui/manifest') return Promise.resolve(new Response(JSON.stringify({ status: 'test' })));
       if (url.startsWith('/api/sessions?')) return Promise.resolve(new Response(JSON.stringify({ sessions: [] })));
@@ -4465,7 +4507,7 @@ describe('Cowd Vue WebUI shell', () => {
   });
 
   it('posts agent discovery and Team template instantiation through Runtime contracts', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ kind: 'agents.assemble', team: {} }), { status: 200 })));
+    const fetchMock = vi.fn<typeof fetch>(() => Promise.resolve(new Response(JSON.stringify({ kind: 'agents.assemble', team: {} }), { status: 200 })));
     vi.stubGlobal('fetch', fetchMock);
     await api.agentAssemble('build a review team');
     await api.instantiateTeamTemplate({

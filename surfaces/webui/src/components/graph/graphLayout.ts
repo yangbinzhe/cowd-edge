@@ -2,7 +2,7 @@ type LayoutGraph = Record<string, any>;
 
 interface LayoutResponse {
   id: number;
-  result?: LayoutGraph;
+  data?: LayoutGraph;
   error?: string;
 }
 
@@ -26,7 +26,7 @@ function rejectPending(error: Error) {
 
 function layoutWorker() {
   if (worker || typeof Worker === 'undefined') return worker;
-  worker = new Worker(new URL('./graphLayout.worker.ts', import.meta.url), { type: 'module' });
+  worker = new Worker(new URL('../../../node_modules/elkjs/lib/elk-worker.min.js', import.meta.url), { type: 'module' });
   const currentWorker = worker;
   worker.onmessage = (event: MessageEvent<LayoutResponse>) => {
     if (worker !== currentWorker) return;
@@ -35,7 +35,7 @@ function layoutWorker() {
     pending.delete(event.data.id);
     clearTimeout(request.timer);
     if (event.data.error) request.reject(new Error(event.data.error));
-    else request.resolve(event.data.result || {});
+    else request.resolve({ ...(event.data.data || {}), layoutEngine: 'elk' });
   };
   worker.onerror = (event) => {
     if (worker !== currentWorker) return;
@@ -43,6 +43,8 @@ function layoutWorker() {
     worker?.terminate();
     worker = null;
   };
+  try { currentWorker.postMessage({ id: 0, cmd: 'register', algorithms: ['layered'] }); }
+  catch (error) { currentWorker.terminate(); worker = null; throw error; }
   return worker;
 }
 
@@ -90,6 +92,7 @@ function fallbackLayout(graph: LayoutGraph) {
   }
   return {
     ...graph,
+    layoutEngine: 'fallback',
     children: children.map((child: LayoutGraph) => {
       const depth = depths.get(String(child.id || '')) || 0;
       const lane = lanes.get(depth) || 0;
@@ -117,7 +120,7 @@ export async function runGraphLayout(graph: LayoutGraph) {
       }, LAYOUT_TIMEOUT_MS);
       pending.set(id, { resolve, reject, timer });
       try {
-        activeWorker.postMessage({ id, graph });
+        activeWorker.postMessage({ id, cmd: 'layout', graph, layoutOptions: graph.layoutOptions || {}, options: {} });
       } catch (error) {
         clearTimeout(timer);
         pending.delete(id);

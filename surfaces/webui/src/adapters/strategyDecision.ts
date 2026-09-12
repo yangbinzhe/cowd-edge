@@ -41,7 +41,7 @@ export interface StrategyDecisionViewModel {
   resources: StrategyDecisionProjection['resource_snapshot'];
   why: string[];
   whyNot: string[];
-  evidenceScopes: NonNullable<StrategyDecisionProjection['evidence_scopes']>;
+  evidenceRefs: string[];
   downgrades: NonNullable<StrategyDecisionProjection['downgrade']>;
   earlyStops: NonNullable<StrategyDecisionProjection['early_stop']>;
   policyVersion: string;
@@ -228,17 +228,6 @@ export function adaptStrategyDecision(
     status: transitionStatus(transition.status),
     summary: publicText(transition.summary),
   }));
-  const evidenceScopes = safeArray(projection.evidence_scopes).map((scope) => ({
-    role_id: publicIdentifier(scope.role_id),
-    focus_id: publicIdentifier(scope.focus_id),
-    responsibility_summary: publicText(scope.responsibility_summary),
-    capability_cropped_refs: legacy
-      ? []
-      : safeArray(scope.capability_cropped_refs).map(publicReference).filter(Boolean),
-    scope_hash: publicIdentifier(scope.scope_hash),
-    overlap_budget_bp: Number(scope.overlap_budget_bp || 0),
-    novelty_target_bp: Number(scope.novelty_target_bp || 0),
-  }));
   const estimated = projection.estimated || null;
   const actual = projection.actual
     ? { ...projection.actual, terminal_reason: publicText(projection.actual.terminal_reason) }
@@ -342,34 +331,12 @@ export function adaptStrategyDecision(
   const edges: GraphEdgeView[] = [];
   const decisionNodeId = nodes[0]!.id;
 
-  evidenceScopes.forEach((scope, index) => {
-    const id = `scope:${scope.role_id}:${scope.focus_id}:${index}`;
-    nodes.push({
-      id: publicIdentifier(id),
-      type: 'evidence-scope',
-      label: `${scope.role_id} · ${scope.focus_id}`,
-      status: scope.capability_cropped_refs.length ? 'scoped' : 'unavailable',
-      group: 'evidence',
-      summary: scope.responsibility_summary,
-      evidenceRefs: scope.capability_cropped_refs,
-      correlationRefs: [scope.scope_hash],
-      href: scope.capability_cropped_refs[0]
-        ? evidenceHref(scope.capability_cropped_refs[0])
-        : runtimeHref,
-      badges: [
-        `overlap≤${scope.overlap_budget_bp}bp`,
-        `novelty≥${scope.novelty_target_bp}bp`,
-      ],
-      raw: scope as unknown as Record<string, unknown>,
-    });
-    edges.push({
-      id: `${decisionNodeId}->${publicIdentifier(id)}`,
-      source: decisionNodeId,
-      target: publicIdentifier(id),
-      type: 'scopes',
-      label: 'scopes',
-      evidenceRefs: scope.capability_cropped_refs,
-    });
+  publicEvidenceRefs.forEach((reference, index) => {
+    const id = `evidence:${index}:${reference}`;
+    nodes.push({ id, type: 'evidence', label: reference, status: 'referenced', group: 'evidence',
+      evidenceRefs: [reference], href: evidenceHref(reference) });
+    edges.push({ id: `${decisionNodeId}->${id}`, source: decisionNodeId, target: id,
+      type: 'references', evidenceRefs: [reference] });
   });
 
   let teamNodeId = '';
@@ -460,7 +427,6 @@ export function adaptStrategyDecision(
         parallel_tool_batches: actual.parallel_tool_batches,
         evidence_overlap_bp: actual.evidence_overlap_bp,
         evidence_overlap_observed: actual.evidence_overlap_observed,
-        working_state_verified: actual.working_state_verified,
         merge_cost_ms: actual.merge_cost_ms,
         parent_merge_count: actual.parent_merge_count,
         quality_score_bp: actual.quality_score_bp,
@@ -540,7 +506,7 @@ export function adaptStrategyDecision(
     resources: projection.resource_snapshot || null,
     why: safeArray(projection.benefit_reason).map(publicText),
     whyNot: safeArray(projection.cost_reason).map(publicText),
-    evidenceScopes,
+    evidenceRefs: publicEvidenceRefs,
     downgrades,
     earlyStops,
     policyVersion: publicText(projection.policy_version) || 'unknown',

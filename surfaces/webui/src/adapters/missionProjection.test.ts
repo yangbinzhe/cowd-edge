@@ -12,6 +12,7 @@ function snapshot(): MissionMaterializedSnapshot {
     projection: {
       schema_version: 3,
       kind: 'mission_control.projection',
+      missions: [], organization_decisions: [], selected_mission_id: '',
       workspace: {
         workspace_id: 'workspace',
         title: 'Mission Control',
@@ -30,6 +31,7 @@ function snapshot(): MissionMaterializedSnapshot {
         task_count: 0,
         team_count: 0,
         agent_count: 0,
+        pending_organization_count: 0,
         pending_approval_count: 0,
         recovery_required_count: 0,
       },

@@ -8,7 +8,7 @@ import {
 } from 'lucide-vue-next';
 import { useAppStore } from './stores/app';
 import type { NavId, NavItem } from './types';
-import { buildCapabilitySpecs } from './data/capabilities';
+import { buildCapabilitySpecs, capabilitySpecFor } from './data/capabilities';
 import { appCatalogDiagnostic, appPluginForRoute, pluginNavItems } from './plugins/registry';
 import ApprovalInbox from './components/ApprovalInbox.vue';
 import CapabilitySidebar from './components/CapabilitySidebar.vue';
@@ -96,7 +96,7 @@ function pageFromRoute(path: string): NavId {
 function defaultSectionFor(page: NavId) {
   if (page === 'chat') return '';
   if (page === 'settings') return 'ui';
-  return capabilitySpecs[page]?.sections?.[0]?.id || '';
+  return capabilitySpecFor(capabilitySpecs, page)?.sections?.[0]?.id || '';
 }
 
 const currentPage = computed<NavId>(() => pageFromRoute(route.path));
@@ -115,7 +115,7 @@ const authorizationGateRequired = computed(() => (
 ));
 const currentCapabilitySpec = computed(() => {
   if (isChatRoute.value || isSettingsRoute.value || isAppRoute.value) return null;
-  return capabilitySpecs[currentPage.value] || null;
+  return capabilitySpecFor(capabilitySpecs, currentPage.value) || null;
 });
 const currentSections = computed(() => currentCapabilitySpec.value?.sections || []);
 const canToggleCompanion = computed(() => {
@@ -131,7 +131,7 @@ const activeSection = computed(() => {
   if (storedSection && available.has(storedSection)) return storedSection;
   return defaultSectionFor(currentPage.value);
 });
-provide(activeCapabilitySectionKey, readonly(activeSection));
+provide(activeCapabilitySectionKey, activeSection);
 const showCompanion = computed(() => {
   if (isSettingsRoute.value) return false;
   if (isChatRoute.value) return !store.companionCollapsed;

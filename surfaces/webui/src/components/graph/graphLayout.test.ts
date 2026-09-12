@@ -43,8 +43,8 @@ describe('graph layout fallback', () => {
     expect(instances[0].terminate).toHaveBeenCalledOnce();
     const third = layout({ children: [{ id: 'three' }] });
     expect(instances).toHaveLength(2);
-    const request = instances[1].postMessage.mock.calls[0][0];
-    instances[1].onmessage({ data: { id: request.id, result: { children: [{ id: 'three', x: 42 }] } } });
+    const request = instances[1].postMessage.mock.calls.find(([message]: any[]) => message.cmd === 'layout')[0];
+    instances[1].onmessage({ data: { id: request.id, data: { children: [{ id: 'three', x: 42 }] } } });
     expect((await third).children[0].x).toBe(42);
     expect(vi.getTimerCount()).toBe(0);
   });

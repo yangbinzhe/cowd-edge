@@ -266,7 +266,7 @@ const contextInputTokens = computed(() => {
 });
 const contextUsage = computed(() => {
   const raw = live.value?.context_usage?.usage_percent_bp;
-  if (raw !== null && raw !== undefined && raw !== '') {
+  if (raw !== null && raw !== undefined) {
     const value = Number(raw);
     if (Number.isFinite(value)) return value / 100;
   }

@@ -27,7 +27,6 @@ const graph = computed(() => adaptMissionControlGraph(
 const missionId = computed(() => String(
   projection.value?.mission_graph?.mission_id
   || projection.value?.selected_mission_id
-  || projection.value?.mission?.mission_id
   || '',
 ).trim());
 

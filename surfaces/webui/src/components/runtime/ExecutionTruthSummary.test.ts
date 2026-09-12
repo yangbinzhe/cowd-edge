@@ -5,7 +5,7 @@ import type { ExecutionProjection } from '../../types';
 import ExecutionTruthSummary from './ExecutionTruthSummary.vue';
 
 describe('ExecutionTruthSummary', () => {
-  it('renders canonical admission, outcome, and evidence payloads', () => {
+  it('renders canonical truth and isolates collaboration to the current Session', async () => {
     const projection = structuredClone(
       PROJECTION_GOLDEN.expected,
     ) as unknown as ExecutionProjection;
@@ -18,6 +18,7 @@ describe('ExecutionTruthSummary', () => {
       branch_terminals: [],
       verified_receipts: [],
       verified_artifacts: [],
+      workspace_materializations: [],
       verified_effects: [{ effect_id: 'effect-1', kind: 'write', status: 'applied' }],
       coverage: {
         required_obligation_ids: ['read', 'write'],
@@ -49,92 +50,16 @@ describe('ExecutionTruthSummary', () => {
       generated_at_ms: 11,
       committed_at_ms: 12,
     };
-    projection.graph.orchestration = {
-      mutation_id: 'mutation-1',
-      semantic_revision: 4,
-      source_generation: 2,
-      applied_mutation_ids: ['mutation-1', 'escalation-mutation-2'],
-      collaboration_escalations: [{
-        escalation_id: 'escalation-1',
-        source_attempt: 'team-1:attempt:2',
-        base_program_revision: 6,
-        request_kind: 'add_team',
-        reason: 'independent review required',
-        evidence_refs: [],
-        applied_graph_revision: 9,
-      }],
-      completion: {
-        acceptance_contract_id: 'acceptance-1',
-        required_evidence_refs: [],
-        required_obligation_ids: [],
-      },
-      collaboration_program: {
-        program_id: 'program-1',
-        revision: 7,
-        required_team_count: 1,
-        semantic_node_instances: { research: ['team-1'] },
-        team_instances: [{ instance_id: 'team-1', semantic_node_id: 'research', required: true }],
-        control: {
-          lifecycle: 'awaiting_resource',
-          obligations: [{
-            instance_id: 'team-1',
-            binding_ref: 'binding-1',
-            state: 'awaiting_resource',
-            reason_kind: 'resource',
-            revision: 7,
-          }],
-          resource_ledger: {
-            context_reservation_tokens: 1_000,
-            output_reservation_tokens: 500,
-            parallel_demand: 2,
-            deadline_at_ms: 123,
-            confidence_basis_points: 9_500,
-            revision: 7,
-          },
-          waiting_relation: 'resource-pool-1',
-          blocker_ref: 'resource-admission-1',
-          next_action: 'await_resource',
-        },
-        edges: [{
-          edge_id: 'edge-1',
-          from: 'team-1',
-          to: 'team-2',
-          kind: 'handoff',
-          state: 'claimed',
-          input_contract: {
-            required_artifact_kinds: [],
-            required_fact_kinds: [],
-            require_committed_effect: false,
-            require_satisfied_acceptance: false,
-          },
-          delivery_receipt: {
-            receipt_ref: 'delivery-1',
-            producer_node_id: 'node-1',
-            producer_attempt: 1,
-            producer_result_ref: 'result-1',
-            evidence_refs: [],
-          },
-          claim_receipt: {
-            claim_ref: 'claim-1',
-            consumer_node_id: 'node-2',
-            consumer_attempt: 1,
-          },
-        }],
-      },
-    } as any;
-    projection.graph.nodes[0] = {
-      ...projection.graph.nodes[0],
-      node_id: 'team-1',
-      work: {
-        role: 'evidence_analyze',
-        required: true,
-        dependency: 'all',
-        expected_input_tokens: 0,
-        expected_output_tokens: 0,
-        expected_duration_ms: 0,
-        scheduling_priority: 200,
-      },
-    } as any;
+    projection.agentic_collaboration = { schema_version: 1, programs: [{
+      program_id: 'program-1', revision: 7, required_team_count: 1,
+      session_id: projection.session_id!, turn_id: projection.turn_id!, root_execution_id: projection.execution_id,
+      objective_id: 'objective-1', objective_summary: 'Research with independent review',
+      status: 'open', model_lease: 'test', permission_ceiling: 'read-only', resource_scopes: [],
+      completion: {}, unresolved: ['independent review required'],
+      teams: [{ team_id: 'team-1', name: 'Research', mission: 'Review inputs', created_by: 'root', lifecycle: 'active', member_ids: [], task_ids: [], topic_ref: 'topic-1' }],
+      tasks: [], agents: [], memberships: [], artifacts: [], topics: [],
+      semantic_refs: { program_ref: 'program-1', objective_ref: 'objective-1', agent_refs: [], artifact_refs: [], task_refs: [], team_refs: [], topic_refs: [] },
+    }] };
     const wrapper = mount(ExecutionTruthSummary, {
       props: {
         projection,
@@ -150,12 +75,11 @@ describe('ExecutionTruthSummary', () => {
     expect(wrapper.text()).toContain('终态总结模型');
     expect(wrapper.text()).toContain('协同编排');
     expect(wrapper.text()).toContain('program-1');
-    expect(wrapper.text()).toContain('等待资源');
-    expect(wrapper.text()).toContain('delivery-1');
-    expect(wrapper.text()).toContain('claim-1');
-    expect(wrapper.text()).toContain('已应用升级');
-    expect(wrapper.text()).toContain('escalation-1');
-    expect(wrapper.text()).toContain('200');
+    expect(wrapper.text()).toContain('independent review required');
+    expect(wrapper.text()).toContain('目标是否完成');
     expect(wrapper.findAll('.execution-truth-evidence article')).toHaveLength(1);
+    await wrapper.setProps({ projection: { ...projection, session_id: 'another-session' } });
+    expect(wrapper.find('.collaboration-program-summary').exists()).toBe(false);
+    wrapper.unmount();
   });
 });

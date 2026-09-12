@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { restorableGraphViewport, saveGraphViewport } from './graphViewport';
+import { loadGraphPositions, saveGraphPositions, validGraphPosition, restorableGraphViewport, saveGraphViewport } from './graphViewport';
 
 describe('graph viewport persistence', () => {
   it('restores only when the layout signature still matches', () => {
@@ -30,5 +30,20 @@ describe('graph viewport persistence', () => {
       y: 8,
       zoom: 3,
     });
+  });
+});
+
+describe('personal node positions', () => {
+  it('restores only the selected model and validates stored coordinates', () => {
+    localStorage.clear();
+    saveGraphPositions('scope-a', { task: { x: -30, y: 400 } });
+    saveGraphPositions('scope-b', { task: { x: 700, y: 20 } });
+    expect(loadGraphPositions('scope-a')).toEqual({ task: { x: -30, y: 400 } });
+    expect(loadGraphPositions('scope-c')).toEqual({});
+    expect(validGraphPosition({ x: NaN, y: 0 })).toBe(false);
+    expect(validGraphPosition({ x: 0, y: Infinity })).toBe(false);
+    localStorage.setItem('cowd.graph.positions.v1', JSON.stringify([['bad', { task: { x: '12', y: 0 } }]]));
+    expect(loadGraphPositions('bad')).toEqual({});
+    localStorage.clear();
   });
 });

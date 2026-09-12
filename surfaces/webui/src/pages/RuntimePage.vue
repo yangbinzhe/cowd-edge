@@ -82,7 +82,7 @@ const configReloadRestartFields = computed(() => {
   return Array.isArray(fields) && fields.length ? fields.join(', ') : '-';
 });
 const configReloadStatusLabel = computed(() => String(configReloadStatus.value?.status || 'unknown'));
-const approvalItems = computed(() => {
+const approvalItems = computed<Array<{ approval: Record<string, unknown>; view: ReturnType<typeof approvalPresentation> }>>(() => {
   const rows = Array.isArray(approvals.value) ? approvals.value : approvals.value?.pending || [];
   return rows.map((approval: any) => ({ approval, view: approvalPresentation(approval) }));
 });
@@ -647,7 +647,7 @@ onUnmounted(() => {
           <StatusPill :status="timeline.__state || 'ready'" />
         </header>
         <TimelineList v-if="timelineListItems.length" :items="timelineListItems" live @select="selectedDetail = $event" />
-        <DataTable v-if="timelineRows.length" :rows="timelineRows" :columns="['sequence', 'domain', 'title', 'status', 'correlation', 'detail']" @row-click="selectedDetail = $event" />
+        <DataTable v-if="timelineRows.length" :rows="timelineRows.map(row => ({ ...row }))" :columns="['sequence', 'domain', 'title', 'status', 'correlation', 'detail']" @row-click="selectedDetail = $event" />
         <EmptyState v-else :title="t('page.runtime.page.title.16b97cb353')" :detail="t('page.runtime.page.detail.059281d68e')" />
       </section>
 

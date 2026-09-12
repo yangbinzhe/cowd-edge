@@ -27,8 +27,7 @@ import { openSessionLiveSource } from './liveTransport';
 import type { SessionLiveSource } from './liveTransport';
 
 type SurfaceExecutionStatus = ExecutionLiveState['status'] | 'accepted_pending_materialization' | 'running' | 'terminal';
-type LiveExecutionState = Omit<ExecutionLiveState, 'status'>
-  & { status: SurfaceExecutionStatus }
+type LiveExecutionState = { status: SurfaceExecutionStatus }
   & Partial<Omit<ExecutionLiveState, 'status'>>;
 
 export type SessionChatState = {
@@ -358,15 +357,15 @@ function sortTurnsCausally(turns: ChatTurn[]) {
   const ingressAnchors = new Map<string, number>();
   turns.forEach((message) => {
     if (message.role !== 'user') return;
-    const turnId = blockMetadata(message.blocks, 'cowd_turn_id');
-    const ingressId = blockMetadata(message.blocks, 'cowd_turn_ingress_message_id');
+    const turnId = blockMetadata(message.blocks || [], 'cowd_turn_id');
+    const ingressId = blockMetadata(message.blocks || [], 'cowd_turn_ingress_message_id');
     if (turnId && ingressId === message.id && Number.isFinite(Number(message.sequence))) {
       ingressAnchors.set(turnId, Number(message.sequence));
     }
   });
   return [...turns].sort((left, right) => {
-    const leftTurn = blockMetadata(left.blocks, 'cowd_turn_id');
-    const rightTurn = blockMetadata(right.blocks, 'cowd_turn_id');
+    const leftTurn = blockMetadata(left.blocks || [], 'cowd_turn_id');
+    const rightTurn = blockMetadata(right.blocks || [], 'cowd_turn_id');
     const leftPhysical = Number.isFinite(Number(left.sequence)) ? Number(left.sequence) : Number.MAX_SAFE_INTEGER;
     const rightPhysical = Number.isFinite(Number(right.sequence)) ? Number(right.sequence) : Number.MAX_SAFE_INTEGER;
     const leftAnchor = ingressAnchors.get(leftTurn) ?? leftPhysical;
@@ -436,9 +435,9 @@ function normalizeTurns(messages: any[]): ChatTurn[] {
       tool_output: toolOutput,
       tool_error: !!result?.is_error,
       token_usage: message.token_usage ?? message.usage,
-      execution_id: blockMetadata(message.blocks, 'cowd_execution_id'),
-      turn_id: blockMetadata(message.blocks, 'cowd_turn_id'),
-      ingress_message_id: blockMetadata(message.blocks, 'cowd_turn_ingress_message_id'),
+      execution_id: blockMetadata(message.blocks || [], 'cowd_execution_id'),
+      turn_id: blockMetadata(message.blocks || [], 'cowd_turn_id'),
+      ingress_message_id: blockMetadata(message.blocks || [], 'cowd_turn_ingress_message_id'),
     } as ChatTurn;
   });
   return sortTurnsCausally(normalized);
@@ -1211,7 +1210,7 @@ export const useChatSessionsStore = defineStore('chatSessions', () => {
     void releaseWriter(sessionId);
   }
 
-  function projectInputDisposition(sessionId: string, base: ActivityEvent, receipt: any) {
+  function projectInputDisposition(sessionId: string, base: Omit<ActivityEvent, 'id' | 'kind' | 'title'>, receipt: any) {
     const dispositionId = String(receipt?.disposition_id || '').trim();
     if (!dispositionId) return;
     const state = String(receipt?.state || 'prepared');

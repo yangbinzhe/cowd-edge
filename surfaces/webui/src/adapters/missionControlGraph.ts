@@ -20,7 +20,7 @@ export function adaptMissionControlGraph(
 ) {
   const graph = projection?.mission_graph;
   if (!graph?.mission_id) return null;
-  const mission = projection.missions?.find(
+  const mission = projection?.missions?.find(
     (candidate) => candidate.mission_id === graph.mission_id,
   );
   const canonicalNodes = new Map(graph.nodes.map((node) => [node.node_id, node]));

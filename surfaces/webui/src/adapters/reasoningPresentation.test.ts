@@ -17,6 +17,8 @@ function activity(
 ): ExecutionActivityProjection {
   return {
     schema_version: 1,
+    definition_refs: [],
+    required: false,
     activity_id: id,
     scope: {
       workspace_id: 'workspace',
@@ -177,13 +179,13 @@ describe('reasoning presentation', () => {
     const root = activity('execution', 'execution');
     const first = {
       ...activity('agent:first', 'agent', root.activity_id, 'agent-run-1'),
-      agent_id: 'researcher',
+      definition_refs: ['agent:researcher'],
       agent_run_id: 'agent-run-1',
       agent_instance_id: 'researcher-1',
     } satisfies ExecutionActivityProjection;
     const second = {
       ...activity('agent:second', 'agent', root.activity_id, 'agent-run-2'),
-      agent_id: 'researcher',
+      definition_refs: ['agent:researcher'],
       agent_run_id: 'agent-run-2',
       agent_instance_id: 'researcher-2',
     } satisfies ExecutionActivityProjection;
@@ -198,7 +200,7 @@ describe('reasoning presentation', () => {
       title: '思考',
       detail: '不能猜测归属。',
       execution_id: 'child-run',
-      agent_id: 'researcher',
+      definition_refs: ['agent:researcher'],
     }], activities, 'execution');
 
     expect(result).toEqual({ global: null, byOwner: {} });

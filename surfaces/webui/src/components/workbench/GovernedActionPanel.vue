@@ -99,6 +99,6 @@ function run() {
     <div class="button-row">
       <button class="primary-action" type="button" @click="run">{{ t('component.workbench.governed.action.panel.action.run', { mode }) }}</button>
     </div>
-    <RequestReceipt :receipt="receipt" :title="t('component.workbench.governed.action.panel.title.receipt', { title: contract.title })" />
+    <RequestReceipt :receipt="receipt !== null && typeof receipt === 'object' ? { ...receipt } : { value: receipt }" :title="t('component.workbench.governed.action.panel.title.receipt', { title: contract.title })" />
   </section>
 </template>

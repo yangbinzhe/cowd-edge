@@ -32,8 +32,7 @@ const actualTokens = computed(() => {
     ? Number(actual.input_tokens || 0) + Number(actual.output_tokens || 0) + Number(actual.cached_tokens || 0)
     : null;
 });
-const firstEvidenceRef = computed(() => view.value?.evidenceScopes
-  .flatMap((scope) => scope.capability_cropped_refs)[0] || '');
+const firstEvidenceRef = computed(() => view.value?.evidenceRefs[0] || '');
 const actualUnavailableLabel = computed(() => {
   if (view.value?.actualMode === 'running') return t('strategy.state.runningUnknown');
   if (view.value?.actualStatus === 'observed') return t('strategy.state.observedUnavailable');
@@ -174,18 +173,7 @@ function trackVisualState(event: Event) {
       </section>
     </div>
 
-    <div v-if="view.evidenceScopes.length" class="strategy-summary__scopes">
-      <article v-for="scope in view.evidenceScopes" :key="`${scope.role_id}:${scope.focus_id}`">
-        <span>{{ scope.role_id }} · {{ scope.focus_id }}</span>
-        <strong>{{ scope.responsibility_summary }}</strong>
-        <small>
-          {{ scope.capability_cropped_refs.length }} {{ t('strategy.metric.evidenceRefs') }}
-          · {{ t('strategy.metric.overlap') }} ≤ {{ scope.overlap_budget_bp / 100 }}%
-        </small>
-      </article>
-    </div>
-
-    <nav v-if="view.executionId || view.teamId || view.evidenceScopes.some((scope) => scope.capability_cropped_refs.length)" class="strategy-summary__links" :aria-label="t('strategy.label.backlinks')">
+    <nav v-if="view.executionId || view.teamId || view.evidenceRefs.length" class="strategy-summary__links" :aria-label="t('strategy.label.backlinks')">
       <RouterLink v-if="view.executionId" :to="`/runtime?section=runs&execution_id=${encodeURIComponent(view.executionId)}&decision_id=${encodeURIComponent(view.id)}`">
         {{ t('strategy.link.execution') }}
       </RouterLink>

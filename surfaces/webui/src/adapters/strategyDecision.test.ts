@@ -18,13 +18,13 @@ describe('adaptStrategyDecision', () => {
     expect(view?.actual?.duration_ms).toBe(51_000);
     expect(view?.graph.nodes.map((node) => node.type)).toEqual([
       'strategy-decision',
-      'evidence-scope',
-      'evidence-scope',
+      'evidence',
+      'evidence',
       'team',
       'strategy-outcome',
     ]);
     expect(view?.graph.nodes.find((node) => node.type === 'team')?.href).toContain('/mission?');
-    expect(view?.graph.nodes.find((node) => node.type === 'evidence-scope')?.href).toContain('/reality?');
+    expect(view?.graph.nodes.find((node) => node.type === 'evidence')?.href).toContain('/reality?');
     expect(view?.graph.nodes.find((node) => node.type === 'strategy-outcome')?.href).toContain('/runtime?');
     expect(view?.timeline.map((item) => item.revision)).toEqual([null, 2, 3, 4]);
     expect(view?.timeline[0]).toMatchObject({ status: 'selected', order: 0 });
@@ -33,6 +33,7 @@ describe('adaptStrategyDecision', () => {
   it('keeps running actuals unknown and marks unproved decisions explicitly', () => {
     const strategy: StrategyDecisionProjection = {
       id: 'strategy-running',
+      schema_version: 1,
       kind: 'strategy_decision',
       revision: 1,
       status: 'running',
@@ -44,7 +45,6 @@ describe('adaptStrategyDecision', () => {
       candidate_estimates: [],
       benefit_reason: [],
       cost_reason: [],
-      evidence_scopes: [],
       downgrade: [],
       early_stop: [],
       proof_status: 'not_proven',
@@ -141,7 +141,7 @@ describe('adaptStrategyDecision', () => {
     expect(view?.graph.nodes.find((node) => node.type === 'agent')?.evidenceRefs)
       .toEqual(['agent-evidence-safe']);
     expect(wire).toContain('evidence-safe');
-    expect(wire).toContain('evidence-scope-safe');
+    expect(wire).not.toContain('evidence-scope-safe');
   });
 
   it('fails closed for every shared public-redaction corpus form in graph inspector and export data', () => {
@@ -152,7 +152,7 @@ describe('adaptStrategyDecision', () => {
         selected_pattern: secret,
         source: secret,
         policy_version: secret,
-      }, '', [{
+      } as unknown as StrategyDecisionProjection, '', [{
         id: `agent-${secret}`,
         kind: secret,
         revision: 1,

@@ -7,7 +7,7 @@ export type CompanionTab = 'activity' | 'workspace' | 'inspector';
 export type Tone = 'neutral' | 'info' | 'success' | 'warn' | 'danger';
 export type ApiReadStatus = 'ready' | 'offline' | 'timeout' | 'forbidden' | 'not_found' | 'invalid_response' | 'server_error' | 'error' | 'stale';
 
-export interface ApiReadState {
+export type ApiReadState = {
   __state?: ApiReadStatus;
   __error?: string;
   __http_status?: number;
@@ -113,7 +113,7 @@ export interface ChatTurn {
   preview?: boolean;
 }
 
-export interface ActivityEvent {
+export type ActivityEvent = {
   id: string;
   kind: 'execution' | 'goal' | 'team' | 'agent' | 'discussion' | 'skill' | 'model' | 'reasoning' | 'tool_batch' | 'tool'
     | 'think' | 'runtime' | 'context' | 'approval' | 'verify' | 'artifact' | 'outcome'
@@ -125,6 +125,11 @@ export interface ActivityEvent {
   detail?: string;
   result_summary?: string;
   status_reason?: string;
+  status_reason_kind?: GatewayComponents['schemas']['ExecutionActivityProjection']['status_reason_kind'];
+  blocked_by_activity_ids?: string[];
+  evidence_ready?: boolean;
+  effect_summary?: GatewayComponents['schemas']['ExecutionActivityProjection']['effect_summary'];
+  acceptance_summary?: GatewayComponents['schemas']['ExecutionActivityProjection']['acceptance_summary'];
   required?: boolean;
   status?: string;
   phase?: string;
@@ -338,7 +343,7 @@ export type DeliveryBranchStatus = 'completed' | 'failed' | 'cancelled' | 'block
 export type VerifiedEffectStatus = 'applied' | 'not_applied' | 'uncertain';
 export type AnswerOrigin = 'model_direct' | 'terminal_delegate' | 'team_synthesizer'
   | 'terminal_narrator' | 'fallback_model' | 'programmatic_fallback'
-  | 'cancellation_receipt';
+  | 'cancellation_receipt' | 'runtime_verified_fallback';
 export type TerminalPresentationState = 'started' | 'streaming' | 'validating'
   | 'committed' | 'aborted' | 'superseded';
 

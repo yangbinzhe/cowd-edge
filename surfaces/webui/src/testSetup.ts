@@ -12,8 +12,8 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 }
 
-if (typeof SVGElement !== 'undefined' && typeof SVGElement.prototype.getBBox !== 'function') {
-  SVGElement.prototype.getBBox = () => ({ x: 0, y: 0, width: 120, height: 20, top: 0, right: 120, bottom: 20, left: 0, toJSON: () => ({}) }) as DOMRect;
+if (typeof SVGElement !== 'undefined' && !('getBBox' in SVGElement.prototype)) {
+  Object.defineProperty(SVGElement.prototype, 'getBBox', { configurable: true, value: () => ({ x: 0, y: 0, width: 120, height: 20, top: 0, right: 120, bottom: 20, left: 0, toJSON: () => ({}) }) as DOMRect });
 }
 
 for (const [property, value] of [['clientWidth', 1024], ['offsetWidth', 1024], ['clientHeight', 768], ['offsetHeight', 768]] as const) {

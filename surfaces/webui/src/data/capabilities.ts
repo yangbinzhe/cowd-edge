@@ -320,3 +320,8 @@ export function buildCapabilitySpecs(): Record<CapabilityId, CapabilitySpec> {
   ),
   };
 }
+
+/** Plugin navigation is not a built-in capability key. */
+export function capabilitySpecFor(specs: Record<CapabilityId, CapabilitySpec>, id: string): CapabilitySpec | undefined {
+  return Object.hasOwn(specs, id) ? specs[id as CapabilityId] : undefined;
+}

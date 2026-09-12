@@ -9,8 +9,21 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vitest/globals"]
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "vitest/globals",
+      "vite/client",
+      "web-bluetooth"
+    ]
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "*.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "*.config.ts",
+    "e2e/**/*.ts"
+  ]
 }

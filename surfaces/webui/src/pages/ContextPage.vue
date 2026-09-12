@@ -180,16 +180,16 @@ async function refresh() {
   loading.value = true;
   error.value = '';
   try {
-    const [nextEnvelope, nextHistory, nextRecommendations, nextTimeline] = await Promise.all([
+    const [nextEnvelope, nextHistory, nextRecommendations, nextExecutionIndex] = await Promise.all([
       api.contextCurrent(sessionId.value, query.value, profile.value),
       api.contextHistory(sessionId.value),
       api.contextRecommendations(sessionId.value),
-      api.runtimeTimeline(sessionId.value).catch(() => ({})),
+      api.sessionExecution(sessionId.value).catch(() => null),
     ]);
     envelope.value = nextEnvelope;
     history.value = nextHistory;
     recommendations.value = nextRecommendations;
-    const executionId = nextTimeline?.execution_graph_summary?.latest?.graph_id;
+    const executionId = nextExecutionIndex?.latest_execution_id;
     if (executionId) {
       selectedExecutionId.value = String(executionId);
       projections.acquire(

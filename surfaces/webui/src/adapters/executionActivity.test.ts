@@ -23,6 +23,8 @@ function activity(
 ): ExecutionActivityProjection {
   return {
     schema_version: 1,
+    definition_refs: [],
+    required: false,
     activity_id: id,
     scope: {
       workspace_id: 'workspace',
@@ -257,19 +259,19 @@ describe('canonical execution activity adapter', () => {
     const root = activity('execution', 'execution');
     const first = {
       ...activity('agent:first', 'agent', root.activity_id),
-      agent_id: 'researcher',
+      definition_refs: ['agent:researcher'],
       agent_instance_id: 'instance:first',
       agent_run_id: 'run:first',
     } satisfies ExecutionActivityProjection;
     const second = {
       ...activity('agent:second', 'agent', root.activity_id),
-      agent_id: 'researcher',
+      definition_refs: ['agent:researcher'],
       agent_instance_id: 'instance:second',
       agent_run_id: 'run:second',
     } satisfies ExecutionActivityProjection;
     const tool = {
       ...activity('tool:ambiguous', 'tool', root.activity_id),
-      agent_id: 'researcher',
+      definition_refs: ['agent:researcher'],
       tool_call_id: 'call:ambiguous',
       status: 'completed',
     } satisfies ExecutionActivityProjection;

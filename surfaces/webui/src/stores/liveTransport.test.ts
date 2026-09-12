@@ -596,7 +596,7 @@ describe('WebUI multiplex live transport', () => {
     const source = openSessionLiveSource('session-auth-recovery', 0);
     await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
     const stream = FakeEventSource.instances[0];
-    const ready = {
+    const ready: LiveEnvelope = {
       schema_version: 1,
       subscription_id: 'live-test',
       subscription_revision: subscriptionApi.revision(),
