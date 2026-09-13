@@ -63,14 +63,17 @@ export function parseStructuredReport(value: string) {
   const jsonStart = value.indexOf('{');
   if (jsonStart >= 0) {
     const embedded = value.slice(jsonStart);
-    // Trim trailing prose after the JSON object. The scan is bounded by the
-    // receipt length and stops at the first parseable object.
-    for (let end = embedded.length; end > 0; end -= 1) {
+    // Trim trailing prose after the JSON object. Locate the first balanced
+    // object in one linear pass and parse only that slice. Parsing every
+    // progressively shorter prefix here was O(n^2) and blocked the main thread
+    // for seconds on large receipts/answers.
+    const slice = firstBalancedJsonSlice(embedded);
+    if (slice) {
       try {
-        const parsed = JSON.parse(embedded.slice(0, end));
+        const parsed = JSON.parse(slice);
         if (parsed && typeof parsed === 'object') return parsed;
       } catch {
-        // Keep trimming trailing characters.
+        // Fall through to the bounded candidate parses below.
       }
     }
   }
@@ -80,6 +83,32 @@ export function parseStructuredReport(value: string) {
       if (parsed && typeof parsed === 'object') return parsed;
     } catch {
       // Try the next candidate representation.
+    }
+  }
+  return null;
+}
+
+function firstBalancedJsonSlice(embedded: string): string | null {
+  const start = embedded.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < embedded.length; index += 1) {
+    const char = embedded[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{' || char === '[') {
+      depth += 1;
+    } else if (char === '}' || char === ']') {
+      depth -= 1;
+      if (depth === 0) return embedded.slice(start, index + 1);
     }
   }
   return null;
