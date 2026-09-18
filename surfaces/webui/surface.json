@@ -2,7 +2,7 @@
   "schema": "cowd.surface.v1",
   "id": "webui",
   "name": "Cowd WebUI",
-  "version": "0.9.725",
+  "version": "0.9.727",
   "kind": "web-surface",
   "capabilities": ["runtime", "session", "memory", "matrix", "tools", "skills", "gateway"],
   "routes": [],
